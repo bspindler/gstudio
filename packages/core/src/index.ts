@@ -8,3 +8,4 @@ export * from './registry/store.js';
 export * from './registry/memory-store.js';
 export * from './gateway/hard-rules.js';
 export * from './gateway/budget.js';
+export * from './gateway/gateway.js';
