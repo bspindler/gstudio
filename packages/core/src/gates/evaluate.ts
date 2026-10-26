@@ -66,22 +66,28 @@ function gateWebTest(_g: Game, m: MetricsSnapshot[], p: Policy, ctx: GateContext
 
   if (channelPass.some(Boolean) && ratingPass) return { decision: 'promote', insufficientData: false, checks };
 
+  // Kill only on a decision-grade sample: at least one channel with n >= min_players, and every channel
+  // that has players (large or small) below its kill line.
+  const belowKill = (s: MetricsSnapshot) => s.d1 !== null && s.d1 < gate.kill_d1[s.channel as 'portal' | 'own_site'];
   const played = web.filter((s) => s.players > 0);
-  const clearlyFails = played.length > 0
-    && played.every((s) => s.d1 !== null && s.d1 < gate.kill_d1[s.channel as 'portal' | 'own_site']);
+  const decisive = played.filter((s) => s.players >= gate.min_players);
+  const clearlyFails = decisive.length > 0 && played.every(belowKill);
   if (clearlyFails) return { decision: 'kill', insufficientData: false, checks };
   return { decision: 'hold', insufficientData: channelPass.some(Boolean) && !ratingsEnough, checks };
 }
 
 function gateBeta(_g: Game, m: MetricsSnapshot[], p: Policy, ctx: GateContext): Verdict {
   const gate = p.gates['3->4'];
-  const store = m.find((s) => s.channel === 'store');
+  const store = fresh(m.filter((s) => s.channel === 'store'), ctx.now, gate.max_metrics_age_days)[0];
   const crashFree = store?.crashFreeRate ?? null;
+  const players = store?.players ?? 0;
   const checks = [
+    check('players', `>= ${gate.min_players}`, String(players), players >= gate.min_players),
     check('crash_free', `>= ${pct(gate.min_crash_free)}`, pct(crashFree), crashFree !== null && crashFree >= gate.min_crash_free),
     ...gate.require.map((r) => check(r, 'true', String(ctx.storeReadiness ?? 'n/a'), ctx.storeReadiness === true)),
   ];
-  return { decision: checks.every((c) => c.pass) ? 'promote' : 'hold', insufficientData: crashFree === null, checks };
+  const insufficientData = crashFree === null || players < gate.min_players;
+  return { decision: !insufficientData && checks.every((c) => c.pass) ? 'promote' : 'hold', insufficientData, checks };
 }
 
 function gateSoftLaunch(g: Game, m: MetricsSnapshot[], p: Policy, ctx: GateContext): Verdict {

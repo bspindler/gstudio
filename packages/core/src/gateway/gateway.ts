@@ -24,7 +24,7 @@ export interface GatewayDeps {
 export interface InboxMeta { title: string; recommendation: string; keyNumbers: { label: string; value: string }[] }
 
 export type BlockReason = 'kill_switch' | 'hard_rule' | 'policy_unavailable' | 'unknown_action'
-  | 'budget_cap' | 'no_executor' | 'already_decided' | 'not_found' | 'rejected';
+  | 'budget_cap' | 'no_executor' | 'already_decided' | 'not_found' | 'rejected' | 'invalid_transition';
 
 export type GatewayResult =
   | { status: 'executed'; notified: boolean; detail?: string }
@@ -40,33 +40,54 @@ export function createGateway(d: GatewayDeps) {
   const now = () => d.clock().toISOString();
   const blocked = (reason: BlockReason, detail?: string): GatewayResult =>
     detail === undefined ? { status: 'blocked', reason } : { status: 'blocked', reason, detail };
+  const slugOf = (a: Action) => (a.gameSlug ? { gameSlug: a.gameSlug } : {});
 
   const audit = (type: string, a: Action, cls: ActionClass | null, result: GatewayResult, summary: string,
     actor: AuditEntry['actor'] = 'system') =>
-    d.store.appendAudit({
-      at: now(), actor, type, summary, data: { action: a, class: cls, result },
-      ...(a.gameSlug ? { gameSlug: a.gameSlug } : {}),
-    });
+    d.store.appendAudit({ at: now(), actor, type, summary, data: { action: a, class: cls, result }, ...slugOf(a) });
 
-  const loadPolicy = async (): Promise<Policy> => (typeof d.policy === 'function' ? d.policy() : d.policy);
-
-  /** Kill switch and hard rules, applied at submit and again at decision time. */
-  async function precheck(a: Action): Promise<GatewayResult | null> {
-    if (KILL_SWITCHED.has(a.kind) && (await d.store.getSettings()).killSwitch.engaged) return blocked('kill_switch');
-    const hr = checkHardRules(a);
-    return hr ? blocked('hard_rule', hr) : null;
+  /** Notification failures are audited and never escape: the action has already happened. */
+  async function safeNotify(n: Notification) {
+    try {
+      await d.notify(n);
+    } catch (e) {
+      await d.store.appendAudit({
+        at: now(), actor: 'system', type: 'notify.failed', summary: n.title,
+        data: { notification: n, error: (e as Error).message }, ...(n.gameSlug ? { gameSlug: n.gameSlug } : {}),
+      });
+    }
   }
 
-  async function createInbox(a: Action, meta: InboxMeta, urgent: boolean): Promise<string> {
+  const loadPolicy = async (): Promise<Policy> => (typeof d.policy === 'function' ? d.policy() : d.policy);
+  const killSwitched = (a: Action) => KILL_SWITCHED.has(a.kind) || (a.costUsd ?? 0) > 0;
+  const killSwitchOn = async () => (await d.store.getSettings()).killSwitch.engaged;
+
+  /** Stage actions must match the game's real current stage, and advances move exactly one stage. */
+  async function checkTransition(a: Action): Promise<string | null> {
+    if (a.kind !== 'stage.advance' && a.kind !== 'stage.kill') return null;
+    const g = a.gameSlug ? await d.store.getGame(a.gameSlug) : undefined;
+    if (!g) return `unknown game ${a.gameSlug ?? '(none)'}`;
+    if (a.fromStage !== g.stage) return `${g.slug} is at stage ${g.stage}, not ${String(a.fromStage)}`;
+    if (a.kind === 'stage.advance' && a.toStage !== g.stage + 1) return `advance must go ${g.stage}->${g.stage + 1}`;
+    if (a.kind === 'stage.kill' && g.stage === 7) return `${g.slug} is already sunset`;
+    return null;
+  }
+
+  /** Kill switch, hard rules and stage verification, applied at submit and again at decision time. */
+  async function precheck(a: Action): Promise<GatewayResult | null> {
+    if (killSwitched(a) && (await killSwitchOn())) return blocked('kill_switch');
+    const hr = checkHardRules(a, d.clock());
+    if (hr) return blocked('hard_rule', hr);
+    const tr = await checkTransition(a);
+    return tr ? blocked('invalid_transition', tr) : null;
+  }
+
+  async function putInbox(a: Action, meta: InboxMeta): Promise<string> {
     const item: InboxItem = {
       id: d.ids(), createdAt: now(), status: 'pending', action: a,
       title: meta.title, recommendation: meta.recommendation, keyNumbers: meta.keyNumbers,
     };
     await d.store.putInboxItem(item);
-    await d.notify({
-      title: urgent ? meta.title : `Approval needed: ${meta.title}`, body: meta.recommendation, urgent,
-      ...(a.gameSlug ? { gameSlug: a.gameSlug } : {}),
-    });
     return item.id;
   }
 
@@ -83,18 +104,27 @@ export function createGateway(d: GatewayDeps) {
       if (!res.ok) {
         const r = blocked('budget_cap', `${res.cap}: committed $${res.committedUsd} of $${res.capUsd}`);
         await audit('budget.cap_hit', a, cls, r, `Budget cap ${res.cap} hit`, actor);
-        await createInbox(a, {
-          title: `Budget cap hit: ${res.cap}`,
+        const title = `Budget cap hit: ${res.cap}`;
+        await putInbox(a, {
+          title,
           recommendation: 'Spend is paused. Raise the cap in policy.yaml, or reject.',
           keyNumbers: [
             { label: 'cap', value: `$${res.capUsd}` },
             { label: 'committed', value: `$${res.committedUsd}` },
             { label: 'requested', value: `$${a.costUsd}` },
           ],
-        }, true);
+        });
+        await safeNotify({ title, body: `Requested $${a.costUsd} for ${a.gameSlug ?? 'overall'}`, urgent: true, ...slugOf(a) });
         return r;
       }
       reservationId = res.reservationId;
+    }
+    // Last-moment kill switch check: the switch may have been engaged after the precheck.
+    if (killSwitched(a) && (await killSwitchOn())) {
+      if (reservationId) await settleBudget(d.store, reservationId, { release: true }, d.clock());
+      const r = blocked('kill_switch');
+      await audit('action.blocked', a, cls, r, `${a.kind} stopped by kill switch`, actor);
+      return r;
     }
     let out: { ok: boolean; detail?: string; actualUsd?: number };
     try {
@@ -103,7 +133,9 @@ export function createGateway(d: GatewayDeps) {
       out = { ok: false, detail: (e as Error).message };
     }
     if (reservationId) {
-      await settleBudget(d.store, reservationId, out.ok ? { actualUsd: out.actualUsd ?? a.costUsd! } : { release: true }, d.clock());
+      // An unusable actual from an executor falls back to the (already reserved) estimate.
+      const actual = out.actualUsd !== undefined && Number.isFinite(out.actualUsd) && out.actualUsd >= 0 ? out.actualUsd : a.costUsd!;
+      await settleBudget(d.store, reservationId, out.ok ? { actualUsd: actual } : { release: true }, d.clock());
     }
     if (!out.ok) {
       const r: GatewayResult = out.detail === undefined ? { status: 'failed' } : { status: 'failed', detail: out.detail };
@@ -111,11 +143,9 @@ export function createGateway(d: GatewayDeps) {
       return r;
     }
     const notified = cls === 'notify';
-    if (notified) {
-      await d.notify({ title: `Done: ${a.kind}`, body: a.rationale ?? out.detail ?? '', urgent: false, ...(a.gameSlug ? { gameSlug: a.gameSlug } : {}) });
-    }
     const r: GatewayResult = out.detail === undefined ? { status: 'executed', notified } : { status: 'executed', notified, detail: out.detail };
     await audit('action.executed', a, cls, r, `${a.kind} executed`, actor);
+    if (notified) await safeNotify({ title: `Done: ${a.kind}`, body: a.rationale ?? out.detail ?? '', urgent: false, ...slugOf(a) });
     return r;
   }
 
@@ -142,9 +172,10 @@ export function createGateway(d: GatewayDeps) {
       return r;
     }
     if (cls === 'approve') {
-      const inboxItemId = await createInbox(a, meta, false);
+      const inboxItemId = await putInbox(a, meta);
       const r: GatewayResult = { status: 'pending_approval', inboxItemId };
       await audit('inbox.created', a, cls, r, meta.title);
+      await safeNotify({ title: `Approval needed: ${meta.title}`, body: meta.recommendation, urgent: false, ...slugOf(a) });
       return r;
     }
     return executeNow(a, cls, policy, 'system');
@@ -153,19 +184,21 @@ export function createGateway(d: GatewayDeps) {
   async function decide(itemId: string, dec: Decision): Promise<GatewayResult> {
     const item = await d.store.getInboxItem(itemId);
     if (!item) return blocked('not_found');
-    const status = dec.choice === 'reject' ? 'rejected' : 'approved';
+    if (item.status !== 'pending') return blocked('already_decided');
     const decision = { at: now(), by: dec.by, choice: dec.choice, ...(dec.modifiedParams ? { modifiedParams: dec.modifiedParams } : {}) };
-    if (!(await d.store.transitionInboxItem(itemId, 'pending', { status, decision }))) return blocked('already_decided');
 
-    const a: Action = dec.choice === 'modify' ? { ...item.action, params: { ...item.action.params, ...dec.modifiedParams } } : item.action;
     if (dec.choice === 'reject') {
+      if (!(await d.store.transitionInboxItem(itemId, 'pending', { status: 'rejected', decision }))) return blocked('already_decided');
       const r = blocked('rejected');
-      await audit('action.rejected', a, 'approve', r, `${dec.by} rejected: ${item.title}`, 'operator');
+      await audit('action.rejected', item.action, 'approve', r, `${dec.by} rejected: ${item.title}`, 'operator');
       return r;
     }
+
+    const a: Action = dec.choice === 'modify' ? { ...item.action, params: { ...item.action.params, ...dec.modifiedParams } } : item.action;
+    // Checks run before the item is consumed, so a blocked approval stays pending and can be retried.
     const pre = await precheck(a);
     if (pre) {
-      await audit('action.blocked', a, 'approve', pre, `${a.kind} blocked at decision time`, 'operator');
+      await audit('action.blocked', a, 'approve', pre, `${a.kind} blocked at decision time; item left pending`, 'operator');
       return pre;
     }
     let policy: Policy;
@@ -173,9 +206,10 @@ export function createGateway(d: GatewayDeps) {
       policy = await loadPolicy();
     } catch (e) {
       const r = blocked('policy_unavailable', (e as Error).message);
-      await audit('action.blocked', a, 'approve', r, 'Policy unavailable; failing closed', 'operator');
+      await audit('action.blocked', a, 'approve', r, 'Policy unavailable; failing closed; item left pending', 'operator');
       return r;
     }
+    if (!(await d.store.transitionInboxItem(itemId, 'pending', { status: 'approved', decision }))) return blocked('already_decided');
     return executeNow(a, 'approve', policy, 'operator');
   }
 
@@ -193,7 +227,7 @@ export function createGateway(d: GatewayDeps) {
     async engageKillSwitch(by: string) {
       await setKillSwitch(true, by);
       await d.onKillSwitch?.();
-      await d.notify({ title: 'Kill switch engaged', body: `All spend and posting stopped by ${by}.`, urgent: true });
+      await safeNotify({ title: 'Kill switch engaged', body: `All spend and posting stopped by ${by}.`, urgent: true });
     },
     async releaseKillSwitch(by: string) {
       await setKillSwitch(false, by);

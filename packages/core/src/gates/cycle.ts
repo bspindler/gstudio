@@ -21,6 +21,7 @@ export function createStageExecutors(store: RegistryStore, clock: () => Date): R
     const g = a.gameSlug ? await store.getGame(a.gameSlug) : undefined;
     const to = toStage(a);
     if (!g || to === undefined) return { ok: false, detail: `cannot move ${a.gameSlug ?? '?'}` };
+    if (g.stage !== a.fromStage) return { ok: false, detail: `${g.slug} moved to stage ${g.stage}; expected ${String(a.fromStage)}` };
     await store.putGame({ ...g, stage: to, failingCycles: 0, updatedAt: clock().toISOString() });
     return { ok: true, detail: `${g.slug} -> stage ${to}` };
   };

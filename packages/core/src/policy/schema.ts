@@ -44,7 +44,14 @@ export const PolicySchema = z
             max_metrics_age_days: z.number().min(0),
           })
           .strict(),
-        '3->4': z.object({ min_crash_free: rate, require: z.array(z.enum(['store_readiness'])) }).strict(),
+        '3->4': z
+          .object({
+            min_crash_free: rate,
+            require: z.array(z.enum(['store_readiness'])),
+            min_players: z.number().int().min(0),
+            max_metrics_age_days: z.number().min(0),
+          })
+          .strict(),
         '4->5': z
           .object({
             d1: rate,

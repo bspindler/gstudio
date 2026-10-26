@@ -1,6 +1,6 @@
 import type { Action } from '../domain/actions.js';
 
-type Rule = (a: Action) => string | null;
+type Rule = (a: Action, now: Date) => string | null;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -26,15 +26,14 @@ const rules: Rule[] = [
   (a) => (a.kind === 'web.publish' && a.params.realPayments === true
     ? 'HR3: web builds may only use fake-door purchases'
     : null),
-  (a) => {
+  (a, now) => {
     if (a.params.countdownResets === true) return 'HR4: a countdown that resets is a fake timer';
     if (a.params.syntheticClaimCount === true) return 'HR4: claim counts must be real, not synthetic';
     if (!('limitedDrop' in a.params)) return null;
     const d = a.params.limitedDrop;
     if (!isObj(d) || !Number.isInteger(d.cap) || (d.cap as number) <= 0) return 'HR4: limited drop needs a positive integer cap';
-    const now = typeof a.params.now === 'number' ? a.params.now : Date.now();
     const ends = typeof d.endsAt === 'string' ? Date.parse(d.endsAt) : NaN;
-    if (Number.isNaN(ends) || ends <= now) return 'HR4: limited drop needs a real end date in the future';
+    if (Number.isNaN(ends) || ends <= now.getTime()) return 'HR4: limited drop needs a real end date in the future';
     return null;
   },
   (a) => ((a.kind === 'post.public' || a.kind === 'spend') && !OFFICIAL_VIA.has(String(a.params.via))
@@ -42,15 +41,15 @@ const rules: Rule[] = [
     : null),
   (a) => {
     if (a.kind !== 'spend') return null;
-    if (typeof a.costUsd !== 'number' || !Number.isFinite(a.costUsd) || a.costUsd < 0) return 'spend needs a numeric costUsd >= 0';
+    if (typeof a.costUsd !== 'number' || !Number.isFinite(a.costUsd) || a.costUsd <= 0) return 'spend needs a numeric costUsd > 0';
     return a.gameSlug ? null : 'spend needs a gameSlug';
   },
 ];
 
-/** Returns null if allowed, otherwise the first violated rule with its reason. */
-export function checkHardRules(a: Action): string | null {
+/** Returns null if allowed, otherwise the first violated rule with its reason. `now` is the trusted clock. */
+export function checkHardRules(a: Action, now: Date): string | null {
   for (const rule of rules) {
-    const v = rule(a);
+    const v = rule(a, now);
     if (v) return v;
   }
   return null;

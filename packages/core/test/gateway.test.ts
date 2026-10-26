@@ -179,8 +179,10 @@ describe('ActionGateway', () => {
   });
 
   it('stage.kill at stage 3 needs approval', async () => {
-    const { gw } = setup();
-    expect((await gw.submit(act({ kind: 'stage.kill', fromStage: 3 }), meta)).status).toBe('pending_approval');
+    const { gw, store } = setup();
+    await store.putGame({ slug: 'g', title: 'G', genre: '', targetSegment: '', stage: 3, markets: [], versions: [], ageRating: null,
+      storeIds: {}, valueEstimate: null, failingCycles: 0, createdAt: '', updatedAt: '' });
+    expect((await gw.submit(act({ kind: 'stage.kill', gameSlug: 'g', fromStage: 3, toStage: 7 }), meta)).status).toBe('pending_approval');
   });
 
   it('every terminal path writes an audit entry with action, class and result', async () => {

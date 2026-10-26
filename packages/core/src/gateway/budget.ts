@@ -42,11 +42,16 @@ function totals(ledger: LedgerEntry[], now: Date) {
   return { overall, perGame };
 }
 
+const assertAmount = (n: number, what: string) => {
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${what} must be a finite amount >= 0 (got ${n})`);
+};
+
 export async function reserveBudget(
   store: RegistryStore,
   policy: Policy,
   req: { gameSlug: string; amountUsd: number; now: Date },
 ): Promise<{ ok: true; reservationId: string } | { ok: false; cap: CapName; capUsd: number; committedUsd: number }> {
+  assertAmount(req.amountUsd, 'amountUsd');
   return store.withLock(LOCK, async () => {
     const t = totals(await store.listLedger(), req.now);
     const game = t.perGame[req.gameSlug] ?? { dailyUsd: 0, totalUsd: 0 };
@@ -58,7 +63,8 @@ export async function reserveBudget(
       ['overall_total', policy.budgets.overall.total_usd, t.overall.totalUsd],
     ];
     for (const [cap, capUsd, committedUsd] of checks) {
-      if (cents(committedUsd + req.amountUsd) > capUsd) return { ok: false, cap, capUsd, committedUsd };
+      // Written as !(<=) so a NaN anywhere fails closed.
+      if (!(cents(committedUsd + req.amountUsd) <= capUsd)) return { ok: false, cap, capUsd, committedUsd };
     }
     const reservationId = randomUUID();
     await store.appendLedger({
@@ -74,6 +80,7 @@ export async function settleBudget(
   outcome: { actualUsd: number } | { release: true },
   now: Date,
 ): Promise<void> {
+  if ('actualUsd' in outcome) assertAmount(outcome.actualUsd, 'actualUsd');
   await store.withLock(LOCK, async () => {
     const reserve = (await store.listLedger()).find((e) => e.reservationId === reservationId && e.kind === 'reserve');
     if (!reserve) throw new Error(`unknown reservation ${reservationId}`);

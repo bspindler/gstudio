@@ -40,7 +40,7 @@ gates:
     d1: { portal: 0.15, own_site: 0.30 }                  # research-adjusted, see docs/architecture.md
     kill_d1: { portal: 0.07, own_site: 0.15 }             # claude-default: "clearly fails"
     max_metrics_age_days: 3
-  "3->4": { min_crash_free: 0.995, require: [store_readiness] }
+  "3->4": { min_crash_free: 0.995, require: [store_readiness], min_players: 50, max_metrics_age_days: 7 }  # min_players, age: claude-default
   "4->5": { d1: 0.35, d7: 0.12, min_ltv_over_cpi: 1.0, min_players: 500, max_metrics_age_days: 10 }
   sunset: { consecutive_failing_cycles: 2 }
 budgets:                    # all zero until Phase 4: any spend is blocked
