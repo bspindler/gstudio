@@ -2,6 +2,10 @@
 
 A platform that takes small mobile games from idea to worldwide launch with minimal human involvement. It covers the game registry, builds, QA, the stage-gate rollout, market expansion, marketing clips, and measurement. Brian is the operator; he is pulled in only for approvals, decisions, or when the system is stuck. The full brief is in `docs/game-studio-prompt.md`, and the approved design is in `docs/architecture.md`.
 
+## Status
+
+Phase 1a and 1b are merged to `main`. Plan 1c (console, portal, Azure adapters, deploy) is next and not yet written. `README.md` has the current status, the open 1c decision, the operator's outstanding setup steps, and the deferred minors from the 1b review (M1–M12). Read it first when resuming, and keep it updated at the end of each plan.
+
 ## Hard rules (never configurable)
 
 1. **No real-money gambling, no crypto, no tokens, no prizes with cash value.** Paid random rewards always show drop odds.
