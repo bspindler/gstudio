@@ -57,3 +57,15 @@ describe('I1: a session crossing UTC midnight is not a D1 return', () => {
     expect(s!.d1).toBe(1);
   });
 });
+
+describe('I3: day maths use the server receive time when present', () => {
+  it('a backdated event received today is an immature cohort', () => {
+    const today = Date.parse('2026-10-31T10:00:00Z');
+    const e: StudioEvent = {
+      v: 1, game: 'g', version: '1', channel: 'portal', playerId: pid(1), sessionId: 'a',
+      ts: today - 5 * DAY, receivedAt: today, name: 'heartbeat', props: {},
+    };
+    const [s] = rollupMetrics([e], { game: 'g', asOf: now });
+    expect(s).toMatchObject({ d1: null, d1Cohort: 0 });
+  });
+});

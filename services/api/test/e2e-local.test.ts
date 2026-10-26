@@ -18,14 +18,16 @@ describe('local end-to-end: play -> ingest -> rollup -> gate', () => {
     const store = createSqliteStore(':memory:');
     let clock = new Date(day0);
     let n = 0;
-    const app = createApp({ objects, clock: () => clock, ids: () => `b${++n}`, allowedOrigins: [] });
+    const app = createApp({ objects, clock: () => clock, ids: () => `b${++n}`, allowedOrigins: [], isKnownGame: async (s) => !!(await store.getGame(s)) });
 
     const seeded = await seedLibrary(store, join(repo, 'games'), clock);
     expect(seeded.sort()).toEqual(['hyperline', 'tidepool-pals']);
     expect(await seedLibrary(store, join(repo, 'games'), clock)).toEqual([]); // idempotent
     expect((await store.getGame('hyperline'))?.stage).toBe(2);
 
-    const post = async (body: unknown) => {
+    // The server stamps receive time, so advance its clock to each session's send time.
+    const post = async (body: { events: { ts: number }[] }) => {
+      clock = new Date(body.events.at(-1)!.ts);
       const res = await app.request('/v1/events', { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
       expect(res.status).toBe(202);
     };

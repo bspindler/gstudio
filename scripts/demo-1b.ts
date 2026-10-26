@@ -15,7 +15,10 @@ const DAY = 86400_000;
 const day0 = Date.now() - 2 * DAY;
 let clock = new Date(day0);
 let n = 0;
-const app = createApp({ objects, clock: () => clock, ids: () => `demo-${++n}`, allowedOrigins: [] });
+const app = createApp({
+  objects, clock: () => clock, ids: () => `demo-${++n}`, allowedOrigins: [],
+  isKnownGame: async (slug) => !!(await store.getGame(slug)),
+});
 const server = serve({ fetch: app.fetch, port: 0 });
 await new Promise((r) => server.once('listening', r));
 const port = (server.address() as { port: number }).port;
@@ -31,6 +34,7 @@ const plays = [
 for (const p of plays) {
   let events = 0;
   for (const b of simulatePlayers({ ...p, version: '0.2.0', ratingShare: 0.15, start: day0 })) {
+    clock = new Date(b.events.at(-1)!.ts); // the server stamps receive time; replay at send time
     const res = await fetch(`http://localhost:${port}/v1/events`, { method: 'POST', body: JSON.stringify(b), headers: { 'content-type': 'application/json' } });
     if (res.status !== 202) throw new Error(`ingest ${res.status}: ${await res.text()}`);
     events += b.events.length;

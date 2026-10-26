@@ -22,6 +22,8 @@ export interface StudioEvent {
   ts: number;
   name: EventName;
   props: Record<string, PropValue>;
+  /** Server receive time (ms), stamped by the ingest. Clients can't set it; day maths use it. */
+  receivedAt?: number;
 }
 
 const propValue = z.union([z.string().max(200), z.number().finite(), z.boolean(), z.null()]);

@@ -20,7 +20,10 @@ const ev = (o: Partial<StudioEvent> = {}): StudioEvent => ({
 let n = 0;
 const setup = () => {
   const objs = memObjects();
-  const app = createApp({ objects: objs.store, clock: () => NOW, ids: () => `id${++n}`, allowedOrigins: ['http://localhost:5174'] });
+  const app = createApp({
+    objects: objs.store, clock: () => NOW, ids: () => `id${++n}`, allowedOrigins: ['http://localhost:5174'],
+    isKnownGame: async (slug) => ['hyperline', 'tidepool-pals'].includes(slug),
+  });
   const post = (body: unknown, headers: Record<string, string> = {}) => app.request('/v1/events', {
     method: 'POST', body: typeof body === 'string' ? body : JSON.stringify(body),
     headers: { 'content-type': 'application/json', ...headers },
@@ -41,10 +44,25 @@ describe('POST /v1/events', () => {
     expect(lines.map((l) => l.name)).toEqual(['session_start', 'heartbeat']);
   });
 
-  it('partitions by the event day, not the server day', async () => {
+  it('partitions by the server receive day and stamps receivedAt (I3, M4)', async () => {
     const { objs, post } = setup();
-    await post({ events: [ev({ ts: NOW.getTime() - 86400_000 })] });
-    expect([...objs.m.keys()][0]).toContain('day=2026-10-25');
+    await post({ events: [ev({ ts: NOW.getTime() - 2 * 86400_000 })] });
+    const [key] = [...objs.m.keys()];
+    expect(key).toContain('day=2026-10-26');
+    expect(JSON.parse(objs.m.get(key!)!.trim()).receivedAt).toBe(NOW.getTime());
+  });
+
+  it('rejects events for unregistered games and writes nothing (I3)', async () => {
+    const { objs, post } = setup();
+    const res = await post({ events: [ev(), ev({ game: 'not-a-game' })] });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toMatch(/not-a-game/);
+    expect(objs.m.size).toBe(0);
+  });
+
+  it('does not let a client set receivedAt', async () => {
+    const { post } = setup();
+    expect((await post({ events: [{ ...ev(), receivedAt: 1 }] })).status).toBe(400);
   });
 
   it('rejects bodies over 64 KB with 413 and writes nothing', async () => {

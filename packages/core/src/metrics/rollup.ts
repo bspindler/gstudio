@@ -20,15 +20,17 @@ export function rollupMetrics(
   const byChannel = new Map<MetricsChannel, ChannelAcc>();
 
   for (const e of events) {
-    if (e.game !== opts.game || e.ts > cutoff) continue;
+    // Server time when present: a client clock can't backdate a cohort into maturity.
+    const t = e.receivedAt ?? e.ts;
+    if (e.game !== opts.game || t > cutoff) continue;
     let ch = byChannel.get(e.channel);
     if (!ch) byChannel.set(e.channel, (ch = { players: new Map(), sessions: new Map() }));
 
-    const day = utcDay(e.ts);
+    const day = utcDay(t);
     let p = ch.players.get(e.playerId);
     if (!p) ch.players.set(e.playerId, (p = { cohortDay: day, sessionStarts: new Map(), sawOffer: false, intent: false }));
     p.cohortDay = Math.min(p.cohortDay, day);
-    p.sessionStarts.set(e.sessionId, Math.min(p.sessionStarts.get(e.sessionId) ?? e.ts, e.ts));
+    p.sessionStarts.set(e.sessionId, Math.min(p.sessionStarts.get(e.sessionId) ?? t, t));
     if (e.name === 'purchase_offer_shown') p.sawOffer = true;
     if (e.name === 'purchase_intent') p.intent = true;
     if (e.name === 'rating' && typeof e.props.stars === 'number' && (!p.rating || e.ts >= p.rating.ts)) {
