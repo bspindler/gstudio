@@ -1,0 +1,13 @@
+{
+  "name": "@studio/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/app.ts" },
+  "dependencies": {
+    "@studio/core": "*",
+    "@studio/adapters-local": "*",
+    "hono": "4.13.14",
+    "@hono/node-server": "2.1.5"
+  }
+}
