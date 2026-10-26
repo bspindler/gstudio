@@ -373,9 +373,11 @@ function win(){
   S.pearls+=reward;S.level=lvl.n+1;save();hud();
   studio.track('level_end',{level:lvl.n,result:'win',score:lvl.got});
   showModal(`<div class="label">Level ${lvl.n} cleared</div><div class="stars">${[1,2,3].map(i=>i<=stars?STAR_ON:STAR_OFF).join('')}</div>
-    <h2>Splendid!</h2><p class="muted">+${reward} pearls, and a shell washed up on the shore.</p>
+    ${!lvl.assisted ? `<h2>Splendid!</h2><p class="muted">+${reward} pearls, and a shell washed up on the shore.</p>
     <div class="row"><button class="btn buy" data-act="win-shell">Collect your shell</button></div>
-    <p class="fine">${oddsLine()}</p>`);
+    <p class="fine">${oddsLine()}</p>`
+    : `<h2>Splendid!</h2><p class="muted">+${reward} pearls. Shells wash up on levels cleared without extra moves.</p>
+    <div class="row"><button class="btn buy" data-act="next">Next level</button></div>`}`);
 }
 function outOfMoves(){
   lvl.over=true;
@@ -392,7 +394,9 @@ function outOfMovesModal(){
       <button class="btn ghost" data-act="retry">Try again</button>
     </div>`);
 }
-function addMoves(){lvl.moves+=5;lvl.over=false;closeModal();hud();}
+// Extra moves (bought, or paid with pearls, which are also sold) make the level assisted: no shell on that win,
+// so no paid path leads to a random reward.
+function addMoves(){lvl.moves+=5;lvl.over=false;lvl.assisted=true;closeModal();hud();}
 /** Called as the player leaves the win or out-of-moves screens. The SDK decides whether to actually ask. */
 function afterLevelScreen(){studio.feedback.maybePrompt();}
 
@@ -457,7 +461,7 @@ document.addEventListener('click',e=>{
   const a=b.dataset.act;
   if(a!=='reset')resetArm=false;
   switch(a){
-    case 'win-shell':ctx='win';offerShell();break;
+    case 'win-shell':if(lvl.assisted)break;ctx='win';offerShell();break;
     case 'crack':b.classList.add('crack');b.disabled=true;setTimeout(()=>showResult(roll()),540);break;
     case 'next':closeModal();showTab('play');startLevel(S.level);afterLevelScreen();break;
     case 'go-album':closeModal();startLevel(S.level);showTab('album');afterLevelScreen();break;

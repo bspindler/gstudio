@@ -40,3 +40,19 @@ describe.each(GAMES)('%s compliance', (slug) => {
     expect(html).toContain('feedback.maybePrompt(');
   });
 });
+
+describe('tidepool-pals: no paid path to a random reward (review I2)', () => {
+  const html = src('tidepool-pals');
+  const fn = (name: string) => html.slice(html.indexOf(`function ${name}(`), html.indexOf('\n}', html.indexOf(`function ${name}(`)));
+
+  it('marks a level as assisted when extra moves are added (paid or pearls)', () => {
+    expect(fn('addMoves')).toMatch(/lvl\.assisted\s*=\s*true/);
+  });
+
+  it('only offers the shell on unassisted wins', () => {
+    const win = fn('win');
+    expect(win).toContain('win-shell');
+    expect(win).toMatch(/!lvl\.assisted\s*\?[^]*win-shell/);
+    expect(html).toMatch(/case 'win-shell':\s*if\s*\(lvl\.assisted\)\s*break;/);
+  });
+});
