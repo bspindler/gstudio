@@ -6,3 +6,4 @@ export * from './policy/classify.js';
 export * from './markets/load.js';
 export * from './registry/store.js';
 export * from './registry/memory-store.js';
+export * from './gateway/hard-rules.js';
