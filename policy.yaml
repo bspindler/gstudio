@@ -1,0 +1,52 @@
+# Autonomy policy for Studio in a Box. Operator-owned: Brian edits this file.
+# Values marked "claude-default" were chosen by Claude, not set by Brian.
+# Hard rules and approve floors live in code (packages/core) and cannot be loosened here.
+version: 1
+actions:
+  build: auto
+  qa.run: auto
+  clip.generate: auto
+  draft.generate: auto
+  data.analyze: auto
+  report.file: auto
+  web.publish: notify
+  balance.tweak: notify
+  store.listing: approve
+  store.submit: approve
+  market.expand: approve
+  price.change: approve
+  iap.change: approve
+  account.create: approve
+  spend: approve
+  post.public:
+    default: approve
+    channels: { tiktok: approve, instagram: approve, youtube: approve }
+  stage.advance:            # key "from->to"; unlisted transitions require approval
+    "0->1": auto
+    "1->2": approve         # fun-check by Brian
+    "2->3": notify
+    "3->4": approve         # store submission + first markets
+    "4->5": approve         # market expansion
+    "5->6": notify
+  stage.kill:
+    max_auto_stage: 2       # stages 0-2 auto; 3+ always approve (floor)
+gates:
+  "0->1": { min_concept_score: 0.6 }                      # claude-default
+  "1->2": { require: [qa_passed, bot_playable] }
+  "2->3":
+    min_players: 200
+    min_avg_rating: 3.8
+    min_rating_count: 20                                  # claude-default
+    d1: { portal: 0.15, own_site: 0.30 }                  # research-adjusted, see docs/architecture.md
+    kill_d1: { portal: 0.07, own_site: 0.15 }             # claude-default: "clearly fails"
+    max_metrics_age_days: 3
+  "3->4": { min_crash_free: 0.995, require: [store_readiness] }
+  "4->5": { d1: 0.35, d7: 0.12, min_ltv_over_cpi: 1.0, min_players: 500, max_metrics_age_days: 10 }
+  sunset: { consecutive_failing_cycles: 2 }
+budgets:                    # all zero until Phase 4: any spend is blocked
+  overall: { daily_usd: 0, total_usd: 0 }
+  per_game_default: { daily_usd: 0, total_usd: 0 }
+  per_game: {}
+  claude: { monthly_usd: 100 }
+inbox:
+  escalate_after_hours: 24
