@@ -13,3 +13,4 @@ export * from './gates/evaluate.js';
 export * from './gates/cycle.js';
 export * from './events/schema.js';
 export * from './metrics/rollup.js';
+export * from './ports/object-store.js';

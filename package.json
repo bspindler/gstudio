@@ -2,10 +2,14 @@
   "name": "studio-in-a-box",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*",
+    "adapters/*",
+    "services/*"
+  ],
   "scripts": {
-    "test": "vitest run --root packages/core",
-    "typecheck": "tsc -b packages/core",
+    "test": "vitest run",
+    "typecheck": "tsc -b packages/core adapters/local",
     "lint:infra": "az bicep build --file infra/main.bicep --stdout > /dev/null"
   },
   "devDependencies": {
