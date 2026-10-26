@@ -9,3 +9,5 @@ export * from './registry/memory-store.js';
 export * from './gateway/hard-rules.js';
 export * from './gateway/budget.js';
 export * from './gateway/gateway.js';
+export * from './gates/evaluate.js';
+export * from './gates/cycle.js';
