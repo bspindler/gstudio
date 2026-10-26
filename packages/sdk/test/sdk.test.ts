@@ -26,10 +26,15 @@ const fakeFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) 
   return new Response(null, { status: 202 });
 });
 
-const make = (o: Record<string, unknown> = {}) => createStudio({
-  game: 'hyperline', version: '0.2.0', endpoint: 'http://localhost:8787', storage: memStorage(),
-  fetch: fakeFetch, ...o,
-});
+const live: { destroy(): void }[] = [];
+const make = (o: Record<string, unknown> = {}) => {
+  const s = createStudio({
+    game: 'hyperline', version: '0.2.0', endpoint: 'http://localhost:8787', storage: memStorage(),
+    fetch: fakeFetch, ...o,
+  });
+  live.push(s);
+  return s;
+};
 const allEvents = () => sent.flatMap((s) => s.events);
 const names = () => allEvents().map((e) => e.name);
 const click = (sel: string) => {
@@ -44,7 +49,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-10-26T12:00:00Z'));
   document.body.innerHTML = '';
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { live.splice(0).forEach((s) => s.destroy()); vi.useRealTimers(); });
 
 describe('identity and channel', () => {
   it('persists an anonymous UUID player id', () => {
@@ -260,5 +265,51 @@ describe('odds for earned random rewards', () => {
   it('rejects tables whose weights do not sum to 1', () => {
     expect(() => make().odds.format([{ label: 'A', weight: 0.5 }])).toThrow(/sum to 1/);
     expect(() => make().odds.roll([{ label: 'A', weight: 0.5 }, { label: 'B', weight: 0.6 }])).toThrow(/sum to 1/);
+  });
+});
+
+describe('I4: flush on hide without waiting', () => {
+  const setVisibility = (v: 'hidden' | 'visible') => {
+    Object.defineProperty(document, 'visibilityState', { value: v, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  afterEach(() => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
+
+  it('sends queued events as soon as the page is hidden', async () => {
+    const s = make();
+    s.track('rating', { stars: 5 });
+    setVisibility('hidden');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(names()).toEqual(['session_start', 'rating']);
+    s.destroy();
+  });
+
+  it('sends session_end on pagehide even while an earlier request is still pending', async () => {
+    let first = true;
+    const hanging = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (first) { first = false; return new Promise<Response>(() => {}); }
+      return fakeFetch(url, init);
+    });
+    const s = make({ fetch: hanging });
+    void s.flush(); // takes session_start and never resolves
+    await vi.advanceTimersByTimeAsync(0);
+    s.track('purchase_intent', { sku: 'x', priceUsd: 0.99 });
+    window.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(names()).toEqual(['purchase_intent', 'session_end']);
+    s.destroy();
+  });
+
+  it('keeps each unload request to at most 50 events', async () => {
+    let hang = true; // the first auto-flush hangs, so later events pile up behind it
+    const s = make({ fetch: (u: string, i?: RequestInit) => (hang ? new Promise<Response>(() => {}) : fakeFetch(u, i)) });
+    for (let i = 0; i < 300; i++) s.track('custom', { i }); // queue caps at 200; the hung drain holds 100
+    await vi.advanceTimersByTimeAsync(0);
+    hang = false;
+    window.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sent.length).toBeGreaterThan(1);
+    expect(Math.max(...sent.map((b) => b.events.length))).toBeLessThanOrEqual(50);
+    s.destroy();
   });
 });

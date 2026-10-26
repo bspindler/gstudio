@@ -8,6 +8,8 @@ const FLUSH_MS = 10_000;
 const HEARTBEAT_MS = 30_000;
 const MAX_QUEUE = 200;
 const MAX_BATCH = 100;
+// Keepalive requests share a 64 KiB in-flight quota, so unload sends go in smaller pieces.
+const UNLOAD_BATCH = 50;
 const FEEDBACK_EVERY_MS = 7 * 86400_000;
 const CHANNELS = ['portal', 'own_site'];
 
@@ -140,14 +142,33 @@ export function createStudio(opts) {
     }
   }
 
+  /**
+   * Page is going away (or may be discarded while hidden): send everything now, without waiting
+   * behind an in-flight request and without retry. Mobile browsers often skip pagehide entirely.
+   */
+  function sendNow() {
+    if (timer) { clearTimeout(timer); timer = undefined; }
+    while (queue.length) {
+      const batch = queue.splice(0, UNLOAD_BATCH);
+      send(`${opts.endpoint}/v1/events`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ events: batch.map((b) => b.e) }),
+        keepalive: true,
+      }).catch(() => { /* page is leaving; nothing to retry into */ });
+    }
+  }
+
   const heartbeat = setInterval(() => {
     if (!doc || doc.visibilityState === 'visible') track('heartbeat');
   }, HEARTBEAT_MS);
-  const onHide = () => { track('session_end'); void flush(); };
+  const onHide = () => { track('session_end'); sendNow(); };
+  const onVisibility = () => { if (doc?.visibilityState === 'hidden') sendNow(); };
   /** @param {ErrorEvent} ev */
   const onError = (ev) => track('error', { message: String(ev.message ?? 'error').slice(0, 200) });
   win?.addEventListener('pagehide', onHide);
   win?.addEventListener('error', onError);
+  doc?.addEventListener('visibilitychange', onVisibility);
 
   track('session_start');
 
@@ -286,6 +307,7 @@ export function createStudio(opts) {
       if (timer) clearTimeout(timer);
       win?.removeEventListener('pagehide', onHide);
       win?.removeEventListener('error', onError);
+      doc?.removeEventListener('visibilitychange', onVisibility);
     },
   };
 }
