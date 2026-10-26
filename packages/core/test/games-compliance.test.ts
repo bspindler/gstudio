@@ -34,6 +34,11 @@ describe.each(GAMES)('%s compliance', (slug) => {
     expect(html).not.toMatch(/RIVALS|DROP_CAP|claimed\s*:\s*Math|dropWindow/);
   });
 
+  it('makes the hidden attribute actually hide things when served as a plain file', () => {
+    // Author styles like .modal{display:grid} beat the browser's [hidden] rule, so each game needs its own.
+    if (/\shidden[\s>=]/.test(html)) expect(html).toMatch(/\[hidden\][^{]*\{\s*display:\s*none\s*!important/);
+  });
+
   it('emits level events and asks for feedback', () => {
     expect(html).toMatch(/track\(\s*['"]level_start['"]/);
     expect(html).toMatch(/track\(\s*['"]level_end['"]/);
