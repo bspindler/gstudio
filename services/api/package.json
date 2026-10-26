@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/app.ts" },
+  "exports": {
+    ".": "./src/app.ts",
+    "./jobs": "./src/jobs.ts"
+  },
   "dependencies": {
     "@studio/core": "*",
     "@studio/adapters-local": "*",
