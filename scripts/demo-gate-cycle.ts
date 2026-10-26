@@ -9,7 +9,7 @@ const base = (slug: string, title: string, genre: string, stage: Game['stage']):
   valueEstimate: null, failingCycles: 0, createdAt: now.toISOString(), updatedAt: now.toISOString(),
 });
 const web = (gameSlug: string, d1: number, players: number) => ({
-  gameSlug, channel: 'portal' as const, asOf: '2026-10-31T12:00:00Z', players, d1, d7: null, avgSessionSec: 140,
+  gameSlug, channel: 'portal' as const, asOf: '2026-10-31T12:00:00Z', players, d1, d7: null, d1Cohort: players, d7Cohort: 0, avgSessionSec: 140,
   purchaseIntentRate: 0.04, avgRating: 4.1, ratingCount: 31, crashFreeRate: null,
 });
 

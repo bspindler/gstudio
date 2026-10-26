@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tidepool Pals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Nunito:wght@600;700;800;900&display=swap">
+<style>
+/* Layout: one-screen phone game. HUD on top, square-ish board fills the middle, tab bar pinned at the bottom. Deliberately single dark "underwater" theme. */
+:root{
+  --abyss:#0A2033; --deep:#10364D; --surf:#174C66; --reef:#1F607E;
+  --foam:#EAF8F5; --mist:#94BFC9; --sand:#FFD98A; --coral:#FF6F61; --aqua:#3DDCCB;
+  --lock:#1B4A61; --ink:#0A2033;
+  --display:'Bagel Fat One','Arial Rounded MT Bold',system-ui,sans-serif;
+  --body:'Nunito',system-ui,-apple-system,'Segoe UI',sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--abyss);background-image:radial-gradient(120% 60% at 50% -5%,var(--reef) 0%,transparent 62%);color:var(--foam);font-family:var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+.app{height:100%;box-sizing:border-box;max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 0}
+button{font-family:inherit;color:inherit}
+button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
+
+/* top bar */
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.brand{font-family:var(--display);font-size:22px;letter-spacing:.5px;color:var(--sand);line-height:1}
+.pearls{display:flex;align-items:center;gap:6px;background:var(--deep);border-radius:999px;padding:5px 12px 5px 6px;font-weight:900;font-variant-numeric:tabular-nums}
+.pearls svg{width:22px;height:22px}
+
+.view{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+.scroll{overflow-y:auto;padding-bottom:12px;-webkit-overflow-scrolling:touch}
+
+/* HUD */
+.hud{display:grid;grid-template-columns:1fr auto;gap:8px}
+.goal,.moves{background:var(--deep);border-radius:16px;padding:8px 12px}
+.goal{display:flex;align-items:center;gap:10px;min-width:0}
+.goal .gicon{width:34px;height:34px;flex:none}
+.goal .gtxt{flex:1;min-width:0}
+.label{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mist)}
+.gcount{font-weight:900;font-size:17px;font-variant-numeric:tabular-nums}
+.bar{height:7px;background:var(--abyss);border-radius:9px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;width:0;background:var(--aqua);border-radius:9px;transition:width .3s}
+.moves{text-align:center;min-width:76px}
+.moves b{display:block;font-family:var(--display);font-size:30px;line-height:1;font-weight:400;font-variant-numeric:tabular-nums}
+.moves.low b{color:var(--coral);animation:throb .8s infinite}
+@keyframes throb{50%{transform:scale(1.12)}}
+
+/* board */
+.boardwrap{flex:1;min-height:0;container-type:size;display:grid;place-items:center}
+.board{position:relative;width:min(100cqw,calc(100cqh * 7 / 8));aspect-ratio:7/8;max-width:100%;border-radius:20px;overflow:hidden;background-color:var(--deep);background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,.055) 58%,transparent 61%);background-size:calc(100% / 7) calc(100% / 8);box-shadow:inset 0 0 0 3px var(--surf),0 10px 30px rgba(0,0,0,.35)}
+.tile{position:absolute;left:0;top:0;width:calc(100% / 7);height:calc(100% / 8);padding:5%;box-sizing:border-box;border:0;background:none;cursor:pointer;transition:transform .28s cubic-bezier(.34,1.35,.64,1)}
+.tile svg{width:100%;height:100%;display:block;pointer-events:none;filter:drop-shadow(0 2px 0 rgba(0,0,0,.25))}
+.tile.pop svg{animation:pop .2s ease-in forwards}
+@keyframes pop{40%{transform:scale(1.25)}100%{transform:scale(0);opacity:0}}
+.tile.shake svg{animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-12%)}75%{transform:translateX(12%)}}
+.tile.spawn svg{animation:spawn .35s cubic-bezier(.34,1.6,.64,1)}
+@keyframes spawn{from{transform:scale(0) rotate(-90deg)}}
+.tile.bomb svg{animation:bob 1.6s ease-in-out infinite}
+@keyframes bob{50%{transform:scale(1.08) rotate(8deg)}}
+.float{position:absolute;pointer-events:none;font-family:var(--display);font-size:22px;color:var(--sand);text-shadow:0 2px 0 var(--ink);animation:rise .8s ease-out forwards;transform:translate(-50%,-50%)}
+@keyframes rise{to{transform:translate(-50%,-160%);opacity:0}}
+.hint{text-align:center;font-size:13px;color:var(--mist);font-weight:700;margin:0}
+
+/* tabs */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-block:6px 10px}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;padding:6px 0;border-radius:14px;font-weight:800;font-size:12px;color:var(--mist);cursor:pointer}
+.tab svg{width:24px;height:24px}
+.tab[aria-selected="true"]{background:var(--deep);color:var(--sand)}
+.badge{position:absolute;top:2px;right:calc(50% - 30px);background:var(--coral);color:var(--foam);font-size:10px;font-weight:900;border-radius:9px;padding:1px 6px}
+
+/* album */
+h2{font-family:var(--display);font-weight:400;font-size:26px;margin:0;text-wrap:balance;letter-spacing:.3px}
+h3{font-family:var(--display);font-weight:400;font-size:19px;margin:0;color:var(--sand)}
+.muted{color:var(--mist);font-size:14px;margin:0}
+.set{background:var(--deep);border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.sethead{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.card{position:relative;background:var(--surf);border-radius:14px;padding:6px 4px 8px;text-align:center;border:2px solid transparent}
+.card svg{width:100%;height:auto;display:block}
+.card .nm{font-weight:900;font-size:12px}
+.card.locked .nm{color:var(--mist)}
+.card[data-r="rare"]{border-color:var(--aqua)}
+.card[data-r="epic"]{border-color:var(--sand)}
+.card.locked{border-color:transparent;background:var(--abyss)}
+.cnt{position:absolute;top:4px;right:6px;font-size:11px;font-weight:900;color:var(--sand)}
+.rar{display:inline-block;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;border-radius:6px;padding:1px 6px;background:var(--abyss);color:var(--mist)}
+.rar.rare{color:var(--aqua)} .rar.epic{color:var(--sand)}
+
+/* shop */
+.offer{display:flex;align-items:center;gap:12px;background:var(--deep);border-radius:18px;padding:12px}
+.offer .art{width:56px;height:56px;flex:none}
+.offer .txt{flex:1;min-width:0}
+.offer .t{font-weight:900;font-size:16px}
+.offer.hero{background:linear-gradient(135deg,var(--reef),var(--deep));box-shadow:inset 0 0 0 2px var(--sand)}
+.tag{display:inline-block;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--sand);border-radius:6px;padding:1px 6px;margin-bottom:3px}
+.btn{border:0;border-radius:14px;padding:11px 16px;font-weight:900;font-size:15px;cursor:pointer;background:var(--aqua);color:var(--ink);box-shadow:0 4px 0 rgba(0,0,0,.3);white-space:nowrap}
+.btn:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.3)}
+.btn.buy{background:var(--sand)}
+.btn.ghost{background:var(--surf);color:var(--foam)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.stats{background:var(--abyss);border:2px dashed var(--surf);border-radius:16px;padding:12px;font-size:13px;color:var(--mist);display:flex;flex-direction:column;gap:4px}
+.stats b{color:var(--foam);font-variant-numeric:tabular-nums}
+.linkbtn{background:none;border:0;color:var(--mist);font-weight:800;font-size:13px;text-decoration:underline;cursor:pointer;padding:8px;align-self:center}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:50;background:rgba(4,16,26,.72);display:grid;place-items:center;padding:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mcard{width:100%;max-width:340px;background:var(--deep);border-radius:24px;padding:22px 18px 18px;text-align:center;display:flex;flex-direction:column;gap:12px;box-shadow:inset 0 0 0 3px var(--surf),0 20px 50px rgba(0,0,0,.5);animation:modalin .3s cubic-bezier(.34,1.5,.64,1)}
+@keyframes modalin{from{transform:scale(.8);opacity:0}}
+.mcard .row{display:flex;flex-direction:column;gap:8px}
+.stars{display:flex;justify-content:center;gap:4px}
+.stars svg{width:48px;height:48px}
+.stars svg:nth-child(2){transform:translateY(-10px)}
+.shellbtn{background:none;border:0;cursor:pointer;width:150px;margin:0 auto;animation:wobble 1.4s ease-in-out infinite}
+.shellbtn svg{width:100%;display:block}
+.shellbtn.crack{animation:crack .55s ease-in forwards}
+@keyframes wobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-6deg)}40%{transform:rotate(6deg)}60%{transform:rotate(0)}}
+@keyframes crack{30%{transform:scale(1.1) rotate(-8deg)}60%{transform:scale(1.15) rotate(8deg)}100%{transform:scale(1.6);opacity:0}}
+.reveal{width:170px;margin:0 auto;animation:revealin .5s cubic-bezier(.34,1.6,.64,1)}
+.reveal svg{width:100%;display:block}
+@keyframes revealin{from{transform:scale(0) rotate(-20deg)}}
+.newtag{font-family:var(--display);color:var(--coral);font-size:20px}
+.fine{font-size:11px;color:var(--mist);margin:0}
+
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;background:var(--foam);color:var(--ink);font-weight:800;font-size:14px;border-radius:999px;padding:9px 16px;box-shadow:0 8px 20px rgba(0,0,0,.4);max-width:calc(100% - 40px);text-align:center;animation:toastin .25s ease-out}
+@keyframes toastin{from{transform:translate(-50%,20px);opacity:0}}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">Tidepool Pals</div>
+    <div class="pearls" aria-label="Pearls"><span id="pearlIcon"></span><span id="pearlCount">0</span></div>
+  </header>
+
+  <section class="view" id="view-play">
+    <div class="hud">
+      <div class="goal">
+        <div class="gicon" id="goalIcon"></div>
+        <div class="gtxt">
+          <div class="label" id="lvlLabel">Level 1</div>
+          <div class="gcount" id="goalCount">0 / 16</div>
+          <div class="bar"><i id="goalBar"></i></div>
+        </div>
+      </div>
+      <div class="moves" id="movesBox"><div class="label">Moves</div><b id="movesCount">22</b></div>
+    </div>
+    <div class="boardwrap"><div class="board" id="board" aria-label="Puzzle board"></div></div>
+    <p class="hint">Tap 2+ matching pieces. Clear 5+ at once for an urchin bomb.</p>
+  </section>
+
+  <section class="view scroll" id="view-album" hidden></section>
+  <section class="view scroll" id="view-shop" hidden></section>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-play" data-tab="play" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><circle cx="17" cy="17" r="4"/></svg>Play</button>
+    <button class="tab" role="tab" id="tab-album" data-tab="album" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><circle cx="12" cy="10" r="3"/></svg>Album<span class="badge" id="albumBadge" hidden></span></button>
+    <button class="tab" role="tab" id="tab-shop" data-tab="shop" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>Shop</button>
+  </nav>
+</div>
+
+<div class="modal" id="modal" hidden><div class="mcard" id="mcard" role="dialog" aria-modal="true"></div></div>
+
+<script type="module">
+import { createStudio } from '/sdk/studio-sdk.js';
+const studio = createStudio({ game: 'tidepool-pals', version: '0.2.0', endpoint: window.STUDIO_CONFIG?.endpoint ?? `${location.protocol}//${location.hostname}:8787` });
+
+const COLS=7, ROWS=8;
+const TILE_COL=['#FF6F61','#FFC93C','#3DDCCB','#A77BFF','#7BD45A'];
+const TILE_NAME=['Coral','Sunstar','Droplet','Gem','Kelp'];
+const HL='<ellipse cx="14.5" cy="13" rx="5" ry="3" fill="#fff" opacity=".55" transform="rotate(-25 14.5 13)"/>';
+function starPts(cx,cy,R,r){let p=[];for(let i=0;i<10;i++){const a=(-90+36*i)*Math.PI/180,rr=i%2?r:R;p.push((cx+rr*Math.cos(a)).toFixed(1)+','+(cy+rr*Math.sin(a)).toFixed(1));}return p.join(' ');}
+const TILES=[
+ `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="15" fill="${TILE_COL[0]}"/><circle cx="20" cy="20" r="14" fill="none" stroke="#000" stroke-opacity=".15" stroke-width="2"/>${HL}</svg>`,
+ `<svg viewBox="0 0 40 40"><polygon points="${starPts(20,21,17,8)}" fill="${TILE_COL[1]}" stroke="#000" stroke-opacity=".15" stroke-width="2" stroke-linejoin="round"/>${HL}</svg>`,
+ `<svg viewBox="0 0 40 40"><path d="M20 3C28 14 33 20 33 26A13 13 0 0 1 7 26C7 20 12 14 20 3Z" fill="${TILE_COL[2]}" stroke="#000" stroke-opacity=".15" stroke-width="2"/><ellipse cx="15" cy="24" rx="3.5" ry="5" fill="#fff" opacity=".5"/></svg>`,
+ `<svg viewBox="0 0 40 40"><polygon points="20,3 36,20 20,37 4,20" fill="${TILE_COL[3]}" stroke="#000" stroke-opacity=".15" stroke-width="2" stroke-linejoin="round"/><polygon points="20,8 13,20 20,20" fill="#fff" opacity=".35"/></svg>`,
+ `<svg viewBox="0 0 40 40"><rect x="5" y="5" width="30" height="30" rx="10" fill="${TILE_COL[4]}" stroke="#000" stroke-opacity=".15" stroke-width="2"/>${HL}</svg>`
+];
+let spikes='';for(let i=0;i<10;i++){const a=i*36*Math.PI/180;spikes+=`<line x1="${(20+9*Math.cos(a)).toFixed(1)}" y1="${(20+9*Math.sin(a)).toFixed(1)}" x2="${(20+18*Math.cos(a)).toFixed(1)}" y2="${(20+18*Math.sin(a)).toFixed(1)}"/>`;}
+const BOMB=`<svg viewBox="0 0 40 40"><g stroke="#C9A6FF" stroke-width="3" stroke-linecap="round">${spikes}</g><circle cx="20" cy="20" r="11" fill="#5B3A86"/><circle cx="20" cy="20" r="4.5" fill="#FF6F61"/><ellipse cx="16" cy="15" rx="3.5" ry="2" fill="#fff" opacity=".5"/></svg>`;
+const PEARL=`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#F3EEFF"/><circle cx="12" cy="12" r="9" fill="none" stroke="#C7B8F0" stroke-width="1.5"/><ellipse cx="9" cy="8.5" rx="3" ry="2" fill="#fff"/></svg>`;
+let ridges='';for(let i=1;i<6;i++){const a=(180+30*i)*Math.PI/180;ridges+=`<line x1="50" y1="88" x2="${(50+40*Math.cos(a)).toFixed(1)}" y2="${(50+40*Math.sin(a)).toFixed(1)}"/>`;}
+const SHELL=`<svg viewBox="0 0 100 100"><path d="M50 88L12 50A38 38 0 0 1 88 50Z" fill="#FFD98A" stroke="#E0A84E" stroke-width="3" stroke-linejoin="round"/><g stroke="#E0A84E" stroke-width="3" stroke-linecap="round">${ridges}</g><path d="M40 88h20l-4 8h-12z" fill="#E0A84E"/><ellipse cx="34" cy="36" rx="7" ry="4" fill="#fff" opacity=".5" transform="rotate(-30 34 36)"/></svg>`;
+const STAR_ON=`<svg viewBox="0 0 40 40"><polygon points="${starPts(20,21,18,8)}" fill="#FFD98A" stroke="#E0A84E" stroke-width="2" stroke-linejoin="round"/></svg>`;
+const STAR_OFF=`<svg viewBox="0 0 40 40"><polygon points="${starPts(20,21,18,8)}" fill="#174C66" stroke="#1F607E" stroke-width="2" stroke-linejoin="round"/></svg>`;
+
+const SETS=[{name:'The Shallows',reward:300},{name:'Coral Reef',reward:400},{name:'The Deep',reward:600}];
+const CREATURES=[
+ {id:'pebbin',name:'Pebbin',set:0,rar:'common',col:'#F4A259',shape:'round',feat:'shell'},
+ {id:'fizz',name:'Fizz',set:0,rar:'common',col:'#5FD3E8',shape:'round',feat:'fins'},
+ {id:'snapjaw',name:'Snapjaw',set:0,rar:'rare',col:'#FF6F61',shape:'wide',feat:'claws'},
+ {id:'marlo',name:'Marlo',set:0,rar:'epic',col:'#FFC93C',shape:'tall',feat:'spikes'},
+ {id:'bloop',name:'Bloop',set:1,rar:'common',col:'#C08CFF',shape:'round',feat:'tentacles'},
+ {id:'tango',name:'Tango',set:1,rar:'common',col:'#FF9BB3',shape:'wide',feat:'fins'},
+ {id:'spindle',name:'Spindle',set:1,rar:'rare',col:'#7BD45A',shape:'tall',feat:'spikes'},
+ {id:'coralie',name:'Coralie',set:1,rar:'epic',col:'#FF5E8A',shape:'round',feat:'crown'},
+ {id:'gloam',name:'Gloam',set:2,rar:'common',col:'#5878E0',shape:'round',feat:'lure'},
+ {id:'wisp',name:'Wisp',set:2,rar:'common',col:'#8FE3D6',shape:'tall',feat:'tentacles'},
+ {id:'lumen',name:'Lumen',set:2,rar:'rare',col:'#2EC4B6',shape:'wide',feat:'lure'},
+ {id:'abyssa',name:'Abyssa',set:2,rar:'epic',col:'#9B5DE5',shape:'tall',feat:'crown'}
+];
+
+function creatureSVG(cr,locked){
+  const f=locked?'#24566E':cr.col;
+  let rx=30,ry=27,cy=60;
+  if(cr.shape==='tall'){rx=24;ry=32;cy=58} else if(cr.shape==='wide'){rx=35;ry=23;cy=62}
+  const L=50-rx,R=50+rx,top=cy-ry,bot=cy+ry;
+  let back='',front='';
+  switch(cr.feat){
+    case 'fins':
+      back+=`<path d="M${L+6} ${cy} L${L-12} ${cy-14} L${L-8} ${cy+12}Z" fill="${f}"/><path d="M${R-6} ${cy} L${R+12} ${cy-14} L${R+8} ${cy+12}Z" fill="${f}"/>`;
+      back+=`<path d="M44 ${top+4} L50 ${top-12} L56 ${top+4}Z" fill="${f}"/>`;break;
+    case 'claws':
+      [[L-6,-1],[R+6,1]].forEach(([x,s])=>{back+=`<line x1="${x-6*s}" y1="${cy}" x2="${x}" y2="${cy-12}" stroke="${f}" stroke-width="6" stroke-linecap="round"/><circle cx="${x}" cy="${cy-18}" r="10" fill="${f}"/><path d="M${x-4} ${cy-30} L${x} ${cy-19} L${x+4} ${cy-30}Z" fill="#0A2033" opacity=".55"/>`});break;
+    case 'spikes':{
+      let pts=[];for(let i=0;i<=6;i++){const a=(195+25*i)*Math.PI/180;const b1=a-.17,b2=a+.17;
+        pts.push(`M${(50+rx*.9*Math.cos(b1)).toFixed(1)} ${(cy+ry*.9*Math.sin(b1)).toFixed(1)} L${(50+(rx+13)*Math.cos(a)).toFixed(1)} ${(cy+(ry+13)*Math.sin(a)).toFixed(1)} L${(50+rx*.9*Math.cos(b2)).toFixed(1)} ${(cy+ry*.9*Math.sin(b2)).toFixed(1)}Z`);}
+      back+=`<path d="${pts.join(' ')}" fill="${f}"/>`;break;}
+    case 'tentacles':
+      [-18,-6,6,18].forEach((dx,i)=>{const x=50+dx*(rx/30);back+=`<path d="M${x} ${bot-8} q ${i%2?6:-6} 10 0 18 q ${i%2?-6:6} 8 0 14" fill="none" stroke="${f}" stroke-width="6" stroke-linecap="round"/>`});break;
+    case 'lure':
+      back+=`<path d="M50 ${top+2} Q 50 ${top-20} 70 ${top-16}" fill="none" stroke="${f}" stroke-width="3.5" stroke-linecap="round"/>`;
+      front+=locked?`<circle cx="71" cy="${top-16}" r="6" fill="${f}"/>`:`<circle cx="71" cy="${top-16}" r="11" fill="#FFF6A8" opacity=".25"/><circle cx="71" cy="${top-16}" r="6" fill="#FFF6A8"/>`;break;
+    case 'crown':
+      [[38,-4],[50,-9],[62,-4]].forEach(([x,dy])=>{back+=`<line x1="${x}" y1="${top+6}" x2="${x}" y2="${top+dy}" stroke="${f}" stroke-width="5" stroke-linecap="round"/>`;front+=`<circle cx="${x}" cy="${top+dy-4}" r="5" fill="${locked?f:'#FFD98A'}"/>`});break;
+    case 'shell':
+      front+=`<path d="M${L+2} ${cy-2} A${rx-2} ${ry-2} 0 0 1 ${R-2} ${cy-2} Z" fill="${locked?'#2B6580':'#C9763A'}" opacity="${locked?.6:1}"/>`;
+      if(!locked)for(let i=1;i<4;i++){const x=L+2+(rx*2-4)*i/4;front+=`<line x1="50" y1="${cy-2}" x2="${x.toFixed(1)}" y2="${(cy-2-Math.sqrt(Math.max(0,1-((x-50)/(rx-2))**2))*(ry-2)).toFixed(1)}" stroke="#A85E2C" stroke-width="2.5"/>`;}
+      break;
+  }
+  let body=`<ellipse cx="50" cy="${cy}" rx="${rx}" ry="${ry}" fill="${f}"/>`;
+  let face='';
+  if(locked){face=`<text x="50" y="${cy+9}" text-anchor="middle" font-family="Bagel Fat One, sans-serif" font-size="28" fill="#3C7A96">?</text>`;}
+  else{
+    body+=`<ellipse cx="50" cy="${cy+ry*.4}" rx="${rx*.62}" ry="${ry*.42}" fill="#fff" opacity=".2"/><ellipse cx="${50-rx*.45}" cy="${cy-ry*.55}" rx="6" ry="3.5" fill="#fff" opacity=".35" transform="rotate(-25 ${50-rx*.45} ${cy-ry*.55})"/>`;
+    const ex=Math.min(rx*.38,13),ey=cy-ry*.12+(cr.feat==='shell'?6:0);
+    face+=`<circle cx="${50-ex-6}" cy="${ey+8}" r="4.5" fill="#FF8FA3" opacity=".6"/><circle cx="${50+ex+6}" cy="${ey+8}" r="4.5" fill="#FF8FA3" opacity=".6"/>`;
+    [-ex,ex].forEach(d=>{face+=`<circle cx="${50+d}" cy="${ey}" r="7.5" fill="#fff"/><circle cx="${50+d+1}" cy="${ey+1}" r="4" fill="#14202B"/><circle cx="${50+d+2.3}" cy="${ey-.6}" r="1.4" fill="#fff"/>`});
+    face+=`<path d="M45 ${ey+9} Q50 ${ey+14} 55 ${ey+9}" fill="none" stroke="#14202B" stroke-width="2.5" stroke-linecap="round"/>`;
+  }
+  return `<svg viewBox="0 0 100 100" role="img" aria-label="${locked?'Undiscovered creature':cr.name}">${back}${body}${front}${face}</svg>`;
+}
+
+/* ---------- save ---------- */
+const KEY='tidepool_v1';
+function fresh(){return {v:1,level:1,pearls:120,shells:0,album:{},claimed:{},starter:false};}
+
+/* ---------- shop catalog (fake-door via studio.purchase.offer; nothing here grants a random reward) ---------- */
+const STARTER_PAL='snapjaw';
+const CATALOG={
+  moves:  {sku:'moves_5',        title:'+5 Moves',       priceUsd:0.99},
+  starter:{sku:'starter_pack',   title:'Starter Pack',   priceUsd:1.99},
+  pouch:  {sku:'pearl_pouch',    title:'Pearl Pouch',    priceUsd:0.99},
+  chest:  {sku:'treasure_chest', title:'Treasure Chest', priceUsd:4.99}
+};
+const price=item=>`$${item.priceUsd.toFixed(2)}`;
+const passed=new Set(); // SKUs the player said no to this session: not shown again, no re-prompt
+let paying=false;
+/** Shows the SDK offer. Resolves true only when granted; 'declined' and 'suppressed' both mean carry on without it. */
+async function buy(item){
+  if(paying)return false;
+  paying=true;
+  try{
+    const r=await studio.purchase.offer({sku:item.sku,title:item.title,priceUsd:item.priceUsd});
+    if(r==='granted')return true;
+    passed.add(item.sku);return false;
+  }finally{paying=false;}
+}
+const offered=item=>!passed.has(item.sku);
+
+/* ---------- earned shell odds (shells come only from play; pearls never buy shells) ---------- */
+const RARITY_ODDS=[{label:'Common',weight:0.62,rar:'common'},{label:'Rare',weight:0.30,rar:'rare'},{label:'Epic',weight:0.08,rar:'epic'}];
+const oddsLine=()=>`Drop odds: ${studio.odds.format(RARITY_ODDS)}. Every pal of a rarity is equally likely.`;
+let S=(function(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.v===1)return s;}catch(e){}return fresh();})();
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+
+/* ---------- dom ---------- */
+const $=id=>document.getElementById(id);
+const board=$('board'), modal=$('modal'), mcard=$('mcard');
+$('pearlIcon').innerHTML=PEARL;
+
+let toastT;
+function toast(msg){document.querySelectorAll('.toast').forEach(t=>t.remove());const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);clearTimeout(toastT);toastT=setTimeout(()=>t.remove(),2200);}
+function showModal(html){mcard.innerHTML=html;modal.hidden=false;const b=mcard.querySelector('button');if(b)b.focus({preventScroll:true});}
+function closeModal(){modal.hidden=true;}
+
+/* ---------- game ---------- */
+let grid=[],busy=false,lvl=null,ctx='win';
+function cfg(n){return {goal:(n-1)%5,target:Math.min(12+n*4,60),moves:Math.max(15,22-Math.floor(n/3))};}
+const rc=()=>Math.floor(Math.random()*5);
+
+function makeTile(c){
+  const el=document.createElement('button');el.type='button';el.className='tile'+(c==='B'?' bomb':'');
+  el.innerHTML=c==='B'?BOMB:TILES[c];el.setAttribute('aria-label',c==='B'?'Urchin bomb':TILE_NAME[c]);
+  const t={c,el,r:0,col:0};el.addEventListener('click',()=>tap(t));board.appendChild(el);return t;
+}
+function setColor(t,c){t.c=c;t.el.className='tile';t.el.innerHTML=TILES[c];t.el.setAttribute('aria-label',TILE_NAME[c]);}
+function place(t,r,c){t.r=r;t.col=c;t.el.style.transform=`translate(${c*100}%,${r*100}%)`;}
+function placeNow(t,r,c){t.el.style.transition='none';place(t,r,c);void t.el.offsetWidth;t.el.style.transition='';}
+
+function startLevel(n){
+  board.innerHTML='';grid=[];busy=false;
+  const c=cfg(n);lvl={n,goal:c.goal,target:c.target,got:0,moves:c.moves,over:false};
+  for(let r=0;r<ROWS;r++){grid[r]=[];for(let col=0;col<COLS;col++){const t=makeTile(rc());grid[r][col]=t;placeNow(t,r-ROWS,col);}}
+  if(!hasMoves())reshuffle(true);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{for(let r=0;r<ROWS;r++)for(let col=0;col<COLS;col++)place(grid[r][col],r,col);}));
+  hud();
+  studio.track('level_start',{level:n});
+}
+function inb(r,c){return r>=0&&r<ROWS&&c>=0&&c<COLS;}
+function flood(r,c){const col=grid[r][c].c,seen=new Set(),out=[],st=[[r,c]];
+  while(st.length){const [y,x]=st.pop(),k=y*COLS+x;if(seen.has(k))continue;seen.add(k);const t=grid[y][x];if(!t||t.c!==col)continue;out.push(t);
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dy,dx])=>{if(inb(y+dy,x+dx))st.push([y+dy,x+dx]);});}
+  return out;}
+function hasMoves(){for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const t=grid[r][c];if(!t)continue;if(t.c==='B')return true;
+  if(c+1<COLS&&grid[r][c+1]&&grid[r][c+1].c===t.c)return true;if(r+1<ROWS&&grid[r+1][c]&&grid[r+1][c].c===t.c)return true;}return false;}
+function reshuffle(silent){let n=0;do{for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const t=grid[r][c];if(t&&t.c!=='B')setColor(t,rc());}n++;}while(!hasMoves()&&n<50);if(!silent)toast('No matches left, so the tide reshuffled the board');}
+
+function floatAt(r,c,text){const s=document.createElement('span');s.className='float';s.textContent=text;s.style.left=((c+.5)/COLS*100)+'%';s.style.top=((r+.5)/ROWS*100)+'%';board.appendChild(s);setTimeout(()=>s.remove(),850);}
+
+function tap(t){
+  if(busy||!lvl||lvl.over)return;
+  const r=t.r,c=t.col;let cells;
+  if(t.c==='B'){cells=[];const seen=new Set();const q=[t];
+    while(q.length){const b=q.pop();for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const y=b.r+dy,x=b.col+dx;if(!inb(y,x))continue;const u=grid[y][x];if(!u||seen.has(u))continue;seen.add(u);cells.push(u);if(u.c==='B'&&u!==b)q.push(u);}}
+    if(navigator.vibrate)try{navigator.vibrate(30)}catch(e){}
+  } else {cells=flood(r,c);if(cells.length<2){t.el.classList.remove('shake');void t.el.offsetWidth;t.el.classList.add('shake');return;}}
+  busy=true;lvl.moves--;
+  let gained=0;
+  cells.forEach(x=>{if(x.c===lvl.goal)gained++;grid[x.r][x.col]=null;x.el.classList.add('pop');x.el.disabled=true;setTimeout(()=>x.el.remove(),220);});
+  lvl.got=Math.min(lvl.target,lvl.got+gained);
+  if(t.c!=='B'&&cells.length>=5){const b=makeTile('B');grid[r][c]=b;placeNow(b,r,c);b.el.classList.add('spawn');}
+  if(gained)floatAt(r,c,'+'+gained);else if(cells.length>=5)floatAt(r,c,'Bomb!');
+  hud();
+  setTimeout(()=>{gravity();setTimeout(()=>{busy=false;check();},320);},150);
+}
+function gravity(){
+  for(let c=0;c<COLS;c++){let w=ROWS-1;
+    for(let r=ROWS-1;r>=0;r--){const t=grid[r][c];if(t){if(r!==w){grid[w][c]=t;grid[r][c]=null;place(t,w,c);}w--;}}
+    const missing=w+1;
+    for(let r=w;r>=0;r--){const t=makeTile(rc());grid[r][c]=t;placeNow(t,r-missing,c);}
+  }
+  requestAnimationFrame(()=>{for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const t=grid[r][c];if(t&&t.r!==r)place(t,r,c);}});
+}
+function hud(){
+  $('pearlCount').textContent=S.pearls.toLocaleString();
+  const owned=CREATURES.filter(c=>S.album[c.id]).length;
+  const claimable=SETS.some((s,i)=>setDone(i)&&!S.claimed[i]);
+  const bd=$('albumBadge');bd.hidden=!claimable;bd.textContent='!';
+  if(!lvl)return;
+  $('lvlLabel').textContent='Level '+lvl.n+' · collect';
+  $('goalIcon').innerHTML=TILES[lvl.goal];
+  $('goalCount').textContent=lvl.got+' / '+lvl.target+' '+TILE_NAME[lvl.goal];
+  $('goalBar').style.width=(lvl.got/lvl.target*100)+'%';
+  $('movesCount').textContent=lvl.moves;
+  $('movesBox').classList.toggle('low',lvl.moves<=3);
+}
+function check(){
+  if(!lvl||lvl.over)return;
+  if(lvl.got>=lvl.target){win();return;}
+  if(lvl.moves<=0){outOfMoves();return;}
+  if(!hasMoves())reshuffle(false);
+}
+function win(){
+  lvl.over=true;
+  const stars=lvl.moves>=8?3:lvl.moves>=4?2:1, reward=10+stars*10;
+  S.pearls+=reward;S.level=lvl.n+1;save();hud();
+  studio.track('level_end',{level:lvl.n,result:'win',score:lvl.got});
+  showModal(`<div class="label">Level ${lvl.n} cleared</div><div class="stars">${[1,2,3].map(i=>i<=stars?STAR_ON:STAR_OFF).join('')}</div>
+    ${!lvl.assisted ? `<h2>Splendid!</h2><p class="muted">+${reward} pearls, and a shell washed up on the shore.</p>
+    <div class="row"><button class="btn buy" data-act="win-shell">Collect your shell</button></div>
+    <p class="fine">${oddsLine()}</p>`
+    : `<h2>Splendid!</h2><p class="muted">+${reward} pearls. Shells wash up on levels cleared without extra moves.</p>
+    <div class="row"><button class="btn buy" data-act="next">Next level</button></div>`}`);
+}
+function outOfMoves(){
+  lvl.over=true;
+  studio.track('level_end',{level:lvl.n,result:'lose',score:lvl.got});
+  outOfMovesModal();
+}
+function outOfMovesModal(){
+  const left=lvl.target-lvl.got;
+  showModal(`<div class="label">Out of moves</div><h2>${left<=4?'So close!':'Out of moves'}</h2>
+    <p class="muted">You need ${left} more ${TILE_NAME[lvl.goal]}. Keep going?</p>
+    <div class="row">
+      ${offered(CATALOG.moves)?`<button class="btn buy" data-act="buy-moves">${CATALOG.moves.title} · ${price(CATALOG.moves)}</button>`:''}
+      <button class="btn" data-act="pearl-moves" ${S.pearls<90?'disabled':''}>+5 moves · 90 pearls</button>
+      <button class="btn ghost" data-act="retry">Try again</button>
+    </div>`);
+}
+// Extra moves (bought, or paid with pearls, which are also sold) make the level assisted: no shell on that win,
+// so no paid path leads to a random reward.
+function addMoves(){lvl.moves+=5;lvl.over=false;lvl.assisted=true;closeModal();hud();}
+/** Called as the player leaves the win or out-of-moves screens. The SDK decides whether to actually ask. */
+function afterLevelScreen(){studio.feedback.maybePrompt();}
+
+/* ---------- collection ---------- */
+function setDone(i){return CREATURES.filter(c=>c.set===i).every(c=>S.album[c.id]);}
+function addPal(cr){const n=(S.album[cr.id]||0)+1;S.album[cr.id]=n;const dup=n>1;if(dup)S.pearls+=25;save();return {cr,dup,n};}
+/** Earned shells only. Rarity first, then a uniform pick within that rarity, both via studio.odds.roll. */
+function roll(){
+  const rar=studio.odds.roll(RARITY_ODDS).rar;
+  const pool=CREATURES.filter(c=>c.rar===rar);
+  const cr=studio.odds.roll(pool.map(c=>({label:c.name,weight:1/pool.length,cr:c}))).cr;
+  return addPal(cr);
+}
+function offerShell(){showModal(`<div class="label">${ctx==='win'?'Your reward':'Shell'}</div><h2>Something's inside…</h2>
+  <button class="shellbtn" data-act="crack" aria-label="Open the shell">${SHELL}</button><p class="muted">Tap the shell to open it</p>
+  <p class="fine">${oddsLine()}</p>`);}
+function showResult({cr,dup,n}){
+  const done=setDone(cr.set)&&!S.claimed[cr.set];
+  const canAgain=S.shells>0;
+  showModal(`<div class="newtag">${dup?'Again!':'New pal!'}</div>
+    <div class="reveal">${creatureSVG(cr,false)}</div>
+    <h2>${cr.name}</h2><div><span class="rar ${cr.rar}">${cr.rar}</span> <span class="muted">· ${SETS[cr.set].name}</span></div>
+    <p class="muted">${dup?`You have ${n} now. Duplicates give +25 pearls.`:'Added to your album.'}${done?` <b style="color:var(--sand)">Set complete! Claim ${SETS[cr.set].reward} pearls in the Album.</b>`:''}</p>
+    <div class="row">${ctx==='win'
+      ?`<button class="btn buy" data-act="next">Next level</button><button class="btn ghost" data-act="go-album">View album</button>`
+      :`${canAgain?`<button class="btn buy" data-act="open-shell">Open another (${S.shells} left)</button>`:''}<button class="btn ghost" data-act="close">Done</button>`}</div>`);
+  hud();renderAlbum();renderShop();
+}
+
+function renderAlbum(){
+  const owned=CREATURES.filter(c=>S.album[c.id]).length;
+  let h=`<div><h2>Pal Album</h2><p class="muted">${owned} of ${CREATURES.length} pals found. Finish a set for a big pearl bonus.</p></div>`;
+  SETS.forEach((s,i)=>{
+    const list=CREATURES.filter(c=>c.set===i),got=list.filter(c=>S.album[c.id]).length,done=got===list.length;
+    h+=`<div class="set"><div class="sethead"><h3>${s.name}</h3>${done?(S.claimed[i]?`<span class="muted">Claimed ✓</span>`:`<button class="btn buy" data-act="claim" data-set="${i}">Claim ${s.reward}</button>`):`<span class="muted">${got}/${list.length} · ${s.reward} pearl reward</span>`}</div>
+      <div class="cards">${list.map(c=>{const n=S.album[c.id]||0;return `<div class="card${n?'':' locked'}" data-r="${c.rar}">${n>1?`<span class="cnt">×${n}</span>`:''}${creatureSVG(c,!n)}<div class="nm">${n?c.name:'???'}</div><span class="rar ${c.rar}">${c.rar}</span></div>`}).join('')}</div></div>`;
+  });
+  h+=`<p class="fine" style="text-align:center">${oddsLine()}</p>`;
+  $('view-album').innerHTML=h;
+}
+function renderShop(){
+  const starterPal=CREATURES.find(c=>c.id===STARTER_PAL);
+  const {starter,pouch,chest}=CATALOG;
+  $('view-shop').innerHTML=`<div><h2>Shop</h2><p class="muted">Pearls and boosts. Shells can't be bought: they wash up when you clear a level.</p></div>
+  ${S.starter||!offered(starter)?'':`<div class="offer hero"><div class="art">${creatureSVG(starterPal,false)}</div><div class="txt"><span class="tag">Once per player</span><div class="t">${starter.title}</div><div class="muted">500 pearls + ${starterPal.name}, a ${starterPal.rar} pal</div></div><button class="btn buy" data-act="buy-starter">${price(starter)}</button></div>`}
+  <div class="offer"><div class="art">${SHELL}</div><div class="txt"><div class="t">Open a Shell</div><div class="muted">${S.shells>0?`You have ${S.shells} shell${S.shells>1?'s':''}`:'Clear a level to earn one'}</div><div class="fine">${oddsLine()}</div></div><button class="btn" data-act="open-shell" ${S.shells>0?'':'disabled'}>Open</button></div>
+  ${offered(pouch)?`<div class="offer"><div class="art">${PEARL}</div><div class="txt"><div class="t">${pouch.title}</div><div class="muted">200 pearls</div></div><button class="btn buy" data-act="buy-pouch">${price(pouch)}</button></div>`:''}
+  ${offered(chest)?`<div class="offer"><div class="art">${PEARL}</div><div class="txt"><span class="tag">Best value</span><div class="t">${chest.title}</div><div class="muted">1,200 pearls</div></div><button class="btn buy" data-act="buy-chest">${price(chest)}</button></div>`:''}
+  <p class="fine" style="text-align:center">Pearls are spent on extra moves.</p>
+  <button class="linkbtn" data-act="reset" id="resetBtn">Reset all progress</button>`;
+}
+
+function showTab(name){
+  ['play','album','shop'].forEach(n=>{$('view-'+n).hidden=n!==name;$('tab-'+n).setAttribute('aria-selected',n===name?'true':'false');});
+  if(name==='album')renderAlbum();if(name==='shop')renderShop();
+}
+
+let resetArm=false;
+document.addEventListener('click',e=>{
+  const tb=e.target.closest('[data-tab]');if(tb){showTab(tb.dataset.tab);return;}
+  const b=e.target.closest('[data-act]');if(!b||b.disabled)return;
+  const a=b.dataset.act;
+  if(a!=='reset')resetArm=false;
+  switch(a){
+    case 'win-shell':if(lvl.assisted)break;ctx='win';offerShell();break;
+    case 'crack':b.classList.add('crack');b.disabled=true;setTimeout(()=>showResult(roll()),540);break;
+    case 'next':closeModal();showTab('play');startLevel(S.level);afterLevelScreen();break;
+    case 'go-album':closeModal();startLevel(S.level);showTab('album');afterLevelScreen();break;
+    case 'close':closeModal();break;
+    case 'buy-moves':
+      buy(CATALOG.moves).then(ok=>{
+        if(ok){addMoves();afterLevelScreen();}
+        else outOfMovesModal(); // declined or suppressed: same screen, minus the offer
+      });break;
+    case 'pearl-moves':S.pearls-=90;save();addMoves();afterLevelScreen();break;
+    case 'retry':closeModal();startLevel(lvl.n);afterLevelScreen();break;
+    case 'open-shell':
+      if(S.shells<=0)break;
+      S.shells--;save();hud();ctx='shop';offerShell();break;
+    case 'buy-starter':
+      buy(CATALOG.starter).then(ok=>{
+        if(ok&&!S.starter){S.starter=true;S.pearls+=500;const pal=CREATURES.find(c=>c.id===STARTER_PAL);const {dup}=addPal(pal);toast(dup?`+500 pearls and another ${pal.name} (+25 pearls)`:`+500 pearls and ${pal.name} joined your album`);}
+        hud();renderShop();renderAlbum();
+      });break;
+    case 'buy-pouch':buy(CATALOG.pouch).then(ok=>{if(ok){S.pearls+=200;save();}hud();renderShop();});break;
+    case 'buy-chest':buy(CATALOG.chest).then(ok=>{if(ok){S.pearls+=1200;save();}hud();renderShop();});break;
+    case 'claim':{const i=+b.dataset.set;if(setDone(i)&&!S.claimed[i]){S.claimed[i]=true;S.pearls+=SETS[i].reward;save();hud();renderAlbum();toast(`${SETS[i].name} complete! +${SETS[i].reward} pearls`);}break;}
+    case 'reset':
+      if(!resetArm){resetArm=true;b.textContent='Tap again to erase everything';break;}
+      resetArm=false;S=fresh();save();renderShop();hud();startLevel(1);toast('Progress reset');break;
+  }
+});
+
+startLevel(S.level);hud();
+</script>

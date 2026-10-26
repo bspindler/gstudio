@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "rootDir": ".", "noEmit": true, "composite": false, "declaration": false },
+  "include": ["*.ts"],
+  "references": [{ "path": "../packages/core" }, { "path": "../adapters/local" }, { "path": "../services/api" }]
+}

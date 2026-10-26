@@ -19,6 +19,7 @@ A platform that takes small mobile games from idea to worldwide launch with mini
 - Approve floor, enforced by the policy loader: `spend`, `store.submit`, `market.expand`, `price.change`, `iap.change`, `account.create`, and `stage.kill` at stage 3 or later can never be classified below `approve`.
 - Fail closed: if the policy is missing or invalid, or an action kind is unknown, the action is blocked.
 - The kill switch blocks every `spend` and `post.public` action, including approvals that were pending when it was engaged.
+- Random rewards are earned-only: nothing purchasable contains a random reward (operator decision, 2026-10-26; `markets.yaml` `paid_random_rewards: false`). The SDK refuses `randomReward` offers, and earned random rewards show odds at the point of opening.
 
 ## Conventions
 
@@ -27,15 +28,27 @@ A platform that takes small mobile games from idea to worldwide launch with mini
 - Inject time (`clock`) and IDs (`ids`) so that core logic stays deterministic.
 - Core logic has no Azure dependencies. Storage, queues, secrets and notifications sit behind ports, with local adapters (SQLite and the filesystem) and Azure adapters. Local dev must never require Azure.
 - Infrastructure is Bicep only (`infra/`). Secrets live in Key Vault and are reached via managed identity; never put them in the repo.
-- Money is USD numbers. Rates are fractions from 0 to 1.
+- Money is USD numbers. Rates are fractions from 0 to 1. Days are UTC.
+- Games use only the SDK (`packages/sdk/studio-sdk.js`) for events, purchases, feedback, flags and odds. `packages/core/test/games-compliance.test.ts` checks every game statically.
+
+## Local dev
+
+- `npm test`, `npm run typecheck`
+- `npm run dev`: API and ingest on :8787, games on :5174 (also on the LAN, for phones). Data goes to `.data/`.
+- `npm run seed`, `npm run rollup`, `npm run gates`: register games, compute metrics, run a gate cycle.
+- `npm run demo:1b`: synthetic players through the real ingest, written to `.data/demo`. Synthetic players are for local use only; never point them at a real channel (hard rule 2).
 
 ## Repo map
 
 ```
-games/<slug>/        HTML5 games (no build step)          [Plan 1b]
-packages/core/       domain, policy, registry, gateway, gates
-adapters/local|azure ports implementations                 [Plan 1c]
+games/<slug>/        HTML5 games (no build step) + game.yaml
+packages/core/       domain, policy, registry, gateway, gates, events, metrics rollup, library
+packages/sdk/        browser game SDK (plain ES module, no deps)
+adapters/local/      SQLite registry, filesystem object store
+adapters/azure/      Cosmos, Blob, Queues, Key Vault          [Plan 1c]
+services/api/        Hono app: ingest + API; jobs (seed, rollup)
 apps/console|portal  operator PWA, public portal          [Plan 1c]
+scripts/             dev server, seed, rollup, gates, demos
 infra/               Bicep
 policy.yaml          autonomy policy, gates, budgets (operator-owned)
 markets.yaml         market tiers

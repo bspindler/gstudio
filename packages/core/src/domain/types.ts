@@ -32,6 +32,9 @@ export interface MetricsSnapshot {
   players: number;
   d1: number | null;
   d7: number | null;
+  /** Players whose D1 / D7 return day has finished: the sample size behind d1 / d7. */
+  d1Cohort: number;
+  d7Cohort: number;
   avgSessionSec: number | null;
   purchaseIntentRate: number | null;
   avgRating: number | null;
