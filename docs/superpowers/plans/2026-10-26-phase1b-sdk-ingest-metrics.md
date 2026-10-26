@@ -46,8 +46,8 @@
 
 Definitions (UTC days; a player's cohort day is the day of their first event on that channel):
 - `players`: distinct playerIds.
-- `d1`: of players whose cohort day ≤ asOf day − 1, the fraction with any event on cohort day + 1. `null` if none mature.
-- `d7`: same with +7, cohort day ≤ asOf day − 7.
+- `d1`: of players whose cohort day + 1 is a finished UTC day (cohort day + 1 < asOf day), the fraction with any event on cohort day + 1. `null` if none mature.
+- `d7`: same with +7 (cohort day + 7 < asOf day).
 - `avgSessionSec`: mean over sessions of (max ts − min ts)/1000, sessions with one event count as 0.
 - `purchaseIntentRate`: players with ≥1 `purchase_intent` ÷ players with ≥1 `purchase_offer_shown`; `null` if no offers.
 - `avgRating` / `ratingCount`: each player's latest `rating.stars`; `null` / 0 if none.
