@@ -4,3 +4,5 @@ export * from './policy/schema.js';
 export * from './policy/load.js';
 export * from './policy/classify.js';
 export * from './markets/load.js';
+export * from './registry/store.js';
+export * from './registry/memory-store.js';
