@@ -1,0 +1,53 @@
+# markets.yaml (researched 2026-10-25; EU/EEA excluded)
+markets:
+  excluded:
+    regions: [EU, EEA]           # incl. NO, IS, LI
+    countries: [VN, CN]          # VN: Decree 147/2024 licensing; CN: ISBN license
+  tiers:
+    tier3:
+      purpose: retention_fun_signal
+      countries: [PH, MY, TH, BR, MX]
+      conditional: [ID]          # enable after IGRS rating confirmed
+      optional: [IN]             # android-only, separate cohort
+      platforms: [android, ios]
+      cpi_usd: {android: [0.05, 0.60], ios: [0.30, 1.50]}
+      gates: {d1_kill_below: 0.22, d1_promote_at: 0.30, d7_promote_at: 0.06}
+      rationale: "Cheap installs, English (PH/MY), large casual audiences; standard soft-launch footprint."
+      notes:
+        PH: "Data Privacy Act 2012"
+        MY: "PDPA amended 2024; DPO + breach notice from 2025-06-01"
+        TH: "PDPA 2019 (enforced 2022); needs TH localization"
+        BR: "LGPD + ECA Digital (2026-03-17): no loot boxes for minors, age assurance; PT-BR"
+        MX: "New LFPDPPP 2025-03-21; ES-MX"
+        ID: "PDP Law 27/2022; IGRS rating mandatory since 2026-01-24; PSE may apply"
+        IN: "DPDP Act + Rules (2025-11); parental consent <18 by ~2027-05"
+    tier2:
+      purpose: monetization_signal_english
+      countries: [CA, AU, NZ]
+      optional: [SG]
+      platforms: [ios, android]
+      cpi_usd: {android: [1.00, 2.50], ios: [2.00, 5.00]}
+      rationale: "English-speaking, US-like spend; standard pre-global monetization check."
+      notes:
+        CA: "PIPEDA; Quebec Law 25; Bill 96 French expectations"
+        AU: "Privacy Act (2024 amendments); loot boxes => M, simulated gambling => R18+ (2024-09-22)"
+        NZ: "Privacy Act 2020; IPP3A from 2026-05-01"
+        SG: "PDPA 2012"
+    tier1:
+      purpose: scale
+      countries: [US, GB]
+      localized_next: [JP, KR, TW]
+      platforms: [ios, android]
+      cpi_usd: {android: [1.50, 3.50], ios: [2.50, 6.00]}
+      rationale: "Largest revenue pools; UK is non-EU (UK GDPR)."
+      notes:
+        US: "COPPA amended rule (compliance 2026-04-22); state privacy laws; state app-store age laws"
+        GB: "UK GDPR + DPA 2018 + DUAA 2025; ICO Children's Code; PECR"
+        JP: "APPI; kompu gacha banned"
+        KR: "PIPA; loot-box probability disclosure (2024-03-22)"
+        TW: "PDPA; loot-box probability disclosure"
+  design_constraints:
+    paid_random_rewards: false
+    gambling_themes: false
+    target_age_rating: "13+ / child-safe"
+    consent_model: "strictest non-EU (UK GDPR / Law 25 / LGPD)"
