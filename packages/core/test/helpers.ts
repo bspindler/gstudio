@@ -22,5 +22,7 @@ export const game = (over: Partial<Game> = {}): Game => ({
 
 export const metrics = (over: Partial<MetricsSnapshot> = {}): MetricsSnapshot => ({
   gameSlug: 'g', channel: 'portal', asOf: '2026-10-31T12:00:00Z', players: 250, d1: 0.16, d7: null,
-  avgSessionSec: 120, purchaseIntentRate: null, avgRating: 4.0, ratingCount: 25, crashFreeRate: null, ...over,
+  avgSessionSec: 120, purchaseIntentRate: null, avgRating: 4.0, ratingCount: 25, crashFreeRate: null,
+  // Unless a test says otherwise, every player is in the mature D1/D7 cohorts.
+  d1Cohort: over.players ?? 250, d7Cohort: over.players ?? 250, ...over,
 });

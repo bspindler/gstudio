@@ -4,13 +4,14 @@ import type { StudioEvent } from '../events/schema.js';
 const DAY_MS = 86400_000;
 const utcDay = (ts: number) => Math.floor(ts / DAY_MS);
 
-interface PlayerAcc { cohortDay: number; days: Set<number>; sawOffer: boolean; intent: boolean; rating?: { ts: number; stars: number } }
+interface PlayerAcc { cohortDay: number; sessionStarts: Map<string, number>; sawOffer: boolean; intent: boolean; rating?: { ts: number; stars: number } }
 interface SessionAcc { min: number; max: number; error: boolean }
 interface ChannelAcc { players: Map<string, PlayerAcc>; sessions: Map<string, SessionAcc> }
 
 /**
  * Turns raw events into one gate-ready snapshot per channel. Days are UTC; a cohort
- * counts toward Dn only once its day +n has fully finished before `asOf`.
+ * counts toward Dn only once its day +n has fully finished before `asOf`. A return is a new session
+ * starting on day +n, so one session that runs past UTC midnight is not a return.
  */
 export function rollupMetrics(
   events: Iterable<StudioEvent>, opts: { game: string; asOf: Date },
@@ -25,9 +26,9 @@ export function rollupMetrics(
 
     const day = utcDay(e.ts);
     let p = ch.players.get(e.playerId);
-    if (!p) ch.players.set(e.playerId, (p = { cohortDay: day, days: new Set(), sawOffer: false, intent: false }));
+    if (!p) ch.players.set(e.playerId, (p = { cohortDay: day, sessionStarts: new Map(), sawOffer: false, intent: false }));
     p.cohortDay = Math.min(p.cohortDay, day);
-    p.days.add(day);
+    p.sessionStarts.set(e.sessionId, Math.min(p.sessionStarts.get(e.sessionId) ?? e.ts, e.ts));
     if (e.name === 'purchase_offer_shown') p.sawOffer = true;
     if (e.name === 'purchase_intent') p.intent = true;
     if (e.name === 'rating' && typeof e.props.stars === 'number' && (!p.rating || e.ts >= p.rating.ts)) {
@@ -41,9 +42,13 @@ export function rollupMetrics(
   }
 
   const asOfDay = utcDay(cutoff);
+  const returned = (p: PlayerAcc, n: number) => {
+    const starts = [...p.sessionStarts.values()].sort((a, b) => a - b).slice(1);
+    return starts.some((t) => utcDay(t) === p.cohortDay + n);
+  };
   const retention = (players: PlayerAcc[], n: number) => {
     const mature = players.filter((p) => p.cohortDay + n < asOfDay);
-    return mature.length ? mature.filter((p) => p.days.has(p.cohortDay + n)).length / mature.length : null;
+    return { rate: mature.length ? mature.filter((p) => returned(p, n)).length / mature.length : null, cohort: mature.length };
   };
 
   return [...byChannel].map(([channel, ch]) => {
@@ -51,13 +56,17 @@ export function rollupMetrics(
     const sessions = [...ch.sessions.values()];
     const offered = players.filter((p) => p.sawOffer);
     const rated = players.flatMap((p) => (p.rating ? [p.rating.stars] : []));
+    const r1 = retention(players, 1);
+    const r7 = retention(players, 7);
     return {
       gameSlug: opts.game,
       channel,
       asOf: opts.asOf.toISOString(),
       players: players.length,
-      d1: retention(players, 1),
-      d7: retention(players, 7),
+      d1: r1.rate,
+      d7: r7.rate,
+      d1Cohort: r1.cohort,
+      d7Cohort: r7.cohort,
       avgSessionSec: sessions.reduce((a, s) => a + (s.max - s.min) / 1000, 0) / sessions.length,
       purchaseIntentRate: offered.length ? offered.filter((p) => p.intent).length / offered.length : null,
       avgRating: rated.length ? rated.reduce((a, b) => a + b, 0) / rated.length : null,

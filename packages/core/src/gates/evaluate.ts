@@ -55,8 +55,8 @@ function gateWebTest(_g: Game, m: MetricsSnapshot[], p: Policy, ctx: GateContext
 
   const channelPass = web.map((s) => {
     const ch = s.channel as 'portal' | 'own_site';
-    const pass = s.players >= gate.min_players && s.d1 !== null && s.d1 >= gate.d1[ch];
-    checks.push(check(`d1_${ch}`, `>= ${pct(gate.d1[ch])} (n >= ${gate.min_players})`, `${pct(s.d1)} (n=${s.players})`, pass));
+    const pass = s.d1Cohort >= gate.min_players && s.d1 !== null && s.d1 >= gate.d1[ch];
+    checks.push(check(`d1_${ch}`, `>= ${pct(gate.d1[ch])} (n >= ${gate.min_players})`, `${pct(s.d1)} (n=${s.d1Cohort})`, pass));
     return pass;
   });
   const ratingsEnough = ratingCount >= gate.min_rating_count;
@@ -66,11 +66,11 @@ function gateWebTest(_g: Game, m: MetricsSnapshot[], p: Policy, ctx: GateContext
 
   if (channelPass.some(Boolean) && ratingPass) return { decision: 'promote', insufficientData: false, checks };
 
-  // Kill only on a decision-grade sample: at least one channel with n >= min_players, and every channel
+  // Kill only on a decision-grade sample: at least one channel whose mature D1 cohort is >= min_players, and every channel
   // that has players (large or small) below its kill line.
   const belowKill = (s: MetricsSnapshot) => s.d1 !== null && s.d1 < gate.kill_d1[s.channel as 'portal' | 'own_site'];
   const played = web.filter((s) => s.players > 0);
-  const decisive = played.filter((s) => s.players >= gate.min_players);
+  const decisive = played.filter((s) => s.d1Cohort >= gate.min_players);
   const clearlyFails = decisive.length > 0 && played.every(belowKill);
   if (clearlyFails) return { decision: 'kill', insufficientData: false, checks };
   return { decision: 'hold', insufficientData: channelPass.some(Boolean) && !ratingsEnough, checks };
@@ -102,7 +102,7 @@ function gateSoftLaunch(g: Game, m: MetricsSnapshot[], p: Policy, ctx: GateConte
     check('d7', `>= ${pct(gate.d7)}`, pct(store?.d7), store?.d7 != null && store.d7 >= gate.d7),
     check('ltv_over_max_cpi', `>= ${gate.min_ltv_over_cpi}`, fmt(ratio), ratio !== null && ratio >= gate.min_ltv_over_cpi),
   ];
-  const insufficientData = !store || store.players < gate.min_players || ratio === null;
+  const insufficientData = !store || store.players < gate.min_players || store.d7Cohort < gate.min_players || ratio === null;
   if (insufficientData) return { decision: 'hold', insufficientData, checks };
   return { decision: checks.every((c) => c.pass) ? 'promote' : 'hold', insufficientData: false, checks };
 }

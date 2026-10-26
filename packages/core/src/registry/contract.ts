@@ -16,7 +16,7 @@ const sampleItem = (id: string): InboxItem => ({
 });
 
 const snap = (channel: MetricsSnapshot['channel'], asOf: string, players: number): MetricsSnapshot => ({
-  gameSlug: 'g', channel, asOf, players, d1: 0.2, d7: null, avgSessionSec: 60,
+  gameSlug: 'g', channel, asOf, players, d1: 0.2, d7: null, d1Cohort: players, d7Cohort: 0, avgSessionSec: 60,
   purchaseIntentRate: null, avgRating: 4, ratingCount: 10, crashFreeRate: null,
 });
 
