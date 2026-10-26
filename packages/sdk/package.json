@@ -1,0 +1,8 @@
+{
+  "name": "@studio/sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./studio-sdk.js" },
+  "devDependencies": { "happy-dom": "21.0.4" }
+}

@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc -b packages/core adapters/local services/api",
+    "typecheck": "tsc -b packages/core packages/sdk adapters/local services/api",
     "lint:infra": "az bicep build --file infra/main.bicep --stdout > /dev/null"
   },
   "devDependencies": {
