@@ -1,0 +1,9 @@
+.superpowers/
+node_modules/
+.data/
+dist/
+*.tsbuildinfo
+local.settings.json
+.env*
+*.pem
+.DS_Store
