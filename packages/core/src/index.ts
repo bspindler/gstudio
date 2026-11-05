@@ -17,3 +17,4 @@ export * from './ports/object-store.js';
 export * from './library/load.js';
 export * from './library/compliance.js';
 export * from './library/scaffold.js';
+export * from './library/pages.js';

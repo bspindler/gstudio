@@ -20,6 +20,7 @@
     "rollup": "tsx scripts/rollup.ts",
     "gates": "tsx scripts/gates.ts",
     "new-game": "tsx scripts/new-game.ts",
+    "build:pages": "tsx scripts/build-pages.ts",
     "demo:1b": "tsx scripts/demo-1b.ts"
   },
   "devDependencies": {
