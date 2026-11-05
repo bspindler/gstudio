@@ -19,6 +19,7 @@
     "seed": "tsx scripts/seed.ts",
     "rollup": "tsx scripts/rollup.ts",
     "gates": "tsx scripts/gates.ts",
+    "new-game": "tsx scripts/new-game.ts",
     "demo:1b": "tsx scripts/demo-1b.ts"
   },
   "devDependencies": {

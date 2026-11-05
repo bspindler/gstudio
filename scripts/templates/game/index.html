@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- CHANGE ME: the name shown in the browser tab. -->
+<title>{{title}}</title>
+<style>
+  /* CHANGE ME: the colours. Each line is one colour, written as #RRGGBB. */
+  :root {
+    --background: #1b1f3a;
+    --panel: #2b3160;
+    --text: #f4f1ff;
+    --target: #ffcf4a;
+    --accent: #5ee6b0;
+    color-scheme: dark;
+  }
+
+  /* Anything with the hidden attribute disappears. Keep this rule. */
+  [hidden] { display: none !important; }
+
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--background);
+    color: var(--text);
+    font: 18px system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app {
+    height: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
+  }
+  .hud { display: flex; justify-content: space-between; font-weight: 700; padding: 4px 0 12px; }
+  .board {
+    position: relative;
+    flex: 1;
+    background: var(--panel);
+    border-radius: 20px;
+    touch-action: none;
+  }
+  .target {
+    position: absolute;
+    width: 72px;
+    height: 72px;
+    margin: -36px 0 0 -36px;
+    border: none;
+    border-radius: 50%;
+    background: var(--target);
+    box-shadow: 0 0 24px var(--target);
+    cursor: pointer;
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    text-align: center;
+    padding: 24px;
+  }
+  .overlay h1 { margin: 0; font-size: 32px; }
+  .overlay p { margin: 0; opacity: 0.85; }
+  .overlay button {
+    font: inherit;
+    font-weight: 700;
+    color: var(--background);
+    background: var(--accent);
+    border: none;
+    border-radius: 999px;
+    padding: 14px 32px;
+    min-height: 48px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hud">
+    <span id="level">Level 1</span>
+    <span id="hits">0 / 5</span>
+    <span id="lives">Lives 3</span>
+  </div>
+  <div class="board" id="board">
+    <button class="target" id="target" aria-label="Target" hidden></button>
+    <div class="overlay" id="overlay">
+      <!-- CHANGE ME: the title on the first screen. -->
+      <h1 id="message">{{title}}</h1>
+      <p id="detail">Tap the circles before they fade away.</p>
+      <button id="play">Play</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// The studio SDK is how the studio learns how your game is doing. It counts levels started and
+// finished (track) and now and then asks the player for a star rating (feedback.maybePrompt).
+// It only uses anonymous IDs. Keep these calls: the automatic checks (npm test) look for them.
+import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
+
+const studio = createStudio({
+  game: '{{slug}}',
+  version: '0.1.0', // keep this the same as version in game.yaml
+  endpoint: resolveEndpoint(location, window.STUDIO_CONFIG),
+});
+
+// CHANGE ME: how many lives the player gets in each level.
+const LIVES = 3;
+// CHANGE ME: hits needed for each level. Level 1 needs 5, and each level after that needs 2 more.
+const hitsNeeded = (level) => 5 + (level - 1) * 2;
+// CHANGE ME: the speed. How long a circle stays (in milliseconds; 1000 = one second).
+// It starts at 1600 and gets 100 shorter each level, but never shorter than 600.
+const fadeTime = (level) => Math.max(600, 1600 - (level - 1) * 100);
+
+const $ = (id) => document.getElementById(id);
+const board = $('board');
+const target = $('target');
+
+let level = 1;
+let hits = 0;
+let lives = LIVES;
+let playing = false;
+let shownAt = 0; // when the current circle appeared
+let frame = 0;
+
+function updateHud() {
+  $('level').textContent = `Level ${level}`;
+  $('hits').textContent = `${hits} / ${hitsNeeded(level)}`;
+  $('lives').textContent = `Lives ${lives}`;
+}
+
+function startLevel() {
+  hits = 0;
+  lives = LIVES;
+  playing = true;
+  $('overlay').hidden = true;
+  updateHud();
+  studio.track('level_start', { level });
+  showTarget();
+}
+
+// Puts the circle somewhere new on the board, keeping it fully inside the edges.
+function showTarget() {
+  const size = 72;
+  const x = size / 2 + Math.random() * (board.clientWidth - size);
+  const y = size / 2 + Math.random() * (board.clientHeight - size);
+  target.style.left = `${x}px`;
+  target.style.top = `${y}px`;
+  target.style.opacity = '1';
+  target.hidden = false;
+  shownAt = performance.now();
+  cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(fade);
+}
+
+// Runs every frame: the circle gets see-through, and if it fades out completely you lose a life.
+function fade(now) {
+  if (!playing) return;
+  const left = 1 - (now - shownAt) / fadeTime(level);
+  if (left > 0) {
+    target.style.opacity = String(left);
+    frame = requestAnimationFrame(fade);
+    return;
+  }
+  lives -= 1;
+  updateHud();
+  if (lives <= 0) endLevel('lose');
+  else showTarget();
+}
+
+target.addEventListener('pointerdown', (event) => {
+  event.preventDefault();
+  if (!playing) return;
+  hits += 1;
+  updateHud();
+  if (hits >= hitsNeeded(level)) endLevel('win');
+  else showTarget();
+});
+
+function endLevel(result) {
+  playing = false;
+  cancelAnimationFrame(frame);
+  target.hidden = true;
+  studio.track('level_end', { level, result });
+
+  // CHANGE ME: the words shown when a level is won or lost.
+  if (result === 'win') {
+    $('message').textContent = `Level ${level} done!`;
+    $('detail').textContent = `Next up: ${hitsNeeded(level + 1)} hits, a little faster.`;
+    $('play').textContent = 'Next level';
+    level += 1;
+  } else {
+    $('message').textContent = 'Out of lives';
+    $('detail').textContent = `You got ${hits} of ${hitsNeeded(level)}. Have another go.`;
+    $('play').textContent = 'Try again';
+  }
+  $('overlay').hidden = false;
+  studio.feedback.maybePrompt();
+}
+
+$('play').addEventListener('click', startLevel);
+</script>
+</body>
+</html>

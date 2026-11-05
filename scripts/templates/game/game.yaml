@@ -1,0 +1,6 @@
+slug: {{slug}}
+title: {{title}}
+genre: arcade
+targetSegment: casual, short sessions 13+
+version: 0.1.0
+ageRating: null

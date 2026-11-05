@@ -1,9 +1,9 @@
 import { fileURLToPath } from 'node:url';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadGameLibrary } from '../src/index.js';
+import { loadGameLibrary, validateSlug } from '../src/index.js';
 
 const lib = (games: Record<string, string>) => {
   const dir = mkdtempSync(join(tmpdir(), 'lib-'));
@@ -33,7 +33,12 @@ describe('loadGameLibrary', () => {
   });
 
   it('loads the real library', async () => {
-    const games = await loadGameLibrary(fileURLToPath(new URL('../../../games', import.meta.url)));
-    expect(games.map((g) => g.slug)).toEqual(['hyperline', 'tidepool-pals']);
+    // Contributors add their own games here, so check the known ones are present rather than an exact list.
+    const dir = fileURLToPath(new URL('../../../games', import.meta.url));
+    const games = await loadGameLibrary(dir);
+    expect(games.map((g) => g.slug)).toEqual(expect.arrayContaining(['hyperline', 'tidepool-pals']));
+    const folders = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+    expect(games.map((g) => g.slug)).toEqual(folders);
+    for (const g of games) expect(validateSlug(g.slug, [])).toBeNull();
   });
 });

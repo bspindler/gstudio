@@ -16,3 +16,4 @@ export * from './metrics/rollup.js';
 export * from './ports/object-store.js';
 export * from './library/load.js';
 export * from './library/compliance.js';
+export * from './library/scaffold.js';
