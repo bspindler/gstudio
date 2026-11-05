@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { complianceViolations } from '../src/index.js';
+import { complianceViolations, gameSources } from '../src/index.js';
 
 // Static checks on every game in games/ for the hard rules that can be seen in source.
 const GAMES = readdirSync(new URL('../../../games/', import.meta.url), { withFileTypes: true })
@@ -10,8 +11,8 @@ const GAMES = readdirSync(new URL('../../../games/', import.meta.url), { withFil
 const src = (slug: string) => readFileSync(new URL(`../../../games/${slug}/index.html`, import.meta.url), 'utf8');
 
 describe.each(GAMES)('%s compliance', (slug) => {
-  it('breaks no compliance rule', () => {
-    expect(complianceViolations(src(slug))).toEqual([]);
+  it('breaks no compliance rule (every .html and .js file)', () => {
+    expect(complianceViolations(gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url))))).toEqual([]);
   });
 });
 
