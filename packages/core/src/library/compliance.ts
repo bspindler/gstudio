@@ -3,24 +3,34 @@
 
 const PURCHASE_LIKE = /\b(buy|shop|store|checkout)\b|priceUsd|PaymentRequest/i;
 
-// Removes HTML comments and JS comments inside <script> blocks, leaving string literals alone
-// (so 'https://...' and '../sdk/studio-sdk.js' survive). Used only by the purchase detector.
+const NETWORK = /\bfetch\s*\(|\bsendBeacon\b|\bXMLHttpRequest\b|\bnew\s+WebSocket\b|\bEventSource\b|<script\b[^>]*\ssrc\s*=\s*["']?(?:https?:)?\/\//i;
+const EXTERNAL_PAYMENT = /stripe|paypal|braintree|\bPaymentRequest\b/i;
+
+// Removes HTML comments, then JS and CSS comments, leaving string literals alone (so 'https://...'
+// and '../sdk/studio-sdk.js' survive). The JS pass runs over the whole text, not only <script>
+// blocks, because a game's sources include plain .js files.
 function stripComments(html: string): string {
   const jsComments = /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g;
   return html
     .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/(<script\b[^>]*>)([\s\S]*?)(<\/script>)/gi, (_m, open: string, body: string, close: string) =>
-      open + body.replace(jsComments, (m: string, str?: string) => str ?? ' ') + close,
-    );
+    .replace(jsComments, (m: string, str?: string) => str ?? ' ');
 }
 
 export function complianceViolations(html: string): string[] {
   const v: string[] = [];
+  const code = stripComments(html);
 
   if (!/import\s*\{[^}]*createStudio[^}]*\}\s*from\s*['"][^'"]*studio-sdk\.js['"]/.test(html))
     v.push("The game must import createStudio from the studio SDK (studio-sdk.js); it is how events, purchases and feedback work.");
+  if (!code.includes('resolveEndpoint('))
+    v.push('Pass endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) to createStudio. It picks where events go, and it makes sure test builds send nothing.');
 
-  if (PURCHASE_LIKE.test(stripComments(html)) && !html.includes('purchase.offer('))
+  if (NETWORK.test(code))
+    v.push('The game must not use the network itself (fetch(, sendBeacon, XMLHttpRequest, WebSocket, EventSource, or a <script src="https://..."> from another site). The SDK is the only thing that sends data, and only when it is allowed to.');
+  if (EXTERNAL_PAYMENT.test(code))
+    v.push('No outside payments (Stripe, PayPal, Braintree or PaymentRequest). Real money only goes through the official store billing; in the game, use purchase.offer( ... ) from the SDK.');
+
+  if (PURCHASE_LIKE.test(code) && !code.includes('purchase.offer('))
     v.push('Purchases must go through purchase.offer( ... ). This game looks like it sells something (buy/shop/store/checkout, priceUsd or PaymentRequest) but never calls purchase.offer(.');
   if (/mockBuy|simulated purchase/i.test(html))
     v.push('Do not fake purchases yourself (mockBuy / "simulated purchase"); use purchase.offer( ... ) from the SDK.');

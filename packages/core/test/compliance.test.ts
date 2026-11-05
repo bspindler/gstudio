@@ -3,8 +3,8 @@ import { complianceViolations } from '../src/library/compliance.js';
 
 const clean = `<!doctype html><html><body>
 <script type="module">
-import { createStudio } from '../../packages/sdk/studio-sdk.js';
-const { track, feedback } = createStudio({});
+import { createStudio, resolveEndpoint } from '../../packages/sdk/studio-sdk.js';
+const { track, feedback } = createStudio({ endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 track('level_start', {});
 track('level_end', {});
 feedback.maybePrompt();
@@ -62,6 +62,54 @@ const u = 'https://example.com/x'; // checkout later
     ['mockBuy', withExtra('<script>mockBuy()</script><script>purchase.offer({})</script>'), 'mockBuy'],
   ])('flags %s', (_n, html, text) => {
     expect(has(html, text)).toBe(true);
+  });
+
+  it('requires resolveEndpoint( for the SDK endpoint', () => {
+    const html = clean.replace('resolveEndpoint(location, window.STUDIO_CONFIG)', "'https://ingest.example'");
+    expect(has(html, 'resolveEndpoint(')).toBe(true);
+  });
+
+  it.each([
+    ['fetch(', "<script>fetch('/x')</script>"],
+    ['navigator.sendBeacon', "<script>navigator.sendBeacon('/x', '')</script>"],
+    ['XMLHttpRequest', '<script>new XMLHttpRequest()</script>'],
+    ['new WebSocket', "<script>new WebSocket('wss://x')</script>"],
+    ['EventSource', "<script>new EventSource('/x')</script>"],
+    ['an external script', '<script src="https://cdn.example/lib.js"></script>'],
+    ['a protocol-relative external script', "<script src='//cdn.example/lib.js'></script>"],
+  ])('flags a direct network call: %s', (_n, extra) => {
+    expect(has(withExtra(extra), 'network')).toBe(true);
+  });
+
+  it('ignores network words in comments and allows Google Fonts links', () => {
+    const extra = `<!-- fetch(x) --><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=X">
+<script>// we never fetch( anything
+/* no XMLHttpRequest, no new WebSocket, no EventSource, no sendBeacon */</script>`;
+    expect(complianceViolations(withExtra(extra))).toEqual([]);
+  });
+
+  it.each([
+    ['Stripe', '<script src="./pay.js"></script><script>Stripe(key)</script>'],
+    ['js.stripe.com', '<script>const u = "https://js.stripe.com/v3"</script>'],
+    ['PayPal', '<script>paypal.Buttons()</script>'],
+    ['Braintree', '<script>braintree.dropin.create()</script>'],
+    ['PaymentRequest', '<script>new PaymentRequest([], {})</script><script>purchase.offer({})</script>'],
+  ])('bans external payments: %s', (_n, extra) => {
+    expect(has(withExtra(extra), 'store billing')).toBe(true);
+  });
+
+  it('ignores payment words in comments', () => {
+    expect(complianceViolations(withExtra('<script>// not stripe, not paypal, not braintree</script>'))).toEqual([]);
+  });
+
+  it('does not count a purchase.offer( that only appears in a comment', () => {
+    expect(has(withExtra('<h2>Shop</h2><script>// purchase.offer({})</script>'), 'purchase.offer')).toBe(true);
+    expect(has(withExtra('<h2>Shop</h2><!-- purchase.offer( -->'), 'purchase.offer')).toBe(true);
+  });
+
+  it('strips comments in plain .js source too (no <script> wrapper)', () => {
+    const js = "\n// shop and buy later; fetch( nothing\nconst x = 1;\n";
+    expect(complianceViolations(clean + js)).toEqual([]);
   });
 
   it('accepts hidden with the [hidden] rule', () => {
