@@ -23,3 +23,15 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: az bicep install && npm run lint:infra
+  # Early warning, not a required check: the current Node LTS (newer than the Node 22 the repo
+  # pins in .nvmrc) on Windows, in case a contributor installs it. A failure here doesn't block merges.
+  node-lts:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 'lts/*', cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

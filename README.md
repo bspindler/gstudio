@@ -43,7 +43,7 @@ npm run demo:1b        # synthetic players through the real ingest, into .data/d
 
 To play, open `http://localhost:5174/tidepool-pals/` or `/hyperline/`. Local data lives in `.data/`, which git ignores; delete it to reset.
 
-**Test builds on GitHub Pages.** Every push to `main` runs `.github/workflows/pages.yml`, which publishes `games/` and the SDK as a static test-build site: a `noindex` index page, `robots.txt` disallowing everything, a "test build" badge on each game, and the SDK in no-ingest mode, so nothing is collected and these sessions never feed metrics or gates. Pages needs GitHub Pro (or Team) on the private repo before it can be turned on.
+**Test builds on GitHub Pages.** Every push to `main` runs `.github/workflows/pages.yml`, which publishes `games/` and the SDK as a static test-build site: a `noindex` index page, `robots.txt` disallowing everything, a "test build" badge on each game, and the SDK in no-ingest mode, so nothing is collected and these sessions never feed metrics or gates. Pages needs GitHub Pro (or Team) on the private repo before it can be turned on. The workflow stays off until then: to turn it on, set Settings > Pages > Source to "GitHub Actions", then add the Actions variable `PAGES_ENABLED` with the value `true`.
 
 ## Contributors
 

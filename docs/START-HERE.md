@@ -30,11 +30,13 @@ Do these once, in order.
 
 **Git for Windows** (keeps track of every change, and Claude Code needs it too). Download it from <https://git-scm.com/download/win> and run the installer. **Keep every default option.** The repo has its own settings file (`.gitattributes`) that handles line endings, so you don't need to change anything there.
 
-**Node.js** (runs the tests and the local game server). Either download the **LTS** installer from <https://nodejs.org>, or run:
+**Node.js version 22** (runs the tests and the local game server). It must be **22**, the version this repo uses (it's written in the `.nvmrc` file). Don't pick "LTS" or "Latest": those are newer versions now. Either run:
 
 ```powershell
-winget install OpenJS.NodeJS.LTS
+winget install OpenJS.NodeJS.22
 ```
+
+or go to <https://nodejs.org/en/download>, **choose version 22** in the version list, and download and run the Windows installer.
 
 Close and reopen PowerShell, then check that it worked (you need version 22.13 or newer):
 

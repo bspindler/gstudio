@@ -11,7 +11,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 jobs:
+  # Off until Pages is enabled, so pushes to main don't fail before then. To turn it on:
+  # 1. Settings > Pages > Build and deployment > Source: choose "GitHub Actions".
+  # 2. Settings > Secrets and variables > Actions > Variables: add PAGES_ENABLED with the value true.
+  # Then push to main, or run this workflow by hand from the Actions tab.
   deploy:
+    if: vars.PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

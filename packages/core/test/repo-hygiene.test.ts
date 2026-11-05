@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -63,5 +64,48 @@ describe('contributor onboarding files', () => {
     const used = [...guide.matchAll(/npm run ([\w:-]+)/g)].map((m) => m[1] ?? '');
     expect(used.length).toBeGreaterThan(0);
     expect(used.filter((s) => !(s in pkg.scripts))).toEqual([]);
+  });
+});
+
+type Workflow = { jobs: Record<string, { name?: string; if?: string; 'runs-on'?: string; 'continue-on-error'?: boolean;
+  strategy?: { matrix?: { os?: string[] } }; steps?: { run?: string; with?: Record<string, unknown> }[] }> };
+const workflow = (name: string) => parse(readFileSync(join(root, '.github/workflows', name), 'utf8')) as Workflow;
+
+describe('final review fixes: setup and CI', () => {
+  it('START-HERE installs Node 22 explicitly, matching .nvmrc, not "LTS"', () => {
+    const guide = readFileSync(join(root, 'docs/START-HERE.md'), 'utf8');
+    expect(readFileSync(join(root, '.nvmrc'), 'utf8').trim()).toBe('22');
+    expect(guide).toContain('winget install OpenJS.NodeJS.22');
+    expect(guide).toMatch(/choose version 22/i);
+    expect(guide).not.toContain('OpenJS.NodeJS.LTS');
+    expect(guide).not.toMatch(/\*\*LTS\*\* installer/);
+  });
+
+  it('CI keeps the required build jobs and adds a non-required node-lts job on Windows', () => {
+    const ci = workflow('ci.yml');
+    expect(ci.jobs.build?.name).toBe('build (${{ matrix.os }})');
+    expect(ci.jobs.build?.strategy?.matrix?.os).toEqual(['ubuntu-latest', 'windows-latest']);
+    const lts = ci.jobs['node-lts'];
+    expect(lts?.['runs-on']).toBe('windows-latest');
+    expect(lts?.['continue-on-error']).toBe(true);
+    expect(lts?.steps?.some((s) => s.with?.['node-version'] === 'lts/*')).toBe(true);
+    expect(lts?.steps?.map((s) => s.run).filter(Boolean)).toEqual(['npm ci', 'npm run typecheck', 'npm test']);
+  });
+
+  it('the Pages workflow only runs once PAGES_ENABLED is set', () => {
+    const pages = workflow('pages.yml');
+    for (const job of Object.values(pages.jobs)) expect(job.if).toBe("vars.PAGES_ENABLED == 'true'");
+    expect(readFileSync(join(root, '.github/workflows/pages.yml'), 'utf8')).toMatch(/#.*PAGES_ENABLED/);
+  });
+
+  it('.vscode/settings.json keeps LF line endings and is not git-ignored', () => {
+    const file = join(root, '.vscode/settings.json');
+    expect(existsSync(file)).toBe(true);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({
+      'files.eol': '\n', 'files.insertFinalNewline': true, 'files.trimTrailingWhitespace': true,
+    });
+    let ignored = true;
+    try { execFileSync('git', ['check-ignore', '-q', '.vscode/settings.json'], { cwd: root }); } catch { ignored = false; }
+    expect(ignored).toBe(false);
   });
 });
