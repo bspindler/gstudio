@@ -36,4 +36,4 @@ serve({ fetch: site.fetch, port: 5174, hostname: bind });
 
 console.log(`API + ingest  http://localhost:8787   (events -> ${dataDir}/objects/events)`);
 for (const h of hosts) console.log(`Games         http://${h}:5174`);
-console.log('Then: npm run rollup && npm run gates');
+console.log('Then, in another terminal, run these one at a time:\n  npm run rollup\n  npm run gates');

@@ -15,7 +15,7 @@ Your games are real studio games. They go through the same steps and follow the 
 These never change, for any game, ever. The tests check some of them automatically, and Dad checks the rest when he reviews your work.
 
 1. **No gambling, no crypto, no tokens, no prizes worth real money.** Nothing you can buy ever contains a random reward, and any random reward a player earns shows its odds. *Why:* gambling-style games hurt people (kids especially), and they're illegal or banned in many places and on the app stores.
-2. **Follow every platform's rules.** No bots pretending to be people, no fake accounts, no fake reviews, no buying likes or downloads. *Why:* it's dishonest, and breaking the rules gets the whole studio banned, not just one game.
+2. **Follow every platform's rules.** Only use a platform's official tools and APIs (the ways it officially lets programs talk to it). No bots pretending to be people, no fake accounts, no fake reviews, no buying likes or downloads, and no scraping (having a program copy data off a site) where the site's terms say no. *Why:* it's dishonest, and breaking the rules gets the whole studio banned, not just one game.
 3. **No real charges.** In test builds, "buy" buttons are fake: they tell the player the item is free during the beta and just note that someone was interested. Real money only ever goes through the official app stores. *Why:* charging people outside the stores breaks their rules and players' trust.
 4. **Protect kids. No dark patterns.** No personal data from anyone under 13. No fake countdown timers, no fake "only 3 left!", and no nagging after a player says no. If something is limited, the limit and end date are real. Age ratings are answered honestly. *Why:* lots of players are young, and tricking people into spending is wrong even when it works.
 5. **Collect as little as possible.** Players are anonymous IDs, never names or emails. *Why:* data we don't collect can't leak, and what we tell the stores we collect has to be true.
@@ -53,14 +53,19 @@ git config --global user.name "<Your Name>"
 git config --global user.email "<you@example.com>"
 ```
 
-**Get the code.** Dad will send you the exact link. It looks like the one below:
+**Get the code.** Dad will send you the exact link. It looks like the one below. First close and reopen PowerShell, so it knows about the programs you just installed (otherwise `code .` says it isn't recognised). Then:
 
 ```powershell
-cd $HOME\Documents
+New-Item -ItemType Directory -Force $HOME\code
+cd $HOME\code
 git clone https://github.com/krakendevlord/<repo-name>.git
 cd <repo-name>
 code .
 ```
+
+We use `$HOME\code` rather than Documents because Windows often syncs Documents to OneDrive, and OneDrive syncing thousands of project files breaks `npm install` and causes clashing copies. Keep code out of OneDrive.
+
+If `code .` still isn't recognised, open VS Code yourself and use **File → Open Folder** to pick the `<repo-name>` folder inside `code`.
 
 The first time Git talks to GitHub, a browser window opens so you can sign in. That's normal.
 
@@ -118,6 +123,8 @@ This is the same server, but your phone can reach it too. It prints some address
 1. Join the **same Wi-Fi** as your laptop.
 2. Open the address it printed, plus your game's folder, for example `http://192.168.1.23:5174/star-catcher/`.
 
+Windows treats a new Wi-Fi network as **Public** (locked down) until you say otherwise. Set your home Wi-Fi to Private first: **Settings → Network & internet → Wi-Fi →** click your network **→ Network profile type → Private**. Only do this for your home network.
+
 The first time, **Windows Firewall** asks whether to allow Node.js. Tick **Private networks** only and leave **Public networks** unticked. Only do this on your **home** Wi-Fi, never at school or in a café: while it's running, anyone on the same network can reach it, and it has no password.
 
 If your phone can't connect, check you're on the same Wi-Fi, then ask Dad (the firewall setting may need fixing).
@@ -145,7 +152,7 @@ git switch -c <short-name-for-the-change>
 ```powershell
 npm test
 git status
-git add games/star-catcher
+git add games/<your-game>
 git commit -m "<what you changed, in a few words>"
 ```
 
@@ -168,6 +175,8 @@ git switch main
 git pull
 git branch -d <your-branch-name>
 ```
+
+If `git branch -d` says the branch is "not fully merged", check that GitHub shows your PR as **Merged**. If it does, it's safe to use `git branch -D <your-branch-name>` (capital D) instead. That message appears because of the way GitHub merges, not because your work is lost.
 
 ## 8. When you're stuck
 
