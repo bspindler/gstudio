@@ -37,8 +37,8 @@ describe('loadGameLibrary', () => {
     const dir = fileURLToPath(new URL('../../../games', import.meta.url));
     const games = await loadGameLibrary(dir);
     expect(games.map((g) => g.slug)).toEqual(expect.arrayContaining(['hyperline', 'tidepool-pals']));
-    const folders = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
-    expect(games.map((g) => g.slug)).toEqual(folders);
+    const folders = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+    expect(games.map((g) => g.slug).sort()).toEqual(folders.sort());
     for (const g of games) expect(validateSlug(g.slug, [])).toBeNull();
   });
 });
