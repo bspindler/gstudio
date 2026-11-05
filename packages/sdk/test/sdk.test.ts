@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createStudio } from '../studio-sdk.js';
+import { createStudio, resolveEndpoint } from '../studio-sdk.js';
 
 type Sent = { url: string; events: { name: string; props: Record<string, unknown>; playerId: string; channel: string; sessionId: string }[] };
 
@@ -311,5 +311,55 @@ describe('I4: flush on hide without waiting', () => {
     expect(sent.length).toBeGreaterThan(1);
     expect(Math.max(...sent.map((b) => b.events.length))).toBeLessThanOrEqual(50);
     s.destroy();
+  });
+});
+
+describe('no-ingest mode (endpoint "")', () => {
+  it('no-ingest mode sends nothing', async () => {
+    const s = make({ endpoint: '' });
+    for (let i = 0; i < 30; i++) s.track('tick', { i });
+    await s.flush();
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
+    Reflect.deleteProperty(document, 'visibilityState');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fakeFetch).not.toHaveBeenCalled();
+  });
+
+  it('no-ingest mode keeps the APIs working', async () => {
+    const storage = memStorage();
+    const s = make({ endpoint: '', storage });
+    const p = s.purchase.offer({ sku: 'skin-neon', title: 'Neon Trail', priceUsd: 0.99 });
+    click('buy');
+    expect(document.body.textContent).toMatch(/free during the beta/i);
+    click('ok');
+    expect(await p).toBe('granted');
+
+    const v = s.flag('tutorial', ['short', 'long']);
+    expect(['short', 'long']).toContain(v);
+    expect(s.flag('tutorial', ['short', 'long'])).toBe(v);
+    expect(s.odds.format([{ label: 'a', weight: 0.25 }, { label: 'b', weight: 0.75 }])).toBe('a 25% · b 75%');
+    expect(s.odds.roll([{ label: 'a', weight: 1 }]).label).toBe('a');
+
+    const s2 = make({ endpoint: '', storage });
+    const f = s2.feedback.maybePrompt();
+    click('star-5');
+    expect(await f).toBe(5);
+    await s2.flush();
+    expect(fakeFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveEndpoint', () => {
+  it('uses no ingest on github.io', () => {
+    expect(resolveEndpoint({ protocol: 'https:', hostname: 'x.github.io' })).toBe('');
+  });
+  it('uses port 8787 on the current host otherwise', () => {
+    expect(resolveEndpoint({ protocol: 'http:', hostname: '192.168.1.5' })).toBe('http://192.168.1.5:8787');
+  });
+  it('an explicit endpoint wins, including the empty string', () => {
+    expect(resolveEndpoint({ protocol: 'http:', hostname: 'localhost' }, { endpoint: 'https://e' })).toBe('https://e');
+    expect(resolveEndpoint({ protocol: 'http:', hostname: 'localhost' }, { endpoint: '' })).toBe('');
   });
 });

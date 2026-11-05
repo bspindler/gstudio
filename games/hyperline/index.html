@@ -141,8 +141,8 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 <div class="modal" id="modal" hidden><div class="mcard" id="mcard" role="dialog" aria-modal="true"></div></div>
 
 <script type="module">
-import { createStudio } from '/sdk/studio-sdk.js';
-const studio = createStudio({ game: 'hyperline', version: '0.2.0', endpoint: window.STUDIO_CONFIG?.endpoint ?? `${location.protocol}//${location.hostname}:8787` });
+import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
+const studio = createStudio({ game: 'hyperline', version: '0.2.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $=id=>document.getElementById(id);
 
 /* ---------- skins ---------- */

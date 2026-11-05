@@ -20,7 +20,9 @@ const CHANNELS = ['portal', 'own_site'];
  * @typedef {{ label: string; weight: number }} OddsRow
  * @typedef {{ sku: string; title: string; priceUsd: number; randomReward?: boolean }} Offer
  * @typedef {{
- *   game: string; version: string; endpoint: string; channel?: 'portal' | 'own_site';
+ *   game: string; version: string;
+ *   endpoint: string; // ingest base URL; '' means no-ingest mode: nothing is ever sent
+ *   channel?: 'portal' | 'own_site';
  *   storage?: KV; fetch?: typeof fetch; now?: () => number; random?: () => number;
  *   document?: Document; window?: Window; location?: { search: string };
  * }} StudioOptions
@@ -78,6 +80,18 @@ function checkOdds(/** @type {OddsRow[]} */ table) {
   }
 }
 
+/**
+ * Picks the ingest base URL. An explicit config endpoint wins (including '' for no-ingest);
+ * static GitHub Pages hosts have no ingest; everything else uses the dev ingest on :8787.
+ * @param {{ protocol: string; hostname: string }} loc
+ * @param {{ endpoint?: string }} [config]
+ */
+export function resolveEndpoint(loc, config) {
+  if (config?.endpoint !== undefined) return config.endpoint;
+  if (loc.hostname.endsWith('.github.io')) return '';
+  return `${loc.protocol}//${loc.hostname}:8787`;
+}
+
 /** @param {StudioOptions} opts */
 export function createStudio(opts) {
   const doc = opts.document ?? globalThis.document;
@@ -85,6 +99,7 @@ export function createStudio(opts) {
   const now = opts.now ?? (() => Date.now());
   const random = opts.random ?? Math.random;
   const send = opts.fetch ?? globalThis.fetch.bind(globalThis);
+  const ingest = opts.endpoint !== '';
   const kv = safeKV(opts.storage ?? defaultStorage());
   const key = (/** @type {string} */ k) => `studio:${opts.game}:${k}`;
 
@@ -123,6 +138,7 @@ export function createStudio(opts) {
   }
 
   async function drain() {
+    if (!ingest) { queue = []; return; }
     while (queue.length) {
       const batch = queue.splice(0, MAX_BATCH);
       try {
@@ -148,6 +164,7 @@ export function createStudio(opts) {
    */
   function sendNow() {
     if (timer) { clearTimeout(timer); timer = undefined; }
+    if (!ingest) { queue = []; return; }
     while (queue.length) {
       const batch = queue.splice(0, UNLOAD_BATCH);
       send(`${opts.endpoint}/v1/events`, {

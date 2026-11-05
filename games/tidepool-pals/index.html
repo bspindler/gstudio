@@ -168,8 +168,8 @@ h3{font-family:var(--display);font-weight:400;font-size:19px;margin:0;color:var(
 <div class="modal" id="modal" hidden><div class="mcard" id="mcard" role="dialog" aria-modal="true"></div></div>
 
 <script type="module">
-import { createStudio } from '/sdk/studio-sdk.js';
-const studio = createStudio({ game: 'tidepool-pals', version: '0.2.0', endpoint: window.STUDIO_CONFIG?.endpoint ?? `${location.protocol}//${location.hostname}:8787` });
+import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
+const studio = createStudio({ game: 'tidepool-pals', version: '0.2.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const COLS=7, ROWS=8;
 const TILE_COL=['#FF6F61','#FFC93C','#3DDCCB','#A77BFF','#7BD45A'];
