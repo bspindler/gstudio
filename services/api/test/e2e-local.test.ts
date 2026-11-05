@@ -1,13 +1,14 @@
-import { mkdtempSync } from 'node:fs';
+import { cpSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createFsObjectStore, createSqliteStore } from '@studio/adapters-local';
 import { createGateway, createStageExecutors, loadPolicy, runGateCycle, templateRationale } from '@studio/core';
 import { createApp } from '../src/app.js';
 import { runRollup, seedLibrary, simulatePlayers } from '../src/jobs.js';
 
-const repo = new URL('../../../', import.meta.url).pathname;
+const repo = fileURLToPath(new URL('../../../', import.meta.url));
 const DAY = 86400_000;
 const day0 = Date.parse('2026-10-20T15:00:00Z');
 
@@ -20,9 +21,12 @@ describe('local end-to-end: play -> ingest -> rollup -> gate', () => {
     let n = 0;
     const app = createApp({ objects, clock: () => clock, ids: () => `b${++n}`, allowedOrigins: [], isKnownGame: async (s) => !!(await store.getGame(s)) });
 
-    const seeded = await seedLibrary(store, join(repo, 'games'), clock);
+    // Copy just the two games under test so the exact-match assertion survives new games being added.
+    const gamesCopy = join(dir, 'games');
+    for (const g of ['hyperline', 'tidepool-pals']) cpSync(join(repo, 'games', g), join(gamesCopy, g), { recursive: true });
+    const seeded = await seedLibrary(store, gamesCopy, clock);
     expect(seeded.sort()).toEqual(['hyperline', 'tidepool-pals']);
-    expect(await seedLibrary(store, join(repo, 'games'), clock)).toEqual([]); // idempotent
+    expect(await seedLibrary(store, gamesCopy, clock)).toEqual([]); // idempotent
     expect((await store.getGame('hyperline'))?.stage).toBe(2);
 
     // The server stamps receive time, so advance its clock to each session's send time.

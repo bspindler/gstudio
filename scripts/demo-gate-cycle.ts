@@ -1,4 +1,5 @@
 // Phase 1a demo: seed three games, run one gate cycle, print evaluations, Inbox and audit trail.
+import { fileURLToPath } from 'node:url';
 import {
   MemoryStore, createGateway, createStageExecutors, loadPolicy, runGateCycle, templateRationale, type Game,
 } from '@studio/core';
@@ -14,7 +15,7 @@ const web = (gameSlug: string, d1: number, players: number) => ({
 });
 
 const store = new MemoryStore();
-const policy = await loadPolicy(new URL('../policy.yaml', import.meta.url).pathname);
+const policy = await loadPolicy(fileURLToPath(new URL('../policy.yaml', import.meta.url)));
 await store.putGame(base('tidepool-pals', 'Tidepool Pals', 'match-3 collection', 1));
 await store.putGame(base('hyperline', 'Hyperline', 'endless runner', 2));
 await store.putGame(base('dud', 'Dud (dummy)', 'test', 2));

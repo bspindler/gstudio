@@ -2,10 +2,11 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createFsObjectStore, createSqliteStore } from '@studio/adapters-local';
 import { createGateway, createStageExecutors, loadPolicy, type RegistryStore } from '@studio/core';
 
-export const repo = new URL('../', import.meta.url).pathname;
+export const repo = fileURLToPath(new URL('../', import.meta.url));
 export const gamesDir = join(repo, 'games');
 
 export function localEnv(dataDir = process.env.STUDIO_DATA ?? join(repo, '.data')) {

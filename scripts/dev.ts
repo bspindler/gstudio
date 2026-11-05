@@ -1,8 +1,8 @@
 // npm run dev: API + ingest on :8787, games + SDK on :5174, bound to localhost.
-// STUDIO_LAN=1 npm run dev also listens on the LAN so a phone can play (the ingest has no auth or rate limit).
+// npm run dev:lan (or STUDIO_LAN=1) also listens on the LAN so a phone can play (the ingest has no auth or rate limit).
 import { randomUUID } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
-import { relative } from 'node:path';
+import { relative, sep } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
@@ -10,7 +10,7 @@ import { loadGameLibrary } from '@studio/core';
 import { createApp } from '@studio/api';
 import { gamesDir, localEnv, repo } from './local-env.js';
 
-const onLan = process.env.STUDIO_LAN === '1';
+const onLan = process.env.STUDIO_LAN === '1' || process.argv.includes('--lan');
 const bind = onLan ? '0.0.0.0' : '127.0.0.1';
 const lan = onLan ? Object.values(networkInterfaces()).flat()
   .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i!.address) : [];
@@ -26,7 +26,7 @@ const api = createApp({
 serve({ fetch: api.fetch, port: 8787, hostname: bind });
 
 const site = new Hono();
-const root = relative(process.cwd(), repo) || '.';
+const root = relative(process.cwd(), repo).split(sep).join('/') || '.';
 site.use('/sdk/*', serveStatic({ root: `${root}/packages`, rewriteRequestPath: (p) => p.replace(/^\/sdk/, '/sdk') }));
 site.get('/', (c) => c.html(`<!doctype html><meta name="viewport" content="width=device-width"><title>Studio games (dev)</title>
 <body style="font:16px system-ui;padding:16px"><h1>Studio games (local dev)</h1><ul>${games.map((g) =>

@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,7 +33,7 @@ describe('loadGameLibrary', () => {
   });
 
   it('loads the real library', async () => {
-    const games = await loadGameLibrary(new URL('../../../games', import.meta.url).pathname);
+    const games = await loadGameLibrary(fileURLToPath(new URL('../../../games', import.meta.url)));
     expect(games.map((g) => g.slug)).toEqual(['hyperline', 'tidepool-pals']);
   });
 });

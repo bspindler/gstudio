@@ -2,6 +2,9 @@
   "name": "studio-in-a-box",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
   "workspaces": [
     "packages/*",
     "adapters/*",
@@ -10,8 +13,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -b packages/core packages/sdk adapters/local services/api && tsc -p scripts",
-    "lint:infra": "az bicep build --file infra/main.bicep --stdout > /dev/null",
+    "lint:infra": "tsx scripts/bicep-lint.ts",
     "dev": "tsx scripts/dev.ts",
+    "dev:lan": "tsx scripts/dev.ts --lan",
     "seed": "tsx scripts/seed.ts",
     "rollup": "tsx scripts/rollup.ts",
     "gates": "tsx scripts/gates.ts",
