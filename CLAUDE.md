@@ -4,7 +4,7 @@ A platform that takes small mobile games from idea to worldwide launch with mini
 
 ## Status
 
-Phase 1a and 1b are merged to `main`. Plan 1c (console, portal, Azure adapters, deploy) is next and not yet written. `README.md` has the current status, the open 1c decision, the operator's outstanding setup steps, and the deferred minors from the 1b review (M1–M12). Read it first when resuming, and keep it updated at the end of each plan.
+Phase 1a and 1b are merged to `main`. Plan 1c (console, portal, Azure adapters, deploy) is next and not yet written. `docs/STATUS.md` has the current status, the open 1c decision, the operator's outstanding setup steps, and the deferred minors from the 1b review (M1–M12). Read it first when resuming, and keep it updated at the end of each plan.
 
 ## Hard rules (never configurable)
 

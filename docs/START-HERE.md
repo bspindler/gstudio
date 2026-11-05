@@ -55,19 +55,19 @@ git config --global user.name "<Your Name>"
 git config --global user.email "<you@example.com>"
 ```
 
-**Get the code.** Dad will send you the exact link. It looks like the one below. First close and reopen PowerShell, so it knows about the programs you just installed (otherwise `code .` says it isn't recognised). Then:
+**Get the code.** First close and reopen PowerShell, so it knows about the programs you just installed (otherwise `code .` says it isn't recognised). Then:
 
 ```powershell
 New-Item -ItemType Directory -Force $HOME\code
 cd $HOME\code
-git clone https://github.com/krakendevlord/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/bspindler/gstudio.git
+cd gstudio
 code .
 ```
 
 We use `$HOME\code` rather than Documents because Windows often syncs Documents to OneDrive, and OneDrive syncing thousands of project files breaks `npm install` and causes clashing copies. Keep code out of OneDrive.
 
-If `code .` still isn't recognised, open VS Code yourself and use **File → Open Folder** to pick the `<repo-name>` folder inside `code`.
+If `code .` still isn't recognised, open VS Code yourself and use **File → Open Folder** to pick the `gstudio` folder inside `code`.
 
 The first time Git talks to GitHub, a browser window opens so you can sign in. That's normal.
 

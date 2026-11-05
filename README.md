@@ -1,93 +1,190 @@
-# Studio in a Box
+<div align="center">
 
-A platform that takes small HTML5 mobile games from idea to worldwide launch with minimal human involvement. The operator (Brian) is pulled in only for approvals, decisions, or when the system is stuck.
+# 🎮 Studio in a Box
 
-- Brief: `docs/game-studio-prompt.md`
-- Approved design: `docs/architecture.md` (Azure + Bicep, local-first)
-- Rules and conventions for agents: `CLAUDE.md`
-- Plans: `docs/superpowers/plans/`
+**Small mobile games, from idea to worldwide launch, with a human only where it matters.**
 
-## Status (as of 2026-11-05)
+[![CI](https://github.com/bspindler/gstudio/actions/workflows/ci.yml/badge.svg)](https://github.com/bspindler/gstudio/actions/workflows/ci.yml)
+![Node 22](https://img.shields.io/badge/node-22-339933?logo=nodedotjs&logoColor=white)
+![TypeScript strict](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Tests: vitest](https://img.shields.io/badge/tests-vitest-6E9F18?logo=vitest&logoColor=white)
+![Infra: Bicep](https://img.shields.io/badge/infra-Azure%20Bicep-0078D4?logo=microsoftazure&logoColor=white)
+![Windows · macOS · Linux](https://img.shields.io/badge/dev-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-555)
 
-Phase 1 is split into three plans: 1a, 1b and 1c.
+[Quick start](#-quick-start) · [Make a game](#-make-your-first-game) · [How it works](#-how-it-works) · [Contributing](#-contributing) · [Docs](#-docs)
 
-| Plan | Scope | State |
-|---|---|---|
-| **1a** Foundation core | Repo scaffold, `policy.yaml`, Bicep skeleton, registry, stage-gate engine, ActionGateway, audit log | ✅ merged to `main` |
-| **1b** SDK, ingest, metrics | Game SDK, ports of Tidepool Pals and Hyperline, event ingest, metrics rollup (D1, D7, session length, purchase intent, rating, crash-free), local SQLite and filesystem adapters, local dev loop | ✅ merged to `main` (last commit `00bbc03`) |
-| **1c** Console, portal, Azure | Operator console v1 (pipeline board, game pages, Inbox, kill switch), public web portal with a landing page per game, Azure adapters (Cosmos, Blob, Queues, Key Vault), Functions API, deploy to Azure dev | ⏭ next, not yet planned |
-| **Onboarding** Contributors + Windows | Windows-safe scripts and CI, compliance for every game file, SDK no-ingest mode, `npm run new-game`, Pages test builds, START-HERE guide (`docs/superpowers/plans/2026-11-05-contributor-onboarding.md`) | ✅ merged to `main` (last commit `7f0dca9`); GitHub steps pending |
+</div>
 
-298 tests pass and `npm run typecheck` is clean.
+---
 
-**Phase 1b demo:** `npm run demo:1b` promotes Hyperline to stage 3 (D1 37.9%). Tidepool is held (D1 22.2%, but its rating of 3.69 is below the 3.8 bar).
+Studio in a Box is a platform that runs a tiny game studio largely on its own. It keeps the game library, builds and tests every game, measures how real players respond, and moves each game through a **stage-gate pipeline**, from concept to web test to store launch and on to new markets. People are pulled in only for approvals, decisions, or when the system is stuck.
 
-**Both games play locally.** Tidepool's gray-overlay bug is fixed (a missing `[hidden]` CSS rule). It still needs a full manual playthrough: open a shell, decline +5 Moves, buy something, open the Album.
+Every outside action (spending, posting, store submissions, price changes, kills) goes through one **gateway** that checks the kill switch, the hard rules, the operator's `policy.yaml` and the budget caps before anything happens.
 
-## Run it locally (no Azure needed)
+## 📚 Table of contents
 
-Requires Node 22.
+- [Features](#-features)
+- [Quick start](#-quick-start)
+- [Make your first game](#-make-your-first-game)
+- [How it works](#-how-it-works)
+- [The stage-gate pipeline](#-the-stage-gate-pipeline)
+- [Hard rules](#%EF%B8%8F-hard-rules)
+- [Scripts](#-scripts)
+- [Project structure](#%EF%B8%8F-project-structure)
+- [Tech stack](#-tech-stack)
+- [Contributing](#-contributing)
+- [Docs](#-docs)
+- [Status and roadmap](#%EF%B8%8F-status-and-roadmap)
+- [License](#-license)
+
+## ✨ Features
+
+- 🕹️ **HTML5 games with no build step.** Each game is one folder in `games/`: an `index.html` plus a `game.yaml`.
+- 🧰 **One small game SDK** for events, fake-door purchases, feedback prompts, A/B flags and reward odds. It uses anonymous IDs only.
+- 🚦 **Stage gates driven by real metrics:** D1 and D7 retention, session length, purchase intent, rating and crash-free rate, with policy-set bars per channel.
+- 🛡️ **Guardrails built in.** The `ActionGateway` is the only route to the outside world, and `policy.yaml` decides what runs automatically and what waits for approval.
+- ✅ **Automatic compliance checks** on every file of every game: no dark patterns, no paid random rewards, purchases only through the SDK, and no direct network calls.
+- 🌱 **`npm run new-game`** creates a compliant starter game in one command.
+- 📱 **Play on your phone** over home Wi-Fi with `npm run dev:lan`.
+- 🌐 **Test builds on GitHub Pages:** hidden from search, labelled "test build", and nothing collected.
+- 💻 **Local-first.** SQLite and filesystem adapters mean you never need Azure to develop, on Windows, macOS or Linux.
+
+## 🚀 Quick start
+
+**You need:** [Node 22](https://nodejs.org/) and [Git](https://git-scm.com/). On Windows, see [`docs/START-HERE.md`](docs/START-HERE.md) for a step-by-step setup.
 
 ```bash
+git clone https://github.com/bspindler/gstudio.git
+cd gstudio
 npm install
-npm test               # vitest, all workspaces
-npm run typecheck
-npm run seed           # register the games in .data/ (stage 2)
-npm run dev            # API/ingest :8787, games :5174 (localhost only)
-npm run dev:lan        # same, also on the LAN for phones; prints the addresses (home networks only)
-npm run new-game <slug>  # scaffold a compliant starter game in games/<slug>/
-npm run build:pages    # build the Pages test-build site into _site/
-npm run rollup         # events -> metrics snapshots
-npm run gates          # run a gate cycle
-npm run demo:1b        # synthetic players through the real ingest, into .data/demo
+npm test          # every workspace, including the game compliance checks
+npm run seed      # register the games locally (stage 2)
+npm run dev       # API + ingest on :8787, games on :5174
 ```
 
-To play, open `http://localhost:5174/tidepool-pals/` or `/hyperline/`. Local data lives in `.data/`, which git ignores; delete it to reset.
+Open <http://localhost:5174/> and pick a game. Local data lives in `.data/` (git-ignored); delete that folder to start fresh.
 
-**Test builds on GitHub Pages.** Every push to `main` runs `.github/workflows/pages.yml`, which publishes `games/` and the SDK as a static test-build site: a `noindex` index page, `robots.txt` disallowing everything, a "test build" badge on each game, and the SDK in no-ingest mode, so nothing is collected and these sessions never feed metrics or gates. Pages needs GitHub Pro (or Team) on the private repo before it can be turned on. The workflow stays off until then: to turn it on, set Settings > Pages > Source to "GitHub Actions", then add the Actions variable `PAGES_ENABLED` with the value `true`.
+## 🌱 Make your first game
 
-## Contributors
+```bash
+npm run new-game star-catcher
+npm run dev
+```
 
-New contributors start at [`docs/START-HERE.md`](docs/START-HERE.md) (a beginner's guide: Windows setup, a first game, playing it on a phone, the Git loop) and [`CONTRIBUTING.md`](CONTRIBUTING.md). Personal Claude Code templates (tutor instructions and conservative permissions) are in `docs/contributor/`.
+Then open <http://localhost:5174/star-catcher/> and start changing the `CHANGE ME` spots in `games/star-catcher/index.html`: the colours, speed, title and lives.
 
-## Picking back up
+**On your phone:** run `npm run dev:lan` instead, connect the phone to the same home Wi-Fi, and open the address it prints.
 
-1. **Decide where 1c runs.** Should Plan 1c deploy to Azure, or stay local until the startup credits land? My default: build the console and portal locally first (SQLite and filesystem adapters), then add the Azure adapters and deploy once the subscription exists.
-2. Write the Plan 1c document in `docs/superpowers/plans/`, then execute it the same way as 1a and 1b: a branch, TDD per task, a final review, then merge.
+## 🧭 How it works
 
-### Operator setup still outstanding (Brian)
+```mermaid
+flowchart LR
+  P[Players<br/>web · portals · iOS/Android] --> SDK[Game SDK<br/>events · fake-door IAP · feedback · flags]
+  SDK -->|batched HTTPS| ING[Ingest]
+  ING --> LAKE[(Event store)]
+  LAKE --> ROLL[Metrics rollup<br/>D1 · D7 · sessions · intent · rating]
+  ROLL --> REG[(Registry<br/>games · metrics · audit)]
+  REG --> GATE[Stage-gate engine]
+  GATE --> AG{ActionGateway<br/>kill switch → hard rules →<br/>policy.yaml → budgets}
+  AG -->|auto| JOBS[Jobs: QA · builds · clips]
+  AG -->|approve| INBOX[Operator inbox]
+  AG --> EXT[Official platform APIs<br/>stores · ads · portals · social]
+```
 
-- Microsoft for Startups credits, then the Azure subscriptions (dev and prod).
-- Delaware LLC, then the EIN, then the D-U-N-S number (needed for the Apple and Google organization accounts in Phase 3).
-- Domain for the portal.
-- GitHub repo. There is no remote yet; everything is local on `main`. In this order:
-  1. Create the private repo and push `main`.
-  2. Confirm CI is green on `build (ubuntu-latest)`, `build (windows-latest)` and `infra`.
-  3. Upgrade to GitHub Pro (or an org on Team), then protect `main`: PR plus 1 review, those three checks required, no force-push.
-  4. Enable Pages (source: GitHub Actions) and set the repo variable `PAGES_ENABLED=true`.
-  5. Only then invite the contributor with write access. Ideally run `docs/START-HERE.md` once on a real Windows machine first.
-- Follow-ups parked from the onboarding review: the payment-word check flags "striped" (needs word boundaries); an unquoted `<script src=https://…>` slips past the network check; Hyperline and Tidepool load Google Fonts, which sends visitor IPs to Google on Pages.
+Core logic has no Azure dependency. Storage, queues, secrets and notifications sit behind ports, with local adapters for development and Azure adapters for production. The full design is in [`docs/architecture.md`](docs/architecture.md).
 
-### Decisions already made
+## 🚦 The stage-gate pipeline
 
-- **Platform:** Azure plus Bicep. The original brief said AWS and CDK.
-- **Local dev:** never requires Azure.
-- **Random rewards are earned-only.** Nothing purchasable contains a random reward (`markets.yaml` `paid_random_rewards: false`).
-- **Hyperline:** the limited drop and the fake leaderboard were removed. The drop returns in Phase 5 with real caps and real end dates.
-- **Rollup:** pure TypeScript, not DuckDB.
-- **SDK:** 4xx responses are dropped, not retried.
-- **Rate limiting:** deferred to Azure Front Door/WAF in 1c.
+| Stage | Name | What moves a game forward |
+|---|---|---|
+| 0 | Concept | Concept score ≥ 0.6 |
+| 1 | Prototype | QA passed and bot-playable |
+| 2 | Web test | ≥ 200 players, rating ≥ 3.8, D1 ≥ 15% on portals or ≥ 30% on our own site |
+| 3 | Beta | Crash-free ≥ 99.5% and store-ready |
+| 4 | Soft launch | D1 ≥ 35%, D7 ≥ 12%, LTV/CPI ≥ 1.0 |
+| 5+ | Expansion → Live ops → Sunset | Market by market, with approval |
 
-### Known minor issues (deferred from the 1b review)
+Stages 0–2 can advance automatically. From stage 3 on, every step needs the operator's approval. The bars live in [`policy.yaml`](policy.yaml), which the operator owns.
 
-- **M1:** one bad event rejects its whole batch. A stored non-UUID player ID is rejected forever.
-- **M2:** `error` event messages can carry PII and have no length cap. Benign errors also lower crash-free.
-- **M3:** a back/forward-cache restore extends the old session.
-- **M5:** the 2→3 gate counts a player twice when they play on both the portal and our own site.
-- **M6:** the SQLite store's compare-and-set does a select, then an update, so it isn't atomic.
-- **M7:** `latestMetrics` breaks ties differently from MemoryStore, and the table has no index.
-- **M8:** the object store's writes aren't atomic, so a partial write can abort the rollup.
-- **M9:** Tidepool's "Open a Shell" card does nothing.
-- **M10:** Hyperline's flex card says "Pulled… Season 1" and promises sharing.
-- **M11:** a paid continue sends two `level_end` events.
-- **M12:** small gaps in the event schema.
+## 🛡️ Hard rules
+
+These are never configurable.
+
+1. **No real-money gambling, no crypto, no tokens, no prizes with cash value.** Random rewards are earned only, never bought, and always show their odds.
+2. **Follow every platform's rules.** Use official APIs only: no bots that pretend to be people, no fake accounts or reviews, no bought engagement, no scraping where the terms forbid it.
+3. **No real charges outside official store billing.** During web tests, purchase buttons are honest fake doors: the item is free during the beta.
+4. **Protect minors.** No personal data from under-13s, honest age ratings, and no dark patterns: no fake timers, fake scarcity, or pressure after a "no".
+5. **Privacy-light by default.** Players get anonymous IDs, and store privacy labels match what we actually collect.
+6. **Original IP only.**
+7. **Secrets live in Azure Key Vault,** never in the repo, accessed with least-privilege managed identities.
+
+## 🧪 Scripts
+
+| Command | What it does |
+|---|---|
+| `npm test` | Run every test with vitest, including game compliance |
+| `npm run typecheck` | Strict TypeScript across all workspaces |
+| `npm run dev` | API + ingest on :8787 and games on :5174, localhost only |
+| `npm run dev:lan` | The same, also on your home network so a phone can play |
+| `npm run new-game <slug>` | Create a compliant starter game in `games/<slug>/` |
+| `npm run build:pages` | Build the GitHub Pages test-build site into `_site/` |
+| `npm run seed` | Register every game in the local registry |
+| `npm run rollup` | Turn raw events into metric snapshots |
+| `npm run gates` | Run one stage-gate cycle |
+| `npm run demo:1b` | Run synthetic players through the real ingest (local only) |
+| `npm run lint:infra` | Validate the Bicep templates (needs the Azure CLI) |
+
+## 🗂️ Project structure
+
+```
+games/<slug>/        HTML5 games (no build step) + game.yaml
+packages/core/       domain, policy, registry, gateway, gates, metrics rollup, game library + compliance
+packages/sdk/        browser game SDK (plain ES module, no dependencies)
+adapters/local/      SQLite registry, filesystem object store
+services/api/        Hono app: ingest + API, jobs (seed, rollup)
+scripts/             dev server, new-game, Pages build, seed, rollup, gates, demos
+infra/               Azure Bicep
+policy.yaml          autonomy policy, gates and budgets (operator-owned)
+markets.yaml         market tiers
+docs/                design, platform research, plans, contributor guide
+```
+
+## 🧱 Tech stack
+
+**TypeScript** (strict, ESM) · **Node 22** · npm workspaces · **vitest** · **Hono** · `node:sqlite` · plain-JS game SDK · **Azure** (Functions, Cosmos DB, Blob, Queues, Key Vault) via **Bicep** · **GitHub Actions** (CI on Linux and Windows, Pages)
+
+## 🤝 Contributing
+
+New here? Start with **[`docs/START-HERE.md`](docs/START-HERE.md)**. It's a friendly guide from a fresh laptop to your own game on your phone, written for Windows. Then read [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+The short version:
+
+1. Make a branch: `git switch -c my-change`.
+2. Make your change and keep `npm test` green.
+3. Push and open a pull request. CI runs on Linux and Windows, and the operator reviews it.
+
+If you use Claude Code, copy the templates in [`docs/contributor/`](docs/contributor/) for tutor-style help and safe permissions.
+
+## 📖 Docs
+
+| Doc | What's in it |
+|---|---|
+| [`docs/START-HERE.md`](docs/START-HERE.md) | Beginner's guide: setup, first game, phone, Git |
+| [`docs/architecture.md`](docs/architecture.md) | The approved design |
+| [`docs/game-studio-prompt.md`](docs/game-studio-prompt.md) | The original brief |
+| [`docs/platforms/`](docs/platforms/) | Platform research: Apple, Google Play, ads, portals, social, markets |
+| [`docs/STATUS.md`](docs/STATUS.md) | Plan status, operator setup, decisions and known issues |
+| [`CLAUDE.md`](CLAUDE.md) | Rules and conventions for AI agents working in this repo |
+
+## 🗺️ Status and roadmap
+
+- [x] **1a:** foundation core: registry, stage-gate engine, ActionGateway, audit log
+- [x] **1b:** game SDK, event ingest, metrics rollup, local adapters
+- [x] **Onboarding:** Windows support, `new-game`, compliance for every file, Pages test builds
+- [ ] **1c:** operator console, public portal, Azure adapters, deploy to Azure
+
+Details are in [`docs/STATUS.md`](docs/STATUS.md).
+
+## 📄 License
+
+Private and proprietary. All rights reserved. This repository is not open source.
