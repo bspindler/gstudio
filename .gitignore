@@ -8,3 +8,5 @@ local.settings.json
 *.pem
 .DS_Store
 _site/
+CLAUDE.local.md
+.claude/settings.local.json

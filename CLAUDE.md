@@ -38,9 +38,16 @@ Phase 1a and 1b are merged to `main`. Plan 1c (console, portal, Azure adapters, 
 ## Local dev
 
 - `npm test`, `npm run typecheck`
-- `npm run dev`: API and ingest on :8787, games on :5174 (also on the LAN, for phones). Data goes to `.data/`.
+- `npm run dev`: API and ingest on :8787, games on :5174, bound to localhost. Data goes to `.data/`.
+- `npm run dev:lan`: the same, also listening on the LAN so a phone can play; prints the addresses. Home networks only (the ingest has no auth). `STUDIO_LAN=1` still works.
+- `npm run new-game <slug>`: scaffold a compliant starter game in `games/<slug>/` (no purchases, no random rewards).
+- `npm run build:pages`: build the GitHub Pages test-build site into `_site/` (noindex, "test build" badge, SDK in no-ingest mode). The Pages workflow runs it on every push to `main`.
 - `npm run seed`, `npm run rollup`, `npm run gates`: register games, compute metrics, run a gate cycle.
 - `npm run demo:1b`: synthetic players through the real ingest, written to `.data/demo`. Synthetic players are for local use only; never point them at a real channel (hard rule 2).
+
+## Contributors
+
+Contributors (start at `docs/START-HERE.md` and `CONTRIBUTING.md`) work on branches and reach `main` only through pull requests with the operator's review and passing CI. Nobody pushes to `main` except the operator. Contributors don't edit `policy.yaml`, `markets.yaml`, `infra/`, or the gateway and policy code in `packages/core` unless the operator asks. A contributor's personal Claude settings live in the untracked `CLAUDE.local.md` and `.claude/settings.local.json` (templates in `docs/contributor/`); they add to these rules and never override them.
 
 ## Repo map
 

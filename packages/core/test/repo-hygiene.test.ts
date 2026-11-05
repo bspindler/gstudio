@@ -41,3 +41,27 @@ describe('repo hygiene (Windows-safe)', () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe('contributor onboarding files', () => {
+  it('contributor settings template is valid JSON with allow and deny lists', () => {
+    const text = readFileSync(join(root, 'docs/contributor/settings.local.json.example'), 'utf8');
+    const settings = JSON.parse(text) as { permissions: { allow: string[]; deny: string[] } };
+    expect(settings.permissions.allow).toContain('Bash(npm test)');
+    expect(settings.permissions.deny.some((r) => /^Edit\(.*policy\.yaml\)$/.test(r))).toBe(true);
+    expect(settings.permissions.deny.some((r) => /git push (--force|-f)/.test(r))).toBe(true);
+  });
+
+  it('.gitignore covers personal Claude files', () => {
+    const lines = readFileSync(join(root, '.gitignore'), 'utf8').split('\n').map((l) => l.trim());
+    expect(lines).toContain('CLAUDE.local.md');
+    expect(lines).toContain('.claude/settings.local.json');
+  });
+
+  it('START-HERE references only scripts that exist', () => {
+    const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+    const guide = readFileSync(join(root, 'docs/START-HERE.md'), 'utf8');
+    const used = [...guide.matchAll(/npm run ([\w:-]+)/g)].map((m) => m[1] ?? '');
+    expect(used.length).toBeGreaterThan(0);
+    expect(used.filter((s) => !(s in pkg.scripts))).toEqual([]);
+  });
+});

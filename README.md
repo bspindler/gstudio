@@ -32,13 +32,22 @@ npm install
 npm test               # vitest, all workspaces
 npm run typecheck
 npm run seed           # register the games in .data/ (stage 2)
-npm run dev            # API/ingest :8787, games :5174 (STUDIO_LAN=1 to expose to phones)
+npm run dev            # API/ingest :8787, games :5174 (localhost only)
+npm run dev:lan        # same, also on the LAN for phones; prints the addresses (home networks only)
+npm run new-game <slug>  # scaffold a compliant starter game in games/<slug>/
+npm run build:pages    # build the Pages test-build site into _site/
 npm run rollup         # events -> metrics snapshots
 npm run gates          # run a gate cycle
 npm run demo:1b        # synthetic players through the real ingest, into .data/demo
 ```
 
 To play, open `http://localhost:5174/tidepool-pals/` or `/hyperline/`. Local data lives in `.data/`, which git ignores; delete it to reset.
+
+**Test builds on GitHub Pages.** Every push to `main` runs `.github/workflows/pages.yml`, which publishes `games/` and the SDK as a static test-build site: a `noindex` index page, `robots.txt` disallowing everything, a "test build" badge on each game, and the SDK in no-ingest mode, so nothing is collected and these sessions never feed metrics or gates. Pages needs GitHub Pro (or Team) on the private repo before it can be turned on.
+
+## Contributors
+
+New contributors start at [`docs/START-HERE.md`](docs/START-HERE.md) (a beginner's guide: Windows setup, a first game, playing it on a phone, the Git loop) and [`CONTRIBUTING.md`](CONTRIBUTING.md). Personal Claude Code templates (tutor instructions and conservative permissions) are in `docs/contributor/`.
 
 ## Picking back up
 
