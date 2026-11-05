@@ -17,6 +17,20 @@ describe('pagesGameHtml', () => {
     expect(out.indexOf('STUDIO_CONFIG')).toBeLessThan(out.indexOf('<script type="module">'));
     expect(out.indexOf('studio-test-badge')).toBeLessThan(out.indexOf('</body>'));
   });
+  it('still adds the no-ingest config and badge when the game has its own noindex meta', () => {
+    const own = game.replace('<head>', '<head><meta name="robots" content="noindex">');
+    const out = pagesGameHtml(own);
+    expect(count(out, '<meta name="robots" content="noindex">')).toBe(1);
+    expect(count(out, "window.STUDIO_CONFIG={endpoint:''}")).toBe(1);
+    expect(out.indexOf('STUDIO_CONFIG')).toBeLessThan(out.indexOf('<script type="module">'));
+    expect(count(out, 'id="studio-test-badge"')).toBe(1);
+  });
+  it('still adds noindex when the game already has the no-ingest config', () => {
+    const own = game.replace('<head>', "<head><script>window.STUDIO_CONFIG={endpoint:''}</script>");
+    const out = pagesGameHtml(own);
+    expect(count(out, '<meta name="robots" content="noindex">')).toBe(1);
+    expect(count(out, "window.STUDIO_CONFIG={endpoint:''}")).toBe(1);
+  });
   it('is idempotent', () => {
     const once = pagesGameHtml(game);
     expect(pagesGameHtml(once)).toBe(once);

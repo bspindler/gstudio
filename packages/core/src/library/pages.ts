@@ -17,8 +17,9 @@ export function pagesGameHtml(html: string): string {
   if (!out.includes('id="studio-test-badge"')) {
     out = /<\/body>/i.test(out) ? out.replace(/<\/body>/i, () => `${BADGE}</body>`) : out + BADGE;
   }
-  const head = NOINDEX + NO_INGEST;
-  if (!out.includes(NOINDEX)) {
+  // Each insert has its own guard, so a game that already has one of them still gets the others.
+  const head = (out.includes(NOINDEX) ? '' : NOINDEX) + (out.includes(NO_INGEST) ? '' : NO_INGEST);
+  if (head) {
     out = /<head[^>]*>/i.test(out) ? out.replace(/<head[^>]*>/i, (m) => m + head) : head + out;
   }
   return out;
