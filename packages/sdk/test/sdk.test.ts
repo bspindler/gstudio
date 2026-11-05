@@ -351,6 +351,31 @@ describe('no-ingest mode (endpoint "")', () => {
   });
 });
 
+describe('fails closed: ingest needs a non-empty endpoint and a non-Pages host', () => {
+  const quiet = async (s: ReturnType<typeof make>) => {
+    for (let i = 0; i < 30; i++) s.track('tick', { i });
+    await s.flush();
+    window.dispatchEvent(new Event('pagehide'));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fakeFetch).not.toHaveBeenCalled();
+  };
+  it('sends nothing when endpoint is undefined', async () => {
+    await quiet(make({ endpoint: undefined }));
+  });
+  it('sends nothing when endpoint is null', async () => {
+    await quiet(make({ endpoint: null }));
+  });
+  it('sends nothing on a github.io host even with an endpoint', async () => {
+    await quiet(make({ endpoint: 'https://ingest.example', location: { search: '', hostname: 'x.github.io' } }));
+  });
+  it('still sends on a normal host with an endpoint', async () => {
+    const s = make({ location: { search: '', hostname: 'localhost' } });
+    s.track('tick');
+    await s.flush();
+    expect(fakeFetch).toHaveBeenCalled();
+  });
+});
+
 describe('resolveEndpoint', () => {
   it('uses no ingest on github.io', () => {
     expect(resolveEndpoint({ protocol: 'https:', hostname: 'x.github.io' })).toBe('');

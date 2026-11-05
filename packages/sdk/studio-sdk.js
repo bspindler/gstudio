@@ -21,10 +21,10 @@ const CHANNELS = ['portal', 'own_site'];
  * @typedef {{ sku: string; title: string; priceUsd: number; randomReward?: boolean }} Offer
  * @typedef {{
  *   game: string; version: string;
- *   endpoint: string; // ingest base URL; '' means no-ingest mode: nothing is ever sent
+ *   endpoint?: string | null; // ingest base URL; '', null or missing means no-ingest mode: nothing is ever sent
  *   channel?: 'portal' | 'own_site';
  *   storage?: KV; fetch?: typeof fetch; now?: () => number; random?: () => number;
- *   document?: Document; window?: Window; location?: { search: string };
+ *   document?: Document; window?: Window; location?: { search: string; hostname?: string };
  * }} StudioOptions
  */
 
@@ -84,7 +84,8 @@ function checkOdds(/** @type {OddsRow[]} */ table) {
  * Picks the ingest base URL. An explicit config endpoint wins (including '' for no-ingest);
  * static GitHub Pages hosts have no ingest; everything else uses the dev ingest on :8787.
  * @param {{ protocol: string; hostname: string }} loc
- * @param {{ endpoint?: string }} [config]
+ * @param {{ endpoint?: string | null }} [config]
+ * @returns {string | null}
  */
 export function resolveEndpoint(loc, config) {
   if (config?.endpoint !== undefined) return config.endpoint;
@@ -99,7 +100,10 @@ export function createStudio(opts) {
   const now = opts.now ?? (() => Date.now());
   const random = opts.random ?? Math.random;
   const send = opts.fetch ?? globalThis.fetch.bind(globalThis);
-  const ingest = opts.endpoint !== '';
+  const loc = opts.location ?? globalThis.location;
+  // Fails closed: ingest only with a real endpoint, and never on a GitHub Pages test build.
+  const ingest = typeof opts.endpoint === 'string' && opts.endpoint !== ''
+    && !(loc?.hostname ?? '').endsWith('.github.io');
   const kv = safeKV(opts.storage ?? defaultStorage());
   const key = (/** @type {string} */ k) => `studio:${opts.game}:${k}`;
 
@@ -109,7 +113,7 @@ export function createStudio(opts) {
   const sessions = Number(kv.get(key('sessions')) ?? 0) + 1;
   kv.set(key('sessions'), String(sessions));
 
-  const fromUrl = new URLSearchParams((opts.location ?? globalThis.location)?.search ?? '').get('ch');
+  const fromUrl = new URLSearchParams(loc?.search ?? '').get('ch');
   const channel = opts.channel ?? (fromUrl && CHANNELS.includes(fromUrl) ? fromUrl : 'own_site');
 
   /** @type {{ e: object; tries: number }[]} */
