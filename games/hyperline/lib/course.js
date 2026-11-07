@@ -157,7 +157,7 @@ const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip' };
 
 export function createCourse(seed) {
-  return { seed: seed >>> 0, rng: mulberry32(seed), objs: [], nextX: 11, introduced: [], last: '' };
+  return { seed: seed >>> 0, rng: mulberry32(seed), objs: [], nextX: 24, introduced: [], last: '', count: 0 };
 }
 
 /** Appends patterns until the course reaches untilX. Idempotent for x already built. */
@@ -177,7 +177,8 @@ export function extendCourse(c, untilX) {
     }
     const { o, len } = p.build(x, d, r);
     o.sort((a, b) => a.x - b.x);
-    for (const ob of o) { ob.p = p.id; c.objs.push(ob); }
+    const g = c.count++;
+    for (const ob of o) { ob.p = p.id; ob.g = g; c.objs.push(ob); }
     c.last = p.id;
     c.nextX += len + Math.max(3.4, 6.2 - d * 2.6, speedAt(x) * 0.42) + r() * 2.2;
   }

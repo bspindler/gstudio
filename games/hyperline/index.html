@@ -1,48 +1,90 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07030F">
 <title>Hyperline</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Monoton&family=Chakra+Petch:wght@500;600;700&display=swap">
 <style>
-/* Layout: one-screen phone game. Brand bar, full-bleed canvas runner in the middle, tab bar at the bottom. Deliberately single dark neon-arcade theme. */
+/* Layout: one-screen phone game. Brand bar, full-bleed 3D canvas runner in the middle, tab bar at
+   the bottom. Deliberately a single dark neon-arcade theme. */
 :root{
   --void:#07030F; --night:#120A24; --panel:#1A1033; --edge:#2E1D57;
-  --text:#F2ECFF; --dim:#A08FC7; --pink:#FF2BD6; --cyan:#22F0FF; --volt:#FFE45C; --lime:#7CFF6B;
+  --text:#F2ECFF; --dim:#A08FC7; --pink:#FF2BD6; --cyan:#22F0FF; --volt:#FFE45C; --lime:#7CFF6B; --orange:#FF8A3D;
   --display:'Monoton','Impact',system-ui,sans-serif;
   --body:'Chakra Petch',system-ui,-apple-system,'Segoe UI',sans-serif;
   color-scheme:dark;
 }
-html,body{height:100%}
-body{background:var(--void);color:var(--text);font-family:var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
-.app{height:100%;box-sizing:border-box;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 0}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--void);color:var(--text);font-family:var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;overscroll-behavior:none}
+.app{height:100%;height:100dvh;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(12px,env(safe-area-inset-top,0px))}
 button{font-family:inherit;color:inherit}
 button:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
 
-.top{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.brand{font-family:var(--display);font-size:26px;line-height:1;color:var(--pink);text-shadow:0 0 6px var(--pink),0 0 18px rgba(255,43,214,.6);letter-spacing:1px}
+.top{display:flex;align-items:center;gap:8px}
+.brand{font-family:var(--display);font-size:26px;line-height:1;color:var(--pink);text-shadow:0 0 6px var(--pink),0 0 18px rgba(255,43,214,.6);letter-spacing:1px;margin-right:auto}
 .cred{display:flex;align-items:center;gap:6px;border:1px solid var(--edge);background:var(--night);border-radius:8px;padding:5px 10px;font-weight:700;font-variant-numeric:tabular-nums}
-.cred i{width:10px;height:10px;background:var(--volt);transform:rotate(45deg);box-shadow:0 0 8px var(--volt)}
+.cred i,.dia{display:inline-block;width:10px;height:10px;background:var(--volt);transform:rotate(45deg);box-shadow:0 0 8px var(--volt)}
+.dia{width:8px;height:8px;margin-right:4px}
+.icon{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--edge);background:var(--night);border-radius:8px;cursor:pointer;padding:0}
+.icon svg{width:20px;height:20px}
 
 .view{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px}
 .scroll{overflow-y:auto;padding-bottom:14px;-webkit-overflow-scrolling:touch}
+.scroll>*{flex-shrink:0}
 
 /* runner */
 .stage{position:relative;flex:1;min-height:0;border-radius:14px;overflow:hidden;border:1px solid var(--edge);touch-action:none;cursor:pointer;background:var(--void)}
 #game{position:absolute;inset:0;width:100%;height:100%;display:block}
 .hud{position:absolute;left:12px;right:12px;top:10px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;font-variant-numeric:tabular-nums}
 .dist{font-weight:700;font-size:30px;line-height:1;text-shadow:0 0 10px var(--cyan)}
-.dist small{font-size:13px;color:var(--dim);display:block;text-shadow:none;letter-spacing:.1em;margin-top:3px}
+.dist small{font-size:12px;color:var(--dim);display:block;text-shadow:none;letter-spacing:.1em;margin-top:4px}
+.dist .sec{color:var(--cyan);opacity:.85}
+.hudr{display:flex;align-items:center;gap:8px}
 .chips{display:flex;align-items:center;gap:6px;font-weight:700;font-size:18px;color:var(--volt);text-shadow:0 0 8px var(--volt)}
 .chips i{width:10px;height:10px;background:var(--volt);transform:rotate(45deg)}
-.ready{position:absolute;inset:0;display:grid;place-items:center;text-align:center;pointer-events:none;background:linear-gradient(transparent 30%,rgba(7,3,15,.55))}
-.ready .go{font-family:var(--display);font-size:clamp(28px,9vw,44px);color:var(--cyan);text-shadow:0 0 8px var(--cyan),0 0 24px rgba(34,240,255,.6);animation:flick 2.4s infinite}
-.ready p{margin:6px 0 0;color:var(--dim);font-weight:600}
+.mult{font-size:12px;color:var(--void);background:var(--volt);border-radius:5px;padding:1px 5px;text-shadow:none;box-shadow:0 0 10px var(--volt)}
+.pause{pointer-events:auto;width:34px;height:34px;border-radius:8px;border:1px solid var(--edge);background:rgba(18,10,36,.7);display:grid;place-items:center;cursor:pointer;padding:0}
+.pause svg{width:14px;height:14px}
+
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;pointer-events:none;padding:14px}
+.ready{justify-content:flex-start;padding-top:96px}
+.ready .go{margin-top:8px}
+.ready{background:linear-gradient(rgba(7,3,15,.25),rgba(7,3,15,.15) 40%,rgba(7,3,15,.8))}
+.go{font-family:var(--display);font-size:clamp(28px,9vw,44px);color:var(--cyan);text-shadow:0 0 8px var(--cyan),0 0 24px rgba(34,240,255,.6);animation:flick 2.4s infinite;line-height:1.1}
+.overlay p{margin:0;color:var(--dim);font-weight:600;font-size:14px}
 @keyframes flick{0%,92%,100%{opacity:1}94%{opacity:.35}96%{opacity:1}97%{opacity:.5}}
-.hint{text-align:center;font-size:13px;color:var(--dim);margin:0;font-weight:600}
+.modes{pointer-events:auto;display:grid;grid-template-columns:1fr 1fr;gap:4px;background:rgba(18,10,36,.85);border:1px solid var(--edge);border-radius:12px;padding:4px;width:min(100%,300px)}
+.mode{border:0;background:none;border-radius:9px;padding:9px 6px;font-weight:700;font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px}
+.mode small{font-size:11px;letter-spacing:.04em;text-transform:none;font-weight:600;opacity:.85}
+.mode[aria-checked="true"]{background:var(--cyan);color:var(--void);box-shadow:0 0 14px rgba(34,240,255,.45)}
+.mode.daily[aria-checked="true"]{background:var(--pink);box-shadow:0 0 14px rgba(255,43,214,.45)}
+.mlist{pointer-events:auto;width:min(100%,340px);display:flex;flex-direction:column;gap:5px;margin-top:auto;text-align:left}
+.mlist h4{margin:0 0 2px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.mis{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;background:rgba(18,10,36,.85);border:1px solid var(--edge);border-radius:10px;padding:7px 10px;font-size:13px;font-weight:600}
+.mis .rw{font-weight:700;color:var(--volt);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mis .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--edge);overflow:hidden}
+.mis .bar i{display:block;height:100%;background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.mis.done{border-color:var(--lime)}
+.mis.done .bar i{background:var(--lime)}
+.mis .new{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--void);background:var(--cyan);border-radius:4px;padding:0 5px;margin-right:6px}
+.paused{background:rgba(7,3,15,.7);pointer-events:none}
+
+.banner{position:absolute;left:0;right:0;top:24%;text-align:center;pointer-events:none;animation:ban 2.4s ease-out forwards}
+.banner .k{font-size:12px;font-weight:700;letter-spacing:.3em;color:var(--dim)}
+.banner .n{font-family:var(--display);font-size:clamp(26px,8.5vw,40px);line-height:1.1;color:var(--volt);text-shadow:0 0 8px var(--volt),0 0 26px rgba(255,228,92,.55)}
+.banner .h{margin:6px auto 0;max-width:300px;font-size:13px;font-weight:600;color:var(--text);background:rgba(7,3,15,.6);border-radius:8px;padding:4px 10px;display:inline-block}
+@keyframes ban{0%{opacity:0;transform:scale(1.25)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0;transform:translateY(-10px)}}
 
 /* tabs */
-.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-block:4px 10px}
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding-top:4px;padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
 .tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:1px solid transparent;padding:6px 0;border-radius:10px;font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);cursor:pointer}
 .tab svg{width:22px;height:22px}
 .tab[aria-selected="true"]{color:var(--cyan);border-color:var(--edge);background:var(--night);text-shadow:0 0 8px var(--cyan)}
@@ -66,7 +108,6 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 .hero{position:relative;overflow:hidden;border:1px solid var(--pink);box-shadow:0 0 24px rgba(255,43,214,.25),inset 0 0 40px rgba(255,43,214,.08)}
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--pink)}
 .herobody{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center}
-.herobody canvas{width:120px;height:120px}
 .heroname{font-weight:700;font-size:22px;line-height:1.1}
 .row{display:flex;gap:8px;flex-wrap:wrap}
 .row .btn{flex:1}
@@ -78,27 +119,31 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 .lb div{display:grid;grid-template-columns:28px 1fr auto;gap:8px;padding:6px 8px;border-radius:8px;font-size:14px;font-weight:600}
 .lb .me{background:rgba(34,240,255,.1);color:var(--cyan);border:1px solid rgba(34,240,255,.35)}
 .lb .rk{color:var(--dim)}
-.lb .cut{border-top:1px dashed var(--edge);margin-top:4px;padding-top:8px}
 
 /* locker */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--night);border:1px solid var(--edge);border-radius:12px;padding:4px}
+.seg button{border:0;background:none;border-radius:9px;padding:8px;font-weight:700;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);cursor:pointer}
+.seg button[aria-selected="true"]{background:var(--edge);color:var(--cyan)}
 .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.skin{display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--night);border:1px solid var(--edge);border-radius:12px;padding:10px 4px;cursor:pointer;text-align:center}
+.skin{display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--night);border:1px solid var(--edge);border-radius:12px;padding:10px 4px;cursor:pointer;text-align:center;min-width:0}
 .skin.eq{border-color:var(--cyan);box-shadow:0 0 14px rgba(34,240,255,.3)}
 .skin .nm{font-weight:700;font-size:13px;line-height:1.15}
 .skin .st{font-size:11px;color:var(--dim)}
 .skin.eq .st{color:var(--cyan)}
 .stats{border:1px dashed var(--edge);border-radius:12px;padding:12px;font-size:13px;color:var(--dim);display:flex;flex-direction:column;gap:4px}
 .stats b{color:var(--text);font-variant-numeric:tabular-nums}
-.linkbtn{background:none;border:0;color:var(--dim);font-weight:600;font-size:13px;text-decoration:underline;cursor:pointer;padding:8px;align-self:center}
 
 /* modal */
-.modal{position:fixed;inset:0;z-index:50;background:rgba(4,2,10,.8);display:grid;place-items:center;padding:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));overflow-y:auto}
-.mcard{width:100%;max-width:340px;background:var(--night);border:1px solid var(--edge);border-radius:18px;padding:20px 16px 16px;text-align:center;display:flex;flex-direction:column;gap:10px;box-shadow:0 0 40px rgba(255,43,214,.2);animation:min .25s ease-out}
+.modal{position:fixed;inset:0;z-index:50;background:rgba(4,2,10,.82);display:grid;place-items:center;padding:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:max(16px,env(safe-area-inset-top,0px));padding-bottom:max(16px,env(safe-area-inset-bottom,0px));overflow-y:auto}
+.mcard{width:100%;max-width:360px;background:var(--night);border:1px solid var(--edge);border-radius:18px;padding:20px 16px 16px;text-align:center;display:flex;flex-direction:column;gap:10px;box-shadow:0 0 40px rgba(255,43,214,.2);animation:min .25s ease-out}
 @keyframes min{from{transform:scale(.9);opacity:0}}
 .mcard .col{display:flex;flex-direction:column;gap:8px}
 .wreck{font-family:var(--display);font-size:34px;font-weight:400;color:var(--pink);text-shadow:0 0 8px var(--pink),0 0 24px rgba(255,43,214,.6);margin:0;line-height:1.1}
-.big{font-weight:700;font-size:44px;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 0 12px var(--cyan)}
+.big{font-weight:700;font-size:48px;line-height:1;font-variant-numeric:tabular-nums;text-shadow:0 0 12px var(--cyan)}
 .newbest{color:var(--volt);font-weight:700;letter-spacing:.16em;text-shadow:0 0 10px var(--volt)}
+.brk{display:grid;grid-template-columns:1fr auto;gap:4px 12px;text-align:left;font-size:13px;font-weight:600;color:var(--dim);background:var(--void);border:1px solid var(--edge);border-radius:12px;padding:10px 12px;font-variant-numeric:tabular-nums}
+.brk b{color:var(--volt);text-align:right}
+.brk .tot{color:var(--text);border-top:1px solid var(--edge);padding-top:5px;margin-top:2px}
 .crate{background:none;border:0;cursor:pointer;width:140px;margin:0 auto;animation:jit 1.2s infinite}
 .crate svg{width:100%;display:block}
 .crate.crack{animation:burst .5s ease-in forwards}
@@ -107,25 +152,48 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 .reveal{margin:0 auto;animation:pin .5s cubic-bezier(.34,1.6,.64,1)}
 @keyframes pin{from{transform:scale(0) rotate(-45deg)}}
 .flex{width:100%;border-radius:12px;display:block;box-shadow:0 0 30px rgba(255,43,214,.35)}
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:6px 0;border-bottom:1px solid var(--edge);font-weight:600}
+.setrow small{display:block;color:var(--dim);font-size:12px;font-weight:500}
+.sw{position:relative;width:52px;height:30px;border-radius:15px;border:1px solid var(--edge);background:var(--void);cursor:pointer;flex:none;padding:0}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--dim);transition:transform .15s}
+.sw[aria-checked="true"]{background:var(--cyan);border-color:var(--cyan)}
+.sw[aria-checked="true"]::after{transform:translateX(22px);background:var(--void)}
+.danger{background:none;border:1px solid #FF2B5E;color:#FF6B8A;border-radius:10px;padding:11px;font-weight:700;cursor:pointer}
 
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;background:var(--text);color:var(--void);font-weight:700;font-size:14px;border-radius:8px;padding:9px 14px;box-shadow:0 0 20px rgba(34,240,255,.5);max-width:calc(100% - 40px);text-align:center}
 
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
+</head>
+<body>
 
 <div class="app">
   <header class="top">
     <div class="brand">HYPERLINE</div>
     <div class="cred" aria-label="Credits"><i></i><span id="credCount">0</span></div>
+    <button class="icon" data-act="settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
   </header>
 
   <section class="view" id="view-run">
     <div class="stage" id="stage">
       <canvas id="game" aria-label="Runner game. Tap or hold to jump."></canvas>
-      <div class="hud"><div class="dist"><span id="distTxt">0</span>m<small id="bestTxt">BEST 0m</small></div><div class="chips"><i></i><span id="chipTxt">0</span></div></div>
-      <div class="ready" id="ready"><div><div class="go">TAP TO RUN</div><p id="readySub">Tap to jump · hold to keep jumping</p></div></div>
+      <div class="hud">
+        <div class="dist"><span id="distTxt">0</span>m<small id="bestTxt">BEST 0m</small><small class="sec" id="secTxt">SECTOR 1</small></div>
+        <div class="hudr"><div class="chips"><i></i><span id="chipTxt">0</span><span class="mult" id="multTxt" hidden>x2</span></div>
+          <button class="pause" id="pauseBtn" data-act="pause" aria-label="Pause" hidden><svg viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg></button></div>
+      </div>
+      <div class="banner" id="banner" hidden><div class="k" id="banK">SECTOR 1</div><div class="n" id="banN">NEON DISTRICT</div><div class="h" id="banH"></div></div>
+      <div class="overlay ready" id="ready">
+        <div class="modes" role="radiogroup" aria-label="Mode">
+          <button class="mode" role="radio" data-act="mode" data-mode="endless" aria-checked="true">Endless<small id="modeBestE">Best 0m</small></button>
+          <button class="mode daily" role="radio" data-act="mode" data-mode="daily" aria-checked="false">Daily run<small id="modeBestD">Today 0m</small></button>
+        </div>
+        <div class="go">TAP TO RUN</div>
+        <p id="readySub">Tap to jump · hold to keep jumping</p>
+        <div class="mlist" id="readyMissions"></div>
+      </div>
+      <div class="overlay paused" id="paused" hidden><div class="go">PAUSED</div><p>Tap to resume</p></div>
     </div>
-    <p class="hint">Dodge spikes, clear gaps, land on blocks. It speeds up the longer you last.</p>
   </section>
 
   <section class="view scroll" id="view-shop" hidden></section>
@@ -142,359 +210,614 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
-const studio = createStudio({ game: 'hyperline', version: '0.2.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
-const $=id=>document.getElementById(id);
+import { createCourse, pruneCourse } from './lib/course.js';
+import { createRunner, step } from './lib/sim.js';
+import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
+import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
+import { applyEvent, checkMissions, chipMultiplier, migrateSave, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
+import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
+import { drawScene, drawSkinThumb, skinColors } from './render.js';
+import { createAudio } from './audio.js';
+
+const studio = createStudio({ game: 'hyperline', version: '0.3.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const $ = (id) => document.getElementById(id);
+const audio = createAudio();
+const RM = matchMedia('(prefers-reduced-motion: reduce)');
+let reduced = RM.matches;
+RM.addEventListener?.('change', (e) => { reduced = e.matches; });
 
 /* ---------- skins ---------- */
-const SKINS=[
- {id:'volt',name:'Volt',rar:'common',a:'#22F0FF',b:'#2B6BFF',shape:'square',src:'crate'},
- {id:'ember',name:'Ember',rar:'common',a:'#FF8A3D',b:'#FF2B5E',shape:'square',src:'crate'},
- {id:'mint',name:'Mint',rar:'common',a:'#7CFF6B',b:'#11B989',shape:'square',src:'crate'},
- {id:'vapor',name:'Vapor',rar:'rare',a:'#FF2BD6',b:'#7A2BFF',shape:'circle',src:'crate'},
- {id:'hexa',name:'Hexa',rar:'rare',a:'#B98CFF',b:'#22F0FF',shape:'hex',src:'crate'},
- {id:'aurum',name:'Aurum',rar:'epic',a:'#FFE45C',b:'#FF9F1C',shape:'diamond',src:'crate'},
- {id:'glitch',name:'Glitch',rar:'epic',a:'#FFFFFF',b:'#8A8AFF',shape:'square',fx:'glitch',src:'crate'},
- {id:'serpent',name:'Chrome Serpent',rar:'premium',a:'#E6E9FF',b:'#8C93C7',shape:'hex',fx:'rainbow',src:'shop'},
- {id:'apex',name:'Apex',rar:'exclusive',a:'#FF2BD6',b:'#FFE45C',shape:'diamond',fx:'rainbow',src:'best'}
+const SKINS = [
+  { id: 'volt', name: 'Volt', rar: 'common', a: '#22F0FF', b: '#2B6BFF', shape: 'square', src: 'crate' },
+  { id: 'ember', name: 'Ember', rar: 'common', a: '#FF8A3D', b: '#FF2B5E', shape: 'square', src: 'crate' },
+  { id: 'mint', name: 'Mint', rar: 'common', a: '#7CFF6B', b: '#11B989', shape: 'square', src: 'crate' },
+  { id: 'vapor', name: 'Vapor', rar: 'rare', a: '#FF2BD6', b: '#7A2BFF', shape: 'circle', src: 'crate' },
+  { id: 'hexa', name: 'Hexa', rar: 'rare', a: '#B98CFF', b: '#22F0FF', shape: 'hex', src: 'crate' },
+  { id: 'aurum', name: 'Aurum', rar: 'epic', a: '#FFE45C', b: '#FF9F1C', shape: 'diamond', src: 'crate' },
+  { id: 'glitch', name: 'Glitch', rar: 'epic', a: '#FFFFFF', b: '#8A8AFF', shape: 'square', fx: 'glitch', src: 'crate' },
+  { id: 'serpent', name: 'Chrome Serpent', rar: 'premium', a: '#E6E9FF', b: '#8C93C7', shape: 'hex', fx: 'rainbow', src: 'shop' },
+  { id: 'apex', name: 'Apex', rar: 'exclusive', a: '#FF2BD6', b: '#FFE45C', shape: 'diamond', fx: 'rainbow', src: 'best' },
 ];
-const SK={};SKINS.forEach(s=>SK[s.id]=s);
-const CRATE_EVERY=5, REVIVE_CR=150, DUP_BACK=60, APEX_AT=1500;
+const SK = Object.fromEntries(SKINS.map((s) => [s.id, s]));
+const SHAPE_NAME = { square: 'Cube', circle: 'Sphere', hex: 'Hex prism', diamond: 'Octahedron' };
+const CRATE_EVERY = 5, REVIVE_CR = 150, DUP_BACK = 60, APEX_AT = 1500;
 /* Credits unlock one specific crate skin directly, so nothing random is ever bought. */
-const UNLOCK_CR={common:300,rare:700,epic:1400};
+const UNLOCK_CR = { common: 300, rare: 700, epic: 1400 };
+
+/* Trails: a separate cosmetic, unlocked directly with credits. Always a specific item, never random. */
+const TRAILS = [
+  { id: 'classic', name: 'Pixel', cost: 0, desc: 'Squares in your skin colour' },
+  { id: 'comet', name: 'Comet', cost: 400, desc: 'A long glowing tail' },
+  { id: 'sparks', name: 'Sparks', cost: 600, desc: 'A thin gold filament' },
+  { id: 'ribbon', name: 'Ribbon', cost: 800, desc: 'A solid neon ribbon' },
+  { id: 'binary', name: 'Binary', cost: 1000, desc: 'Leaves ones and zeros behind' },
+  { id: 'prism', name: 'Prism', cost: 1500, desc: 'A full-spectrum ribbon' },
+];
+const TR = Object.fromEntries(TRAILS.map((t) => [t.id, t]));
 
 /* Shop catalog: the only place real-money items and prices are defined. */
-const CATALOG={
-  revive:{sku:'hyperline.revive',title:'Revive',priceUsd:0.99},
-  stack:{sku:'hyperline.credits_500',title:'Stack · 500 credits',priceUsd:0.99},
-  vault:{sku:'hyperline.credits_3000',title:'Vault · 3,000 credits',priceUsd:4.99},
-  serpent:{sku:'hyperline.skin_serpent',title:'Chrome Serpent skin',priceUsd:2.99}
+const CATALOG = {
+  revive: { sku: 'hyperline.revive', title: 'Revive', priceUsd: 0.99 },
+  stack: { sku: 'hyperline.credits_500', title: 'Stack · 500 credits', priceUsd: 0.99 },
+  vault: { sku: 'hyperline.credits_3000', title: 'Vault · 3,000 credits', priceUsd: 4.99 },
+  serpent: { sku: 'hyperline.skin_serpent', title: 'Chrome Serpent skin', priceUsd: 2.99 },
 };
-const CREDIT_GRANT={stack:500,vault:3000};
-const price=item=>`$${item.priceUsd.toFixed(2)}`;
+const CREDIT_GRANT = { stack: 500, vault: 3000 };
+const price = (item) => `$${item.priceUsd.toFixed(2)}`;
 
 /* Neon Crate odds. Crates are earned from play only (one every CRATE_EVERY runs), never sold.
    Each tier's share is split evenly across its skins; weights sum to 1. */
-const TIER={common:.62,rare:.30,epic:.08};
-const CRATE_POOL=SKINS.filter(s=>s.src==='crate');
-const CRATE_TABLE=CRATE_POOL.map(s=>({label:s.name,weight:TIER[s.rar]/CRATE_POOL.filter(p=>p.rar===s.rar).length,id:s.id}));
-const oddsTxt=()=>studio.odds.format(CRATE_TABLE);
-
-function rr(c,x,y,w,h,r){c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
-function drawSkin(c,sk,x,y,size,rot,t,locked){
-  const h=size/2;c.save();c.translate(x,y);c.rotate(rot);
-  const path=()=>{c.beginPath();
-    if(sk.shape==='circle')c.arc(0,0,h,0,Math.PI*2);
-    else if(sk.shape==='hex'){for(let i=0;i<6;i++){const a=Math.PI/3*i+Math.PI/6;i?c.lineTo(Math.cos(a)*h*1.08,Math.sin(a)*h*1.08):c.moveTo(Math.cos(a)*h*1.08,Math.sin(a)*h*1.08);}c.closePath();}
-    else if(sk.shape==='diamond'){c.moveTo(0,-h*1.15);c.lineTo(h*1.15,0);c.lineTo(0,h*1.15);c.lineTo(-h*1.15,0);c.closePath();}
-    else rr(c,-h,-h,size,size,size*.16);};
-  if(locked){path();c.fillStyle='#1A1033';c.fill();c.lineWidth=Math.max(1,size*.05);c.strokeStyle='#3A2A6A';c.stroke();
-    c.fillStyle='#5A4A8A';c.font=`700 ${size*.6}px "Chakra Petch",sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText('?',0,size*.03);c.restore();return;}
-  let a=sk.a,b=sk.b;
-  if(sk.fx==='rainbow'){a=`hsl(${(t*80)%360},100%,72%)`;b=`hsl(${(t*80+140)%360},100%,58%)`;}
-  if(sk.fx==='glitch'){c.globalAlpha=.65;
-    c.save();c.translate(size*.09*Math.sin(t*37),size*.03*Math.sin(t*13));path();c.fillStyle='#22F0FF';c.fill();c.restore();
-    c.save();c.translate(-size*.09*Math.cos(t*29),0);path();c.fillStyle='#FF2BD6';c.fill();c.restore();c.globalAlpha=1;}
-  const g=c.createLinearGradient(-h,-h,h,h);g.addColorStop(0,a);g.addColorStop(1,b);
-  c.shadowColor=a;c.shadowBlur=size*.45;path();c.fillStyle=g;c.fill();c.shadowBlur=0;
-  c.save();c.scale(.7,.7);path();c.lineWidth=Math.max(1,size*.07);c.strokeStyle='rgba(255,255,255,.45)';c.stroke();c.restore();
-  c.beginPath();rr(c,-h*.55,-h*.28,h*1.1,h*.42,h*.12);c.fillStyle='rgba(7,3,15,.82)';c.fill();
-  c.fillStyle=a;c.shadowColor=a;c.shadowBlur=size*.15;c.fillRect(-h*.36,-h*.16,h*.2,h*.18);c.fillRect(h*.16,-h*.16,h*.2,h*.18);c.shadowBlur=0;
-  c.restore();
-}
-function paintThumbs(root,t){root.querySelectorAll('canvas[data-skin]').forEach(cv=>{const s=+cv.dataset.size,d=Math.min(2,window.devicePixelRatio||1);
-  if(cv.width!==s*d){cv.width=s*d;cv.height=s*d;cv.style.width=s+'px';cv.style.height=s+'px';}
-  const x=cv.getContext('2d');x.setTransform(d,0,0,d,0,0);x.clearRect(0,0,s,s);drawSkin(x,SK[cv.dataset.skin],s/2,s/2,s*.46,0,t||1.3,cv.dataset.locked==='1');});}
-const thumb=(id,size,locked,extra)=>`<canvas data-skin="${id}" data-size="${size}" data-locked="${locked?1:0}" ${extra||''}></canvas>`;
+const TIER = { common: 0.62, rare: 0.30, epic: 0.08 };
+const CRATE_POOL = SKINS.filter((s) => s.src === 'crate');
+const CRATE_TABLE = CRATE_POOL.map((s) => ({ label: s.name, weight: TIER[s.rar] / CRATE_POOL.filter((p) => p.rar === s.rar).length, id: s.id }));
+const oddsTxt = () => studio.odds.format(CRATE_TABLE);
 
 /* ---------- save ---------- */
-const KEY='hyperline_v1';
-const fresh=()=>({v:2,credits:150,owned:{volt:1},eq:'volt',best:0,runs:0,crates:0,opened:0,top:[]});
-function load(){
-  try{const s=JSON.parse(localStorage.getItem(KEY));
-    if(s&&s.v===2)return s;
-    if(s&&s.v===1){const owned=s.owned||{volt:1};return {v:2,credits:s.credits|0,owned,eq:owned[s.eq]?s.eq:'volt',best:s.best|0,runs:s.runs|0,crates:0,opened:0,top:s.best?[{run:0,d:s.best,at:Date.now()}]:[]};}
-  }catch(e){}
-  return fresh();}
-let S=load();
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}};
-/* The player's own best runs. A revived run updates its existing entry instead of adding a second one. */
-function recordRun(run,d){
-  const e=run>0&&S.top.find(r=>r.run===run);
-  if(e){e.d=Math.max(e.d,d);e.at=Date.now();}else S.top.push({run,d,at:Date.now()});
-  S.top.sort((a,b)=>b.d-a.d);S.top=S.top.slice(0,5);}
+/* The storage key is the one v1 used, so existing progress is found; migrateSave brings it to v3. */
+const KEY = 'hyperline_v1', GKEY = 'hyperline_ghosts';
+function load() { try { return migrateSave(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return migrateSave(null); } }
+let S = load();
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage blocked: play on */ } };
+save();
+function loadGhosts() {
+  try {
+    const g = JSON.parse(localStorage.getItem(GKEY)) || {};
+    return { endless: validGhost(g.endless) ? g.endless : null,
+      daily: g.daily && typeof g.daily.day === 'string' && validGhost(g.daily.g) ? g.daily : null };
+  } catch (e) { return { endless: null, daily: null }; }
+}
+let GH = loadGhosts();
+const saveGhosts = () => { try { localStorage.setItem(GKEY, JSON.stringify(GH)); } catch (e) { /* too big or blocked */ } };
+/* The player's own best endless runs. A revived run updates its entry instead of adding a second one. */
+function recordRun(run, d) {
+  const e = run > 0 && S.top.find((r) => r.run === run);
+  if (e) { e.d = Math.max(e.d, d); e.at = Date.now(); } else S.top.push({ run, d, at: Date.now() });
+  S.top.sort((a, b) => b.d - a.d); S.top = S.top.slice(0, 5);
+}
+const today = () => utcDay(Date.now());
+const dailyBest = () => (S.daily.day === today() ? S.daily.best : 0);
 
 /* ---------- ui helpers ---------- */
-const modal=$('modal'),mcard=$('mcard');
+const modal = $('modal'), mcard = $('mcard');
 let toastT;
-function toast(m){document.querySelectorAll('.toast').forEach(t=>t.remove());const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);clearTimeout(toastT);toastT=setTimeout(()=>t.remove(),2200);}
-function showModal(h){mcard.innerHTML=h;modal.hidden=false;paintThumbs(mcard);const b=mcard.querySelector('button');if(b)b.focus({preventScroll:true});}
-const closeModal=()=>{modal.hidden=true;};
-function cred(){$('credCount').textContent=S.credits.toLocaleString();$('shopDot').hidden=!S.crates;}
-const fmt=n=>Math.floor(n).toLocaleString();
+function toast(m) {
+  document.querySelectorAll('.toast').forEach((t) => t.remove());
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.appendChild(t);
+  clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2200);
+}
+function showModal(h) { mcard.innerHTML = h; modal.hidden = false; paintThumbs(mcard); const b = mcard.querySelector('button'); if (b) b.focus({ preventScroll: true }); }
+const closeModal = () => { modal.hidden = true; };
+function cred() { $('credCount').textContent = S.credits.toLocaleString(); $('shopDot').hidden = !S.crates; }
+const fmt = (n) => Math.floor(n).toLocaleString();
+const buzz = (p) => { if (S.settings.haptics) try { navigator.vibrate && navigator.vibrate(p); } catch (e) { /* unsupported */ } };
+
+function paintCanvas(cv, t) {
+  if (cv.dataset.trail) { paintTrail(cv, t || 1.3); return; }
+  const s = +cv.dataset.size, d = Math.min(2, window.devicePixelRatio || 1);
+  if (cv.width !== s * d) { cv.width = s * d; cv.height = s * d; cv.style.width = s + 'px'; cv.style.height = s + 'px'; }
+  const x = cv.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0); x.clearRect(0, 0, s, s);
+  drawSkinThumb(x, SK[cv.dataset.skin], s / 2, s / 2, s * 0.42, t || 1.3, cv.dataset.locked === '1');
+}
+function paintThumbs(root, t) { root.querySelectorAll('canvas[data-skin],canvas[data-trail]').forEach((cv) => paintCanvas(cv, t)); }
+const thumb = (id, size, locked, extra) => `<canvas data-skin="${id}" data-size="${size}" data-locked="${locked ? 1 : 0}" ${extra || ''}></canvas>`;
+function paintTrail(cv, t) {
+  const s = +cv.dataset.size, d = Math.min(2, window.devicePixelRatio || 1), id = cv.dataset.trail, locked = cv.dataset.locked === '1';
+  if (cv.width !== s * d) { cv.width = s * d; cv.height = s * d; cv.style.width = s + 'px'; cv.style.height = s + 'px'; }
+  const x = cv.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0); x.clearRect(0, 0, s, s);
+  const [a, b] = skinColors(SK[S.eq], t), n = 16;
+  const pt = (i) => ({ x: s * 0.08 + (i / n) * s * 0.7, y: s * 0.55 - Math.sin((i / n) * Math.PI) * s * 0.3 });
+  x.globalAlpha = locked ? 0.35 : 1;
+  for (let i = 1; i <= n; i++) {
+    const p = pt(i), q = pt(i - 1), k = i / n;
+    if (id === 'classic') { x.fillStyle = a; const z = 2 + k * 5; x.globalAlpha = (locked ? 0.35 : 1) * k; x.fillRect(p.x - z / 2, p.y - z / 2, z, z); }
+    else if (id === 'binary') { x.fillStyle = '#7CFF6B'; x.globalAlpha = (locked ? 0.35 : 1) * k; x.font = '700 9px monospace'; x.fillText(i % 3 ? '1' : '0', p.x, p.y); }
+    else { x.beginPath(); x.moveTo(q.x, q.y); x.lineTo(p.x, p.y); x.lineCap = 'round';
+      x.strokeStyle = id === 'prism' ? `hsl(${(i * 22) % 360},100%,60%)` : id === 'sparks' ? '#FFE45C' : id === 'ribbon' ? b : a;
+      x.lineWidth = id === 'sparks' ? 1.5 : id === 'comet' ? 1 + k * 7 : 7; x.globalAlpha = (locked ? 0.35 : 1) * (0.3 + k * 0.7); x.stroke(); }
+  }
+  x.globalAlpha = 1;
+  const e = pt(n); x.fillStyle = locked ? '#3A2A6A' : a; x.fillRect(e.x - 5, e.y - 5, 10, 10);
+}
 
 /* ---------- purchases (fake-door via the studio SDK) ---------- */
 /* Items the player passed on this session. Their buttons are hidden so we never re-prompt. */
-const passed=new Set();
-let buying=false;
-async function buy(key){
-  if(buying||passed.has(key))return false;
-  buying=true;
-  try{const r=await studio.purchase.offer(CATALOG[key]);if(r==='granted')return true;passed.add(key);return false;}
-  finally{buying=false;}}
+const passed = new Set();
+let buying = false;
+async function buy(key) {
+  if (buying || passed.has(key)) return false;
+  buying = true;
+  try { const r = await studio.purchase.offer(CATALOG[key]); if (r === 'granted') return true; passed.add(key); return false; }
+  finally { buying = false; }
+}
 
 /* ---------- game ---------- */
-/* ---------- game ---------- */
-const cv=$('game'),cx=cv.getContext('2d'),stage=$('stage');
-let W=0,H=0,U=40,FY=0;
-function resize(){const r=stage.getBoundingClientRect(),d=Math.min(2,window.devicePixelRatio||1);W=r.width;H=r.height;if(!W||!H)return;
-  cv.width=Math.round(W*d);cv.height=Math.round(H*d);cx.setTransform(d,0,0,d,0,0);U=Math.min(H/8,W/9.5);FY=H*.74;}
+const cv = $('game'), cx = cv.getContext('2d'), stage = $('stage');
+let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1), dprCap = DPR;
+function resize() {
+  const r = stage.getBoundingClientRect(); DPR = Math.min(dprCap, window.devicePixelRatio || 1);
+  W = r.width; H = r.height; if (!W || !H) return;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+}
 new ResizeObserver(resize).observe(stage);
 
-const P=1.6,PS=.8,GRAV=62,JV=17.6;
-const STARS=Array.from({length:70},()=>({x:Math.random(),y:Math.random()*.65,s:Math.random()*1.4+.3,p:Math.random()*6}));
-let G,pressed=false;
-function reset(){G={state:'ready',cam:0,speed:7,y:0,vy:0,grounded:true,rot:0,objs:[],nextX:11,chips:0,inv:0,cont:false,awarded:0,shake:0,parts:[],buf:0,t:G?G.t:0};$('ready').hidden=false;hud();}
-function gen(){
-  const view=W/U||10;
-  while(G.nextX<G.cam+view+14){
-    const d=Math.min(1,G.nextX/700),x=G.nextX,r=Math.random();let len;
-    if(r<.34){const n=1+Math.floor(Math.random()*(d>.25?3:2));for(let i=0;i<n;i++)G.objs.push({t:'spike',x:x+i*.8,y:0});len=n*.8;G.objs.push({t:'chip',x:x+len/2,y:2.7});}
-    else if(r<.54){const w=2+Math.floor(Math.random()*3);G.objs.push({t:'block',x,w,h:1});if(d>.35&&w>=3&&Math.random()<.55)G.objs.push({t:'spike',x:x+w/2-.4,y:1});else G.objs.push({t:'chip',x:x+w/2,y:1.6});len=w;}
-    else if(r<.68){G.objs.push({t:'block',x,w:2,h:1},{t:'block',x:x+2,w:2,h:2},{t:'chip',x:x+3,y:2.6});len=4;}
-    else if(r<.85){const w=1.8+Math.random()*(.5+d*.7);G.objs.push({t:'pit',x,w},{t:'chip',x:x+w/2,y:2.3});len=w;}
-    else{G.objs.push({t:'block',x,w:2,h:1},{t:'spike',x:x+2,y:0});len=2.8;}
-    G.nextX+=len+Math.max(3.4,6.2-d*2.6)+Math.random()*2.2;
+let G, pressed = false;
+function makeCourse(mode) { return createCourse(mode === 'daily' ? dailySeed(today()) : (Math.random() * 4294967296) >>> 0); }
+function reset() {
+  G = { state: 'ready', mode: S.mode, course: makeCourse(S.mode), runner: createRunner(), stats: newRunStats(S.mode), simT: 0, acc: 0,
+    t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
+    blink: 0, lift: 0, flipT: 0, doneM: [], ghost: null, rec: null, day: today(), trailTick: 0 };
+  $('ready').hidden = false; $('paused').hidden = true; $('pauseBtn').hidden = true;
+  renderReady(); hud();
+}
+function startRun() {
+  S.runs++; G.run = S.runs; G.mode = S.mode; G.day = today();
+  G.course = makeCourse(G.mode); G.runner = createRunner(); G.stats = newRunStats(G.mode);
+  G.ghost = G.mode === 'daily' ? (GH.daily && GH.daily.day === G.day ? GH.daily.g : null) : GH.endless;
+  G.rec = createGhostRecorder(); G.simT = 0; G.acc = 0;
+  G.state = 'run'; $('ready').hidden = true; $('pauseBtn').hidden = false;
+  save();
+  studio.track('level_start', { level: 1, run: S.runs, mode: G.mode });
+  audio.startBeat(0);
+  banner(0);
+}
+
+/* particles live in world space and are projected like everything else */
+function spawn(x, y, n, col, spd, life, size, up = 0) {
+  if (reduced) n = Math.ceil(n / 3);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, b = Math.random() * Math.PI - Math.PI / 2, v = spd * (0.3 + Math.random());
+    G.parts.push({ x, y, z: 0, vx: Math.cos(a) * Math.cos(b) * v, vy: Math.sin(b) * v + up, vz: Math.sin(a) * Math.cos(b) * v, life, max: life, col, size: size * (0.5 + Math.random()) });
   }
 }
-const onFloor=x=>!G.objs.some(o=>o.t==='pit'&&x>o.x&&x<o.x+o.w);
-function spawn(x,y,n,col,spd,life,size){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,v=spd*(.3+Math.random());G.parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life,max:life,col,size:size*(.5+Math.random())});}}
-function update(dt){
-  G.t+=dt;if(G.shake>0)G.shake=Math.max(0,G.shake-dt);
-  G.parts.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=300*dt*(p.g||0);p.life-=dt;});G.parts=G.parts.filter(p=>p.life>0);
-  if(G.state!=='run')return;
-  G.speed=Math.min(13.5,7+G.cam/110);G.cam+=G.speed*dt;gen();
-  G.objs=G.objs.filter(o=>o.x+(o.w||1)>G.cam-4);
-  if(G.inv>0)G.inv-=dt;
-  if(G.buf>0)G.buf-=dt;
-  if((pressed||G.buf>0)&&G.grounded){G.vy=JV;G.grounded=false;G.buf=0;}
-  const x0=G.cam+P,x1=x0+PS,prevY=G.y;
-  G.vy-=GRAV*dt;G.y+=G.vy*dt;
-  let sup=-99;
-  if(onFloor(x0+PS/2)){if(prevY>=-.12)sup=0;else if(G.y<0&&G.y+PS>-0.2){if(die())return;}}
-  for(const o of G.objs){if(o.t!=='block')continue;if(x1>o.x+.06&&x0<o.x+o.w-.06){if(prevY>=o.h-.14)sup=Math.max(sup,o.h);else if(G.y<o.h-.14&&G.y+PS>0){if(die())return;}}}
-  if(sup>-99&&G.y<=sup&&G.vy<=0){G.y=sup;G.vy=0;if(!G.grounded){G.rot=Math.round(G.rot/(Math.PI/2))*(Math.PI/2);spawn(P*U+PS*U/2,FY-sup*U,6,'#22F0FF',90,.3,3);}G.grounded=true;}
-  else if(G.y>sup+.001)G.grounded=false;
-  if(!G.grounded)G.rot+=dt*5.6;
-  for(const o of G.objs){
-    if(o.t==='spike'&&x1-.16>o.x+.2&&x0+.16<o.x+.6&&G.y+.08<o.y+.58&&G.y+PS>o.y){if(die())return;}
-    if(o.t==='chip'&&!o.got&&Math.abs(x0+PS/2-o.x)<.6&&Math.abs(G.y+PS/2-o.y)<.6){o.got=true;G.chips++;spawn((o.x-G.cam)*U,FY-o.y*U,10,'#FFE45C',120,.4,3);}
+function pop(text, x, y, col, size = 18) { G.pops.push({ text, x, y, col, size, age: 0, life: 0.9 }); }
+
+let banT;
+function banner(i) {
+  const s = sectorInfo(i), b = $('banner');
+  $('banK').textContent = `SECTOR ${i + 1}`; $('banN').textContent = s.name; $('banH').textContent = s.hint;
+  b.hidden = true; void b.offsetWidth; b.hidden = false;
+  clearTimeout(banT); banT = setTimeout(() => { b.hidden = true; }, 2600);
+}
+
+function simStep() {
+  const r = G.runner, jump = pressed || G.buf > 0;
+  if (G.buf > 0) G.buf -= STEP;
+  const ev = step(r, G.course, jump);
+  G.simT += STEP;
+  recordGhost(G.rec, G.simT, r.x, r.y, r.flip);
+  const cxw = r.x + PS / 2, cyw = r.y + PS / 2, sk = SK[S.eq];
+  for (const e of ev) {
+    switch (e.t) {
+      case 'jump': G.buf = 0; audio.jump(); spawn(cxw, r.flip ? r.y + PS : r.y, 5, '#FFFFFF', 3, 0.25, 0.08); break;
+      case 'land':
+        spawn(cxw, r.flip ? r.y + PS : r.y, 7, sk.a, 4, 0.3, 0.1);
+        if (e.spikes >= 3) pop(`${e.spikes} IN ONE JUMP`, cxw, cyw + 0.8, '#7CFF6B', 16);
+        G.stats = applyEvent(G.stats, e); break;
+      case 'chip': {
+        const before = chipMultiplier(G.stats.streak);
+        G.stats = applyEvent(G.stats, e); audio.chip(G.stats.streak);
+        spawn(e.x, e.y, 10, '#FFE45C', 5, 0.4, 0.1);
+        const m = chipMultiplier(G.stats.streak);
+        if (m > before) { pop(`STREAK x${m}`, e.x, e.y + 0.6, '#FFE45C', 18); buzz(15); }
+        break; }
+      case 'chipMiss':
+        if (G.stats.streak >= 8) pop('streak reset', cxw, cyw + 0.9, '#A08FC7', 13);
+        G.stats = applyEvent(G.stats, e); break;
+      case 'near':
+        G.stats = applyEvent(G.stats, e); audio.near(); buzz(10);
+        pop(`CLOSE! +${NEAR_CR}`, e.x, e.y + 0.4, '#22F0FF', 20);
+        spawn(e.x, e.y, 8, '#22F0FF', 4, 0.35, 0.08); break;
+      case 'pad': G.stats = applyEvent(G.stats, e); audio.pad(); spawn(cxw, r.y, 14, '#7CFF6B', 5, 0.45, 0.1, 4); break;
+      case 'bar': G.stats = applyEvent(G.stats, e); break;
+      case 'flipIn': audio.flip(); break;
+      case 'flipOut': audio.flip(); G.stats = applyEvent(G.stats, e); break;
+      case 'die': die(); return;
+    }
   }
-  if(G.y<-2.5){G.inv=0;die();return;}
-  const sk=SK[S.eq];G.parts.push({x:P*U+2,y:FY-(G.y+PS/2)*U+(Math.random()-.5)*PS*U*.6,vx:-G.speed*U*.9,vy:0,life:.35,max:.35,col:sk.fx==='rainbow'?`hsl(${(G.t*80)%360},100%,65%)`:sk.a,size:PS*U*.22});
-  hud();
+  G.stats.dist = r.x - P;
+  const sec = sectorAt(G.stats.dist) + 1;
+  if (sec > G.stats.sector) {
+    G.stats = applyEvent(G.stats, { t: 'sector', sector: sec });
+    banner(sec - 1); audio.sector(); audio.setSector(sec - 1);
+    studio.track('sector_reached', { sector: sec, mode: G.mode, run: G.run });
+  }
+  for (const id of checkMissions(S.missions, G.stats)) {
+    if (G.doneM.includes(id)) continue;
+    const m = missionById(id);
+    G.doneM.push(id); S.credits += m.reward; save(); cred();
+    audio.mission(); buzz([20, 40, 20]);
+    toast(`Mission complete · +${m.reward} credits`);
+    studio.track('mission_complete', { id, reward: m.reward, mode: G.mode, run: G.run });
+  }
+  if (++G.trailTick % 2 === 0) {
+    G.trail.push({ x: cxw, y: cyw, k: Math.random() }); if (G.trail.length > 26) G.trail.shift();
+    if (S.trail === 'sparks' && !reduced && Math.random() < 0.5) G.parts.push({ x: cxw - 0.3, y: cyw + (Math.random() - 0.5) * 0.5, z: (Math.random() - 0.5) * 0.5, vx: -2, vy: Math.random() * 2, vz: 0, life: 0.4, max: 0.4, col: '#FFE45C', size: 0.07 });
+  }
+  if (G.trailTick % 240 === 0) pruneCourse(G.course, r.x);
 }
-function die(){
-  if(G.inv>0)return false;
-  G.state='dead';G.shake=.45;const sk=SK[S.eq];
-  spawn(P*U+PS*U/2,FY-(G.y+PS/2)*U,46,sk.a,340,.9,6);spawn(P*U+PS*U/2,FY-(G.y+PS/2)*U,20,'#FF2BD6',260,.7,4);
-  try{navigator.vibrate&&navigator.vibrate(60);}catch(e){}
-  setTimeout(showDeath,700);return true;
+
+function die() {
+  const r = G.runner, sk = SK[S.eq];
+  G.state = 'dead'; G.shake = reduced ? 0 : 0.5; G.flash = 0.5;
+  spawn(r.x + PS / 2, r.y + PS / 2, 46, sk.a, 9, 0.9, 0.16, 2); spawn(r.x + PS / 2, r.y + PS / 2, 20, '#FF2BD6', 7, 0.7, 0.12, 2);
+  audio.death(); audio.stopBeat(); buzz(70);
+  $('pauseBtn').hidden = true;
+  setTimeout(showDeath, 750);
 }
-function runCredits(){return Math.floor(G.cam/5)+G.chips*3;}
-let lastDeath=null;
-function showDeath(){
-  const dist=Math.floor(G.cam),total=runCredits(),delta=total-G.awarded;G.awarded=total;S.credits+=delta;
-  const prevBest=S.best,newBest=dist>prevBest;if(newBest)S.best=dist;
-  let crate=false;
-  if(!G.counted){G.counted=true;if(S.runs%CRATE_EVERY===0){S.crates++;crate=true;}}
-  const apex=!S.owned.apex&&S.best>=APEX_AT;if(apex)S.owned.apex=1;
-  recordRun(G.run||0,dist);save();cred();hud();
-  studio.track('level_end',{level:1,result:'lose',score:dist,run:G.run||0,revived:G.cont});
-  deathScreen({dist,prevBest,newBest,delta,crate,apex});
+
+let lastDeath = null;
+function showDeath() {
+  const st = G.stats, dist = Math.floor(st.dist), total = runCredits(st), delta = total - G.awarded;
+  G.awarded = total; S.credits += delta;
+  let prevBest, newBest;
+  if (G.mode === 'daily') {
+    if (S.daily.day !== G.day) S.daily = { day: G.day, best: 0 };
+    prevBest = S.daily.best; newBest = dist > prevBest;
+    if (newBest) { S.daily.best = dist; GH.daily = { day: G.day, g: finishGhost(G.rec) }; saveGhosts(); }
+  } else {
+    prevBest = S.best; newBest = dist > prevBest;
+    if (newBest) { S.best = dist; GH.endless = finishGhost(G.rec); saveGhosts(); }
+    recordRun(G.run || 0, dist);
+  }
+  let crate = false;
+  if (!G.counted) { G.counted = true; if (S.runs % CRATE_EVERY === 0) { S.crates++; crate = true; } }
+  const apex = !S.owned.apex && dist >= APEX_AT; if (apex) S.owned.apex = 1;
+  // Swap completed missions for the next ones in the list.
+  const done = G.doneM.map((id) => missionById(id));
+  for (const id of G.doneM) {
+    const i = S.missions.indexOf(id); if (i < 0) continue;
+    const m = rollMission(S.missionSeq, S.missions); S.missions[i] = m.id; S.missionSeq = m.seq;
+  }
+  const fresh = G.doneM.length ? S.missions.filter((id) => !lastActive.includes(id)) : [];
+  G.doneM = [];
+  save(); cred(); hud();
+  studio.track('level_end', { level: 1, result: 'lose', score: dist, run: G.run || 0, revived: G.cont, mode: G.mode,
+    sector: st.sector, chips: st.chips, maxStreak: st.maxStreak, nearMisses: st.near });
+  if (G.mode === 'daily') studio.track('daily_run_end', { score: dist, day: G.day, best: S.daily.best, newBest, revived: G.cont });
+  deathScreen({ dist, prevBest, newBest, delta, crate, apex, done, fresh, total });
+  lastActive = [...S.missions];
 }
-function deathScreen(d){
-  lastDeath=d;const gap=d.prevBest-d.dist,toNext=CRATE_EVERY-S.runs%CRATE_EVERY;
+let lastActive = [...S.missions];
+
+function missionRows(stats, fresh = []) {
+  return S.missions.map((id) => {
+    const m = missionById(id), p = stats ? missionProgress(m, stats) : 0;
+    return `<div class="mis"><span>${fresh.includes(id) ? '<span class="new">NEW</span>' : ''}${m.text}</span><span class="rw"><span class="dia"></span>${m.reward}</span>
+      ${stats ? `<span class="bar"><i style="width:${(p / m.target) * 100}%"></i></span>` : ''}</div>`;
+  }).join('');
+}
+function deathScreen(d) {
+  lastDeath = d;
+  const st = G.stats, daily = G.mode === 'daily', gap = d.prevBest - d.dist, toNext = CRATE_EVERY - (S.runs % CRATE_EVERY);
+  const secName = sectorInfo(st.sector - 1).name;
+  const distCr = Math.floor(st.dist / 5);
   showModal(`<div class="wreck">WRECKED</div><div class="big">${fmt(d.dist)}m</div>
-    ${d.newBest?'<div class="newbest">NEW BEST</div>':`<p class="muted">Best ${fmt(d.prevBest)}m${gap>0&&gap<=80?` · only ${gap}m short`:''}</p>`}
-    <p class="muted">+${d.delta} credits · ${G.chips} chips grabbed</p>
-    ${d.crate?'<div class="newbest">NEON CRATE EARNED</div>':`<p class="fine">${toNext} more run${toNext>1?'s':''} to your next free Neon Crate</p>`}
-    ${d.apex?'<div class="newbest">APEX UNLOCKED</div>':''}
+    <p class="muted">Sector ${st.sector} · ${secName}${daily ? ' · Daily run' : ''}</p>
+    ${d.newBest ? `<div class="newbest">${daily ? 'NEW DAILY BEST' : 'NEW BEST'}</div>`
+      : `<p class="muted">${daily ? 'Daily best' : 'Best'} ${fmt(d.prevBest)}m${gap > 0 && gap <= 80 ? ` · ${gap}m short` : ''}</p>`}
+    <div class="brk"><span>Distance</span><b>+${distCr}</b>
+      <span>Chips ${st.chips} · best streak ${st.maxStreak}</span><b>+${st.chipPts}</b>
+      <span>Near misses ${st.near}</span><b>+${st.near * NEAR_CR}</b>
+      ${d.done.length ? `<span>Missions ${d.done.length}</span><b>+${d.done.reduce((a, m) => a + m.reward, 0)}</b>` : ''}
+      <span class="tot">${G.cont ? 'Earned since revive' : 'Run total'}</span><b class="tot">+${d.delta + d.done.reduce((a, m) => a + m.reward, 0)}</b></div>
+    ${d.done.map((m) => `<div class="mis done"><span>✓ ${m.text}</span><span class="rw"><span class="dia"></span>${m.reward}</span></div>`).join('')}
+    <div class="mlist" style="margin:0;width:100%"><h4>Missions</h4>${missionRows(st, d.fresh)}</div>
+    ${d.crate ? '<div class="newbest">NEON CRATE EARNED</div>' : `<p class="fine">${toNext} more run${toNext > 1 ? 's' : ''} to your next free Neon Crate</p>`}
+    ${d.apex ? '<div class="newbest">APEX UNLOCKED</div>' : ''}
+    ${daily ? `<p class="fine">Same course for everyone today. A new one starts at 00:00 UTC (in ${untilReset()}).</p>` : ''}
     <div class="col">
-      ${G.cont||passed.has('revive')?'':`<button class="btn buy" data-act="revive-buy">Revive · ${price(CATALOG.revive)}</button>`}
-      ${G.cont?'':`<button class="btn" data-act="revive-cr" ${S.credits<REVIVE_CR?'disabled':''}>Revive · ${REVIVE_CR} credits</button>`}
+      ${G.cont || passed.has('revive') ? '' : `<button class="btn buy" data-act="revive-buy">Revive · ${price(CATALOG.revive)}</button>`}
+      ${G.cont ? '' : `<button class="btn" data-act="revive-cr" ${S.credits < REVIVE_CR ? 'disabled' : ''}>Revive · ${REVIVE_CR} credits</button>`}
       <button class="btn ghost" data-act="again">Run again</button>
     </div>
-    ${G.cont?'<p class="fine">One revive per run.</p>':''}`);
+    ${G.cont ? '<p class="fine">One revive per run.</p>' : ''}`);
 }
-function revive(){
-  G.cont=true;G.state='run';G.inv=2;G.vy=0;G.grounded=true;G.y=0;G.rot=0;
-  const a=G.cam+P-1,b=G.cam+P+8;G.objs=G.objs.filter(o=>o.x+(o.w||.8)<a||o.x>b);
-  closeModal();
-}
-let lastD=-1,lastC=-1;
-function hud(){const d=G?Math.floor(G.cam):0;if(d!==lastD){$('distTxt').textContent=fmt(d);lastD=d;}if(G&&G.chips!==lastC){$('chipTxt').textContent=G.chips;lastC=G.chips;}$('bestTxt').textContent='BEST '+fmt(S.best)+'m';}
+function untilReset() { const ms = msToNextUtcDay(Date.now()), h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000); return `${h}h ${m}m`; }
 
-function hash(i,k){const s=Math.sin(i*12.9898+k*78.233)*43758.5453;return s-Math.floor(s);}
-function skyline(par,col,hm,k,t){
-  const off=G.cam*par,bw=2.2;cx.fillStyle=col;
-  for(let i=Math.floor(off/bw)-1;i<Math.floor(off/bw)+W/U/bw+2;i++){
-    const x=(i*bw-off)*U,h=(.25+hash(i,k)*.75)*FY*hm,w=bw*U*(.7+hash(i,k+3)*.3);cx.fillRect(x,FY-h,w,h);
-    if(k===2&&hash(i,9)>.45){cx.fillStyle=hash(i,4)>.5?'rgba(255,43,214,.55)':'rgba(34,240,255,.5)';
-      for(let j=0;j<4;j++)if(hash(i,j+20)>.5)cx.fillRect(x+w*.2+(j%2)*w*.35,FY-h+12+Math.floor(j/2)*14,w*.18,4);cx.fillStyle=col;}
-  }
-}
-function draw(){
-  if(!W||!H)return;const t=G.t;
-  cx.save();if(G.shake>0){const m=G.shake*18;cx.translate((Math.random()-.5)*m,(Math.random()-.5)*m);}
-  let g=cx.createLinearGradient(0,0,0,FY);g.addColorStop(0,'#07030F');g.addColorStop(.7,'#1C0A38');g.addColorStop(1,'#3A0F52');cx.fillStyle=g;cx.fillRect(-20,-20,W+40,FY+20);
-  STARS.forEach(s=>{let x=(s.x*W-G.cam*U*.03)%W;if(x<0)x+=W;cx.globalAlpha=.4+.4*Math.sin(t*2+s.p);cx.fillStyle='#fff';cx.fillRect(x,s.y*FY,s.s,s.s);});cx.globalAlpha=1;
-  const sunR=Math.min(W,FY)*.22;cx.save();cx.beginPath();cx.arc(W*.72,FY*.62,sunR,0,Math.PI*2);g=cx.createLinearGradient(0,FY*.62-sunR,0,FY*.62+sunR);g.addColorStop(0,'#FFE45C');g.addColorStop(1,'#FF2BD6');cx.fillStyle=g;cx.shadowColor='#FF2BD6';cx.shadowBlur=40;cx.globalAlpha=.85;cx.fill();cx.restore();
-  cx.fillStyle='#1C0A38';for(let i=0;i<5;i++){const yy=FY*.62+sunR*(.15+i*.18);cx.fillRect(W*.72-sunR,yy,sunR*2,2+i*1.6);}
-  skyline(.08,'#170830',.62,1,t);skyline(.2,'#0F0522',.42,2,t);
-  cx.fillStyle='#0A0416';cx.fillRect(-20,FY,W+40,H-FY+20);
-  cx.strokeStyle='rgba(255,43,214,.28)';cx.lineWidth=1;cx.beginPath();
-  for(let wx=Math.floor(G.cam)-6;wx<G.cam+W/U+6;wx++){const sx=(wx-G.cam)*U;cx.moveTo(sx,FY);cx.lineTo(W/2+(sx-W/2)*2.4,H);}
-  for(let k=1;k<=6;k++){const y=FY+(H-FY)*(k/6)**1.8;cx.moveTo(0,y);cx.lineTo(W,y);}cx.stroke();
-  const pits=G.objs.filter(o=>o.t==='pit').sort((a,b)=>a.x-b.x);
-  pits.forEach(o=>{cx.fillStyle='#030108';cx.fillRect((o.x-G.cam)*U,FY,o.w*U,H-FY+20);});
-  cx.save();cx.strokeStyle='#22F0FF';cx.lineWidth=3;cx.shadowColor='#22F0FF';cx.shadowBlur=12;cx.beginPath();let sx=-20;
-  pits.forEach(o=>{const a=(o.x-G.cam)*U;if(a>sx){cx.moveTo(sx,FY);cx.lineTo(a,FY);}sx=Math.max(sx,(o.x+o.w-G.cam)*U);});cx.moveTo(sx,FY);cx.lineTo(W+20,FY);cx.stroke();cx.restore();
-  for(const o of G.objs){const x=(o.x-G.cam)*U;if(x>W+40||x<-6*U)continue;
-    if(o.t==='block'){const y=FY-o.h*U,w=o.w*U,h=o.h*U;cx.fillStyle='#170A30';cx.fillRect(x,y,w,h);cx.save();cx.strokeStyle='#22F0FF';cx.lineWidth=2;cx.shadowColor='#22F0FF';cx.shadowBlur=10;cx.strokeRect(x+1,y+1,w-2,h-2);cx.restore();
-      cx.strokeStyle='rgba(34,240,255,.2)';cx.beginPath();for(let i=1;i<o.w;i++){cx.moveTo(x+i*U,y);cx.lineTo(x+i*U,y+h);}if(o.h>1){cx.moveTo(x,y+U);cx.lineTo(x+w,y+U);}cx.stroke();}
-    else if(o.t==='spike'){const b=FY-o.y*U;cx.save();cx.beginPath();cx.moveTo(x+2,b);cx.lineTo(x+.4*U,b-.8*U);cx.lineTo(x+.8*U-2,b);cx.closePath();cx.fillStyle='#2A0626';cx.fill();cx.strokeStyle='#FF2BD6';cx.lineWidth=2.5;cx.shadowColor='#FF2BD6';cx.shadowBlur=12;cx.stroke();cx.restore();}
-    else if(o.t==='chip'&&!o.got){const y=FY-o.y*U,s=U*.18,k=Math.abs(Math.cos(t*4+o.x));cx.save();cx.translate(x,y);cx.scale(Math.max(.25,k),1);cx.beginPath();cx.moveTo(0,-s);cx.lineTo(s,0);cx.lineTo(0,s);cx.lineTo(-s,0);cx.closePath();cx.fillStyle='#FFE45C';cx.shadowColor='#FFE45C';cx.shadowBlur=12;cx.fill();cx.restore();}
-  }
-  G.parts.forEach(p=>{cx.globalAlpha=Math.max(0,p.life/p.max);cx.fillStyle=p.col;cx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);});cx.globalAlpha=1;
-  if(G.state!=='dead'&&!(G.inv>0&&Math.floor(G.inv*10)%2))drawSkin(cx,SK[S.eq],P*U+PS*U/2,FY-(G.y+PS/2)*U,PS*U,G.rot,t,false);
-  cx.restore();
+function revive() {
+  G.cont = true;
+  const r = G.runner, a = r.x - 2, b = r.x + 12;
+  // Remove every pattern that touches the restart zone, whole, so nothing is left half-built.
+  const gone = new Set(G.course.objs.filter((o) => o.t !== 'chip' && o.x < b && o.x + (o.w || 0.8) > a).map((o) => o.g));
+  G.course.objs = G.course.objs.filter((o) => !gone.has(o.g));
+  Object.assign(r, { y: 0, vy: 0, grounded: true, flip: false, dead: '', rot: 0, air: 0 });
+  G.state = 'run'; G.blink = 1.4; G.acc = 0; pressed = false;
+  $('pauseBtn').hidden = false;
+  closeModal(); audio.startBeat(G.stats.sector - 1);
 }
 
+function pause() {
+  if (G.state !== 'run') return;
+  G.state = 'paused'; pressed = false; $('paused').hidden = false; audio.suspend();
+}
+function resume() {
+  G.state = 'run'; G.acc = 0; pressed = false; $('paused').hidden = true;
+  audio.resume(); audio.startBeat(G.stats.sector - 1);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) { if (G.state === 'run') pause(); else audio.suspend(); } });
+
+let lastD = -1, lastC = -1, lastS = -1, lastM = -1;
+function hud() {
+  const d = G ? Math.floor(G.stats.dist) : 0;
+  if (d !== lastD) { $('distTxt').textContent = fmt(d); lastD = d; }
+  if (G && G.stats.chips !== lastC) { $('chipTxt').textContent = G.stats.chips; lastC = G.stats.chips; }
+  const m = G ? chipMultiplier(G.stats.streak) : 1;
+  if (m !== lastM) { $('multTxt').hidden = m < 2; $('multTxt').textContent = 'x' + m; lastM = m; }
+  const sec = G ? G.stats.sector : 1;
+  if (sec !== lastS) { $('secTxt').textContent = `SECTOR ${sec} · ${sectorInfo(sec - 1).name}`; lastS = sec; }
+  const mode = G ? G.mode : S.mode;
+  $('bestTxt').textContent = (mode === 'daily' ? 'DAILY BEST ' + fmt(dailyBest()) : 'BEST ' + fmt(S.best)) + 'm';
+}
+function renderReady() {
+  document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === S.mode)));
+  $('modeBestE').textContent = `Best ${fmt(S.best)}m`;
+  $('modeBestD').textContent = `Today ${fmt(dailyBest())}m`;
+  $('readySub').textContent = S.mode === 'daily'
+    ? `Same course for everyone today · new course in ${untilReset()}`
+    : (GH.endless ? 'Race your best-run ghost · hold to keep jumping' : 'Tap to jump · hold to keep jumping');
+  $('readyMissions').innerHTML = `<h4>Missions</h4>${missionRows(null)}`;
+}
+
+function update(dt) {
+  G.t += dt;
+  const k = 1 - Math.exp(-dt * 6);
+  for (const p of G.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 9 * dt; p.life -= dt; }
+  G.parts = G.parts.filter((p) => p.life > 0);
+  if (G.parts.length > 400) G.parts.splice(0, G.parts.length - 400);
+  for (const p of G.pops) p.age += dt;
+  G.pops = G.pops.filter((p) => p.age < p.life);
+  G.shake = Math.max(0, G.shake - dt); G.flash = Math.max(0, G.flash - dt * 2); G.blink = Math.max(0, G.blink - dt);
+  const r = G.runner;
+  G.lift += ((r.flip ? 0 : Math.max(0, r.y - 1.6) * 0.55) - G.lift) * k;
+  G.flipT += ((r.flip ? 1 : 0) - G.flipT) * (1 - Math.exp(-dt * 4));
+  if (G.state === 'run' && modal.hidden) {
+    G.acc += dt;
+    while (G.acc >= STEP && G.state === 'run') { simStep(); G.acc -= STEP; }
+    hud();
+  } else if (G.state === 'ready') {
+    // idle bob on the start line
+    r.y = Math.abs(Math.sin(G.t * 2.2)) * 0.12 * (reduced ? 0 : 1);
+  }
+}
+function draw() {
+  if (!W || !H) return;
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const r = G.runner, sh = G.shake * 0.9;
+  const gp = G.ghost && G.state !== 'ready' ? ghostAt(G.ghost, G.simT) : null;
+  drawScene(cx, W, H, {
+    rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
+    ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, t: G.t, lift: G.lift, flipT: G.flipT,
+    shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash,
+    reduced, speed: speedAt(r.x), showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
+  });
+}
 
 /* input */
-function press(){if(!modal.hidden)return;if(G.state==='ready'){G.state='run';$('ready').hidden=true;S.runs++;G.run=S.runs;save();studio.track('level_start',{level:1,run:S.runs});return;}if(G.state==='run'){pressed=true;G.buf=.12;}}
-stage.addEventListener('pointerdown',e=>{e.preventDefault();press();});
-['pointerup','pointercancel','pointerleave'].forEach(n=>stage.addEventListener(n,()=>{pressed=false;}));
-window.addEventListener('keydown',e=>{if((e.code==='Space'||e.code==='ArrowUp')&&!$('view-run').hidden){e.preventDefault();if(!e.repeat)press();}});
-window.addEventListener('keyup',e=>{if(e.code==='Space'||e.code==='ArrowUp')pressed=false;});
+function press() {
+  if (!modal.hidden) return;
+  audio.unlock();
+  if (G.state === 'paused') { resume(); return; }
+  if (G.state === 'ready') { startRun(); return; }
+  if (G.state === 'run') { pressed = true; G.buf = 0.12; }
+}
+stage.addEventListener('pointerdown', (e) => { if (e.target.closest('button')) return; e.preventDefault(); press(); });
+['pointerup', 'pointercancel'].forEach((n) => window.addEventListener(n, () => { pressed = false; }));
+stage.addEventListener('pointerleave', () => { pressed = false; });
+window.addEventListener('keydown', (e) => {
+  if ((e.code === 'Space' || e.code === 'ArrowUp') && !$('view-run').hidden) { e.preventDefault(); if (!e.repeat) press(); }
+  if ((e.code === 'KeyP' || e.code === 'Escape') && G.state === 'run') pause();
+});
+window.addEventListener('keyup', (e) => { if (e.code === 'Space' || e.code === 'ArrowUp') pressed = false; });
 
 /* ---------- shop / crate / flex ---------- */
-function topRows(){
-  if(!S.top.length)return '<p class="muted">No runs yet. Your five best distances show up here.</p>';
-  return `<div class="lb">${S.top.map((r,i)=>`<div class="${i===0?'me':''}"><span class="rk">${i+1}</span><span>${new Date(r.at).toLocaleDateString()}</span><span>${fmt(r.d)}m</span></div>`).join('')}</div>`;
+function topRows() {
+  if (!S.top.length) return '<p class="muted">No runs yet. Your five best endless distances show up here.</p>';
+  return `<div class="lb">${S.top.map((r, i) => `<div class="${i === 0 ? 'me' : ''}"><span class="rk">${i + 1}</span><span>${new Date(r.at).toLocaleDateString()}</span><span>${fmt(r.d)}m</span></div>`).join('')}</div>`;
 }
-function buyBtn(key,label){
-  return passed.has(key)?'<span class="fine">Not now</span>':`<button class="btn buy" data-act="buy" data-item="${key}">${label||price(CATALOG[key])}</button>`;
+function buyBtn(key, label) {
+  return passed.has(key) ? '<span class="fine">Not now</span>' : `<button class="btn buy" data-act="buy" data-item="${key}">${label || price(CATALOG[key])}</button>`;
 }
-function renderShop(){
-  const own=!!S.owned.serpent,toNext=CRATE_EVERY-S.runs%CRATE_EVERY;
-  $('view-shop').innerHTML=`
+function renderShop() {
+  const own = !!S.owned.serpent, toNext = CRATE_EVERY - (S.runs % CRATE_EVERY);
+  $('view-shop').innerHTML = `
   <div class="panel hero">
     <span class="eyebrow">Featured skin</span>
-    <div class="herobody">${thumb('serpent',120,false,'id="heroSkin"')}
+    <div class="herobody">${thumb('serpent', 120, false, 'id="heroSkin"')}
       <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><div class="heroname">Chrome Serpent</div><span><span class="rar premium">premium</span></span>
-      <p class="muted">Color-shifting runner with a rainbow trail. You get exactly this skin.</p></div></div>
-    <div class="row">${own?'<button class="btn" data-act="flex" data-skin="serpent">Show flex card</button>':buyBtn('serpent',`Get Chrome Serpent · ${price(CATALOG.serpent)}`)}</div>
+      <p class="muted">Color-shifting hex prism with a rainbow sheen. You get exactly this skin.</p></div></div>
+    <div class="row">${own ? '<button class="btn" data-act="flex" data-skin="serpent">Show flex card</button>' : buyBtn('serpent', `Get Chrome Serpent · ${price(CATALOG.serpent)}`)}</div>
   </div>
-  <div class="panel"><div class="offer">${thumb('glitch',56,true)}<div class="txt"><div class="t">Neon Crate${S.crates?` · ${S.crates} ready`:''}</div><div class="muted">Earned from play, never sold: one free crate every ${CRATE_EVERY} runs.${S.crates?'':` Next in ${toNext} run${toNext>1?'s':''}.`}</div></div><button class="btn" data-act="crate" ${S.crates?'':'disabled'}>Open</button></div>
+  <div class="panel"><div class="offer">${thumb('glitch', 56, true)}<div class="txt"><div class="t">Neon Crate${S.crates ? ` · ${S.crates} ready` : ''}</div><div class="muted">Earned from play, never sold: one free crate every ${CRATE_EVERY} runs.${S.crates ? '' : ` Next in ${toNext} run${toNext > 1 ? 's' : ''}.`}</div></div><button class="btn" data-act="crate" ${S.crates ? '' : 'disabled'}>Open</button></div>
     <p class="fine">Odds: ${oddsTxt()}</p></div>
   <div class="panel"><h3>Your top runs</h3>${topRows()}<p class="fine">Reach ${fmt(APEX_AT)}m in one run to unlock the exclusive <b style="color:var(--lime)">Apex</b> skin. It can't be bought.</p></div>
-  <div class="panel"><h3>Credits</h3><p class="muted">Use credits to revive, or to unlock a specific crate skin from your locker.</p>
+  <div class="panel"><h3>Credits</h3><p class="muted">Use credits to revive, or to unlock a specific skin or trail from your locker.</p>
     <div class="offer"><div class="txt"><div class="t">Stack</div><div class="muted">500 credits</div></div>${buyBtn('stack')}</div>
     <div class="offer"><div class="txt"><span class="tag">Best value</span><div class="t">Vault</div><div class="muted">3,000 credits</div></div>${buyBtn('vault')}</div></div>`;
   paintThumbs($('view-shop'));
 }
-function renderLocker(){
-  const owned=SKINS.filter(s=>S.owned[s.id]).length;
-  const srcTxt={crate:'Crate or credits',shop:'In the shop',best:`Run ${fmt(APEX_AT)}m`};
-  $('view-locker').innerHTML=`<div><h2>Locker</h2><p class="muted">${owned} of ${SKINS.length} skins. Tap one you own to run with it.</p></div>
-  <div class="grid">${SKINS.map(s=>{const o=S.owned[s.id],eq=S.eq===s.id;return `<button class="skin${eq?' eq':''}" data-act="skin" data-skin="${s.id}">${thumb(s.id,64,!o)}<span class="nm">${o?s.name:'???'}</span><span class="rar ${s.rar}">${s.rar}</span><span class="st">${eq?'Equipped':o?(o>1?'×'+o:'Tap to equip'):srcTxt[s.src]}</span></button>`}).join('')}</div>
+let lockerTab = 'skins';
+function renderLocker() {
+  const owned = SKINS.filter((s) => S.owned[s.id]).length, ownedT = TRAILS.filter((t) => S.trails[t.id]).length;
+  const srcTxt = { crate: 'Crate or credits', shop: 'In the shop', best: `Run ${fmt(APEX_AT)}m` };
+  const body = lockerTab === 'skins'
+    ? `<p class="muted">${owned} of ${SKINS.length} skins. Tap one you own to run with it.</p>
+      <div class="grid">${SKINS.map((s) => { const o = S.owned[s.id], eq = S.eq === s.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="skin" data-skin="${s.id}">${thumb(s.id, 64, !o)}<span class="nm">${o ? s.name : '???'}</span><span class="rar ${s.rar}">${s.rar}</span><span class="st">${eq ? 'Equipped' : o ? (o > 1 ? '×' + o : SHAPE_NAME[s.shape]) : srcTxt[s.src]}</span></button>`; }).join('')}</div>`
+    : `<p class="muted">${ownedT} of ${TRAILS.length} trails. Each one unlocks directly with credits: you always get exactly the trail you pick.</p>
+      <div class="grid">${TRAILS.map((t) => { const o = S.trails[t.id], eq = S.trail === t.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="trail" data-trail="${t.id}"><canvas data-trail="${t.id}" data-size="64" data-locked="${o ? 0 : 1}"></canvas><span class="nm">${t.name}</span><span class="st">${eq ? 'Equipped' : o ? 'Tap to equip' : `<span class="dia"></span>${t.cost.toLocaleString()}`}</span></button>`; }).join('')}</div>`;
+  $('view-locker').innerHTML = `<div><h2>Locker</h2></div>
+  <div class="seg" role="tablist"><button role="tab" data-act="ltab" data-l="skins" aria-selected="${lockerTab === 'skins'}">Skins</button><button role="tab" data-act="ltab" data-l="trails" aria-selected="${lockerTab === 'trails'}">Trails</button></div>
+  ${body}
   <div class="stats"><div style="font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:11px">Stats</div>
-    <div>Runs played: <b>${S.runs}</b></div><div>Crates opened: <b>${S.opened}</b></div><div>Best run: <b>${fmt(S.best)}m</b></div></div>
-  <button class="linkbtn" data-act="reset">Reset all progress</button>`;
+    <div>Runs played: <b>${S.runs}</b></div><div>Crates opened: <b>${S.opened}</b></div><div>Best run: <b>${fmt(S.best)}m</b></div><div>Today's daily best: <b>${fmt(dailyBest())}m</b></div></div>`;
   paintThumbs($('view-locker'));
 }
-const CRATE_SVG=`<svg viewBox="0 0 100 100"><defs><filter id="gl"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g filter="url(#gl)" fill="#170A30" stroke="#FF2BD6" stroke-width="3" stroke-linejoin="round"><path d="M50 12L86 30V70L50 88L14 70V30Z"/><path d="M14 30L50 48L86 30M50 48V88" fill="none"/></g><text x="50" y="40" text-anchor="middle" font-family="Chakra Petch,sans-serif" font-weight="700" font-size="20" fill="#22F0FF">?</text></svg>`;
-function rollCrate(){const s=SK[studio.odds.roll(CRATE_TABLE).id];
-  const dup=!!S.owned[s.id];S.owned[s.id]=(S.owned[s.id]||0)+1;if(dup)S.credits+=DUP_BACK;save();return {s,dup};}
-function showPull(s,dup,label){
-  showModal(`<div class="eyebrow" style="color:var(--${s.rar==='epic'?'volt':s.rar==='rare'?'cyan':s.rar==='premium'?'pink':'dim'})">${label||(dup?'Duplicate':'New skin')}</div>
-    <div class="reveal">${thumb(s.id,150,false)}</div><h2>${s.name}</h2><div><span class="rar ${s.rar}">${s.rar}</span></div>
-    <p class="muted">${dup?`Already owned. +${DUP_BACK} credits back.`:'Added to your locker.'}</p>
-    <div class="col">${S.eq!==s.id?`<button class="btn" data-act="equip" data-skin="${s.id}">Equip</button>`:''}
-      ${s.rar!=='common'?`<button class="btn buy" data-act="flex" data-skin="${s.id}">Make flex card</button>`:''}
-      ${s.src==='crate'&&S.crates>0?`<button class="btn ghost" data-act="crate">Open another · ${S.crates} left</button>`:''}
+const CRATE_SVG = `<svg viewBox="0 0 100 100"><defs><filter id="gl"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g filter="url(#gl)" fill="#170A30" stroke="#FF2BD6" stroke-width="3" stroke-linejoin="round"><path d="M50 12L86 30V70L50 88L14 70V30Z"/><path d="M14 30L50 48L86 30M50 48V88" fill="none"/></g><text x="50" y="40" text-anchor="middle" font-family="Chakra Petch,sans-serif" font-weight="700" font-size="20" fill="#22F0FF">?</text></svg>`;
+function rollCrate() {
+  const s = SK[studio.odds.roll(CRATE_TABLE).id];
+  const dup = !!S.owned[s.id]; S.owned[s.id] = (S.owned[s.id] || 0) + 1; if (dup) S.credits += DUP_BACK; save(); return { s, dup };
+}
+function showPull(s, dup, label) {
+  showModal(`<div class="eyebrow" style="color:var(--${s.rar === 'epic' ? 'volt' : s.rar === 'rare' ? 'cyan' : s.rar === 'premium' ? 'pink' : 'dim'})">${label || (dup ? 'Duplicate' : 'New skin')}</div>
+    <div class="reveal">${thumb(s.id, 150, false, 'class="spin"')}</div><h2>${s.name}</h2><div><span class="rar ${s.rar}">${s.rar}</span></div>
+    <p class="muted">${dup ? `Already owned. +${DUP_BACK} credits back.` : 'Added to your locker.'}</p>
+    <div class="col">${S.eq !== s.id ? `<button class="btn" data-act="equip" data-skin="${s.id}">Equip</button>` : ''}
+      ${s.rar !== 'common' ? `<button class="btn buy" data-act="flex" data-skin="${s.id}">Make flex card</button>` : ''}
+      ${s.src === 'crate' && S.crates > 0 ? `<button class="btn ghost" data-act="crate">Open another · ${S.crates} left</button>` : ''}
       <button class="btn ghost" data-act="close">Done</button></div>`);
 }
-function flexCard(s){
-  const c=document.createElement('canvas'),Wc=540,Hc=760;c.width=Wc;c.height=Hc;const x=c.getContext('2d');
-  let g=x.createLinearGradient(0,0,0,Hc);g.addColorStop(0,'#07030F');g.addColorStop(.6,'#1C0A38');g.addColorStop(1,'#3A0F52');x.fillStyle=g;x.fillRect(0,0,Wc,Hc);
-  x.strokeStyle='rgba(255,43,214,.3)';x.lineWidth=1;x.beginPath();for(let i=-12;i<=12;i++){x.moveTo(Wc/2+i*24,560);x.lineTo(Wc/2+i*80,Hc);}for(let k=1;k<7;k++){const y=560+(Hc-560)*(k/7)**1.7;x.moveTo(0,y);x.lineTo(Wc,y);}x.stroke();
-  x.fillStyle='#22F0FF';x.shadowColor='#22F0FF';x.shadowBlur=14;x.fillRect(0,558,Wc,3);x.shadowBlur=0;
-  x.save();x.strokeStyle='#FF2BD6';x.lineWidth=4;x.shadowColor='#FF2BD6';x.shadowBlur=24;x.beginPath();rr(x,18,18,Wc-36,Hc-36,26);x.stroke();x.restore();
-  x.textAlign='center';x.fillStyle='#FF2BD6';x.shadowColor='#FF2BD6';x.shadowBlur=18;x.font='54px Monoton, Impact, sans-serif';x.fillText('HYPERLINE',Wc/2,104);x.shadowBlur=0;
-  drawSkin(x,s,Wc/2,320,190,0,2.1,false);
-  const rc={rare:'#22F0FF',epic:'#FFE45C',premium:'#FF2BD6',exclusive:'#7CFF6B'}[s.rar]||'#A08FC7';
-  x.fillStyle='#F2ECFF';x.font='700 48px "Chakra Petch", sans-serif';x.fillText(s.name.toUpperCase(),Wc/2,500);
-  x.fillStyle=rc;x.font='700 22px "Chakra Petch", sans-serif';x.fillText(s.rar.toUpperCase(),Wc/2,536);
-  x.fillStyle='#F2ECFF';x.font='700 30px "Chakra Petch", sans-serif';x.fillText(`BEST RUN ${fmt(S.best)}m`,Wc/2,650);
-  x.fillStyle='#A08FC7';x.font='600 20px "Chakra Petch", sans-serif';x.fillText('Pulled in Hyperline · Season 1',Wc/2,700);
+function rr(c, x, y, w, h, r) { c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function flexCard(s) {
+  const c = document.createElement('canvas'), Wc = 540, Hc = 760; c.width = Wc; c.height = Hc; const x = c.getContext('2d');
+  let g = x.createLinearGradient(0, 0, 0, Hc); g.addColorStop(0, '#07030F'); g.addColorStop(0.6, '#1C0A38'); g.addColorStop(1, '#3A0F52'); x.fillStyle = g; x.fillRect(0, 0, Wc, Hc);
+  x.strokeStyle = 'rgba(255,43,214,.3)'; x.lineWidth = 1; x.beginPath(); for (let i = -12; i <= 12; i++) { x.moveTo(Wc / 2 + i * 24, 560); x.lineTo(Wc / 2 + i * 80, Hc); } for (let k = 1; k < 7; k++) { const y = 560 + (Hc - 560) * (k / 7) ** 1.7; x.moveTo(0, y); x.lineTo(Wc, y); } x.stroke();
+  x.fillStyle = '#22F0FF'; x.shadowColor = '#22F0FF'; x.shadowBlur = 14; x.fillRect(0, 558, Wc, 3); x.shadowBlur = 0;
+  x.save(); x.strokeStyle = '#FF2BD6'; x.lineWidth = 4; x.shadowColor = '#FF2BD6'; x.shadowBlur = 24; x.beginPath(); rr(x, 18, 18, Wc - 36, Hc - 36, 26); x.stroke(); x.restore();
+  x.textAlign = 'center'; x.fillStyle = '#FF2BD6'; x.shadowColor = '#FF2BD6'; x.shadowBlur = 18; x.font = '54px Monoton, Impact, sans-serif'; x.fillText('HYPERLINE', Wc / 2, 104); x.shadowBlur = 0;
+  drawSkinThumb(x, s, Wc / 2, 320, 150, 2.1, false);
+  const rc = { rare: '#22F0FF', epic: '#FFE45C', premium: '#FF2BD6', exclusive: '#7CFF6B' }[s.rar] || '#A08FC7';
+  x.textAlign = 'center';
+  x.fillStyle = '#F2ECFF'; x.font = '700 48px "Chakra Petch", sans-serif'; x.fillText(s.name.toUpperCase(), Wc / 2, 500);
+  x.fillStyle = rc; x.font = '700 22px "Chakra Petch", sans-serif'; x.fillText(s.rar.toUpperCase(), Wc / 2, 536);
+  x.fillStyle = '#F2ECFF'; x.font = '700 30px "Chakra Petch", sans-serif'; x.fillText(`BEST RUN ${fmt(S.best)}m`, Wc / 2, 650);
+  x.fillStyle = '#A08FC7'; x.font = '600 20px "Chakra Petch", sans-serif'; x.fillText('Pulled in Hyperline · Season 1', Wc / 2, 700);
   return c.toDataURL('image/png');
 }
-function showFlex(id){const s=SK[id];showModal(`<div class="eyebrow">Flex card</div><img class="flex" alt="${s.name} flex card" src="${flexCard(s)}">
+function showFlex(id) {
+  const s = SK[id]; showModal(`<div class="eyebrow">Flex card</div><img class="flex" alt="${s.name} flex card" src="${flexCard(s)}">
   <p class="muted">Screenshot this to post it. In the real app, this button shares straight to TikTok or Instagram Stories.</p>
-  <div class="col"><button class="btn ghost" data-act="close">Done</button></div>`);}
-function showUnlock(id){const s=SK[id],cost=UNLOCK_CR[s.rar];
-  showModal(`<div class="eyebrow">Unlock skin</div><div class="reveal">${thumb(id,120,false)}</div><h2>${s.name}</h2><div><span class="rar ${s.rar}">${s.rar}</span></div>
+  <div class="col"><button class="btn ghost" data-act="close">Done</button></div>`);
+}
+function showUnlock(id) {
+  const s = SK[id], cost = UNLOCK_CR[s.rar];
+  showModal(`<div class="eyebrow">Unlock skin</div><div class="reveal">${thumb(id, 120, false, 'class="spin"')}</div><h2>${s.name}</h2><div><span class="rar ${s.rar}">${s.rar}</span></div>
     <p class="muted">Unlock exactly this skin for ${cost.toLocaleString()} credits. You have ${S.credits.toLocaleString()}. You can also find it in a Neon Crate.</p>
-    <div class="col"><button class="btn" data-act="unlock" data-skin="${id}" ${S.credits<cost?'disabled':''}>Unlock · ${cost.toLocaleString()} credits</button>
-      <button class="btn ghost" data-act="close">Cancel</button></div>`);}
+    <div class="col"><button class="btn" data-act="unlock" data-skin="${id}" ${S.credits < cost ? 'disabled' : ''}>Unlock · ${cost.toLocaleString()} credits</button>
+      <button class="btn ghost" data-act="close">Cancel</button></div>`);
+}
+function showTrailUnlock(id) {
+  const t = TR[id];
+  showModal(`<div class="eyebrow">Unlock trail</div><div class="reveal"><canvas data-trail="${id}" data-size="120" data-locked="0"></canvas></div><h2>${t.name}</h2>
+    <p class="muted">${t.desc}. Unlock exactly this trail for ${t.cost.toLocaleString()} credits. You have ${S.credits.toLocaleString()}.</p>
+    <div class="col"><button class="btn" data-act="trail-unlock" data-trail="${id}" ${S.credits < t.cost ? 'disabled' : ''}>Unlock · ${t.cost.toLocaleString()} credits</button>
+      <button class="btn ghost" data-act="close">Cancel</button></div>`);
+}
+let resetArm = false;
+function showSettings() {
+  resetArm = false;
+  const sw = (k, label, sub) => `<div class="setrow"><span>${label}<small>${sub}</small></span><button class="sw" role="switch" data-act="set" data-key="${k}" aria-checked="${S.settings[k]}" aria-label="${label}"></button></div>`;
+  showModal(`<h2>Settings</h2>
+    <div style="display:flex;flex-direction:column">
+      ${sw('sound', 'Sound', 'Jumps, chips, crashes')}
+      ${sw('music', 'Music', 'Synth beat while you run')}
+      ${sw('haptics', 'Haptics', 'Vibration on supported phones')}
+    </div>
+    <p class="fine" style="text-align:left">Motion follows your device's reduced-motion setting${reduced ? ' (on: no camera shake, fewer particles)' : ''}.</p>
+    <button class="danger" data-act="reset">Reset all progress</button>
+    <p class="fine">Hyperline 0.3.0 · Nothing you do here leaves your device except anonymous play events.</p>
+    <div class="col"><button class="btn ghost" data-act="close">Done</button></div>`);
+}
 
 /* ---------- tabs & actions ---------- */
-function showTab(n){['run','shop','locker'].forEach(k=>{$('view-'+k).hidden=k!==n;$('tab-'+k).setAttribute('aria-selected',k===n?'true':'false');});
-  pressed=false;if(n==='shop')renderShop();if(n==='locker')renderLocker();if(n==='run')requestAnimationFrame(resize);}
-function refresh(){cred();if(!$('view-shop').hidden)renderShop();if(!$('view-locker').hidden)renderLocker();}
-let resetArm=false;
-document.addEventListener('click',async e=>{
-  const tb=e.target.closest('[data-tab]');if(tb){showTab(tb.dataset.tab);return;}
-  const b=e.target.closest('[data-act]');if(!b||b.disabled)return;const a=b.dataset.act;if(a!=='reset')resetArm=false;
-  switch(a){
-    case 'revive-buy':b.disabled=true;
-      if(await buy('revive'))revive();
+function showTab(n) {
+  ['run', 'shop', 'locker'].forEach((k) => { $('view-' + k).hidden = k !== n; $('tab-' + k).setAttribute('aria-selected', k === n ? 'true' : 'false'); });
+  pressed = false;
+  if (n !== 'run' && G.state === 'run') pause();
+  if (n === 'shop') { renderShop(); studio.track('shop_view', { crates: S.crates, credits: S.credits }); }
+  if (n === 'locker') renderLocker();
+  if (n === 'run') { requestAnimationFrame(resize); if (G.state === 'ready') renderReady(); }
+}
+function refresh() { cred(); if (!$('view-shop').hidden) renderShop(); if (!$('view-locker').hidden) renderLocker(); if (G.state === 'ready') renderReady(); }
+document.addEventListener('click', async (e) => {
+  const tb = e.target.closest('[data-tab]'); if (tb) { showTab(tb.dataset.tab); return; }
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return; const a = b.dataset.act; if (a !== 'reset') resetArm = false;
+  switch (a) {
+    case 'revive-buy': b.disabled = true;
+      if (await buy('revive')) revive();
       else b.remove(); /* declined or suppressed: drop the paid option, no re-prompt */
       break;
-    case 'revive-cr':S.credits-=REVIVE_CR;save();cred();revive();break;
-    case 'again':closeModal();reset();studio.feedback.maybePrompt();break;
-    case 'close':closeModal();break;
-    case 'crate':if(!S.crates){toast(`Crates are earned: one every ${CRATE_EVERY} runs`);break;}
-      showModal(`<div class="eyebrow">Neon Crate</div><button class="crate" data-act="crack" aria-label="Open the crate">${CRATE_SVG}</button><p class="muted">Tap to crack it open</p><p class="fine">Odds: ${oddsTxt()}</p>`);break;
-    case 'crack':if(!S.crates)break;S.crates--;S.opened++;save();b.classList.add('crack');b.disabled=true;
-      setTimeout(()=>{const r=rollCrate();refresh();showPull(r.s,r.dup);},480);break;
-    case 'buy':{const k=b.dataset.item;b.disabled=true;
-      if(await buy(k)){
-        if(k==='serpent'){S.owned.serpent=1;save();showPull(SK.serpent,false,'Yours now');}
-        else{S.credits+=CREDIT_GRANT[k];save();toast(`+${CREDIT_GRANT[k].toLocaleString()} credits`);}
+    case 'revive-cr': if (S.credits < REVIVE_CR) break; S.credits -= REVIVE_CR; save(); cred(); revive(); break;
+    case 'again': closeModal(); reset(); studio.feedback.maybePrompt(); break;
+    case 'close': closeModal(); break;
+    case 'mode': if (G.state !== 'ready') break; S.mode = b.dataset.mode === 'daily' ? 'daily' : 'endless'; save(); audio.click(); reset(); break;
+    case 'pause': pause(); break;
+    case 'settings': showSettings(); break;
+    case 'set': {
+      const k = b.dataset.key; S.settings[k] = !S.settings[k]; save(); b.setAttribute('aria-checked', String(S.settings[k]));
+      if (k === 'sound') audio.setSound(S.settings.sound);
+      if (k === 'music') { audio.setMusic(S.settings.music); if (S.settings.music && G.state === 'run') audio.startBeat(G.stats.sector - 1); }
+      if (k === 'haptics' && S.settings.haptics) buzz(20);
+      break; }
+    case 'crate': if (!S.crates) { toast(`Crates are earned: one every ${CRATE_EVERY} runs`); break; }
+      showModal(`<div class="eyebrow">Neon Crate</div><button class="crate" data-act="crack" aria-label="Open the crate">${CRATE_SVG}</button><p class="muted">Tap to crack it open</p><p class="fine">Odds: ${oddsTxt()}</p>`); break;
+    case 'crack': if (!S.crates) break; S.crates--; S.opened++; save(); b.classList.add('crack'); b.disabled = true;
+      setTimeout(() => { const r = rollCrate(); refresh(); showPull(r.s, r.dup); }, 480); break;
+    case 'buy': { const k = b.dataset.item; b.disabled = true;
+      if (await buy(k)) {
+        if (k === 'serpent') { S.owned.serpent = 1; save(); showPull(SK.serpent, false, 'Yours now'); }
+        else { S.credits += CREDIT_GRANT[k]; save(); toast(`+${CREDIT_GRANT[k].toLocaleString()} credits`); }
       }
-      refresh();break;}
-    case 'flex':showFlex(b.dataset.skin);break;
-    case 'equip':S.eq=b.dataset.skin;save();toast(SK[S.eq].name+' equipped');closeModal();if(!$('view-locker').hidden)renderLocker();break;
-    case 'skin':{const id=b.dataset.skin;if(S.owned[id]){S.eq=id;save();renderLocker();toast(SK[id].name+' equipped');}
-      else if(SK[id].src==='best')toast(`Reach ${fmt(APEX_AT)}m in one run to unlock Apex`);
-      else if(SK[id].src==='crate')showUnlock(id);
-      else showTab('shop');break;}
-    case 'unlock':{const id=b.dataset.skin,cost=UNLOCK_CR[SK[id].rar];if(S.owned[id]||S.credits<cost)break;
-      S.credits-=cost;S.owned[id]=1;save();closeModal();refresh();toast(SK[id].name+' unlocked');break;}
-    case 'reset':if(!resetArm){resetArm=true;b.textContent='Tap again to erase everything';break;}resetArm=false;S=fresh();save();cred();renderLocker();reset();toast('Progress reset');break;
+      refresh(); break; }
+    case 'flex': showFlex(b.dataset.skin); break;
+    case 'equip': S.eq = b.dataset.skin; save(); toast(SK[S.eq].name + ' equipped'); closeModal(); if (!$('view-locker').hidden) renderLocker(); break;
+    case 'ltab': lockerTab = b.dataset.l === 'trails' ? 'trails' : 'skins'; renderLocker(); break;
+    case 'skin': { const id = b.dataset.skin; if (S.owned[id]) { S.eq = id; save(); renderLocker(); toast(SK[id].name + ' equipped'); }
+      else if (SK[id].src === 'best') toast(`Reach ${fmt(APEX_AT)}m in one run to unlock Apex`);
+      else if (SK[id].src === 'crate') showUnlock(id);
+      else showTab('shop'); break; }
+    case 'unlock': { const id = b.dataset.skin, cost = UNLOCK_CR[SK[id].rar]; if (S.owned[id] || S.credits < cost) break;
+      S.credits -= cost; S.owned[id] = 1; save(); closeModal(); refresh(); toast(SK[id].name + ' unlocked');
+      studio.track('skin_unlock', { id, cost }); break; }
+    case 'trail': { const id = b.dataset.trail; if (S.trails[id]) { S.trail = id; save(); renderLocker(); toast(TR[id].name + ' trail equipped'); } else showTrailUnlock(id); break; }
+    case 'trail-unlock': { const id = b.dataset.trail, t = TR[id]; if (!t || S.trails[id] || S.credits < t.cost) break;
+      S.credits -= t.cost; S.trails[id] = 1; S.trail = id; save(); closeModal(); refresh(); toast(t.name + ' trail unlocked and equipped');
+      studio.track('trail_unlock', { id, cost: t.cost }); break; }
+    case 'reset': if (!resetArm) { resetArm = true; b.textContent = 'Tap again to erase everything'; break; }
+      resetArm = false; S = migrateSave(null); GH = { endless: null, daily: null }; save(); saveGhosts(); lastActive = [...S.missions];
+      cred(); closeModal(); reset(); refresh(); toast('Progress reset'); break;
   }
 });
 
 /* ---------- loop ---------- */
-let last=performance.now();
-function loop(now){const dt=Math.min(1/30,(now-last)/1000);last=now;
-  if(!$('view-run').hidden){if(modal.hidden||G.state!=='run')update(dt);draw();}
-  else if(!$('view-shop').hidden){G.t+=dt;const h=$('heroSkin');if(h)paintThumbs({querySelectorAll:()=>[h]},G.t);}
-  requestAnimationFrame(loop);}
-reset();cred();hud();resize();requestAnimationFrame(loop);
+let last = performance.now(), slow = 0, frames = 0;
+function loop(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!$('view-run').hidden) {
+    if (G.state !== 'paused') update(dt);
+    draw();
+    // Adaptive resolution: if frames run long, step the canvas resolution down (never below 1x).
+    frames++; if (dt > 1 / 45) slow++;
+    if (frames >= 90) { if (slow > 45 && dprCap > 1) { dprCap = Math.max(1, dprCap - 0.5); resize(); } frames = 0; slow = 0; }
+  } else {
+    G.t += dt;
+    const h = $('heroSkin');
+    if (h && !reduced) paintCanvas(h, G.t);
+  }
+  if (!modal.hidden && !reduced) mcard.querySelectorAll('canvas.spin').forEach((h) => paintCanvas(h, G.t));
+  requestAnimationFrame(loop);
+}
+audio.setSound(S.settings.sound); audio.setMusic(S.settings.music);
+reset(); cred(); resize(); requestAnimationFrame(loop);
 </script>
 
-</body></html>
+</body>
+</html>
