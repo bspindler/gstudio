@@ -176,7 +176,8 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .washout svg{width:100%;height:100%;display:block}
 @keyframes washout{to{transform:translate(var(--wx),var(--wy)) scale(.4) rotate(40deg);opacity:0}}
 .exitmark{position:absolute;pointer-events:none;display:flex;align-items:center;justify-content:space-around;color:#BFF7EE;background:linear-gradient(var(--ed),rgba(61,220,203,.55),rgba(61,220,203,0));border-radius:8px}
-.exitmark svg{width:14px;height:14px;animation:nudge 1.4s ease-in-out infinite}
+.exitmark span{display:block;width:14px;height:14px;max-width:100%;animation:nudge 1.4s ease-in-out infinite} /* the svg keeps its own rotation */
+.exitmark svg{width:100%;height:100%;display:block}
 @keyframes nudge{50%{transform:translate(var(--nx),var(--ny))}}
 .lost .tl{animation:bobble 2.2s ease-in-out infinite}
 @keyframes bobble{50%{transform:translateY(-6%) rotate(-4deg)}}
@@ -780,9 +781,10 @@ function drawExit() {
   const ex = lvl?.exit; if (!ex) return;
   const d = document.createElement('div');
   d.id = 'exitmark'; d.className = 'exitmark'; d.setAttribute('aria-hidden', 'true');
-  const pos = { down: 'left:4%;right:4%;top:100%;height:5.5%;--ed:180deg;--nx:0;--ny:3px', left: 'top:4%;bottom:4%;right:100%;width:6%;flex-direction:column;--ed:270deg;--nx:-3px;--ny:0', right: 'top:4%;bottom:4%;left:100%;width:6%;flex-direction:column;--ed:90deg;--nx:3px;--ny:0' }[ex];
+  // side strips hug the board edge: the phone gutter is only 16px wide
+  const pos = { down: 'left:4%;right:4%;top:100%;height:5.5%;--ed:180deg;--nx:0;--ny:3px', left: 'top:4%;bottom:4%;right:99%;width:3.8%;flex-direction:column;--ed:270deg;--nx:-2px;--ny:0', right: 'top:4%;bottom:4%;left:99%;width:3.8%;flex-direction:column;--ed:90deg;--nx:2px;--ny:0' }[ex];
   d.style.cssText = pos;
-  d.innerHTML = ARROW(ex).repeat(4);
+  d.innerHTML = `<span>${ARROW(ex)}</span>`.repeat(4);
   boardEl.appendChild(d);
 }
 
