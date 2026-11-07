@@ -1354,7 +1354,7 @@ const SCENERY_ART = {
 };
 const sceneryColor = (pool, id) => { const i = poolInfo(pool); return i.authored ? SCENERY_ART[id].col : i.palette.accent; };
 const scenerySVG = (id, c) => `<svg viewBox="${SCENERY_ART[id].vb}" preserveAspectRatio="xMidYMax meet">${SCENERY_ART[id].draw(c || SCENERY_ART[id].col)}</svg>`;
-const LITTER = {
+const REEF_LITTER = {
   can: '<rect x="-7" y="-4" width="14" height="8" rx="2" fill="#A9B4BA"/><rect x="-2" y="-4" width="3" height="8" fill="#D9584E" opacity=".8"/><ellipse cx="7" cy="0" rx="1.4" ry="4" fill="#7C878D"/>',
   bottle: '<path d="M-10-3h12l3-1.5h4v5h-4l-3-1.5h-12z" transform="rotate(-8)" fill="#9FD3C7" opacity=".75" stroke="#6E9C92" stroke-width="1"/>',
   ring: '<g fill="none" stroke="#C9CFD3" stroke-width="2"><circle cx="-7" cy="0" r="3.6"/><circle cx="0" cy="0" r="3.6"/><circle cx="7" cy="0" r="3.6"/></g>',
@@ -1376,7 +1376,7 @@ function reefScene(p, stage) {
   if (stage >= 2) h += `<g fill="${pal.accent}"><path d="M110 124c-2-10 3-14 6-20 1 6-2 10 1 14 2-6 6-8 9-12-1 8-4 12-7 18z"/><path d="M196 122c-3-8 1-14 4-18 1 5 0 8 2 11 2-4 5-6 8-8-1 7-4 11-7 15z"/></g>`;
   if (stage >= 1) h += `<polygon points="${starPts(140, 132, 6, 2.6)}" fill="${mix('#FF8A5B', '#7E7468', m)}"/>`;
   if (stage === 3) { const a = SCENERY_ART[info.scenery.id], [, , vw, vh] = a.vb.split(' ').map(Number), w = 64, hh = Math.min(70, w * vh / vw); h += `<svg x="${206 - w / 2}" y="${142 - hh}" width="${w}" height="${hh}" viewBox="${a.vb}" preserveAspectRatio="xMidYMax meet">${a.draw(sceneryColor(p, info.scenery.id))}</svg>`; }
-  for (const [k, x, y] of LITTER_AT.slice(0, LITTER_N[stage])) h += `<g transform="translate(${x} ${y}) scale(1.6)">${LITTER[k]}</g>`;
+  for (const [k, x, y] of LITTER_AT.slice(0, LITTER_N[stage])) h += `<g transform="translate(${x} ${y}) scale(1.6)">${REEF_LITTER[k]}</g>`;
   if (stage <= 1) for (let i = 0; i < 14; i++) h += `<circle cx="${(i * 53) % 320}" cy="${52 + (i * 37) % 80}" r="${1 + (i % 3) * .6}" fill="#C9D6CF" opacity="${stage ? .18 : .3}"/>`;
   for (let i = 0; i < [0, 0, 1, 3][stage]; i++) { const c = i === 1 ? '#FFD98A' : pal.accent; h += `<g transform="translate(${40 + i * 70} ${66 + i * 14})"><g class="rs-fish" style="--fd:${9 + i * 2}s;--fx:${110 - i * 20}px"><path d="M24 0q-9-7-18 0q9 7 18 0z" fill="${c}"/><path d="M7 0l-7-5v10z" fill="${c}"/><circle cx="19" cy="-1" r="1.4" fill="#14202B"/></g></g>`; }
   if (stage >= 1) for (let i = 0; i <= stage; i++) h += `<circle class="rs-bub" style="animation-delay:-${(i * 1.3).toFixed(1)}s" cx="${70 + i * 66}" cy="140" r="${2 + (i % 2)}" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="1"/>`;

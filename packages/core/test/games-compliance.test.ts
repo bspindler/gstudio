@@ -1,4 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -13,6 +16,16 @@ const src = (slug: string) => readFileSync(new URL(`../../../games/${slug}/index
 describe.each(GAMES)('%s compliance', (slug) => {
   it('breaks no compliance rule (every .html and .js file)', () => {
     expect(complianceViolations(gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url))))).toEqual([]);
+  });
+
+  it('has inline module scripts that parse (catches duplicate declarations after merges)', () => {
+    const scripts = [...src(slug).matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    const dir = mkdtempSync(join(tmpdir(), `game-${slug}-`));
+    scripts.forEach((code, i) => {
+      const file = join(dir, `inline-${i}.mjs`);
+      writeFileSync(file, code);
+      expect(() => execFileSync(process.execPath, ['--check', file], { stdio: 'pipe' }), `${slug} inline script ${i}`).not.toThrow();
+    });
   });
 
   it('tracks only event names the ingest accepts (an unknown name rejects the whole batch)', () => {
