@@ -4,6 +4,8 @@ export type Save = {
   v: 2; level: number; stars: Record<number, number>; pearls: number; shells: number; sandDollars: number;
   album: Record<string, number>; claimed: Record<number, boolean>; starter: boolean; decor: Record<string, boolean>;
   settings: { sound: boolean; haptics: boolean };
+  /** Reef restoration: thriving rewards claimed, and the highest stage already celebrated per pool (null: not yet initialised). */
+  reef: { claimed: Record<number, boolean>; seen: Record<number, number> | null };
 };
 export type LevelRun = { n: number; assisted: boolean; shellDrop: boolean; shellTaken: boolean; boosters?: string[] };
 export type Storage = { getItem(k: string): string | null; setItem(k: string, v: string): void };

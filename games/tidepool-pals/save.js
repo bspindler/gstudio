@@ -8,10 +8,13 @@ const START_PEARLS = 120;
 
 export function fresh() {
   return { v: 2, level: 1, stars: {}, pearls: START_PEARLS, shells: 0, sandDollars: 0, album: {}, claimed: {},
-    starter: false, decor: {}, settings: { sound: true, haptics: true } };
+    starter: false, decor: {}, settings: { sound: true, haptics: true }, reef: { claimed: {}, seen: {} } };
 }
 
 const obj = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+/** Reef fields (see reef.js). `seen: null` marks a save from before the reef: reef.initReef fills it from progress,
+ *  so old progress is not replayed as stage-ups, while thriving rewards still wait to be claimed once. */
+const reefOf = (r) => { const o = obj(r); return { claimed: { ...obj(o.claimed) }, seen: o.seen && typeof o.seen === 'object' && !Array.isArray(o.seen) ? { ...o.seen } : null }; };
 const num = (x, d) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : d);
 
 /** Any stored value in, a valid v2 save out. v1 saves keep everything and gain stars and sand dollars. */
@@ -24,14 +27,14 @@ export function migrate(raw) {
     for (let n = 1; n < level; n++) stars[n] = 1; // v1 had no stars; passed levels count as cleared
     const sandDollars = Object.values(album).reduce((a, n) => a + Math.max(0, num(n, 0) - 1), 0);
     return { ...fresh(), level, stars, pearls: num(raw.pearls, START_PEARLS), shells: Math.floor(num(raw.shells, 0)),
-      sandDollars, album, claimed: { ...obj(raw.claimed) }, starter: !!raw.starter };
+      sandDollars, album, claimed: { ...obj(raw.claimed) }, starter: !!raw.starter, reef: reefOf(null) };
   }
   if (raw.v === 2) {
     const f = fresh();
     return { ...f, ...raw, v: 2, level: Math.max(1, Math.floor(num(raw.level, 1))), pearls: num(raw.pearls, f.pearls),
       shells: Math.floor(num(raw.shells, 0)), sandDollars: Math.floor(num(raw.sandDollars, 0)),
       stars: { ...obj(raw.stars) }, album: { ...obj(raw.album) }, claimed: { ...obj(raw.claimed) }, decor: { ...obj(raw.decor) },
-      starter: !!raw.starter, settings: { ...f.settings, ...obj(raw.settings) } };
+      starter: !!raw.starter, settings: { ...f.settings, ...obj(raw.settings) }, reef: reefOf(raw.reef) };
   }
   return fresh();
 }
