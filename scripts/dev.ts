@@ -2,7 +2,8 @@
 // npm run dev:lan (or STUDIO_LAN=1) also listens on the LAN so a phone can play (the ingest has no auth or rate limit).
 import { randomUUID } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
-import { relative, sep } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
@@ -28,9 +29,10 @@ serve({ fetch: api.fetch, port: 8787, hostname: bind });
 const site = new Hono();
 const root = relative(process.cwd(), repo).split(sep).join('/') || '.';
 site.use('/sdk/*', serveStatic({ root: `${root}/packages`, rewriteRequestPath: (p) => p.replace(/^\/sdk/, '/sdk') }));
-site.get('/', (c) => c.html(`<!doctype html><meta name="viewport" content="width=device-width"><title>Studio games (dev)</title>
-<body style="font:16px system-ui;padding:16px"><h1>Studio games (local dev)</h1><ul>${games.map((g) =>
-  `<li><a href="/${g.slug}/">${g.title}</a> (${g.genre}, v${g.version}) · <a href="/${g.slug}/?ch=portal">as portal</a></li>`).join('')}</ul>`));
+// The GStudio shelf page; read per request so edits show on refresh. `<` is escaped so a title can't close the script tag.
+const shelf = JSON.stringify(games.map(({ slug, title, genre, version, targetSegment }) =>
+  ({ slug, title, genre, version, targetSegment }))).replace(/</g, '\\u003c');
+site.get('/', (c) => c.html(readFileSync(join(repo, 'scripts/site/index.html'), 'utf8').replace('/*__GAMES__*/[]', shelf)));
 site.use('/*', serveStatic({ root: `${root}/games` }));
 serve({ fetch: site.fetch, port: 5174, hostname: bind });
 
