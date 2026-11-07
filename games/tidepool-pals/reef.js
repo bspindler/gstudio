@@ -149,10 +149,12 @@ export function homeScenery(S) {
 
 /* ---------- residents ---------- */
 // Each pal's favourite pool, by what its real-life cousin likes: rocky shallows, kelp, caves, the dark.
+// Three per pool across the first four, so every early pool gets neighbours.
 export const PAL_HOME = {
-  pebbin: 0, fizz: 0, snapjaw: 0, marlo: 1,
-  bloop: 2, tango: 5, spindle: 4, coralie: 0,
-  gloam: 3, wisp: 7, lumen: 3, abyssa: 2,
+  pebbin: 0, snapjaw: 0, coralie: 0, // rocky, coral shallows
+  fizz: 1, marlo: 1, spindle: 1, // sculpins, urchins and sea stars all live among kelp
+  bloop: 2, tango: 2, abyssa: 2, // octopus dens, anemones and shells in the rocks of the arch
+  gloam: 3, lumen: 3, wisp: 3, // the glowing, drifting deep
 };
 /** Owned pals living in each thriving pool. A pal lives in its favourite pool once that pool thrives, otherwise in
  *  the first thriving pool. `order` is the canonical pal order, so the result never depends on album order. */
