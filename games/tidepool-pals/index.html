@@ -149,21 +149,94 @@ h3{font-family:var(--display);font-weight:400;font-size:19px;margin:0;color:var(
 .cur-sd{display:inline-flex;align-items:center;gap:4px;vertical-align:middle}
 .cur-sd svg{width:18px;height:18px}
 
-/* ---------- map ---------- */
+/* ---------- reef map (one card per pool; the current pool opens to show its 10 levels) ---------- */
 .maphead{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.map{position:relative;width:100%;max-width:400px;margin:4px auto 0}
-.node{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;border:0;padding:0;font-family:var(--display);font-size:23px;color:var(--ink);cursor:pointer;background:radial-gradient(circle at 36% 28%,#FFF6D6 0 12%,#FFD98A 45%,#D9973A);box-shadow:inset 0 -5px 0 rgba(0,0,0,.12),0 6px 0 #8A5A1E,0 12px 18px rgba(0,0,0,.35)}
-.node.cur{background:radial-gradient(circle at 36% 28%,#E6FFFB 0 12%,#3DDCCB 45%,#168C83);box-shadow:inset 0 -5px 0 rgba(0,0,0,.12),0 6px 0 #0D5E57,0 0 0 6px rgba(61,220,203,.25),0 12px 18px rgba(0,0,0,.35);animation:pulse 1.8s ease-in-out infinite}
-@keyframes pulse{50%{transform:scale(1.07)}}
-.node.lock{background:radial-gradient(circle at 36% 28%,#3A7D9C,#174C66 70%);color:#5E93AA;box-shadow:0 6px 0 #0B2A3D;cursor:default}
-.node .st{position:absolute;left:50%;bottom:-19px;transform:translateX(-50%);display:flex;gap:1px}
-.node .st svg{width:17px;height:17px}
-.node .mk{position:absolute;top:-8px;right:-10px;width:26px;height:26px;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4))}
-.node .mk svg{width:100%;height:100%}
-.dot{position:absolute;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;border-radius:50%;background:rgba(234,248,245,.22)}
-.dot.on{background:rgba(255,217,138,.75)}
-.chapter{position:absolute;left:0;right:0;text-align:center;font-family:var(--display);font-size:18px;color:var(--sand);letter-spacing:.4px;text-shadow:0 2px 0 rgba(0,0,0,.4)}
-.chapter span{display:inline-block;background:rgba(10,32,51,.65);border-radius:999px;padding:4px 14px}
+.kind{margin:0;font-weight:800;font-size:13px;color:var(--sand);letter-spacing:.02em}
+.welcome{display:flex;flex-direction:column;gap:6px;background:rgba(255,217,138,.1);border:1.5px solid rgba(255,217,138,.4);border-radius:18px;padding:12px 14px;font-weight:700;font-size:14px;line-height:1.4;flex:none}
+.welcome b{font-family:var(--display);font-weight:400;font-size:18px;color:var(--sand)}
+.reef{display:flex;flex-direction:column;gap:12px;flex:none}
+.rpool{background:var(--panel);box-shadow:var(--rim);border-radius:22px;overflow:hidden;flex:none}
+.rpool.cur{box-shadow:var(--rim),0 0 0 2.5px rgba(61,220,203,.55)}
+.rhead{display:block;width:100%;border:0;background:none;padding:0;text-align:left;cursor:pointer}
+.rhead[disabled]{cursor:default}
+.rscene{position:relative;height:118px;overflow:hidden;background:#2C3836}
+.rscene>svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.rscene.big{height:170px;border-radius:18px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.12);flex:none}
+.rstage{position:absolute;left:10px;top:10px;font-size:10.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;background:rgba(10,32,51,.72);color:var(--foam);border-radius:999px;padding:3px 9px}
+.rpool.s3 .rstage{background:var(--aqua);color:var(--ink)}
+.rlock{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:12px;font-weight:900;font-size:14px;color:var(--foam);background:rgba(10,32,51,.45)}
+.rmeta{display:flex;flex-direction:column;gap:6px;padding:10px 14px 12px}
+.rname{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.rname h3{color:var(--foam);font-size:20px;min-width:0;overflow-wrap:anywhere}
+.rstars{flex:none;font-weight:900;font-size:14px;color:var(--sand);font-variant-numeric:tabular-nums}
+.rmeter{position:relative;height:12px;border-radius:999px;background:var(--abyss);box-shadow:inset 0 2px 3px rgba(0,0,0,.35);overflow:hidden}
+.rmeter i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,#25B5A6,var(--aqua) 60%,#9CF7EC);transition:width .6s cubic-bezier(.2,.8,.3,1)}
+.rmeter b{position:absolute;top:2px;bottom:2px;width:2px;margin-left:-1px;background:rgba(234,248,245,.35);border-radius:1px}
+.rsub{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 8px;font-size:12.5px;font-weight:800;color:var(--mist)}
+.rlevels{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:2px 12px 14px}
+.lvl{position:relative;width:100%;aspect-ratio:1;max-height:62px;border:0;border-radius:16px;padding:0 0 9px;font-family:var(--display);font-size:20px;color:var(--ink);cursor:pointer;background:radial-gradient(circle at 36% 28%,#FFF6D6 0 12%,#FFD98A 50%,#D9973A);box-shadow:inset 0 -4px 0 rgba(0,0,0,.12),0 4px 0 #8A5A1E;display:grid;place-items:center}
+.lvl:active{transform:translateY(2px);box-shadow:inset 0 -4px 0 rgba(0,0,0,.12),0 2px 0 #8A5A1E}
+.lvl.cur{background:radial-gradient(circle at 36% 28%,#E6FFFB 0 12%,#3DDCCB 50%,#168C83);box-shadow:inset 0 -4px 0 rgba(0,0,0,.12),0 4px 0 #0D5E57,0 0 0 4px rgba(61,220,203,.28);animation:pulse 1.8s ease-in-out infinite}
+.lvl.lock{background:var(--abyss);color:#3C7A96;box-shadow:inset 0 2px 4px rgba(0,0,0,.4);cursor:default}
+.lvl .ls{position:absolute;left:0;right:0;bottom:4px;display:flex;justify-content:center}
+.lvl .ls svg{width:13px;height:13px}
+@keyframes pulse{50%{transform:scale(1.06)}}
+.rs-sway{transform-box:fill-box;transform-origin:50% 100%;animation:kelp 4s ease-in-out infinite alternate}
+.rs-sway.b{animation-duration:5.2s;animation-delay:-2s}
+.rs-fish{transform-box:fill-box;transform-origin:50% 50%;animation:fishx var(--fd,9s) linear infinite}
+@keyframes fishx{0%{transform:translateX(0) scaleX(1)}48%{transform:translateX(var(--fx,120px)) scaleX(1)}50%{transform:translateX(var(--fx,120px)) scaleX(-1)}98%{transform:translateX(0) scaleX(-1)}100%{transform:translateX(0) scaleX(1)}}
+.rs-rays{animation:raypulse 6s ease-in-out infinite alternate}
+@keyframes raypulse{from{opacity:.55}to{opacity:1}}
+.rs-bub{animation:rsbub 4s ease-in infinite}
+@keyframes rsbub{to{transform:translateY(-120px);opacity:0}}
+/* stage-up celebration: the old stage washes away to reveal the new one */
+.cele{display:flex;flex-direction:column;gap:12px}
+.cfwrap{position:absolute;inset:0;overflow:hidden;pointer-events:none;border-radius:inherit}
+.rscene .from{position:absolute;inset:0}
+.rscene .from>svg{width:100%;height:100%;display:block}
+.cele .rscene .from{animation:washout 1.6s .35s ease-in-out forwards}
+@keyframes washout{to{opacity:0;transform:scale(1.04)}}
+.cele h2{color:var(--sand)}
+.dyk{text-align:left;background:rgba(61,220,203,.1);border:1.5px solid rgba(61,220,203,.4);border-radius:14px;padding:10px 12px;font-size:13.5px;font-weight:700;line-height:1.4}
+.dyk .label{color:var(--aqua);margin-bottom:2px}
+.gift{display:flex;align-items:center;gap:10px;text-align:left;background:var(--abyss);border-radius:14px;padding:8px 10px;font-weight:800;font-size:14px}
+.gift .art{width:46px;height:46px;flex:none;display:grid;place-items:center}
+.gift .art svg{width:100%;height:100%;overflow:visible}
+.movers{display:flex;justify-content:center;gap:4px;flex-wrap:wrap}
+.movers span{width:52px}
+.movers svg{width:100%;display:block}
+@media (prefers-reduced-motion:reduce){.cele .rscene .from{display:none}}
+
+/* ---------- home pool extras: reef scenery, residents, photo mode ---------- */
+.poolhead{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.btn.cam{display:inline-flex;align-items:center;gap:6px;flex:none}
+.btn.cam svg{width:18px;height:18px}
+.scen{position:absolute;pointer-events:none}
+.scen svg{width:100%;height:100%;display:block;overflow:visible}
+.scen.sway svg{transform-origin:50% 100%;animation:kelp 5s ease-in-out infinite alternate}
+.homes{display:flex;flex-direction:column;gap:10px}
+.home{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.home .hn{font-weight:900;font-size:14px;min-width:0;flex:1 1 120px}
+.home .hn small{display:block;font-weight:800;font-size:12px;color:var(--mist)}
+.home .hp{display:flex;gap:2px;flex-wrap:wrap}
+.home .hp span{width:34px}
+.home .hp svg{width:100%;display:block}
+body.photo .top,body.photo .tabs,body.photo #view-pool>:not(.pool){display:none!important}
+body.photo #view-pool .pool{height:calc(100% - 76px);min-height:300px}
+.photobar{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;display:flex;gap:8px;width:calc(100% - 32px);max-width:420px}
+.photobar .btn{flex:1}
+.flexcard{width:100%;border-radius:14px;display:block;box-shadow:0 10px 30px rgba(0,0,0,.45);-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
+
+/* ---------- field notes ---------- */
+button.card{font:inherit;color:inherit;cursor:pointer}
+button.card:active{transform:scale(.97)}
+.fnhead{display:flex;align-items:center;gap:12px;text-align:left}
+.fnhead .art{width:96px;flex:none}
+.fnhead .art svg{width:100%;display:block}
+.fnanimal{font-family:var(--display);font-size:22px;color:var(--sand);line-height:1.1}
+.fnlist{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.fnlist li{position:relative;padding:10px 12px 10px 34px;background:var(--abyss);border-radius:14px;font-weight:700;font-size:14.5px;line-height:1.4}
+.fnlist li::before{content:'';position:absolute;left:12px;top:15px;width:10px;height:10px;border-radius:50%;background:var(--aqua);box-shadow:0 0 0 3px rgba(61,220,203,.25)}
 
 /* ---------- pool ---------- */
 .pool{position:relative;flex:none;height:min(56vh,420px);border-radius:24px;overflow:hidden;background:linear-gradient(180deg,#3AA6C4 0%,#1C6F93 40%,#114A68 100%);box-shadow:inset 0 0 0 3px rgba(255,255,255,.12),0 10px 26px rgba(0,0,0,.35)}
@@ -319,6 +392,8 @@ import { buildBoard, collapse, counter, goalStatus, goalsMet, hasMoves, largestG
 import { levelDef } from './levels.js';
 import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, loadSave, recordWin,
   resetProgress, sandDollarCost, shellDrop, takeShell, writeSave } from './save.js';
+import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, didYouKnow, homeScenery, initReef, pendingThriving,
+  poolInfo, poolOf, reefPools, residents, takeStageUps } from './reef.js';
 
 const studio = createStudio({ game: 'tidepool-pals', version: '0.3.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
@@ -444,7 +519,7 @@ const FLOOR = `<svg viewBox="0 0 400 100" preserveAspectRatio="none"><path d="M0
 
 /* ---------- save ---------- */
 const store = (() => { try { const s = window.localStorage; s.getItem('x'); return s; } catch (e) { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v) }; } })();
-let S = loadSave(store);
+let S = initReef(loadSave(store));
 const persist = () => writeSave(store, S);
 
 /* ---------- shop catalog (fake-door via studio.purchase.offer; nothing here grants a random reward) ---------- */
@@ -548,8 +623,8 @@ function confetti() {
 }
 
 /* ---------- level text ---------- */
-const CHAPTERS = ['The Shallows', 'Coral Reef', 'Kelp Forest', 'Sunken Ship', 'Twilight Drop', 'The Deep', 'Abyssal Plain', 'Vent Gardens'];
-function chapter(n) { const i = Math.floor((n - 1) / 10); const nm = CHAPTERS[i % CHAPTERS.length]; return i >= CHAPTERS.length ? `${nm} ${Math.floor(i / CHAPTERS.length) + 1}` : nm; }
+/** A level's chapter is its reef pool (reef.js), so the map, the level sheet and the HUD all use the same names. */
+function chapter(n) { return poolInfo(poolOf(n)).name; }
 function goalIcon(g) { return g.t === 'collect' ? TILES[g.c] : g.t === 'sand' ? SAND : ICE_ICON; }
 function goalText(g) { return g.t === 'collect' ? `Collect ${g.need} ${TILE_NAME[g.c]}` : g.t === 'sand' ? `Break all ${g.need} sand` : `Free ${g.need} frozen pal${g.need > 1 ? 's' : ''}`; }
 
@@ -889,64 +964,273 @@ function showResult({ cr, dup, n }) {
   pearlsChanged(); renderCurrent();
 }
 
+/* ---------- reef art: the stage drives everything (murk, litter, kelp, coral, fish, light) ---------- */
+const mix = (a, b, t) => { const ch = (h, i) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16); return '#' + [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, '0')).join(''); };
+// Scenery a thriving pool adds to the Home Pool. `at` is its fixed spot there; `col` its colour for authored pools.
+const SCENERY_ART = {
+  coral: { vb: '0 0 60 60', col: '#FF7F8A', at: 'left:15%;bottom:13%;width:18%;height:24%', draw: (c) => `<g fill="none" stroke="${c}" stroke-width="6" stroke-linecap="round"><path d="M30 58V34M30 42L17 28V14M17 28L8 23M30 37L43 23V9M43 23L53 18M30 48L40 44"/></g><g fill="${mix(c, '#ffffff', .45)}"><circle cx="17" cy="12" r="4"/><circle cx="8" cy="21" r="3.4"/><circle cx="43" cy="8" r="4"/><circle cx="53" cy="16" r="3.4"/><circle cx="41" cy="43" r="3"/></g><ellipse cx="30" cy="58" rx="12" ry="3" fill="#000" opacity=".18"/>` },
+  kelp: { vb: '0 0 40 120', col: '#C9A43A', at: 'right:1%;bottom:12%;width:13%;height:60%', sway: true, draw: (c) => `<g fill="none" stroke-linecap="round"><path d="M14 120C6 96 22 80 12 56S18 22 14 6" stroke="${c}" stroke-width="5.5"/><path d="M27 120C35 100 19 86 29 64S23 34 29 18" stroke="${mix(c, '#000000', .2)}" stroke-width="4.5"/></g><g fill="${mix(c, '#ffffff', .25)}"><circle cx="17" cy="72" r="3.6"/><circle cx="10" cy="44" r="3.2"/><circle cx="25" cy="52" r="3"/><circle cx="31" cy="30" r="3"/></g>` },
+  rockarch: { vb: '0 0 100 70', col: '#7E95A3', at: 'left:52%;bottom:15%;width:30%;height:25%', draw: (c) => `<path d="M6 70C4 36 22 8 50 8S96 36 94 70H76C76 46 66 30 50 30S24 46 24 70Z" fill="${c}" stroke="${mix(c, '#000000', .3)}" stroke-width="3" stroke-linejoin="round"/><path d="M14 40C18 24 30 14 44 11" fill="none" stroke="${mix(c, '#ffffff', .35)}" stroke-width="3" stroke-linecap="round"/><g fill="#5DAA6A"><ellipse cx="50" cy="9" rx="12" ry="4"/><ellipse cx="86" cy="48" rx="6" ry="3"/><ellipse cx="13" cy="55" rx="5" ry="3"/></g>` },
+  glow: { vb: '0 0 50 40', col: '#7CF3E5', at: 'left:31%;bottom:8%;width:13%;height:14%', draw: (c) => [[12, 18], [25, 10], [38, 16]].map(([x, y]) => `<path d="M${x} 40Q${x - 3} ${(y + 40) / 2} ${x} ${y}" stroke="#3E6E8A" stroke-width="3" fill="none"/><circle cx="${x}" cy="${y}" r="8" fill="${c}" opacity=".25"/><circle cx="${x}" cy="${y}" r="4" fill="${c}"/>`).join('') },
+  starshelf: { vb: '0 0 80 36', col: '#FF9F5A', at: 'right:19%;bottom:2%;width:22%;height:11%', draw: (c) => `<path d="M2 36C6 18 24 12 40 14S76 20 78 36Z" fill="#6E808A"/><path d="M10 26C20 18 34 17 44 18" stroke="#93A4AD" stroke-width="2.5" fill="none" stroke-linecap="round"/><polygon points="${starPts(26, 14, 10, 4.5)}" fill="${c}" stroke="${mix(c, '#000000', .3)}" stroke-width="1.4" stroke-linejoin="round"/><polygon points="${starPts(56, 18, 8, 3.6)}" fill="#B07BFF" stroke="#6B43A6" stroke-width="1.4" stroke-linejoin="round"/>` },
+  anemones: { vb: '0 0 60 40', col: '#7BD45A', at: 'left:1%;bottom:1%;width:17%;height:15%', sway: true, draw: (c) => `<g stroke="${c}" stroke-width="3.4" stroke-linecap="round" fill="none">${[-24, -14, -5, 5, 14, 24].map((a) => `<path d="M30 38Q${30 + a * .4} 26 ${30 + a * .9} 10"/>`).join('')}</g><g fill="${mix(c, '#ffffff', .6)}">${[-24, -14, -5, 5, 14, 24].map((a) => `<circle cx="${30 + a * .9}" cy="10" r="2.6"/>`).join('')}</g><ellipse cx="30" cy="38" rx="14" ry="4" fill="${mix(c, '#000000', .35)}"/>` },
+  seagrass: { vb: '0 0 60 50', col: '#4FAF6A', at: 'left:42%;bottom:1%;width:20%;height:16%', sway: true, draw: (c) => `<g fill="none" stroke-linecap="round" stroke-width="3.4">${[8, 16, 24, 32, 40, 48, 54].map((x, i) => `<path d="M${x} 50Q${x + (i % 2 ? 6 : -6)} 30 ${x + (i % 2 ? -2 : 4)} ${8 + (i * 7) % 16}" stroke="${i % 2 ? c : mix(c, '#ffffff', .25)}"/>`).join('')}</g>` },
+  clam: { vb: '0 0 50 34', col: '#8AB8F0', at: 'right:42%;bottom:19%;width:11%;height:9%', draw: (c) => `<path d="M3 22Q25 -6 47 22Z" fill="${c}" stroke="${mix(c, '#000000', .3)}" stroke-width="2" stroke-linejoin="round"/><path d="M3 22Q25 40 47 22Z" fill="${mix(c, '#000000', .15)}"/><g stroke="${mix(c, '#000000', .3)}" stroke-width="1.5"><path d="M25 22V6M15 22L11 10M35 22L39 10"/></g><circle cx="25" cy="22" r="5.5" fill="#F4EEFF" stroke="#B9A8E8"/><ellipse cx="23" cy="20" rx="2" ry="1.3" fill="#fff"/>` },
+};
+const sceneryColor = (pool, id) => { const i = poolInfo(pool); return i.authored ? SCENERY_ART[id].col : i.palette.accent; };
+const scenerySVG = (id, c) => `<svg viewBox="${SCENERY_ART[id].vb}" preserveAspectRatio="xMidYMax meet">${SCENERY_ART[id].draw(c || SCENERY_ART[id].col)}</svg>`;
+const LITTER = {
+  can: '<rect x="-7" y="-4" width="14" height="8" rx="2" fill="#A9B4BA"/><rect x="-2" y="-4" width="3" height="8" fill="#D9584E" opacity=".8"/><ellipse cx="7" cy="0" rx="1.4" ry="4" fill="#7C878D"/>',
+  bottle: '<path d="M-10-3h12l3-1.5h4v5h-4l-3-1.5h-12z" transform="rotate(-8)" fill="#9FD3C7" opacity=".75" stroke="#6E9C92" stroke-width="1"/>',
+  ring: '<g fill="none" stroke="#C9CFD3" stroke-width="2"><circle cx="-7" cy="0" r="3.6"/><circle cx="0" cy="0" r="3.6"/><circle cx="7" cy="0" r="3.6"/></g>',
+  bag: '<path d="M-8 4Q-10-6-3-7Q0-12 3-7Q10-6 8 4Q0 8-8 4Z" fill="#EEF2F4" opacity=".55" stroke="#C9CFD3" stroke-width="1"/>',
+};
+const LITTER_AT = [['bag', 112, 100], ['can', 70, 128], ['bottle', 236, 128], ['ring', 162, 136], ['can', 286, 122]];
+const LITTER_N = [5, 3, 1, 0], MURK = [0.85, 0.55, 0.22, 0];
+let sceneUid = 0;
+/** One pool at one stage, as an SVG strip. Polluted is grey, cloudy and littered; thriving is clear, green and busy. */
+function reefScene(p, stage) {
+  const info = poolInfo(p), pal = info.palette, m = MURK[stage], id = 'rw' + (++sceneUid);
+  const green = mix('#4DB35A', '#5E6A58', m), green2 = mix('#7BD45A', '#6A7562', m);
+  let h = `<svg viewBox="0 0 320 150" preserveAspectRatio="xMidYMax slice" aria-hidden="true"><defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${mix(pal.top, '#6E7F7A', m)}"/><stop offset="1" stop-color="${mix(pal.bottom, '#2C3836', m)}"/></linearGradient></defs><rect width="320" height="150" fill="url(#${id})"/>`;
+  if (stage >= 2) h += `<g class="rs-rays" fill="#ffffff" opacity="${stage === 3 ? .16 : .08}"><polygon points="40,0 80,0 40,150 10,150"/><polygon points="130,0 150,0 120,150 100,150"/><polygon points="210,0 250,0 230,150 190,150"/></g>`;
+  h += `<ellipse cx="270" cy="128" rx="46" ry="22" fill="${mix('#6E808A', '#4A5553', m)}"/><ellipse cx="40" cy="132" rx="34" ry="16" fill="${mix('#7B8C96', '#4F5958', m)}"/>`;
+  const kelpX = [26, 292, 58, 252, 306], kelpN = [1, 2, 4, 5][stage], kelpH = [26, 50, 80, 104][stage];
+  for (let i = 0; i < kelpN; i++) { const x = kelpX[i], hh = kelpH - (i % 2) * 14; h += `<path class="rs-sway${i % 2 ? ' b' : ''}" d="M${x} 150C${x - 8} ${150 - hh * .35} ${x + 8} ${150 - hh * .65} ${x} ${150 - hh}" fill="none" stroke="${i % 2 ? green2 : green}" stroke-width="5" stroke-linecap="round"/>`; }
+  h += `<path d="M0 124Q60 108 120 118T240 114T320 120V150H0Z" fill="${mix('#E8C985', '#787262', m)}"/><path d="M0 136Q80 124 170 134T320 132V150H0Z" fill="${mix('#D9B66C', '#666152', m)}"/>`;
+  if (stage >= 2) h += `<g fill="${pal.accent}"><path d="M110 124c-2-10 3-14 6-20 1 6-2 10 1 14 2-6 6-8 9-12-1 8-4 12-7 18z"/><path d="M196 122c-3-8 1-14 4-18 1 5 0 8 2 11 2-4 5-6 8-8-1 7-4 11-7 15z"/></g>`;
+  if (stage >= 1) h += `<polygon points="${starPts(140, 132, 6, 2.6)}" fill="${mix('#FF8A5B', '#7E7468', m)}"/>`;
+  if (stage === 3) { const a = SCENERY_ART[info.scenery.id], [, , vw, vh] = a.vb.split(' ').map(Number), w = 64, hh = Math.min(70, w * vh / vw); h += `<svg x="${206 - w / 2}" y="${142 - hh}" width="${w}" height="${hh}" viewBox="${a.vb}" preserveAspectRatio="xMidYMax meet">${a.draw(sceneryColor(p, info.scenery.id))}</svg>`; }
+  for (const [k, x, y] of LITTER_AT.slice(0, LITTER_N[stage])) h += `<g transform="translate(${x} ${y}) scale(1.6)">${LITTER[k]}</g>`;
+  if (stage <= 1) for (let i = 0; i < 14; i++) h += `<circle cx="${(i * 53) % 320}" cy="${52 + (i * 37) % 80}" r="${1 + (i % 3) * .6}" fill="#C9D6CF" opacity="${stage ? .18 : .3}"/>`;
+  for (let i = 0; i < [0, 0, 1, 3][stage]; i++) { const c = i === 1 ? '#FFD98A' : pal.accent; h += `<g transform="translate(${40 + i * 70} ${66 + i * 14})"><g class="rs-fish" style="--fd:${9 + i * 2}s;--fx:${110 - i * 20}px"><path d="M24 0q-9-7-18 0q9 7 18 0z" fill="${c}"/><path d="M7 0l-7-5v10z" fill="${c}"/><circle cx="19" cy="-1" r="1.4" fill="#14202B"/></g></g>`; }
+  if (stage >= 1) for (let i = 0; i <= stage; i++) h += `<circle class="rs-bub" style="animation-delay:-${(i * 1.3).toFixed(1)}s" cx="${70 + i * 66}" cy="140" r="${2 + (i % 2)}" fill="none" stroke="#ffffff" stroke-opacity=".55" stroke-width="1"/>`;
+  if (m > 0) h += `<rect width="320" height="150" fill="#5F6E66" opacity="${(m * .28).toFixed(2)}"/>`;
+  return h + '</svg>';
+}
+
 /* ---------- views ---------- */
+let reefOpen = null, reefOpenAt = 0; // which pool shows its levels (null: the current pool, -1: none)
+const palOrder = () => CREATURES.map((c) => c.id);
+function nextStageLine(x) {
+  const next = STAGES[x.stage + 1], need = Math.ceil(next.at * x.total - 1e-9) - x.cleared;
+  return `${need} more until ${next.name.toLowerCase()}`;
+}
+function poolCard(x) {
+  const info = poolInfo(x.pool), st = STAGES[x.stage], first = x.levels[0];
+  const open = x.unlocked && (reefOpen ?? poolOf(S.level)) === x.pool;
+  const meta = x.unlocked
+    ? `<div class="rmeter" role="progressbar" aria-label="${info.name} restoration" aria-valuemin="0" aria-valuemax="${x.total}" aria-valuenow="${x.cleared}"><i style="width:${(x.fraction * 100).toFixed(0)}%"></i>${STAGES.slice(1, 3).map((s) => `<b style="left:${s.at * 100}%"></b>`).join('')}</div>
+      <div class="rsub"><span>${x.cleared} of ${x.total} levels cleaned up</span><span>${x.stage === 3 ? 'Pals have moved in' : nextStageLine(x)}</span></div>`
+    : `<div class="rsub"><span>Levels ${first}–${first + x.total - 1}</span></div>`;
+  const levels = open ? `<div class="rlevels">${x.levels.map((n) => {
+    const s = S.stars[n] || 0, can = n <= S.level, cur = n === S.level;
+    return `<button class="lvl${cur ? ' cur' : ''}${can ? '' : ' lock'}" ${can ? `data-act="open-level" data-n="${n}"` : 'disabled'} aria-label="Level ${n}${can ? (s ? `, ${s} star${s > 1 ? 's' : ''}` : ', not cleared yet') : ', not reached yet'}">${n}${s ? `<span class="ls">${[1, 2, 3].map((i) => STAR(i <= s)).join('')}</span>` : ''}</button>`;
+  }).join('')}</div>` : '';
+  return `<article class="rpool s${x.stage}${x.current ? ' cur' : ''}" id="rpool-${x.pool}">
+    <button class="rhead" ${x.unlocked ? `data-act="reef-toggle" data-p="${x.pool}" aria-expanded="${open}"` : 'disabled'} aria-label="${info.name}: ${x.unlocked ? `${st.name}, ${x.cleared} of ${x.total} levels cleaned up, ${x.stars} of ${x.maxStars} stars` : 'not reached yet'}">
+      <div class="rscene">${reefScene(x.pool, x.unlocked ? x.stage : 0)}${x.unlocked ? `<span class="rstage">${st.name}</span>` : `<div class="rlock">Clear level ${first - 1} to reach ${info.name}</div>`}</div>
+      <div class="rmeta"><div class="rname"><h3>${info.name}</h3>${x.unlocked ? `<span class="rstars">★ ${x.stars}/${x.maxStars}</span>` : ''}</div>${meta}</div>
+    </button>${levels}</article>`;
+}
 function renderMap() {
-  const top = Math.max(S.level + 4, 12);
+  if (reefOpenAt !== S.level) { reefOpen = null; reefOpenAt = S.level; }
   const playing = lvl && !lvl.over;
+  const pools = reefPools(S), open = pools.filter((x) => x.unlocked);
+  const thriving = open.filter((x) => x.stage === 3).length;
   const totalStars = Object.values(S.stars).reduce((a, b) => a + b, 0);
-  const STEP = 92, PAD = 70;
-  const xOf = (n) => 50 + Math.sin(n * 0.95) * 30;
-  const yOf = (n) => PAD + (n - 1) * STEP + Math.floor((n - 1) / 10) * 46;
-  let h = '';
-  for (let n = 1; n <= top; n++) {
-    if ((n - 1) % 10 === 0) h += `<div class="chapter" style="top:${yOf(n) - 62}px"><span>${chapter(n)}</span></div>`;
-    if (n < top && (n % 10 !== 0)) for (const f of [.25, .5, .75]) h += `<i class="dot${n < S.level ? ' on' : ''}" style="left:${(xOf(n) + (xOf(n + 1) - xOf(n)) * f).toFixed(1)}%;top:${(yOf(n) + (yOf(n + 1) - yOf(n)) * f).toFixed(0)}px"></i>`;
-    const st = S.stars[n] || 0, open = n <= S.level, cur = n === S.level;
-    const def = open ? levelDef(n) : null;
-    const g = def ? def.goals.find((x) => x.t !== 'collect') || def.goals[0] : null;
-    h += `<button class="node${cur ? ' cur' : ''}${open ? '' : ' lock'}" style="left:${xOf(n).toFixed(1)}%;top:${yOf(n)}px" ${open ? `data-act="open-level" data-n="${n}"` : 'disabled'} aria-label="Level ${n}${open ? (st ? `, ${st} stars` : ', not cleared yet') : ', locked'}">${n}
-      ${g ? `<span class="mk">${goalIcon(g)}</span>` : ''}${st ? `<span class="st">${[1, 2, 3].map((i) => STAR(i <= st)).join('')}</span>` : ''}</button>`;
-  }
-  $('view-map').innerHTML = `<div class="maphead"><div><h2>Tide Map</h2><p class="muted">${S.level > 1 ? `★ ${totalStars} of ${(S.level - 1) * 3} stars · replay any cleared level` : 'Clear levels to earn up to 3 stars each'}</p></div>
+  const isNew = S.level === 1 && !Object.keys(S.stars).length;
+  $('view-map').innerHTML = `<div class="maphead"><div><h2>Your Reef</h2><p class="muted">${isNew ? 'Every level you clear tidies a pool' : `${thriving} of ${open.length} pool${open.length > 1 ? 's' : ''} thriving · ★ ${totalStars}`}</p></div>
     <button class="btn buy" data-act="${playing ? 'resume' : 'play-next'}">${playing ? `Resume ${lvl.n}` : `Play ${S.level}`}</button></div>
-    <div class="map" id="map" style="height:${yOf(top) + PAD}px">${h}</div>`;
+    ${isNew ? `<div class="welcome"><b>Welcome to the reef</b><span>Litter has drifted into these rock pools. Each level you clear tidies a little more, until a pool is thriving and pals move in.</span><span class="kind">The kind puzzle game: no lives, no timers, just tides.</span></div>`
+      : '<p class="kind">The kind puzzle game: no lives, no timers, just tides.</p>'}
+    <div class="reef">${pools.map(poolCard).join('')}</div>`;
+  if (modal.hidden) setTimeout(() => { if (view === 'map' && modal.hidden) celebrateReef(); }, 250);
 }
 function scrollMapToCurrent() {
-  const node = document.querySelector('#map .node.cur'); const v = $('view-map');
-  if (node) v.scrollTop = Math.max(0, node.offsetTop - v.clientHeight / 2);
+  const p = reefOpen ?? poolOf(S.level), el = $('rpool-' + p), v = $('view-map');
+  v.scrollTop = el && p > 0 ? Math.max(0, el.offsetTop - v.offsetTop - 8) : 0; // the first pool keeps the welcome in view
 }
+
+/* ---------- stage-up celebrations and thriving rewards (deterministic, granted once) ---------- */
+let reefQueue = [], reefThen = null;
+/** Shows new stage-ups and any unclaimed thriving reward, one card each, then runs `then`. False if there was nothing. */
+function celebrateReef(then = null) {
+  const items = takeStageUps(S);
+  for (const p of pendingThriving(S)) if (!items.some((u) => u.pool === p)) items.push({ pool: p, from: 3, to: 3 });
+  if (!items.length) return false;
+  persist();
+  reefQueue = items; reefThen = then;
+  showReefCard();
+  return true;
+}
+function showReefCard() {
+  const u = reefQueue.shift();
+  if (!u) { closeModal(); const t = reefThen; reefThen = null; if (t) t(); else renderCurrent(); return; }
+  const info = poolInfo(u.pool);
+  let gift = '';
+  if (u.to === 3) {
+    const r = claimThriving(S, u.pool);
+    if (r) {
+      persist(); pearlsChanged();
+      const movers = (residents(S, palOrder())[u.pool] || []).map((id) => CREATURES.find((c) => c.id === id));
+      ev('pool_thriving', { pool: u.pool, pearls: r.pearls, decor: r.decor, residents: movers.length });
+      gift = `<div class="gift"><span class="art">${PEARL}</span><span>+${r.pearls} pearls</span></div>
+        <div class="gift"><span class="art">${scenerySVG(r.decor, sceneryColor(u.pool, r.decor))}</span><span>New in your Home Pool: ${info.scenery.name}</span></div>
+        ${movers.length ? `<div class="label">Moving in</div><div class="movers">${movers.map((c) => `<span>${creatureSVG(c, false)}</span>`).join('')}</div>` : '<p class="fine">Pals you find will move in here.</p>'}`;
+    }
+  }
+  if (u.from !== u.to) ev('pool_stage_up', { pool: u.pool, from: STAGES[u.from].id, to: STAGES[u.to].id });
+  const title = u.to === 1 ? `The clean-up has begun in ${info.name}!` : `${info.name} is ${STAGES[u.to].name.toLowerCase()}!`;
+  showModal(`${u.to === 3 ? `<div class="cfwrap">${confetti()}</div>` : ''}<div class="cele"><div class="label">${u.from === u.to ? 'Your reef' : 'Pool restored'}</div>
+    <div class="rscene big">${reefScene(u.pool, u.to)}${u.from !== u.to ? `<div class="from">${reefScene(u.pool, u.from)}</div>` : ''}<span class="rstage">${STAGES[u.to].name}</span></div>
+    <h2>${title}</h2>
+    <div class="dyk"><div class="label">Did you know?</div>${didYouKnow(u.pool, u.to)}</div>
+    ${gift}
+    <button class="btn buy" data-act="reef-next">${!reefQueue.length && reefThen ? 'Keep going' : 'Lovely!'}</button></div>`);
+  sfx.win(); buzz([20, 40, 20]);
+}
+
+/* ---------- home pool: the sum of your reef ---------- */
+const CAMERA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+/** Scenery from thriving pools: each kind in its spot; repeats (pools past the eighth) sit beside it, tinted. */
+function homeSceneryItems() {
+  const n = {};
+  return homeScenery(S).map((x) => ({ ...x, k: (n[x.id] = (n[x.id] || 0) + 1) - 1 })).filter((x) => x.k < 3);
+}
+const sceneryShift = (k) => k ? `transform:translateX(${k % 2 ? -70 : 70}%) scale(${(1 - .15 * k).toFixed(2)})` : '';
+function swimSpot(i) { return { top: 6 + ((i * 37) % 54), left: 2 + ((i * 29) % 52) }; }
 function renderPool() {
   const owned = CREATURES.filter((c) => S.album[c.id]);
   const r = mulberry32(5);
   const swimmers = owned.map((cr, i) => {
     // spread out over the water; each swims a stretch that stays inside the pool (dist is in its own widths)
-    const top = 6 + ((i * 37) % 54), left = 2 + ((i * 29) % 52), room = (96 - left - 20) / 20 * 100;
+    const { top, left } = swimSpot(i), room = (96 - left - 20) / 20 * 100;
     const dist = Math.max(20, Math.min(room, 60 + r() * 160)), d = 14 + r() * 12;
     return `<button class="swim" data-act="pet" data-id="${cr.id}" aria-label="${cr.name}" style="top:${top}%;left:${left}%;--dist:${dist.toFixed(0)}%;--d:${d.toFixed(1)}s;--dl:-${(r() * d).toFixed(1)}s"><span class="bob">${creatureSVG(cr, false)}</span></button>`;
   }).join('');
+  const scenery = homeSceneryItems().map((x) => `<div class="scen${SCENERY_ART[x.id].sway ? ' sway' : ''}" style="${SCENERY_ART[x.id].at};${sceneryShift(x.k)}">${scenerySVG(x.id, sceneryColor(x.pool, x.id))}</div>`).join('');
   const decos = DECOR.filter((d) => S.decor[d.id]).map((d) => `<div class="deco ${DECOR_ART[d.id].cls || ''}" style="${DECOR_ART[d.id].at}">${DECOR_ART[d.id].svg}</div>`).join('');
   const bubbles = [12, 38, 66, 88].map((x, i) => `<i class="pbub" style="left:${x}%;animation-delay:-${i * 1.3}s"></i>`).join('');
-  $('view-pool').innerHTML = `<div><h2>Home Pool</h2><p class="muted">Every pal you find lives here. Tap one to say hi.</p></div>
-    <div class="pool"><div class="prays"></div><div class="floor">${FLOOR}</div>${decos}${bubbles}${swimmers}
+  const homes = residents(S, palOrder());
+  const thriving = reefPools(S).filter((x) => x.stage === 3);
+  $('view-pool').innerHTML = `<div class="poolhead"><div><h2>Home Pool</h2><p class="muted">Your whole reef in one pool. Every thriving pool adds scenery, and every pal you find swims here. Tap one to say hi.</p></div>
+    <button class="btn sm ghost cam" data-act="reef-photo">${CAMERA}Photo</button></div>
+    <div class="pool"><div class="prays"></div><div class="floor">${FLOOR}</div>${scenery}${decos}${bubbles}${swimmers}
       ${owned.length ? '' : '<div class="empty">Your pool is empty for now. Clear a level to find a shell, and the pal inside moves in here.</div>'}</div>
+    <div class="panel homes"><div class="sethead"><h3>Reef residents</h3><span class="muted">${thriving.length} pool${thriving.length === 1 ? '' : 's'} thriving</span></div>
+      ${thriving.length ? thriving.map((x) => { const ids = homes[x.pool] || []; return `<div class="home"><div class="hn">${poolInfo(x.pool).name}<small>${ids.length ? ids.map((id) => CREATURES.find((c) => c.id === id).name).join(', ') : 'Room for pals you find'}</small></div><div class="hp">${ids.map((id) => `<span>${creatureSVG(CREATURES.find((c) => c.id === id), false)}</span>`).join('')}</div></div>`; }).join('')
+        : '<p class="muted">When a pool on your reef is thriving, pals you own move in and its scenery appears here.</p>'}</div>
     <div class="sethead"><h3>Decorations</h3><span class="muted">Just for looks · pearls</span></div>
     <div class="decos">${DECOR.map((d) => { const own = !!S.decor[d.id]; return `<div class="panel decocard"><div class="art">${DECOR_ART[d.id].svg}</div><div class="t">${d.name}</div>${own ? '<span class="muted">Placed ✓</span>' : `<button class="btn sm" data-act="decor" data-id="${d.id}" ${S.pearls >= d.pearls ? '' : 'disabled'}>${d.pearls} pearls</button>`}</div>`; }).join('')}</div>`;
 }
+
+/* ---------- photo mode: hide the UI, then a framed card shared through the official Web Share API (never auto-posted) ---------- */
+function photoMode(on) {
+  document.body.classList.toggle('photo', on);
+  document.querySelector('.photobar')?.remove();
+  if (on) document.body.insertAdjacentHTML('beforeend', '<div class="photobar"><button class="btn buy" data-act="reef-card">Make a card</button><button class="btn ghost" data-act="reef-photo-done">Done</button></div>');
+}
+const svgImage = (svg, w, h) => new Promise((res) => {
+  const img = new Image();
+  img.onload = () => res(img); img.onerror = () => res(null);
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg ', `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(1, Math.round(w))}" height="${Math.max(1, Math.round(h))}" `));
+});
+/** A Home Pool css spot ('left:8%;bottom:6%;width:15%;height:15%') as a box inside a W x H window. */
+function boxOf(at, W, H) {
+  const v = {};
+  for (const part of at.split(';')) { const [k, val] = part.split(':'); if (k && val) v[k.trim()] = parseFloat(val) / 100; }
+  const w = v.width * W, h = v.height * H;
+  return { x: v.left !== undefined ? v.left * W : W - v.right * W - w, y: H - v.bottom * H - h, w, h };
+}
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+let cardCanvas = null;
+async function makeCard() {
+  try { await document.fonts.load('72px "Bagel Fat One"'); await document.fonts.load('900 34px Nunito'); } catch (e) { /* system fonts are fine */ }
+  const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1350;
+  const c = cv.getContext('2d');
+  const fr = c.createLinearGradient(0, 0, 0, 1350); fr.addColorStop(0, '#FFF0C4'); fr.addColorStop(1, '#F0B856');
+  c.fillStyle = fr; c.fillRect(0, 0, 1080, 1350);
+  const X = 54, Y = 54, W = 972, H = 1010;
+  c.save(); rrect(c, X, Y, W, H, 44); c.clip();
+  const wg = c.createLinearGradient(0, Y, 0, Y + H); wg.addColorStop(0, '#3AA6C4'); wg.addColorStop(.4, '#1C6F93'); wg.addColorStop(1, '#114A68');
+  c.fillStyle = wg; c.fillRect(X, Y, W, H);
+  c.fillStyle = 'rgba(255,255,255,.08)';
+  for (const [a, b] of [[80, 200], [330, 420], [600, 700], [820, 880]]) { c.beginPath(); c.moveTo(X + a, Y); c.lineTo(X + b, Y); c.lineTo(X + b - 160, Y + H * .75); c.lineTo(X + a - 160, Y + H * .75); c.fill(); }
+  const draw = async (svg, b, extra = '') => { const img = await svgImage(svg, b.w, b.h); if (!img) return; c.save(); if (extra) { const k = +extra; c.translate(b.x + b.w / 2 + (k % 2 ? -.7 : .7) * b.w, b.y + b.h); c.scale(1 - .15 * k, 1 - .15 * k); c.drawImage(img, -b.w / 2, -b.h, b.w, b.h); } else c.drawImage(img, b.x, b.y, b.w, b.h); c.restore(); };
+  const at = (s) => { const b = boxOf(s, W, H); return { ...b, x: b.x + X, y: b.y + Y }; };
+  await draw(FLOOR, { x: X - W * .02, y: Y + H * .76, w: W * 1.04, h: H * .24 });
+  for (const x of homeSceneryItems()) await draw(scenerySVG(x.id, sceneryColor(x.pool, x.id)), at(SCENERY_ART[x.id].at), x.k ? String(x.k) : '');
+  for (const d of DECOR.filter((d) => S.decor[d.id])) await draw(DECOR_ART[d.id].svg, at(DECOR_ART[d.id].at));
+  const owned = CREATURES.filter((cr) => S.album[cr.id]);
+  for (const [i, cr] of owned.entries()) { const { top, left } = swimSpot(i), w = W * .19; await draw(creatureSVG(cr, false), { x: X + W * left / 100 + (i % 3) * W * .08, y: Y + H * top / 100, w, h: w }); }
+  c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 3;
+  for (const [bx, by, br] of [[140, 640, 10], [420, 420, 7], [760, 300, 12], [900, 560, 8]]) { c.beginPath(); c.arc(X + bx, Y + by, br, 0, Math.PI * 2); c.stroke(); }
+  c.restore();
+  c.lineWidth = 6; c.strokeStyle = 'rgba(138,90,30,.35)'; rrect(c, X, Y, W, H, 44); c.stroke();
+  const pools = reefPools(S).filter((x) => x.stage === 3).length;
+  c.fillStyle = '#0A2033'; c.font = '72px "Bagel Fat One", "Arial Rounded MT Bold", sans-serif'; c.textBaseline = 'alphabetic';
+  c.fillText('My Home Pool', 80, 1160);
+  c.font = '900 34px Nunito, system-ui, sans-serif'; c.fillStyle = '#5A3C12';
+  c.fillText(`${pools} pool${pools === 1 ? '' : 's'} restored · ${owned.length} pal${owned.length === 1 ? '' : 's'}`, 82, 1214);
+  c.textAlign = 'right'; c.fillStyle = '#C4532F'; c.font = '44px "Bagel Fat One", "Arial Rounded MT Bold", sans-serif';
+  c.fillText('Tidepool Pals', 1000, 1160);
+  c.font = '800 26px Nunito, system-ui, sans-serif'; c.fillStyle = '#5A3C12';
+  c.fillText('the kind puzzle game', 1000, 1204);
+  return cv;
+}
+const canShareFiles = () => !!(navigator.share && navigator.canShare && window.File);
+async function showCard() {
+  const cv = await makeCard(); cardCanvas = cv;
+  const pals = CREATURES.filter((cr) => S.album[cr.id]).length, pools = reefPools(S).filter((x) => x.stage === 3).length;
+  ev('photo_made', { pals, pools });
+  const share = canShareFiles();
+  showModal(`<div class="label">Photo mode</div><h2>Your Home Pool</h2><img class="flexcard" src="${cv.toDataURL('image/png')}" alt="A card of your Home Pool with ${pals} pals">
+    <div class="row">${share ? '<button class="btn buy" data-act="reef-share">Share</button>' : ''}<button class="btn ghost" data-act="reef-card-done">Done</button></div>
+    <p class="fine">${share ? 'Share opens your device\'s share sheet. Nothing is posted for you.' : 'Screenshot to share, or press and hold the picture to save it.'}</p>`);
+}
+async function shareCard() {
+  if (!cardCanvas || !canShareFiles()) return;
+  const blob = await new Promise((res) => cardCanvas.toBlob(res, 'image/png'));
+  if (!blob) return;
+  const data = { files: [new File([blob], 'tidepool-pals-home-pool.png', { type: 'image/png' })], title: 'My Home Pool', text: 'My Home Pool in Tidepool Pals' };
+  if (!navigator.canShare(data)) { toast('Screenshot to share, or press and hold the picture to save it'); return; }
+  try { await navigator.share(data); ev('photo_shared', { method: 'web_share' }); } catch (e) { /* the player closed the share sheet */ }
+}
+
 function shellRow() {
   return `<div class="panel offer"><div class="art">${SHELL}</div><div class="txt"><div class="t">Saved shells</div><div class="muted">${S.shells > 0 ? `You have ${S.shells} shell${S.shells > 1 ? 's' : ''} to open` : 'Clear a level and tap "Save for later" to keep a shell here'}</div><div class="fine">${oddsLine()}</div></div><button class="btn" data-act="open-shell" ${S.shells > 0 ? '' : 'disabled'}>Open</button></div>`;
 }
 function renderAlbum() {
   const owned = CREATURES.filter((c) => S.album[c.id]).length;
-  let h = `<div><h2>Pal Album</h2><p class="muted">${owned} of ${CREATURES.length} pals found. Finish a set for a big pearl bonus.</p></div>${shellRow()}
+  let h = `<div><h2>Pal Album</h2><p class="muted">${owned} of ${CREATURES.length} pals found. Tap a pal to read its field notes about the real animal behind it.</p></div>${shellRow()}
     <div class="panel"><div class="sethead"><h3>Sand dollars</h3><span class="cur-sd" style="font-weight:900;font-size:18px">${SANDDOLLAR}${S.sandDollars}</span></div>
     <p class="muted">Every duplicate pal also gives a sand dollar. Trade them for the exact pal you're missing: no luck involved.</p></div>`;
   SETS.forEach((s, i) => {
     const list = CREATURES.filter((c) => c.set === i), got = list.filter((c) => S.album[c.id]).length, done = got === list.length;
-    h += `<div class="panel set"><div class="sethead"><h3>${s.name}</h3>${done ? (S.claimed[i] ? '<span class="muted">Claimed ✓</span>' : `<button class="btn buy sm" data-act="claim" data-set="${i}">Claim ${s.reward}</button>`) : `<span class="muted">${got}/${list.length} · ${s.reward} pearl reward</span>`}</div>
-      <div class="cards">${list.map((c) => { const n = S.album[c.id] || 0, cost = sandDollarCost(c.rar); return `<div class="card${n ? '' : ' locked'}" data-r="${c.rar}">${n > 1 ? `<span class="cnt">×${n}</span>` : ''}${creatureSVG(c, !n)}<div class="nm">${n ? c.name : '???'}</div><span class="rar ${c.rar}">${c.rar}</span>${n ? '' : `<button class="trade${S.sandDollars >= cost ? ' can' : ''}" data-act="sd-ask" data-id="${c.id}" aria-label="Trade ${cost} sand dollars for this pal">${SANDDOLLAR}${cost}</button>`}</div>`; }).join('')}</div></div>`;
+    h += `<div class="panel set"><div class="sethead"><h3>${s.name}</h3>${done ? (S.claimed[i] ? '<span class="muted">Claimed ✓</span>' : `<button class="btn buy sm" data-act="claim" data-set="${i}">Claim ${s.reward}</button>`) : `<span class="muted">${got}/${list.length} · ${s.reward} pearl set bonus</span>`}</div>
+      <div class="cards">${list.map((c) => {
+        const n = S.album[c.id] || 0, cost = sandDollarCost(c.rar);
+        if (n) return `<button class="card" data-r="${c.rar}" data-act="reef-notes" data-id="${c.id}" aria-label="${c.name}: field notes">${n > 1 ? `<span class="cnt">×${n}</span>` : ''}${creatureSVG(c, false)}<div class="nm">${c.name}</div><span class="rar ${c.rar}">${c.rar}</span></button>`;
+        return `<div class="card locked" data-r="${c.rar}">${creatureSVG(c, true)}<div class="nm">???</div><span class="rar ${c.rar}">${c.rar}</span><button class="trade${S.sandDollars >= cost ? ' can' : ''}" data-act="sd-ask" data-id="${c.id}" aria-label="Trade ${cost} sand dollars for this pal">${SANDDOLLAR}${cost}</button></div>`;
+      }).join('')}</div></div>`;
   });
   h += `<p class="fine" style="text-align:center">${oddsLine()}</p>`;
   $('view-album').innerHTML = h;
+}
+
+/* ---------- field notes: the real animal behind each pal ---------- */
+function showNotes(id) {
+  const cr = CREATURES.find((c) => c.id === id), n = FIELD_NOTES[id];
+  if (!cr || !n || !S.album[id]) return;
+  const homes = residents(S, palOrder()), home = Object.keys(homes).find((p) => homes[p].includes(id));
+  ev('field_notes_view', { pal: id });
+  showModal(`<div class="sheethead"><div><div class="label">Field notes</div><h2>${cr.name}</h2></div><button class="close" data-act="close" aria-label="Close">${X_ICON}</button></div>
+    <div class="fnhead"><div class="art">${creatureSVG(cr, false)}</div><div><div class="label">Inspired by a real</div><div class="fnanimal">${n.animal}</div><div style="margin-top:6px"><span class="rar ${cr.rar}">${cr.rar}</span> <span class="muted">· ${SETS[cr.set].name}</span></div></div></div>
+    <ul class="fnlist">${n.lines.map((l) => `<li>${l}</li>`).join('')}</ul>
+    <p class="fine">${home === undefined ? `Moves in when a pool on your reef is thriving. Favourite spot: ${poolInfo(PAL_HOME[id]).name}.`
+      : +home === PAL_HOME[id] ? `Lives in ${poolInfo(+home).name}, its favourite spot on your reef.`
+      : `Lives in ${poolInfo(+home).name} for now, and moves to ${poolInfo(PAL_HOME[id]).name} once that pool is thriving.`}</p>`, true);
 }
 function renderShop() {
   const starterPal = CREATURES.find((c) => c.id === STARTER_PAL);
@@ -982,7 +1266,7 @@ function showTab(name) {
   if (name === 'shop') ev('shop_view', { shells: S.shells, pearls: S.pearls });
   if (name === 'pool') ev('pool_view', { pals: CREATURES.filter((c) => S.album[c.id]).length });
 }
-function goNext() { closeModal(); openLevel(lvl ? lvl.n + 1 : S.level); afterLevelScreen(); }
+function goNext() { closeModal(); const n = lvl ? lvl.n + 1 : S.level; if (!celebrateReef(() => openLevel(n))) openLevel(n); afterLevelScreen(); }
 
 /* ---------- input ---------- */
 tilesEl.addEventListener('click', (e) => { const t = e.target.closest('.tile'); if (t && !t.disabled) onTileTap(t); });
@@ -1058,6 +1342,22 @@ document.addEventListener('click', (e) => {
     case 'pet': { b.classList.remove('spin'); void b.offsetWidth; b.classList.add('spin'); sfx.pop(4 + Math.floor(Math.random() * 4)); const cr = CREATURES.find((c) => c.id === b.dataset.id); toast(`${cr.name} says hi!`); break; }
   }
 });
+
+/* ---------- reef, home pool photo and field-notes input (kept apart from the main handler) ---------- */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act^="reef-"]'); if (!b || b.disabled) return;
+  switch (b.dataset.act) {
+    case 'reef-toggle': { const p = +b.dataset.p; reefOpen = (reefOpen ?? poolOf(S.level)) === p ? -1 : p; sfx.tap(); renderMap(); break; }
+    case 'reef-next': showReefCard(); break;
+    case 'reef-notes': sfx.tap(); showNotes(b.dataset.id); break;
+    case 'reef-photo': sfx.tap(); photoMode(true); break;
+    case 'reef-photo-done': photoMode(false); break;
+    case 'reef-card': b.disabled = true; showCard().finally(() => { b.disabled = false; }); break;
+    case 'reef-share': shareCard(); break;
+    case 'reef-card-done': closeModal(); break;
+  }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.hidden && document.body.classList.contains('photo')) photoMode(false); });
 
 /* ---------- boot ---------- */
 hud();
