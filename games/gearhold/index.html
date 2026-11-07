@@ -156,7 +156,8 @@
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { LEVELS, WALLS } from './levels.js';
-import { TS, TEX, ENEMY_ART, PROP_ART, ITEM_ART, FX_ART, makeGuns } from './art.js';
+import { TS, TEX, ENEMY_ART, PROP_ART, ITEM_ART, FX_ART } from './art.js';
+import { buildGuns, drawGun } from './gun3d.js';
 
 const studio = createStudio({ game: 'gearhold', version: '0.1.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 
@@ -413,7 +414,9 @@ for (let i = 0; i < TS; i++) {
   if (v < 0.06) f *= 0.6 + 0.4 * v / 0.06;
   vfac[i] = f;
 }
-let GUNS = [];
+const GUN3D = buildGuns();
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const norm3 = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 function allocView() {
   const dpr = Math.min(2, devicePixelRatio || 1);
   H = Math.round(Math.max(180, Math.min(600, innerHeight * dpr * quality)) / 2) * 2;
@@ -436,7 +439,6 @@ function allocView() {
 function resize() {
   const dpr = Math.min(2, devicePixelRatio || 1);
   hands.width = Math.round(innerWidth * 1.04 * dpr); hands.height = Math.round(innerHeight * 1.04 * dpr);
-  GUNS = makeGuns(Math.min(hands.height * 0.5, hands.width * 0.62));
   bloom.style.filter = `blur(${Math.max(4, Math.round(innerHeight / 55))}px) brightness(1.5)`;
   allocView();
 }
@@ -646,39 +648,28 @@ function drawHands(now) {
   const cw = hands.width, ch = hands.height;
   hctx.clearRect(0, 0, cw, ch);
   if (mode !== 'play' && mode !== 'paused') return;
-  const gun = GUNS[P.weapon];
-  const amp = P.bobAmp, bx = Math.sin(P.bob) * ch * 0.014 * amp, by = Math.abs(Math.cos(P.bob)) * ch * 0.016 * amp;
-  const gw = gun.base.width, gh = gun.base.height, [mx0, my0] = gun.tips[0], [pvx, pvy] = gun.pivot;
-  // Muzzle sits just below and right of the crosshair; sway lags behind turning and strafing.
-  const rc = P.recoil * P.recoil;
-  const gx = cw / 2 + gh * 0.05 - mx0 + bx + P.swayX * ch + rc * gh * 0.06;
-  const gy = ch * 0.5 + gh * 0.12 - my0 + by + P.swayY * ch + rc * gh * 0.05;
-  const rot = -rc * (P.weapon ? 0.22 : 0.34); // kick: the muzzle flips up around the grip
-  const toScreen = ([x, y]) => {
-    const dx = x - pvx, dy = y - pvy, c = Math.cos(rot), s2 = Math.sin(rot);
-    return [gx + pvx + dx * c - dy * s2, gy + pvy + dx * s2 + dy * c];
-  };
-  hctx.save();
-  hctx.translate(gx + pvx, gy + pvy); hctx.rotate(rot); hctx.translate(-pvx, -pvy);
-  hctx.drawImage(gun.base, 0, 0);
-  // light the gun with the room
-  const [r, g, b] = lightAt(P.x, P.y);
-  const lum = Math.min(1.2, (r + g + b) / 3);
-  hctx.globalCompositeOperation = 'source-atop';
-  hctx.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(0.75, 0.95 - lum))})`;
-  hctx.fillRect(0, 0, gw, gh);
-  const mx = Math.max(r, g, b, 0.01);
-  hctx.fillStyle = `rgba(${Math.round((r / mx) * 255)},${Math.round((g / mx) * 255)},${Math.round((b / mx) * 255)},0.16)`;
-  hctx.fillRect(0, 0, gw, gh);
-  if (P.flash > 0) { hctx.fillStyle = 'rgba(255,170,80,.35)'; hctx.fillRect(0, 0, gw, gh); }
-  hctx.globalCompositeOperation = 'lighter';
-  hctx.drawImage(gun.glow, 0, 0);
-  hctx.restore();
+  const gun = GUN3D[P.weapon];
+  // The gun is a 3D model held low and right, its bore aimed at a point far down the crosshair.
+  const f = Math.min(ch, cw * 1.25) * 0.95, amp = P.bobAmp, rc = P.recoil * P.recoil;
+  const pos = [
+    0.13 + Math.sin(P.bob) * 0.007 * amp + P.swayX * 0.22,
+    0.066 + Math.abs(Math.cos(P.bob)) * 0.007 * amp + P.swayY * 0.22 + rc * 0.008,
+    0.285 - rc * 0.04,
+  ];
+  const aim = norm3(sub3([0, 0, 30], pos));
+  const [lr, lg, lb] = lightAt(P.x, P.y);
+  // Room light on the gun, mostly brightness with a little of the room's colour.
+  const lum = (lr + lg + lb) / 3;
+  const light = [lr, lg, lb].map((v) => Math.max(0.4, Math.min(1.25, (lum * 0.75 + v * 0.25) * 0.95 + 0.15)));
+  const tips = drawGun(hctx, gun, {
+    // angled inward a little, like a real viewmodel, so the left flank shows
+    pos, yaw: Math.atan2(aim[0], aim[2]) - 0.22 - P.swayX * 0.5, pitch: Math.asin(-aim[1]) + P.swayY * 0.4, roll: -0.1 - P.swayX * 0.6,
+    kick: rc * (P.weapon ? 0.32 : 0.45),
+  }, { f, cx: cw / 2, cy: ch / 2, light, flash: P.flash > 0 ? 1 : 0 });
   hctx.globalCompositeOperation = 'lighter';
   if (P.flash > 0) {
-    const size = ch * (P.weapon ? 0.2 : 0.17) * (0.8 + Math.random() * 0.4);
-    for (const tip of gun.tips) {
-      const [fx2, fy2] = toScreen(tip);
+    const size = ch * (P.weapon ? 0.16 : 0.13) * (0.8 + Math.random() * 0.4);
+    for (const [fx2, fy2] of tips) {
       const rg = hctx.createRadialGradient(fx2, fy2, 1, fx2, fy2, size);
       rg.addColorStop(0, 'rgba(255,255,240,1)');
       rg.addColorStop(0.25, 'rgba(255,190,90,.9)');
@@ -695,7 +686,7 @@ function drawHands(now) {
     }
   }
   if (P.tracer > 0) {
-    const [tx0, ty0] = toScreen(gun.tips[0]), a = P.tracer / 0.07;
+    const [tx0, ty0] = tips[0], a = P.tracer / 0.07;
     const lg = hctx.createLinearGradient(tx0, ty0, cw / 2, ch / 2);
     lg.addColorStop(0, `rgba(255,225,160,${0.9 * a})`); lg.addColorStop(1, 'rgba(255,225,160,0)');
     hctx.strokeStyle = lg; hctx.lineWidth = Math.max(2, ch * 0.005); hctx.lineCap = 'round';
