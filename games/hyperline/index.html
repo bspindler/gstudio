@@ -446,7 +446,7 @@ function simStep() {
   if (sec > G.stats.sector) {
     G.stats = applyEvent(G.stats, { t: 'sector', sector: sec });
     banner(sec - 1); audio.sector(); audio.setSector(sec - 1);
-    studio.track('sector_reached', { sector: sec, mode: G.mode, run: G.run });
+    studio.track('custom', { event: 'sector_reached', sector: sec, mode: G.mode, run: G.run });
   }
   for (const id of checkMissions(S.missions, G.stats)) {
     if (G.doneM.includes(id)) continue;
@@ -454,7 +454,7 @@ function simStep() {
     G.doneM.push(id); S.credits += m.reward; save(); cred();
     audio.mission(); buzz([20, 40, 20]);
     toast(`Mission complete · +${m.reward} credits`);
-    studio.track('mission_complete', { id, reward: m.reward, mode: G.mode, run: G.run });
+    studio.track('custom', { event: 'mission_complete', id, reward: m.reward, mode: G.mode, run: G.run });
   }
   if (++G.trailTick % 2 === 0) {
     G.trail.push({ x: cxw, y: cyw, k: Math.random() }); if (G.trail.length > 26) G.trail.shift();
@@ -500,7 +500,7 @@ function showDeath() {
   save(); cred(); hud();
   studio.track('level_end', { level: 1, result: 'lose', score: dist, run: G.run || 0, revived: G.cont, mode: G.mode,
     sector: st.sector, chips: st.chips, maxStreak: st.maxStreak, nearMisses: st.near });
-  if (G.mode === 'daily') studio.track('daily_run_end', { score: dist, day: G.day, best: S.daily.best, newBest, revived: G.cont });
+  if (G.mode === 'daily') studio.track('custom', { event: 'daily_run_end', score: dist, day: G.day, best: S.daily.best, newBest, revived: G.cont });
   deathScreen({ dist, prevBest, newBest, delta, crate, apex, done, fresh, total });
   lastActive = [...S.missions];
 }
@@ -749,7 +749,7 @@ function showTab(n) {
   ['run', 'shop', 'locker'].forEach((k) => { $('view-' + k).hidden = k !== n; $('tab-' + k).setAttribute('aria-selected', k === n ? 'true' : 'false'); });
   pressed = false;
   if (n !== 'run' && G.state === 'run') pause();
-  if (n === 'shop') { renderShop(); studio.track('shop_view', { crates: S.crates, credits: S.credits }); }
+  if (n === 'shop') { renderShop(); studio.track('custom', { event: 'shop_view', crates: S.crates, credits: S.credits }); }
   if (n === 'locker') renderLocker();
   if (n === 'run') { requestAnimationFrame(resize); if (G.state === 'ready') renderReady(); }
 }
@@ -793,11 +793,11 @@ document.addEventListener('click', async (e) => {
       else showTab('shop'); break; }
     case 'unlock': { const id = b.dataset.skin, cost = UNLOCK_CR[SK[id].rar]; if (S.owned[id] || S.credits < cost) break;
       S.credits -= cost; S.owned[id] = 1; save(); closeModal(); refresh(); toast(SK[id].name + ' unlocked');
-      studio.track('skin_unlock', { id, cost }); break; }
+      studio.track('custom', { event: 'skin_unlock', id, cost }); break; }
     case 'trail': { const id = b.dataset.trail; if (S.trails[id]) { S.trail = id; save(); renderLocker(); toast(TR[id].name + ' trail equipped'); } else showTrailUnlock(id); break; }
     case 'trail-unlock': { const id = b.dataset.trail, t = TR[id]; if (!t || S.trails[id] || S.credits < t.cost) break;
       S.credits -= t.cost; S.trails[id] = 1; S.trail = id; save(); closeModal(); refresh(); toast(t.name + ' trail unlocked and equipped');
-      studio.track('trail_unlock', { id, cost: t.cost }); break; }
+      studio.track('custom', { event: 'trail_unlock', id, cost: t.cost }); break; }
     case 'reset': if (!resetArm) { resetArm = true; b.textContent = 'Tap again to erase everything'; break; }
       resetArm = false; S = migrateSave(null); GH = { endless: null, daily: null }; save(); saveGhosts(); lastActive = [...S.missions];
       cred(); closeModal(); reset(); refresh(); toast('Progress reset'); break;
