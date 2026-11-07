@@ -3,7 +3,7 @@
 // objects sorted far to near. Glow is faked with additive double strokes (no shadowBlur in the
 // hot path) so it holds 60fps on a mid phone.
 
-import { clipToNear, faceNormal, faceVisible, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
+import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
 import { moverH } from './lib/sim.js';
 import { BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo } from './lib/world.js';
 
@@ -68,26 +68,42 @@ function seg(c, cam, a, b) {
 }
 
 const CUBE = MESHES.cube;
-/** Axis-aligned box with back faces culled; dark translucent fill and neon edges. */
-function box(c, cam, x0, x1, y0, y1, z0, z1, col, fillA, edgeW) {
+/** Axis-aligned box with back faces culled: solid faces lit in the box's own colour, neon edges.
+ *  fillA is opacity in [0, 1] (1 = solid). */
+function box(c, cam, x0, x1, y0, y1, z0, z1, col, fillA, edgeW, surface = false) {
   // Trim the part behind the camera instead of dropping the whole box.
   x0 = Math.max(x0, cam.eye[0] + 0.25);
   if (x1 <= x0) return;
-  const vs = CUBE.verts.map(([vx, vy, vz]) => project(cam, vx < 0 ? x0 : x1, vy < 0 ? y0 : y1, vz < 0 ? z0 : z1));
+  const wv = CUBE.verts.map(([vx, vy, vz]) => [vx < 0 ? x0 : x1, vy < 0 ? y0 : y1, vz < 0 ? z0 : z1]);
+  const vs = wv.map((v) => project(cam, v[0], v[1], v[2]));
   if (vs.some((v) => !v)) return;
-  const cc = rgb(col);
-  c.beginPath();
+  const cc = rgb(col), dark = [10, 5, 24];
   const vis = [];
   for (const f of CUBE.faces) {
-    const pts = f.map((i) => vs[i]);
-    if (faceVisible(pts)) vis.push(pts);
+    // World-space culling: keep faces whose outward normal points toward the eye.
+    const fw = f.map((i) => wv[i]), n = faceNormal(fw), e = cam.eye;
+    const ctr = [0, 1, 2].map((k) => fw.reduce((acc, v) => acc + v[k], 0) / fw.length);
+    if (n[0] * (e[0] - ctr[0]) + n[1] * (e[1] - ctr[1]) + n[2] * (e[2] - ctr[2]) > 0) vis.push({ pts: f.map((i) => vs[i]), n });
   }
-  for (const pts of vis) {
+  const a0 = c.globalAlpha;
+  for (const { pts, n } of vis) {
+    const l = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
+    // Top faces glow brightest; sides fall off to a deep tint, never to black.
+    // Track surfaces stay dark so the grid and the runner read on top of them.
+    const lit = surface ? lerpC(dark, cc, 0.1 + 0.12 * l) : n[1] > 0.5 ? lerpC(cc, [255, 255, 255], 0.12) : lerpC(dark, cc, 0.55 + 0.4 * l);
     pathPts(c, pts);
-    c.fillStyle = css(lerpC([8, 4, 20], cc, 0.12 + fillA * 0.25), 0.55 + fillA * 0.4); c.fill();
+    c.globalAlpha = a0 * fillA;
+    const b = project(cam, (x0 + x1) / 2, y0, (z0 + z1) / 2), t = project(cam, (x0 + x1) / 2, y1, (z0 + z1) / 2);
+    if (!surface && n[1] <= 0.5 && b && t) {
+      const g = c.createLinearGradient(0, t.y, 0, b.y);
+      g.addColorStop(0, css(lit)); g.addColorStop(1, css(lerpC(lit, dark, 0.3)));
+      c.fillStyle = g;
+    } else c.fillStyle = css(lit);
+    c.fill();
   }
+  c.globalAlpha = a0;
   c.beginPath();
-  for (const pts of vis) { c.moveTo(pts[0].x, pts[0].y); for (let i = 1; i <= pts.length; i++) c.lineTo(pts[i % pts.length].x, pts[i % pts.length].y); }
+  for (const { pts } of vis) { c.moveTo(pts[0].x, pts[0].y); for (let i = 1; i <= pts.length; i++) c.lineTo(pts[i % pts.length].x, pts[i % pts.length].y); }
   neon(c, col, edgeW);
 }
 
@@ -102,11 +118,12 @@ function mesh(c, cam, m, pos, scale, rot, a, b, alpha = 1, wire = false, edge = 
   const ca = rgb(a), cb = rgb(b);
   c.globalAlpha *= alpha;
   for (const f of m.faces) {
-    const pts = f.map((i) => pv[i]);
-    if (!faceVisible(pts)) continue;
+    const pts = f.map((i) => pv[i]), fw = f.map((i) => wv[i]), n = faceNormal(fw), e = cam.eye;
+    // World-space culling (the screen-space winding test is mirrored under this camera).
+    const ctr = [0, 1, 2].map((k) => fw.reduce((acc, v) => acc + v[k], 0) / fw.length);
+    if (!wire && n[0] * (e[0] - ctr[0]) + n[1] * (e[1] - ctr[1]) + n[2] * (e[2] - ctr[2]) <= 0) continue;
     pathPts(c, pts);
     if (!wire) {
-      const n = faceNormal(f.map((i) => wv[i]));
       const l = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
       c.fillStyle = css(lerpC(lerpC(cb, [6, 3, 16], 0.35), lerpC(ca, [255, 255, 255], 0.25), 0.15 + 0.85 * l)); c.fill();
       if (edge) neon(c, edge, 1.6);
@@ -325,7 +342,7 @@ export function drawScene(c, W, H, st) {
     const [x0, x1] = segs[i];
     const fade = Math.max(0.15, Math.min(1, 1 - (x0 - rx - 35) / 40));
     c.globalAlpha = fade;
-    box(c, cam, x0, x1, -0.38, 0, -TZ, TZ, pal.rail, 0.75, 1.6);
+    box(c, cam, x0, x1, -0.38, 0, -TZ, TZ, pal.rail, 0.9, 1.6, true);
     c.beginPath();
     for (let x = Math.ceil(x0); x < x1; x += 2) seg(c, cam, [x, 0.001, -TZ], [x, 0.001, TZ]);
     seg(c, cam, [x0, 0.001, 0], [x1, 0.001, 0]);
@@ -345,14 +362,14 @@ export function drawScene(c, W, H, st) {
     const fade = Math.max(0, Math.min(1, 1 - (o.x - rx - 38) / 36));
     if (fade <= 0) continue;
     switch (o.t) {
-      case 'block': dr.push({ z: depth(o.x + w, o.h / 2, 0), f: () => { c.globalAlpha = fade; box(c, cam, o.x, o.x + o.w, 0, o.h, -1, 1, pal.block, 0.5, 2); } }); break;
+      case 'block': dr.push({ z: depth(o.x + w, o.h / 2, 0), f: () => { c.globalAlpha = fade; box(c, cam, o.x, o.x + o.w, 0, o.h, -1, 1, pal.block, 1, 2); } }); break;
       case 'spike': dr.push({ z: depth(o.x + 0.4, o.y, 0), f: () => {
         c.globalAlpha = fade;
         for (const zz of [-0.52, 0.52]) mesh(c, cam, MESHES.pyramid, [o.x + 0.4, o.inv ? o.y - 0.4 : o.y + 0.4, zz], [0.76, 0.8, 0.92], [o.inv ? Math.PI : 0, 0, 0], mixHex(pal.neon, '#12051F', 0.55), mixHex(pal.neon, '#12051F', 0.85), 1, false, pal.neon);
       } }); break;
       case 'bar': dr.push({ z: depth(o.x + o.w, o.y + 0.6, 0), f: () => {
         c.globalAlpha = fade;
-        box(c, cam, o.x, o.x + o.w, o.y, o.y + BAR_H, -1.3, 1.3, '#FF8A3D', 0.2, 2);
+        box(c, cam, o.x, o.x + o.w, o.y, o.y + BAR_H, -1.3, 1.3, '#FF8A3D', 0.55, 2);
         c.beginPath();
         for (let k = 0.3; k < BAR_H; k += 0.45) seg(c, cam, [o.x, o.y + k, -1.3], [o.x, o.y + k, 1.3]);
         c.globalAlpha = fade * 0.45; neon(c, '#FFE45C', 1, false);
@@ -361,7 +378,7 @@ export function drawScene(c, W, H, st) {
       } }); break;
       case 'pad': dr.push({ z: depth(o.x + o.w, 0, 0) + 1, f: () => {
         c.globalAlpha = fade;
-        box(c, cam, o.x, o.x + o.w, 0, 0.1, -0.9, 0.9, '#7CFF6B', 0.6, 1.6);
+        box(c, cam, o.x, o.x + o.w, 0, 0.1, -0.9, 0.9, '#7CFF6B', 1, 1.6);
         c.beginPath();
         const ph = (t * 3) % 1;
         for (let k = 0; k < 2; k++) {
@@ -376,11 +393,11 @@ export function drawScene(c, W, H, st) {
         c.beginPath();
         for (const xx of [o.x + 0.2, o.x + o.w - 0.2]) seg(c, cam, [xx, h - 0.3, 1], [xx, -3.2, 1]);
         c.globalAlpha = fade * 0.35; neon(c, '#FFE45C', 1, false); c.globalAlpha = fade;
-        box(c, cam, o.x, o.x + o.w, h - 0.3, h, -1, 1, '#FFE45C', 0.6, 2);
+        box(c, cam, o.x, o.x + o.w, h - 0.3, h, -1, 1, '#FFE45C', 1, 2);
       } }); break;
       case 'flip': dr.push({ z: depth(o.x + o.w, CEIL_Y, 0) + 3, f: () => {
         c.globalAlpha = fade;
-        box(c, cam, o.x, o.x + o.w, CEIL_Y, CEIL_Y + 0.3, -TZ, TZ, pal.rail, 0.3, 1.8);
+        box(c, cam, o.x, o.x + o.w, CEIL_Y, CEIL_Y + 0.3, -TZ, TZ, pal.rail, 0.5, 1.8, true);
         c.beginPath();
         for (let x = Math.ceil(o.x) + 0.5; x < o.x + o.w; x += 3) { seg(c, cam, [x, 0.4, 0], [x, 1.2, 0]); seg(c, cam, [x - 0.25, 0.9, 0], [x, 1.2, 0]); seg(c, cam, [x + 0.25, 0.9, 0], [x, 1.2, 0]); }
         c.globalAlpha = fade * (0.5 + 0.3 * Math.sin(t * 6)); neon(c, pal.rail, 2);

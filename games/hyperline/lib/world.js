@@ -25,8 +25,8 @@ export const SECTOR_LEN = 250;
 /** Speed in units per second at distance x. Keeps rising (slowly) past the Apex distance. */
 export function speedAt(x) {
   const d = Math.max(0, x);
-  const base = Math.min(14.5, 7 + d / 115);
-  return d > 1500 ? base + Math.min(1.5, (d - 1500) / 600) : base;
+  const base = Math.min(17.5, 9 + d / 90);
+  return d > 1500 ? base + Math.min(3, (d - 1500) / 400) : base;
 }
 
 export function sectorAt(x) {

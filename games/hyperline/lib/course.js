@@ -180,7 +180,7 @@ export function extendCourse(c, untilX) {
     const g = c.count++;
     for (const ob of o) { ob.p = p.id; ob.g = g; c.objs.push(ob); }
     c.last = p.id;
-    c.nextX += len + Math.max(3.4, 6.2 - d * 2.6, speedAt(x) * 0.42) + r() * 2.2;
+    c.nextX += len + Math.max(2.8, 5.4 - d * 2.6, speedAt(x) * 0.4) + r() * 1.8;
   }
 }
 
