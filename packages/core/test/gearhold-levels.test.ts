@@ -84,4 +84,19 @@ describe('gearhold levels', () => {
     expect(LEVELS.length).toBeGreaterThanOrEqual(3);
     for (const l of LEVELS) expect(l.name.length * l.hint.length).toBeGreaterThan(0);
   });
+
+  it('gives every level a lighting mood (ambient, lamp and haze colours)', () => {
+    for (const l of LEVELS as (Level & { mood?: Record<string, number[]> })[]) {
+      for (const k of ['ambient', 'lamp', 'haze']) {
+        const c = l.mood?.[k];
+        expect(c, `${l.name} mood.${k}`).toHaveLength(3);
+        for (const v of c!) expect(v).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('places explosive canisters (o) somewhere in the campaign', () => {
+    expect(FLOOR_THINGS).toContain('o');
+    expect(LEVELS.some((l) => l.map.some((row) => row.includes('o')))).toBe(true);
+  });
 });
