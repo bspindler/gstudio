@@ -301,7 +301,7 @@ describe('tidepool helpers', () => {
     const b = applyAbility(grid(CHECKER), 'bloop', 2, 2, mulberry32(1), counter(100));
     if (!b.ok) throw new Error('expected ok');
     expect(b.recolored).toHaveLength(2); // the checkerboard 2x2 has two of the other colour
-    for (const [r, c] of [[2, 2], [2, 3], [3, 2], [3, 3]]) expect((at(b.grid, r, c) as { c: number }).c).toBe(1);
+    for (const [r, c] of [[2, 2], [2, 3], [3, 2], [3, 3]] as const) expect((at(b.grid, r, c) as { c: number }).c).toBe(1);
     const t = applyAbility(grid(CHECKER), 'tango', 3, 3, mulberry32(1), counter(100));
     expect(t.ok && t.recolored.length).toBe(4);
     expect(applyAbility(grid(put(CHECKER, 2, 2, 's')), 'bloop', 2, 2, mulberry32(1), counter(100)).ok).toBe(false);
