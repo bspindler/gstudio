@@ -32,7 +32,6 @@
   #world { position: absolute; inset: -2%; }
   #world canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   #view { image-rendering: auto; }
-  #bloom { mix-blend-mode: screen; pointer-events: none; }
   #hands { pointer-events: none; }
   #vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); }
   #hurt { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 35%, rgba(255,30,10,.75)); opacity: 0; }
@@ -88,7 +87,7 @@
   #overlay {
     position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 16px; padding: 24px; box-sizing: border-box; text-align: center;
-    background: radial-gradient(ellipse at center, rgba(10,8,6,.35), rgba(3,3,5,.88) 80%);
+    background: radial-gradient(ellipse at center, rgba(8,10,22,.12), rgba(4,5,12,.72) 85%);
   }
   #overlay h1 {
     margin: 0; font-size: clamp(44px, 11vw, 96px); font-weight: 800; letter-spacing: .12em;
@@ -122,7 +121,6 @@
 <div id="stage">
   <div id="world">
     <canvas id="view"></canvas>
-    <canvas id="bloom"></canvas>
     <canvas id="hands"></canvas>
   </div>
   <div id="vignette"></div>
@@ -145,7 +143,7 @@
   </div>
   <div id="overlay">
     <h1 id="title">GEARHOLD</h1>
-    <div class="tag" id="tag">foundry lockdown</div>
+    <div class="tag" id="tag">the clockwork citadel</div>
     <p id="detail"></p>
     <p id="stats"></p>
     <div id="levels"></div>
@@ -156,19 +154,19 @@
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { LEVELS, WALLS } from './levels.js';
-import { TS, TEX, ENEMY_ART, PROP_ART, ITEM_ART, FX_ART } from './art.js';
-import { buildGuns, drawGun } from './gun3d.js';
+import { createRenderer, M4 } from './render3d.js';
+import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildScenery, buildArmillary } from './models.js';
+import { buildGuns, gunTriangles } from './gun3d.js';
 
 const studio = createStudio({ game: 'gearhold', version: '0.1.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
-const view = $('view'), ctx = view.getContext('2d');
-const bloom = $('bloom'), bctx = bloom.getContext('2d');
+const view = $('view');
 const hands = $('hands'), hctx = hands.getContext('2d');
 const coarse = matchMedia('(pointer: coarse)').matches;
-const TM = TS - 1, TB = Math.log2(TS);
-const LM = 8; // light-map texels per map cell
-const FOG = 0.075;
+const R3 = createRenderer(view);
+const EYE = 0.6; // eye height; walls are 2 to 4 tall and the sky is open
+const lin = (c, k = 1) => c.map((v) => Math.pow(v, 2.2) * k);
 
 // ---------- progress (per-device convenience only) ----------
 const SAVE_KEY = 'gearhold.unlocked';
@@ -233,32 +231,37 @@ const sfx = {
 
 // ---------- entity tables ----------
 const STATS = {
-  d: { hp: 30, speed: 1.7, radius: 0.32, scale: 0.5, z: 0.32 },
-  c: { hp: 20, speed: 3.0, radius: 0.3, scale: 0.5, z: 0 },
-  b: { hp: 260, speed: 1.05, radius: 0.5, scale: 0.95, z: 0 },
-  o: { hp: 18, speed: 0, radius: 0.28, scale: 0.46, z: 0, prop: true },
+  d: { hp: 30, speed: 1.7, radius: 0.3 },
+  c: { hp: 20, speed: 3.0, radius: 0.3 },
+  b: { hp: 260, speed: 1.05, radius: 0.5 },
+  o: { hp: 18, speed: 0, radius: 0.26, prop: true },
 };
-const ITEM_SCALE = { h: 0.3, a: 0.3, k: 0.3, w: 0.34 };
-const artFor = (k) => (k === 'o'
-  ? { frames: [PROP_ART.o.whole, PROP_ART.o.whole], attack: PROP_ART.o.whole, dead: PROP_ART.o.dead }
-  : ENEMY_ART[k]);
+const ITEM_KINDS = 'hakw';
+// Hit volumes: spheres [forward offset, height, radius] fitted to each machine's model.
+function volumes(e) {
+  if (e.kind === 'd') return [[0, e.hz, 0.25]];
+  if (e.kind === 'c') return [[0, 0.17, 0.26], [0.26, 0.15, 0.11]];
+  if (e.kind === 'b') return [[0, 0.3, 0.24], [0, 0.8, 0.4], [0, 1.27, 0.17]];
+  return [[0, 0.28, 0.21]];
+}
 
 // ---------- level state ----------
 const P = {
   x: 0, y: 0, a: 0, hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, bob: 0, bobAmp: 0, recoil: 0, flash: 0, flashRot: 0,
   vx: 0, vy: 0, av: 0, look: 0, kick: 0, swayX: 0, swayY: 0, hitMark: 0, hitKill: false, tracer: 0, tracerTo: null,
 };
-const LOOK_MAX = 0.42; // tan of the steepest up/down look
+const LOOK_MAX = 1.2; // tan of the steepest up/down look (about 50 degrees)
 let sens = 1;
 try { sens = Math.max(0.3, Math.min(3, Number(localStorage.getItem('gearhold.sens')) || 1)); } catch { /* default */ }
-// Where the crosshair points: P.look plus recoil kick plus a little walk bob. Rendering and shooting share it.
-const viewLook = () => P.look + P.kick + Math.sin(P.bob * 2) * 0.006 * P.bobAmp;
+// Where the crosshair points: P.look plus recoil kick. Rendering and shooting share it.
+const viewLook = () => P.look + P.kick;
+
 let level = 0, mw = 0, mh = 0, grid = [], doorOpen = new Float32Array(0), doorMoving = new Uint8Array(0);
 let enemies = [], items = [], shots = [], fx = [], foes = 0;
 let kills = 0, levelTime = 0, noiseRadius = 0, msgTime = 0, lockedNag = 0, hurtFx = 0, glowFx = 0, shake = 0;
 let mode = 'title';
 let mood = LEVELS[0].mood;
-let lmW = 0, baseL = new Float32Array(0), frameL = new Float32Array(0), ao = new Float32Array(0), lampCell = new Uint8Array(0);
+let wallH = new Float32Array(0);
 const dyn = [];
 
 const isWall = (c) => WALLS.includes(c);
@@ -281,181 +284,81 @@ function loadLevel(i) {
   Object.assign(P, { hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, recoil: 0, flash: 0, vx: 0, vy: 0, av: 0, look: 0, kick: 0, hitMark: 0, tracer: 0 });
   for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
     const c = map[y][x];
-    grid[y * mw + x] = c === 'S' || STATS[c] || ITEM_SCALE[c] ? '.' : c;
+    grid[y * mw + x] = c === 'S' || STATS[c] || ITEM_KINDS.includes(c) ? '.' : c;
     if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
-      enemies.push({ kind: c, ...STATS[c], ...artFor(c), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0 });
-    } else if (ITEM_SCALE[c]) items.push({ kind: c, x: x + 0.5, y: y + 0.5, scale: ITEM_SCALE[c], art: ITEM_ART[c] });
+      enemies.push({ kind: c, ...STATS[c], x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0 });
+    } else if (ITEM_KINDS.includes(c)) items.push({ kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
   }
   foes = enemies.filter((e) => !e.prop).length;
   const sx = Math.floor(P.x), sy = Math.floor(P.y);
   P.a = [[1, 0, 0], [0, 1, Math.PI / 2], [-1, 0, Math.PI], [0, -1, -Math.PI / 2]].find(([dx, dy]) => !solid(sx + dx, sy + dy))?.[2] ?? 0;
   kills = 0; levelTime = 0; noiseRadius = 0;
-  bake();
+  if (R3) buildGfx();
 }
 
-// ---------- lighting ----------
-function wallsBetween(ax, ay, bx, by, doorsBlock) {
-  const d = Math.hypot(bx - ax, by - ay), n = Math.ceil(d / 0.2);
-  for (let i = 1; i < n; i++) {
-    const t = i / n, x = Math.floor(ax + (bx - ax) * t), y = Math.floor(ay + (by - ay) * t);
-    if (doorsBlock ? solid(x, y) : isWall(cell(x, y))) return true;
-  }
-  return false;
+// ---------- graphics resources ----------
+const MESH = {}, ITEM_MESH = {}, DOOR_MESH = {};
+let GUNS = [], G = null;
+if (R3) {
+  const m = buildMachines();
+  for (const k in m) { MESH[k] = {}; for (const p in m[k]) MESH[k][p] = R3.mesh(m[k][p]); }
+  const it = buildItems();
+  for (const k in it) ITEM_MESH[k] = R3.mesh(it[k]);
+  for (const axis of ['x', 'z']) for (const kind of ['D', 'K']) DOOR_MESH[axis + kind] = R3.mesh(buildDoor(axis, kind));
+  MESH.armillary = R3.mesh(buildArmillary());
+  GUNS = buildGuns();
 }
-// Adds one point light into a light map. Visibility is tested per half-cell so shadows stay soft-edged.
-function splat(map, l, doorsBlock) {
-  const x0 = Math.max(0, Math.floor(l.x - l.r)), x1 = Math.min(mw - 1, Math.floor(l.x + l.r));
-  const y0 = Math.max(0, Math.floor(l.y - l.r)), y1 = Math.min(mh - 1, Math.floor(l.y + l.r));
-  const half = LM / 2, [cr, cg, cb] = l.c;
-  for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
-    if (isWall(cell(cx, cy))) continue;
-    for (let q = 0; q < 4; q++) {
-      const qx = cx + (q & 1) * 0.5 + 0.25, qy = cy + (q >> 1) * 0.5 + 0.25;
-      if ((qx - l.x) ** 2 + (qy - l.y) ** 2 > (l.r + 0.4) ** 2) continue;
-      if (wallsBetween(l.x, l.y, qx, qy, doorsBlock)) continue;
-      const tx0 = cx * LM + (q & 1) * half, ty0 = cy * LM + (q >> 1) * half;
-      for (let ty = ty0; ty < ty0 + half; ty++) for (let tx = tx0; tx < tx0 + half; tx++) {
-        const wx = (tx + 0.5) / LM, wy = (ty + 0.5) / LM, d = Math.hypot(wx - l.x, wy - l.y);
-        if (d >= l.r) continue;
-        const k = (1 - d / l.r) ** 2 * l.i, i3 = (ty * lmW + tx) * 3;
-        map[i3] += cr * k; map[i3 + 1] += cg * k; map[i3 + 2] += cb * k;
-      }
-    }
-  }
-}
-function blur3(a, w, h, stride) {
-  const out = new Float32Array(a.length);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < stride; c++) {
-    let s = 0, n = 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const xx = x + dx, yy = y + dy;
-      if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
-      s += a[(yy * w + xx) * stride + c]; n++;
-    }
-    out[(y * w + x) * stride + c] = s / n;
-  }
-  return out;
-}
-function bake() {
-  lmW = mw * LM;
-  const lmH = mh * LM;
-  baseL = new Float32Array(lmW * lmH * 3);
-  ao = new Float32Array(lmW * lmH);
-  lampCell = new Uint8Array(mw * mh);
+// Floating crystal lanterns: room interiors first, then corridors, spaced apart.
+function placeLamps() {
   const open = (x, y) => { const c = cell(x, y); return !isWall(c) && !isDoor(c); };
-  const lights = [];
-  // Ceiling lamps: room interiors first, then corridors, spaced apart.
-  for (const [interior, gap] of [[true, 3.3], [false, 4.4]]) {
+  const lamps = [];
+  for (const [interior, gap] of [[true, 3.4], [false, 4.6]]) {
     for (let y = 1; y < mh - 1; y++) for (let x = 1; x < mw - 1; x++) {
-      if (!open(x, y) || lampCell[y * mw + x]) continue;
+      if (!open(x, y) || lamps.some(([lx, ly]) => lx === x && ly === y)) continue;
       if (interior) {
         let all = true;
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) all &&= open(x + dx, y + dy);
         if (!all) continue;
       }
-      if (lights.some((l) => l.lamp && (l.x - x - 0.5) ** 2 + (l.y - y - 0.5) ** 2 < gap * gap)) continue;
-      lampCell[y * mw + x] = 1;
-      lights.push({ x: x + 0.5, y: y + 0.5, r: 5.2, i: 1.55, c: mood.lamp, lamp: true });
+      if (lamps.some(([lx, ly]) => (lx - x) ** 2 + (ly - y) ** 2 < gap * gap)) continue;
+      lamps.push([x, y]);
     }
   }
-  // Glowing walls light the floor in front of them.
-  const EMIT = { X: [[0.3, 1, 0.55], 3.8, 1.25], K: [[1, 0.5, 0.15], 2.8, 1.0], P: [[1, 0.42, 0.12], 2.3, 0.55] };
-  for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
-    const e = EMIT[cell(x, y)];
-    if (!e) continue;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      if (open(x + dx, y + dy)) lights.push({ x: x + 0.5 + dx * 0.6, y: y + 0.5 + dy * 0.6, c: e[0], r: e[1], i: e[2] });
-    }
-  }
-  for (const l of lights) splat(baseL, l, false);
-  const [ar, ag, ab] = mood.ambient;
-  for (let i = 0; i < baseL.length; i += 3) { baseL[i] += ar; baseL[i + 1] += ag; baseL[i + 2] += ab; }
-  baseL = blur3(blur3(baseL, lmW, lmH, 3), lmW, lmH, 3);
-  frameL = new Float32Array(baseL.length);
-  // Ambient occlusion: darker where the floor meets walls.
-  for (let ty = 0; ty < lmH; ty++) for (let tx = 0; tx < lmW; tx++) {
-    const wx = (tx + 0.5) / LM, wy = (ty + 0.5) / LM, cx = Math.floor(wx), cy = Math.floor(wy);
-    let dmin = 1;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      if (!dx && !dy) continue;
-      const c = cell(cx + dx, cy + dy);
-      if (!isWall(c) && !isDoor(c)) continue;
-      const ex = Math.max(cx + dx - wx, 0, wx - (cx + dx + 1)), ey = Math.max(cy + dy - wy, 0, wy - (cy + dy + 1));
-      dmin = Math.min(dmin, Math.hypot(ex, ey));
-    }
-    const t = Math.min(1, dmin / 0.6);
-    ao[ty * lmW + tx] = 0.4 + 0.6 * t * t * (3 - 2 * t);
-  }
+  return lamps;
 }
-function addLight(x, y, r, c, i) { if (dyn.length < 14) dyn.push({ x, y, r, c, i }); }
-function applyLights() {
-  frameL.set(baseL);
-  for (const l of dyn) splat(frameL, l, true);
+function buildGfx() {
+  if (G) for (const m of [G.level, G.scenery, G.lantern]) { R3.gl.deleteBuffer(m.buf); R3.gl.deleteVertexArray(m.vao); }
+  const L = buildLevel(grid, mw, mh, mood);
+  wallH = L.heights;
+  const lamps = placeLamps();
+  G = {
+    level: R3.mesh(L.data),
+    scenery: R3.mesh(buildScenery(mw / 2, mh / 2)),
+    lantern: R3.mesh(buildLantern(mood)),
+    doors: L.doors,
+    lamps,
+    emitters: L.emitters,
+    lights: [
+      ...lamps.map(([x, y]) => ({ p: [x + 0.5, 1.75, y + 0.5], r: 6.5, c: lin(mood.lamp, 1.6) })),
+      ...L.emitters.map((e) => ({ p: e.p, r: e.r, c: lin(e.c, 1.4) })),
+    ],
+  };
+}
+
+// Lights for this frame: the nearest fixed lights plus whatever is flashing, burning or flying.
+function addLight(x, y, r, c, i, h = 0.6) { if (dyn.length < 6) dyn.push({ p: [x, h, y], r, c: lin(c, i * 1.6) }); }
+function frameLights(eye) {
+  const near = G.lights
+    .map((l) => ({ l, d: (l.p[0] - eye[0]) ** 2 + (l.p[2] - eye[2]) ** 2 }))
+    .sort((a, b) => a.d - b.d).slice(0, 16 - dyn.length).map((x) => x.l);
+  const out = [...dyn, ...near];
   dyn.length = 0;
-}
-function lightAt(x, y) {
-  const i3 = (Math.max(0, Math.min(mh * LM - 1, Math.floor(y * LM))) * lmW + Math.max(0, Math.min(lmW - 1, Math.floor(x * LM)))) * 3;
-  return [frameL[i3], frameL[i3 + 1], frameL[i3 + 2]];
+  return out;
 }
 
-// ---------- view sizing and adaptive quality ----------
-let H = 360, W = 640, img = null, px = null, zbuf = null, bimg = null, bpx = null;
-// Projection: `plane` is the camera plane half-width (horizontal FOV); `proj` is pixels per unit at
-// distance 1, the same both ways so pixels are square and hit tests match what is drawn.
-let plane = 0.66, proj = 360;
-// Floor and ceiling rows indexed by distance from the horizon row.
-let distT = new Float32Array(0), fogT = new Float32Array(0), smoothT = new Uint8Array(0), quality = coarse ? 0.42 : 0.55;
-const vfac = new Float32Array(TS);
-for (let i = 0; i < TS; i++) {
-  const v = i / TS;
-  let f = 1.12 - 0.3 * v;
-  if (v > 0.9) f *= 0.5 + 0.5 * (1 - v) / 0.1;
-  if (v < 0.06) f *= 0.6 + 0.4 * v / 0.06;
-  vfac[i] = f;
-}
-const GUN3D = buildGuns();
-const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const norm3 = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
-function allocView() {
-  const dpr = Math.min(2, devicePixelRatio || 1);
-  H = Math.round(Math.max(180, Math.min(600, innerHeight * dpr * quality)) / 2) * 2;
-  W = Math.min(1100, Math.round((H * innerWidth) / Math.max(1, innerHeight) / 2) * 2);
-  view.width = W; view.height = H;
-  img = ctx.createImageData(W, H); px = new Uint32Array(img.data.buffer);
-  zbuf = new Float32Array(W);
-  bloom.width = Math.ceil(W / 4); bloom.height = Math.ceil(H / 4);
-  bimg = bctx.createImageData(bloom.width, bloom.height); bpx = new Uint32Array(bimg.data.buffer);
-  plane = Math.max(0.5, Math.min(1.0, (0.5 * W) / H));
-  proj = W / (2 * plane);
-  const n = H * 2 + Math.ceil(proj) + 4;
-  distT = new Float32Array(n); fogT = new Float32Array(n); smoothT = new Uint8Array(n);
-  for (let k = 0; k < n; k++) {
-    distT[k] = proj / 2 / (k + 0.5);
-    fogT[k] = Math.exp(-distT[k] * FOG);
-    smoothT[k] = (distT[k] * TS * 2 * plane) / W < 0.6 ? 1 : 0; // texels per pixel: smooth when magnified
-  }
-}
-function resize() {
-  const dpr = Math.min(2, devicePixelRatio || 1);
-  hands.width = Math.round(innerWidth * 1.04 * dpr); hands.height = Math.round(innerHeight * 1.04 * dpr);
-  bloom.style.filter = `blur(${Math.max(4, Math.round(innerHeight / 55))}px) brightness(1.5)`;
-  allocView();
-}
-addEventListener('resize', resize);
-resize();
-let workEma = 8, frames = 0;
-function adaptQuality(ms) {
-  workEma = workEma * 0.92 + ms * 0.08;
-  if (++frames % 45) return;
-  const before = quality;
-  if (workEma > 13 && quality > 0.3) quality = Math.max(0.3, quality - 0.07);
-  else if (workEma < 6.5 && quality < 0.9) quality = Math.min(0.9, quality + 0.04);
-  if (quality !== before) allocView();
-}
-
-// ---------- rendering ----------
-const hit = { dist: 0, side: 0, c: '#', u: 0 };
+// ---------- rays and sight ----------
+const hit = { dist: 0, side: 0, c: '#', u: 0, mx: 0, my: 0 };
 function castRay(ox, oy, dx, dy) {
   let mx = Math.floor(ox), my = Math.floor(oy);
   const ddx = dx === 0 ? 1e30 : Math.abs(1 / dx), ddy = dy === 0 ? 1e30 : Math.abs(1 / dy);
@@ -466,206 +369,167 @@ function castRay(ox, oy, dx, dy) {
     let side;
     if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; }
     const c = cell(mx, my);
-    if (!isWall(c) && !isDoor(c)) continue;
-    const dist = side === 0 ? sdx - ddx : sdy - ddy;
-    let wx = side === 0 ? oy + dist * dy : ox + dist * dx;
-    wx -= Math.floor(wx);
-    if (isDoor(c)) {
-      const o = doorOpen[my * mw + mx];
-      if (wx < o) continue;
-      wx -= o;
-    }
-    hit.dist = dist; hit.side = side; hit.c = c; hit.u = wx;
+    if (!isWall(c) && !(isDoor(c) && doorOpen[my * mw + mx] < 0.95)) continue;
+    hit.dist = side === 0 ? sdx - ddx : sdy - ddy; hit.side = side; hit.c = c; hit.mx = mx; hit.my = my;
     return hit;
   }
-  hit.dist = 96; hit.side = 0; hit.c = '#'; hit.u = 0;
+  hit.dist = 96; hit.c = '#';
   return hit;
 }
+function wallsBetween(ax, ay, bx, by, doorsBlock) {
+  const d = Math.hypot(bx - ax, by - ay), n = Math.ceil(d / 0.2);
+  for (let i = 1; i < n; i++) {
+    const t = i / n, x = Math.floor(ax + (bx - ax) * t), y = Math.floor(ay + (by - ay) * t);
+    if (doorsBlock ? solid(x, y) : isWall(cell(x, y))) return true;
+  }
+  return false;
+}
+const lineOfSight = (ax, ay, bx, by) => !wallsBetween(ax, ay, bx, by, true);
+const topAt = (x, y) => {
+  const c = cell(x, y);
+  if (isDoor(c)) return 1.7 * (1 - doorOpen[y * mw + x]);
+  return x < 0 || y < 0 || x >= mw || y >= mh ? 99 : wallH[y * mw + x] + 0.12;
+};
 
-// Shade one texel: emissive texels pass through; others get light, then haze.
-function lit(t, lr, lg, lb, hr, hg, hb) {
-  if (t >>> 24 === 254) return t | 0xff000000;
-  let r = (t & 255) * lr + hr, g = ((t >> 8) & 255) * lg + hg, b = ((t >> 16) & 255) * lb + hb;
-  if (r > 255) r = 255;
-  if (g > 255) g = 255;
-  if (b > 255) b = 255;
-  return 0xff000000 | (b << 16) | (g << 8) | r;
+// ---------- view sizing and adaptive quality ----------
+let quality = coarse ? 0.65 : 0.9, dtEma = 16, frames = 0;
+function resize() {
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  hands.width = Math.round(innerWidth * 1.04 * dpr); hands.height = Math.round(innerHeight * 1.04 * dpr);
+  if (R3) R3.resize(Math.max(320, Math.round(hands.width * quality)), Math.max(180, Math.round(hands.height * quality)));
+}
+addEventListener('resize', resize);
+resize();
+function adaptQuality(dtMs) {
+  dtEma = dtEma * 0.95 + dtMs * 0.05;
+  if (++frames % 90) return;
+  const before = quality;
+  if (dtEma > 24 && quality > 0.45) quality = Math.max(0.45, quality - 0.1);
+  else if (dtEma < 17.5 && quality < 1) quality = Math.min(1, quality + 0.05);
+  if (quality !== before) resize();
 }
 
-// Bilinear texel fetch (wraps both ways) for surfaces close enough to be magnified.
-function bilerp(t, u, v) {
-  const x0 = Math.floor(u), y0 = Math.floor(v), fx = u - x0, fy = v - y0;
-  const xa = x0 & TM, xb = (x0 + 1) & TM, ya = (y0 & TM) << TB, yb = ((y0 + 1) & TM) << TB;
-  const a = t[ya | xa];
-  if (a >>> 24 === 254) return a;
-  const b = t[ya | xb], c = t[yb | xa], d = t[yb | xb];
-  const w0 = (1 - fx) * (1 - fy), w1 = fx * (1 - fy), w2 = (1 - fx) * fy, w3 = fx * fy;
-  const r = (a & 255) * w0 + (b & 255) * w1 + (c & 255) * w2 + (d & 255) * w3;
-  const g = ((a >> 8) & 255) * w0 + ((b >> 8) & 255) * w1 + ((c >> 8) & 255) * w2 + ((d >> 8) & 255) * w3;
-  const bl = ((a >> 16) & 255) * w0 + ((b >> 16) & 255) * w1 + ((c >> 16) & 255) * w2 + ((d >> 16) & 255) * w3;
-  return 0xff000000 | (bl << 16) | (g << 8) | r;
+// ---------- rendering ----------
+const I4 = M4.ident();
+function camera() {
+  const pitch = Math.atan(viewLook());
+  const eye = [P.x, EYE + Math.sin(P.bob * 2) * 0.014 * P.bobAmp, P.y];
+  const c = Math.cos(pitch), fwd = [Math.cos(P.a) * c, Math.sin(pitch), Math.sin(P.a) * c];
+  const asp = view.width / view.height, plane = Math.max(0.5, Math.min(1, 0.5 * asp));
+  const vfov = Math.min(1.35, 2 * Math.atan(plane / asp));
+  return { eye, view: M4.lookAt(eye, [eye[0] + fwd[0], eye[1] + fwd[1], eye[2] + fwd[2]], [0, 1, 0]), proj: M4.persp(vfov, asp, 0.03, 600) };
 }
-
-// 4x4 ordered dither thresholds: see-through smoke without per-pixel blending.
-const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
-const drawList = [];
-let hazeR = 0, hazeG = 0, hazeB = 0;
-// One floor (or ceiling) pixel, `k` rows from the horizon, along ray (rdx, rdy).
-function planeTexel(k, rdx, rdy, ceil) {
-  const rd = distT[k], fx = P.x + rdx * rd, fy = P.y + rdy * rd;
-  let li = ((fy * LM) | 0) * lmW + ((fx * LM) | 0);
-  if (li < 0 || li >= ao.length) li = 0;
-  const fog = fogT[k], f = fog * ao[li] * (ceil ? 0.8 : 1), l3 = li * 3, kk = 1 - fog;
-  const t = ceil ? (lampCell[(fy | 0) * mw + (fx | 0)] ? TEX.lamp : TEX.ceil) : TEX.floor;
-  const texel = smoothT[k] ? bilerp(t, fx * TS - 0.5, fy * TS - 0.5) : t[((((fy * TS) | 0) & TM) << TB) | (((fx * TS) | 0) & TM)];
-  return lit(texel, frameL[l3] * f, frameL[l3 + 1] * f, frameL[l3 + 2] * f, hazeR * kk, hazeG * kk, hazeB * kk);
+function machineDraws(e, t, out) {
+  const yaw = Math.PI / 2 - e.face;
+  const dead = !!e.dead, mesh = MESH[e.kind];
+  const look = { tint: dead ? [0.3, 0.29, 0.32] : [1, 1, 1], flash: !dead && e.flash > 0 ? 1 : 0, emi: dead ? 0 : e.atk > 0 ? 1.9 : 1 };
+  const put = (m, model) => out.push({ mesh: m, model, ...look });
+  if (dead) {
+    // wreck: squashed, tipped and turned
+    const root = M4.trs(e.x, 0.02, e.y, yaw + e.spin, 0.25, 0.18, 1.05, 0.32, 1.05);
+    const lift = e.kind === 'd' ? M4.trs(0, 0.25, 0) : I4;
+    for (const k in mesh) {
+      if (k === 'leg') for (let i = 0; i < (e.kind === 'c' ? 6 : 2); i++) put(mesh.leg, M4.mul(root, M4.trs((i % 2 ? 1 : -1) * 0.2, 0.05, -0.15 + (i >> 1) * 0.15, i * 1.3)));
+      else if (k === 'arm') for (const s of [-1, 1]) put(mesh.arm, M4.mul(root, M4.trs(s * 0.5, 0.4, 0, 0, 0, s * 1.3)));
+      else put(mesh[k], M4.mul(root, lift));
+    }
+    return;
+  }
+  if (e.kind === 'd') {
+    const root = M4.trs(e.x, e.hz, e.y, yaw);
+    put(mesh.body, root);
+    put(mesh.ring, M4.mul(root, M4.trs(0, 0, 0, t * 2.4, 0.32)));
+  } else if (e.kind === 'c') {
+    const root = M4.trs(e.x, 0, e.y, yaw);
+    put(mesh.body, root);
+    for (let i = 0; i < 6; i++) {
+      const side = i < 3 ? 1 : -1, k = i % 3;
+      const ph = t * 17 + k * 2.1 + (side > 0 ? 0 : Math.PI);
+      const swing = Math.sin(ph) * 0.42 * e.moving, lift = Math.max(0, Math.cos(ph)) * 0.25 * e.moving;
+      put(mesh.leg, M4.mul(root, M4.trs(side * 0.17, 0.15, -0.14 + k * 0.14, (side > 0 ? 0 : Math.PI) + swing, 0, lift)));
+    }
+  } else if (e.kind === 'b') {
+    const root = M4.trs(e.x, 0, e.y, yaw), walk = Math.sin(t * 6) * 0.45 * e.moving;
+    put(mesh.body, root);
+    for (const s of [-1, 1]) {
+      put(mesh.leg, M4.mul(root, M4.mul(M4.trs(s * 0.17, 0.48, 0, 0, s * walk), M4.trs(0, -0.48, 0))));
+      const raise = s > 0 && e.atk > 0 ? -1.4 : -s * walk * 0.8;
+      put(mesh.arm, M4.mul(root, M4.trs(s * 0.48, 1.02, 0, 0, raise)));
+    }
+  } else {
+    put(mesh.body, M4.trs(e.x, 0, e.y, t * 0.4 + e.anim));
+  }
 }
 
 function render(now) {
-  applyLights();
-  const dirX = Math.cos(P.a), dirY = Math.sin(P.a), plX = -dirY * plane, plY = dirX * plane;
-  // Looking up or down shifts the horizon row (y-shearing); the crosshair stays at the centre row.
-  const hz = Math.round(H / 2 + viewLook() * proj), L = frameL, lw = lmW, lmax = ao.length - 1;
-  [hazeR, hazeG, hazeB] = mood.haze;
-  const hr = hazeR, hg = hazeG, hb = hazeB;
-
-  for (let x = 0; x < W; x++) {
-    const cam = (2 * x) / W - 1, rdx = dirX + plX * cam, rdy = dirY + plY * cam;
-    const h = castRay(P.x, P.y, rdx, rdy);
-    const dist = Math.max(h.dist, 0.001);
-    zbuf[x] = dist;
-    const lineH = proj / dist, y0 = Math.floor(hz - lineH / 2), y1 = Math.floor(hz + lineH / 2);
-
-    for (let y = Math.max(0, hz, y1 - 1); y < H; y++) px[y * W + x] = planeTexel(y - hz, rdx, rdy, false);
-    for (let y = Math.min(H - 1, hz - 1, y0 + 1); y >= 0; y--) px[y * W + x] = planeTexel(hz - 1 - y, rdx, rdy, true);
-
-    // wall or door
-    const t = TEX[h.c] || TEX['#'];
-    let uf = h.u * TS;
-    if (!isDoor(h.c) && ((h.side === 0 && rdx > 0) || (h.side === 1 && rdy < 0))) uf = TS - uf;
-    const tx = Math.max(0, Math.min(TM, uf | 0)), smooth = lineH > TS * 1.6;
-    let wx = P.x + rdx * dist, wy = P.y + rdy * dist;
-    if (h.side === 0) wx -= Math.sign(rdx) * 0.04; else wy -= Math.sign(rdy) * 0.04;
-    let li = ((wy * LM) | 0) * lw + ((wx * LM) | 0);
-    if (li < 0 || li > lmax) li = 0;
-    const fog = Math.exp(-dist * FOG), k = 1 - fog, sf = fog * (h.side ? 0.8 : 1), l3 = li * 3;
-    const lr = L[l3] * sf, lg = L[l3 + 1] * sf, lb = L[l3 + 2] * sf;
-    const ys = Math.max(0, y0), ye = Math.min(H, y1 + 1), step = TS / lineH;
-    let tpos = (ys - hz + lineH / 2) * step;
-    const hk = hr * k, gk = hg * k, bk = hb * k;
-    for (let y = ys; y < ye; y++) {
-      const ty = Math.max(0, Math.min(TM, tpos | 0)), v = vfac[ty];
-      const texel = smooth ? bilerp(t, uf - 0.5, Math.max(0, Math.min(TM - 1, tpos - 0.5))) : t[(ty << TB) | tx];
-      tpos += step;
-      px[y * W + x] = lit(texel, lr * v, lg * v, lb * v, hk, gk, bk);
-    }
-  }
-
-  // sprites, far to near
-  drawList.length = 0;
-  for (const e of enemies) {
-    const alive = !e.dead;
-    const tex = alive ? (e.atk > 0 ? e.attack : e.frames[Math.floor(e.anim * 4) % 2]) : e.dead;
-    const z = alive ? e.z + (e.kind === 'd' ? Math.sin(now / 300 + e.anim) * 0.04 : 0) : 0;
-    e.tex = tex; e.zNow = z; // what is on screen is what shots test against
-    if (alive) drawList.push({ x: e.x, y: e.y, shadow: e.radius * (e.kind === 'd' ? 0.8 : 1.1), bias: 0.01 });
-    drawList.push({ x: e.x, y: e.y, tex, scale: alive ? e.scale : Math.max(0.5, e.scale * 0.7), z, flash: alive && e.flash > 0 });
-  }
+  if (!R3 || !G) return;
+  const t = now / 1000, cam = camera();
+  R3.begin({ eye: cam.eye, view: cam.view, proj: cam.proj, mood, lights: frameLights(cam.eye), center: [mw / 2, 0, mh / 2], radius: Math.max(mw, mh) * 0.72 });
+  const draws = [{ mesh: G.level, model: I4 }];
+  for (const d of G.doors) draws.push({ mesh: DOOR_MESH[d.axis + d.kind], model: M4.trs(d.x, -doorOpen[d.y * mw + d.x] * 1.74, d.y) });
+  for (const [x, y] of G.lamps) draws.push({ mesh: G.lantern, model: M4.trs(x + 0.5, 1.75 + Math.sin(t * 1.3 + x) * 0.05, y + 0.5, t * 0.6 + x), noShadow: true });
   for (const it of items) {
-    const bob = it.kind === 'k' ? 0.12 + Math.sin(now / 250) * 0.05 : 0;
-    drawList.push({ x: it.x, y: it.y, shadow: 0.22, bias: 0.01 });
-    drawList.push({ x: it.x, y: it.y, tex: it.art, scale: it.scale, z: bob });
+    const bob = 0.06 + Math.sin(t * 2.2 + it.phase) * 0.05;
+    draws.push({ mesh: ITEM_MESH[it.kind], model: M4.trs(it.x, it.kind === 'k' ? 0.3 + bob : bob, it.y, t * 1.6 + it.phase) });
   }
-  for (const s of shots) drawList.push({ x: s.x, y: s.y, tex: FX_ART.orb, scale: 0.3, z: 0.38 });
+  for (const e of enemies) machineDraws(e, t, draws);
+  R3.shadows(draws);
+  R3.sky(t);
+  draws.push({ mesh: G.scenery, model: I4 });
+  draws.push({ mesh: MESH.armillary, model: M4.trs(mw / 2 + 40, 34, mh / 2 - 75, t * 0.04, 0.35, 0.2) });
+  R3.draw(draws);
+
+  // glows, sparks and smoke
+  const bb = [];
+  const lampC = lin(mood.lamp, 0.55);
+  for (const [x, y] of G.lamps) bb.push({ p: [x + 0.5, 1.75, y + 0.5], size: 0.7, c: lampC, a: 0.6, add: 1 });
+  for (const e of G.emitters) bb.push({ p: e.p, size: e.kind === 'exit' ? 1.4 : 0.9, c: lin(e.c, 0.35), a: 0.5, add: 1 });
+  for (const s of shots) {
+    bb.push({ p: [s.x, 0.55, s.y], size: 0.1, c: [3, 1.8, 0.8], add: 1 });
+    bb.push({ p: [s.x, 0.55, s.y], size: 0.36, c: [1.4, 0.5, 0.15], a: 0.8, add: 1 });
+  }
   for (const f of fx) {
-    const age = 1 - f.life / f.max;
-    drawList.push({ x: f.x, y: f.y, tex: f.tex, scale: f.scale * (1 + age * (f.grow || 0)) * (f.shrink ? 1 - age * 0.7 : 1), z: f.z, alpha: f.dither ? 0.55 * (1 - age) : 1, near: 0.45 });
+    const age = 1 - f.life / f.max, p = [f.x, f.z, f.y];
+    if (f.kind === 'smoke') bb.push({ p, size: f.scale * (1 + age * (f.grow || 1)) * 0.75, c: [0.5, 0.49, 0.48], a: 0.5 * (1 - age) });
+    else if (f.kind === 'debris') bb.push({ p, size: f.scale * 0.5, c: [0.12, 0.12, 0.14], a: 1 });
+    else if (f.kind === 'boom') bb.push({ p, size: f.scale * (1 - age * 0.4), c: [2.4, 1.3, 0.5], a: 1 - age, add: 1 });
+    else bb.push({ p, size: f.scale * 0.7, c: f.kind === 'cyan' ? [1, 2.2, 2.6] : [2.6, 1.5, 0.6], a: 1, add: 1 });
   }
-  for (const s of drawList) s.d = (s.x - P.x) ** 2 + (s.y - P.y) ** 2 + (s.bias || 0);
-  drawList.sort((a, b) => b.d - a.d);
+  R3.billboards(bb);
 
-  const inv = 1 / (plX * dirY - dirX * plY);
-  for (const s of drawList) {
-    const sx = s.x - P.x, sy = s.y - P.y;
-    const tX = inv * (dirY * sx - dirX * sy), tY = inv * (-plY * sx + plX * sy);
-    if (tY < (s.near || 0.1)) continue;
-    const scrX = (W / 2) * (1 + tX / tY), unit = proj / tY;
-    if (s.shadow) {
-      const sw = unit * s.shadow * 2.2, sh2 = sw * 0.2, cy = hz + unit * 0.5;
-      const xs = Math.max(0, Math.floor(scrX - sw / 2)), xe = Math.min(W, Math.ceil(scrX + sw / 2));
-      const ys = Math.max(0, Math.floor(cy - sh2 / 2)), ye = Math.min(H, Math.ceil(cy + sh2 / 2));
-      for (let x = xs; x < xe; x++) {
-        if (tY >= zbuf[x]) continue;
-        const nx = (x - scrX) / (sw / 2);
-        for (let y = ys; y < ye; y++) {
-          const ny = (y - cy) / (sh2 / 2), d = nx * nx + ny * ny;
-          if (d >= 1) continue;
-          const m = 0.35 + 0.65 * d, c = px[y * W + x];
-          px[y * W + x] = 0xff000000 | ((((c >> 16) & 255) * m) << 16) | ((((c >> 8) & 255) * m) << 8) | ((c & 255) * m);
-        }
-      }
-      continue;
-    }
-    const sh = unit * s.scale, bottom = hz + unit * 0.5 - unit * s.z, top = bottom - sh, left = scrX - sh / 2;
-    const xs = Math.max(0, Math.floor(left)), xe = Math.min(W, Math.floor(left + sh));
-    const ys = Math.max(0, Math.ceil(top)), ye = Math.min(H, Math.floor(bottom));
-    if (xs >= xe || ys >= ye) continue;
-    const [r0, g0, b0] = lightAt(s.x, s.y);
-    const fog = Math.exp(-tY * FOG), k = 1 - fog, boost = s.flash ? 3.2 : 1;
-    const lr = r0 * fog * 1.15 * boost, lg = g0 * fog * 1.15 * boost, lb = b0 * fog * 1.15 * boost;
-    const hk = hr * k, gk = hg * k, bk = hb * k, ts = TS / sh, tex = s.tex;
-    for (let x = xs; x < xe; x++) {
-      if (tY >= zbuf[x]) continue;
-      const tx = Math.min(TM, ((x - left) * ts) | 0);
-      for (let y = ys; y < ye; y++) {
-        if (s.alpha < 1 && BAYER[((y & 3) << 2) | (x & 3)] > s.alpha) continue;
-        const c = tex[(Math.min(TM, ((y - top) * ts) | 0) << TB) | tx];
-        if (!(c >>> 24)) continue;
-        px[y * W + x] = lit(c, lr, lg, lb, hk, gk, bk);
-      }
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-
-  // bloom: bright parts, quarter size, blurred by CSS and screened on top
-  const bw = bloom.width, bh = bloom.height;
-  for (let by = 0; by < bh; by++) {
-    const sy = Math.min(H - 1, by * 4 + 1);
-    for (let bx = 0; bx < bw; bx++) {
-      const c = px[sy * W + Math.min(W - 1, bx * 4 + 1)], c2 = px[Math.min(H - 1, sy + 2) * W + Math.min(W - 1, bx * 4 + 3)];
-      const r = ((c & 255) + (c2 & 255)) >> 1, g = (((c >> 8) & 255) + ((c2 >> 8) & 255)) >> 1, b = (((c >> 16) & 255) + ((c2 >> 16) & 255)) >> 1;
-      const m = r > g ? (r > b ? r : b) : g > b ? g : b;
-      if (m < 170) { bpx[by * bw + bx] = 0xff000000; continue; }
-      const q = (m - 170) / 85;
-      bpx[by * bw + bx] = 0xff000000 | ((b * q) << 16) | ((g * q) << 8) | (r * q);
-    }
-  }
-  bctx.putImageData(bimg, 0, 0);
-  drawHands(now);
+  const tips = drawViewmodel();
+  drawHands(tips);
 }
 
-function drawHands(now) {
-  const cw = hands.width, ch = hands.height;
-  hctx.clearRect(0, 0, cw, ch);
-  if (mode !== 'play' && mode !== 'paused') return;
-  const gun = GUN3D[P.weapon];
-  // The gun is a 3D model held low and right, its bore aimed at a point far down the crosshair.
-  const f = Math.min(ch, cw * 1.25) * 0.95, amp = P.bobAmp, rc = P.recoil * P.recoil;
+// The gun: a 3D model held low and right, angled slightly inward, its bore aimed down the crosshair.
+function drawViewmodel() {
+  if (mode !== 'play' && mode !== 'paused') return null;
+  const amp = P.bobAmp, rc = P.recoil * P.recoil;
   const pos = [
     0.13 + Math.sin(P.bob) * 0.007 * amp + P.swayX * 0.22,
     0.066 + Math.abs(Math.cos(P.bob)) * 0.007 * amp + P.swayY * 0.22 + rc * 0.008,
     0.285 - rc * 0.04,
   ];
-  const aim = norm3(sub3([0, 0, 30], pos));
-  const [lr, lg, lb] = lightAt(P.x, P.y);
-  // Room light on the gun, mostly brightness with a little of the room's colour.
-  const lum = (lr + lg + lb) / 3;
-  const light = [lr, lg, lb].map((v) => Math.max(0.4, Math.min(1.25, (lum * 0.75 + v * 0.25) * 0.95 + 0.15)));
-  const tips = drawGun(hctx, gun, {
-    // angled inward a little, like a real viewmodel, so the left flank shows
+  const al = Math.hypot(pos[0], pos[1], 30 - pos[2]), aim = [-pos[0] / al, -pos[1] / al, (30 - pos[2]) / al];
+  const { data, tips } = gunTriangles(GUNS[P.weapon], {
     pos, yaw: Math.atan2(aim[0], aim[2]) - 0.22 - P.swayX * 0.5, pitch: Math.asin(-aim[1]) + P.swayY * 0.4, roll: -0.1 - P.swayX * 0.6,
     kick: rc * (P.weapon ? 0.32 : 0.45),
-  }, { f, cx: cw / 2, cy: ch / 2, light, flash: P.flash > 0 ? 1 : 0 });
+  });
+  const asp = view.width / view.height;
+  const f = Math.min(1, asp * 1.25) * 0.95, fovy = 2 * Math.atan(0.5 / f);
+  const proj = M4.persp(fovy, asp, 0.01, 10);
+  const flash = P.flash > 0 ? { p: [tips[0][0], tips[0][1], tips[0][2] + 0.05], r: 0.9, c: [5, 3.4, 1.6] } : null;
+  R3.viewmodel(data, proj, flash);
+  return tips.map((p) => {
+    const q = M4.apply(proj, p);
+    return [(q[0] * 0.5 + 0.5) * hands.width, (0.5 - q[1] * 0.5) * hands.height];
+  });
+}
+
+function drawHands(tips) {
+  const cw = hands.width, ch = hands.height;
+  hctx.clearRect(0, 0, cw, ch);
+  if (!tips) return;
   hctx.globalCompositeOperation = 'lighter';
   if (P.flash > 0) {
     const size = ch * (P.weapon ? 0.16 : 0.13) * (0.8 + Math.random() * 0.4);
@@ -701,7 +565,6 @@ function drawHands(now) {
     for (const [sx2, sy2] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { hctx.moveTo(cw / 2 + sx2 * r0, ch / 2 + sy2 * r0); hctx.lineTo(cw / 2 + sx2 * r1, ch / 2 + sy2 * r1); }
     hctx.stroke();
   }
-  // crosshair
   const cx = cw / 2, cy = ch / 2, s = Math.max(4, ch * 0.009), gap = s * 0.8;
   hctx.strokeStyle = 'rgba(0,0,0,.5)'; hctx.lineWidth = Math.max(3, s * 0.5);
   const cross = () => { hctx.beginPath(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { hctx.moveTo(cx + dx * gap, cy + dy * gap); hctx.lineTo(cx + dx * (gap + s), cy + dy * (gap + s)); } hctx.stroke(); };
@@ -725,30 +588,41 @@ function bumpsEnemy(x, y, self) {
 }
 function tryMove(o, dx, dy, r) {
   if (!blocked(o.x + dx, o.y, r) && !(o === P && bumpsEnemy(o.x + dx, o.y, null))) o.x += dx;
+  else if (o === P && Math.abs(dx) > Math.abs(dy)) slideCorner(o, dx, 0, r);
   if (!blocked(o.x, o.y + dy, r) && !(o === P && bumpsEnemy(o.x, o.y + dy, null))) o.y += dy;
+  else if (o === P && Math.abs(dy) > Math.abs(dx)) slideCorner(o, 0, dy, r);
 }
-const lineOfSight = (ax, ay, bx, by) => !wallsBetween(ax, ay, bx, by, true);
+// Blocked right beside an opening (a doorway or corridor)? Ease sideways round the corner into it.
+function slideCorner(o, dx, dy, r) {
+  for (const s of [0.05, -0.05, 0.1, -0.1, 0.16, -0.16]) {
+    const ox = dy ? s : 0, oy = dx ? s : 0;
+    if (blocked(o.x + ox, o.y + oy, r) || blocked(o.x + ox + dx, o.y + oy + dy, r)) continue;
+    const k = Math.min(1, (Math.abs(dx) + Math.abs(dy)) * 12);
+    o.x += ox * k; o.y += oy * k;
+    return;
+  }
+}
 
 // ---------- effects ----------
 const rand = (a, b) => a + Math.random() * (b - a);
-function particle(p) { if (fx.length < 260) fx.push({ z: 0, vx: 0, vy: 0, vz: 0, grav: 0, bounce: 0, ...p, max: p.life }); }
-function sparks(x, y, z, n, tex = FX_ART.ember) {
+function particle(p) { if (fx.length < 320) fx.push({ z: 0, vx: 0, vy: 0, vz: 0, grav: 0, bounce: 0, ...p, max: p.life }); }
+function sparks(x, y, z, n, kind = 'ember') {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = rand(1, 3.5);
-    particle({ x, y, z, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: rand(0.5, 3), grav: 9, bounce: 0.35, life: rand(0.25, 0.6), tex, scale: rand(0.03, 0.05) });
+    particle({ x, y, z, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: rand(0.5, 3), grav: 9, bounce: 0.35, life: rand(0.25, 0.6), kind, scale: rand(0.03, 0.05) });
   }
 }
 function smoke(x, y, z, scale = 0.28) {
-  particle({ x: x + rand(-0.1, 0.1), y: y + rand(-0.1, 0.1), z, vx: rand(-0.2, 0.2), vy: rand(-0.2, 0.2), vz: rand(0.3, 0.7), life: rand(0.9, 1.5), tex: FX_ART.smoke, scale, grow: 1.4, dither: true });
+  particle({ x: x + rand(-0.1, 0.1), y: y + rand(-0.1, 0.1), z, vx: rand(-0.2, 0.2), vy: rand(-0.2, 0.2), vz: rand(0.3, 0.7), life: rand(0.9, 1.5), kind: 'smoke', scale, grow: 1.4 });
 }
 function explosion(x, y, big) {
-  particle({ x, y, z: 0.15, life: big ? 0.6 : 0.45, tex: FX_ART.boom, scale: big ? 1.4 : 0.9, shrink: true, boom: big ? 2.6 : 2 });
-  sparks(x, y, 0.3, big ? 26 : 14);
-  for (let i = 0; i < (big ? 10 : 6); i++) {
+  particle({ x, y, z: 0.35, life: big ? 0.6 : 0.45, kind: 'boom', scale: big ? 1.3 : 0.8, boom: big ? 2.6 : 2 });
+  sparks(x, y, 0.4, big ? 28 : 16);
+  for (let i = 0; i < (big ? 12 : 7); i++) {
     const a = Math.random() * Math.PI * 2, s = rand(1, 3);
-    particle({ x, y, z: 0.3, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: rand(1.5, 4), grav: 10, bounce: 0.4, life: rand(0.8, 1.6), tex: FX_ART.debris, scale: rand(0.05, 0.09) });
+    particle({ x, y, z: 0.35, vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: rand(1.5, 4), grav: 10, bounce: 0.4, life: rand(0.8, 1.6), kind: 'debris', scale: rand(0.05, 0.09) });
   }
-  for (let i = 0; i < (big ? 6 : 3); i++) smoke(x, y, 0.2, big ? 0.5 : 0.35);
+  for (let i = 0; i < (big ? 6 : 3); i++) smoke(x, y, 0.3, big ? 0.5 : 0.35);
   const d = Math.hypot(P.x - x, P.y - y);
   shake = Math.max(shake, Math.max(0, 1 - d / 9) * (big ? 1 : 0.6));
 }
@@ -760,8 +634,8 @@ function updateFx(dt) {
     const nx = f.x + f.vx * dt, ny = f.y + f.vy * dt;
     if (solid(Math.floor(nx), Math.floor(ny))) { f.vx *= -0.3; f.vy *= -0.3; } else { f.x = nx; f.y = ny; }
     f.vz -= f.grav * dt; f.z += f.vz * dt;
-    if (f.z < 0) { f.z = 0; f.vz = -f.vz * f.bounce; f.vx *= 0.6; f.vy *= 0.6; }
-    if (f.boom) addLight(f.x, f.y, 5.5, [1, 0.62, 0.28], f.boom * (f.life / f.max));
+    if (f.z < 0.02) { f.z = 0.02; f.vz = -f.vz * f.bounce; f.vx *= 0.6; f.vy *= 0.6; }
+    if (f.boom) addLight(f.x, f.y, 6, [1, 0.62, 0.28], f.boom * (f.life / f.max), 0.6);
   }
 }
 
@@ -770,7 +644,8 @@ function damageEnemy(e, n) {
   if (e.dead) return;
   e.hp -= n; e.flash = 0.08; e.awake = true;
   if (e.hp > 0) { sfx.hit(); return; }
-  e.dead = artFor(e.kind).dead;
+  e.dead = true;
+  e.spin = rand(-0.6, 0.6);
   e.smokeT = e.prop ? 3 : 5;
   if (!e.prop) kills += 1;
   sfx.boom();
@@ -792,38 +667,36 @@ function hurt(n) {
   sfx.hurt();
   if (P.hp <= 0) { sfx.die(); endLevel('lose'); }
 }
-// Is there a solid pixel of the sprite near (u, v)? A few texels of slack, no more.
-function opaqueNear(tex, u, v) {
-  const cx = (u * TS) | 0, cy = (v * TS) | 0;
-  for (let oy = -3; oy <= 3; oy += 3) for (let ox = -3; ox <= 3; ox += 3) {
-    const x = cx + ox, y = cy + oy;
-    if (x >= 0 && y >= 0 && x <= TM && y <= TM && tex[(y << TB) | x] >>> 24) return true;
-  }
-  return false;
-}
-// A shot travels along the crosshair in 3D: angle `ang` sideways and slope `slope` up or down.
-// It hits the first thing whose drawn pixels it passes through: a machine, the floor, the ceiling or a wall.
+// A shot is a ray from the eye along the crosshair: angle `ang` sideways and slope `slope` up or down.
+// It hits the first thing it passes through: a machine's hit volume, a wall (unless it flies over
+// the top into the sky), or the floor.
 function hitscan(ang, slope, dmg) {
-  const dx = Math.cos(ang), dy = Math.sin(ang);
-  const wall = castRay(P.x, P.y, dx, dy).dist;
-  const planeHit = slope < -1e-4 ? 0.5 / -slope : slope > 1e-4 ? 0.5 / slope : Infinity;
-  const reach = Math.min(wall, planeHit);
-  let best = null, bestAlong = reach;
+  const hx0 = Math.cos(ang), hy0 = Math.sin(ang), c = 1 / Math.sqrt(1 + slope * slope), s = slope * c;
+  const D = [hx0 * c, s, hy0 * c], O = [P.x, EYE, P.y];
+  const h = castRay(P.x, P.y, hx0, hy0);
+  let reach = 60;
+  if (EYE + slope * h.dist < topAt(h.mx, h.my)) reach = Math.min(reach, h.dist / c);
+  if (s < -1e-4) reach = Math.min(reach, EYE / -s);
+  let best = null, bestT = reach;
   for (const e of enemies) {
-    if (e.dead || !e.tex) continue;
-    const vx = e.x - P.x, vy = e.y - P.y, along = vx * dx + vy * dy;
-    if (along <= 0.05 || along >= bestAlong) continue;
-    const u = 0.5 - (vy * dx - vx * dy) / e.scale;
-    if (u < 0 || u >= 1) continue;
-    const za = 0.5 + slope * along, v = (e.zNow + e.scale - za) / e.scale;
-    if (v < 0 || v >= 1) continue;
-    if (opaqueNear(e.tex, u, v)) { best = e; bestAlong = along; }
+    if (e.dead) continue;
+    const fx2 = Math.cos(e.face), fy2 = Math.sin(e.face);
+    for (const [fwd, hgt, r] of volumes(e)) {
+      const L = [e.x + fx2 * fwd - O[0], hgt - O[1], e.y + fy2 * fwd - O[2]];
+      const tc = L[0] * D[0] + L[1] * D[1] + L[2] * D[2];
+      if (tc <= 0) continue;
+      const d2 = L[0] * L[0] + L[1] * L[1] + L[2] * L[2] - tc * tc;
+      if (d2 > r * r) continue;
+      const th = tc - Math.sqrt(r * r - d2);
+      if (th < bestT) { best = e; bestT = th; }
+    }
   }
-  const d = best ? bestAlong - 0.2 : reach - 0.06;
-  const hx = P.x + dx * d, hy = P.y + dy * d, hz = Math.max(0.02, Math.min(0.98, 0.5 + slope * d));
-  sparks(hx, hy, hz, best ? 5 : 6, FX_ART.ember);
-  if (!best && Math.random() < 0.5) smoke(hx, hy, hz, 0.16);
-  P.tracerTo = [hx, hy, hz];
+  const t = Math.max(0.1, bestT - 0.04);
+  const ix = O[0] + D[0] * t, iz = O[1] + D[1] * t, iy = O[2] + D[2] * t;
+  if (t < 59) {
+    sparks(ix, iy, iz, best ? 5 : 6, 'ember');
+    if (!best && Math.random() < 0.5) smoke(ix, iy, iz, 0.16);
+  }
   if (best) {
     damageEnemy(best, dmg);
     P.hitMark = 0.2; P.hitKill = P.hitKill || !!best.dead;
@@ -855,8 +728,8 @@ function updateEnemies(dt) {
     if (e.dead) {
       if (e.smokeT > 0) {
         e.smokeT -= dt; e.puffT -= dt;
-        if (e.puffT <= 0) { smoke(e.x, e.y, 0.1, 0.22); e.puffT = rand(0.25, 0.5); }
-        if (e.smokeT > 2) addLight(e.x, e.y, 1.8, [1, 0.5, 0.2], rand(0.35, 0.6));
+        if (e.puffT <= 0) { smoke(e.x, e.y, 0.15, 0.22); e.puffT = rand(0.25, 0.5); }
+        if (e.smokeT > 2) addLight(e.x, e.y, 2, [1, 0.5, 0.2], rand(0.35, 0.6), 0.3);
       }
       continue;
     }
@@ -865,8 +738,13 @@ function updateEnemies(dt) {
     const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy);
     const sees = d < 18 && lineOfSight(e.x, e.y, P.x, P.y);
     if (!e.awake && ((sees && d < 14) || d < noiseRadius)) { e.awake = true; e.cd = 0.5 + Math.random() * 0.6; }
-    if (!e.awake) continue;
+    e.hz = 0.64 + Math.sin(levelTime * 2.1 + e.anim) * 0.05;
+    if (!e.awake) { e.moving = 0; continue; }
     e.anim += dt;
+    // turn smoothly to face the player
+    let turn = Math.atan2(dy, dx) - e.face;
+    turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+    e.face += turn * Math.min(1, dt * 8);
     const ux = dx / (d || 1), uy = dy / (d || 1);
     let mx = 0, my = 0;
     if (e.kind === 'd') {
@@ -887,19 +765,21 @@ function updateEnemies(dt) {
         e.cd = 2.0; e.atk = 0.3;
       }
     }
-    const step = e.speed * dt;
+    const step = e.speed * dt, ox = e.x, oy = e.y;
     const nx = e.x + mx * step, ny = e.y + my * step;
     if (Math.hypot(P.x - nx, P.y - ny) > e.radius + 0.3 && !bumpsEnemy(nx, ny, e)) tryMove(e, mx * step, my * step, e.radius * 0.8);
+    const moved = Math.hypot(e.x - ox, e.y - oy) / Math.max(step, 1e-4);
+    e.moving += (Math.min(1, moved) - e.moving) * Math.min(1, dt * 10);
   }
 }
 function updateShots(dt) {
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i];
     s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
-    addLight(s.x, s.y, 2.6, [1, 0.55, 0.2], 0.9);
+    addLight(s.x, s.y, 2.8, [1, 0.55, 0.2], 1);
     if ((s.x - P.x) ** 2 + (s.y - P.y) ** 2 < 0.35 * 0.35) { hurt(s.dmg); shots.splice(i, 1); continue; }
     if (s.life <= 0 || solid(Math.floor(s.x), Math.floor(s.y))) {
-      sparks(s.x - s.vx * 0.02, s.y - s.vy * 0.02, 0.38, 6);
+      sparks(s.x - s.vx * 0.02, s.y - s.vy * 0.02, 0.55, 6);
       shots.splice(i, 1);
     }
   }
@@ -1076,11 +956,10 @@ function update(dt) {
 const worldEl = $('world');
 let last = 0, shaking = false;
 function loop(now) {
-  const dt = Math.min(0.05, (now - last) / 1000 || 0);
+  const dtMs = now - last, dt = Math.min(0.05, dtMs / 1000 || 0);
   last = now;
-  const t0 = performance.now();
   if (mode === 'play') update(dt);
-  else if (mode === 'title') { P.a += dt * 0.12; P.look *= 0.95; }
+  else if (mode === 'title') { P.a += dt * 0.1; P.look += (0.1 - P.look) * 0.02; }
   if (mode !== 'paused') updateFx(dt);
   shake = Math.max(0, shake - dt * 2.5);
   if (shake > 0.01) {
@@ -1089,7 +968,7 @@ function loop(now) {
     shaking = true;
   } else if (shaking) { worldEl.style.transform = ''; shaking = false; }
   render(now);
-  adaptQuality(performance.now() - t0);
+  if (dtMs > 0 && dtMs < 200) adaptQuality(dtMs);
   requestAnimationFrame(loop);
 }
 
@@ -1174,7 +1053,7 @@ function endLevel(result) {
       saveUnlocked(level + 1);
       showOverlay('SECTOR CLEAR', `next: ${LEVELS[level + 1].name}`, LEVELS[level + 1].hint, stats, [['Next level', () => startLevel(level + 1)]]);
     } else {
-      showOverlay('FOUNDRY CLEARED', 'lockdown lifted', 'Every rogue machine is scrap. The foundry is quiet again. Nice work, repair unit.', stats, [['Play again', () => startLevel(0)]]);
+      showOverlay('CITADEL RESTORED', 'the gears turn true', 'Every rogue machine is scrap and Gearhold drifts quietly above the clouds again. Nice work, repair unit.', stats, [['Play again', () => startLevel(0)]]);
     }
   } else {
     showOverlay('WRECKED', 'chassis failure', 'Your chassis gave out. Reboot and try that sector again.', stats, [['Try again', () => startLevel(level)], ['Title', title, true]]);
@@ -1184,10 +1063,14 @@ function endLevel(result) {
 
 function title() {
   mode = 'title';
+  if (!R3) {
+    showOverlay('GEARHOLD', 'needs WebGL 2', 'This game draws its world in 3D with WebGL 2, which this browser does not offer. Try a current Chrome, Edge, Firefox or Safari.', '', []);
+    return;
+  }
   loadLevel(unlocked);
   const buttons = [[unlocked > 0 ? `Continue: ${LEVELS[unlocked].name}` : 'Play', () => startLevel(unlocked)]];
   for (let i = 0; i < unlocked; i++) buttons.push([`${i + 1} · ${LEVELS[i].name}`, () => startLevel(i), true]);
-  showOverlay('GEARHOLD', 'foundry lockdown', 'The foundry machines have gone rogue and sealed the doors. You are the last repair unit online. Scrap them and reach the exit panel.', '', buttons);
+  showOverlay('GEARHOLD', 'the clockwork citadel', 'Gearhold floats above a sea of clouds, kept turning by its caretaker machines. They have gone rogue and sealed the halls. You are the last repair unit online: scrap them and reach the exit arches.', '', buttons);
 }
 
 title();

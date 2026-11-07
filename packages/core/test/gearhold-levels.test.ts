@@ -85,13 +85,17 @@ describe('gearhold levels', () => {
     for (const l of LEVELS) expect(l.name.length * l.hint.length).toBeGreaterThan(0);
   });
 
-  it('gives every level a lighting mood (ambient, lamp and haze colours)', () => {
-    for (const l of LEVELS as (Level & { mood?: Record<string, number[]> })[]) {
-      for (const k of ['ambient', 'lamp', 'haze']) {
-        const c = l.mood?.[k];
+  it('gives every level a sky and lighting mood (colours, sun direction, fog)', () => {
+    for (const l of LEVELS as (Level & { mood?: Record<string, number[] | number> })[]) {
+      for (const k of ['skyTop', 'skyHorizon', 'cloud', 'sunColor', 'ambient', 'ground', 'lamp', 'crystal']) {
+        const c = l.mood?.[k] as number[] | undefined;
         expect(c, `${l.name} mood.${k}`).toHaveLength(3);
         for (const v of c!) expect(v).toBeGreaterThanOrEqual(0);
       }
+      const sun = l.mood?.sunDir as number[];
+      expect(sun, `${l.name} mood.sunDir`).toHaveLength(3);
+      expect(sun[1], 'the sun is above the horizon').toBeGreaterThan(0);
+      expect(l.mood?.fog as number).toBeGreaterThan(0);
     }
   });
 

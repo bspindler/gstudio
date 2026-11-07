@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>GStudio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #1b1430;
+    --night-2: #251b42;
+    --night-3: #31245a;
+    --paper: #f3eeff;
+    --muted: #b7abd6;
+    --volt: #ffe14d;
+    --hot: #ff4f9a;
+    --radius-card: 22px;
+    --radius-chip: 999px;
+    --display: 'Bungee', 'Impact', system-ui, sans-serif;
+    --body: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--night); }
+  body {
+    margin: 0; min-height: 100vh; color: var(--paper); font: 400 17px/1.5 var(--body);
+    background:
+      radial-gradient(1200px 600px at 85% -10%, #3b2470 0%, transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, #2a1a52 0%, transparent 60%),
+      var(--night);
+    overflow-x: hidden;
+  }
+  /* faint dot-matrix floor */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: radial-gradient(rgba(243,238,255,.07) 1px, transparent 1.2px);
+    background-size: 22px 22px;
+    mask-image: linear-gradient(to bottom, transparent, #000 40%, #000);
+  }
+  .wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--volt); outline-offset: 3px; border-radius: 8px; }
+
+  /* ---------- hero ---------- */
+  header.hero { padding: clamp(40px, 9vw, 110px) 0 clamp(28px, 5vw, 56px); }
+  .devtag {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted);
+    border: 1px solid var(--night-3); background: rgba(37,27,66,.6); padding: 6px 12px; border-radius: var(--radius-chip);
+  }
+  .devtag i { width: 8px; height: 8px; border-radius: 50%; background: #5cf2a1; box-shadow: 0 0 10px #5cf2a1; }
+  h1.mark {
+    font-family: var(--display); font-weight: 400; margin: 18px 0 0; line-height: .9;
+    font-size: clamp(64px, 15vw, 188px); letter-spacing: -.01em; color: var(--volt);
+    text-shadow:
+      1px 1px 0 #f2a93b, 2px 2px 0 #f2a93b, 3px 3px 0 #e8792f, 4px 4px 0 #e8792f,
+      5px 5px 0 #d4483a, 6px 6px 0 #d4483a, 7px 7px 0 #a8305e, 8px 8px 0 #a8305e,
+      9px 9px 0 #6d2470, 10px 10px 0 #6d2470, 14px 18px 30px rgba(0,0,0,.45);
+    animation: stamp .9s cubic-bezier(.2,1.6,.4,1) both;
+  }
+  h1.mark span { display: inline-block; animation: drop .7s cubic-bezier(.2,1.5,.45,1) both; }
+  @keyframes stamp { from { transform: scale(1.08); filter: blur(6px); opacity: 0; } to { transform: none; filter: none; opacity: 1; } }
+  @keyframes drop { from { transform: translateY(-60%) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  .lede { max-width: 34ch; margin: 28px 0 0; font-size: clamp(19px, 2.3vw, 24px); line-height: 1.35; font-weight: 600; }
+  .lede small { display: block; margin-top: 8px; font-size: 16px; font-weight: 400; color: var(--muted); }
+
+  /* ---------- shelf ---------- */
+  .shelf-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 8px 0 18px; }
+  .shelf-head h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(22px, 3vw, 30px); }
+  .shelf-head p { margin: 0; color: var(--muted); font-size: 15px; }
+  .grid { display: grid; gap: 22px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); padding-bottom: 40px; }
+
+  .card {
+    --accent: var(--hot);
+    position: relative; display: flex; flex-direction: column;
+    background: linear-gradient(180deg, var(--night-2), #1f1738);
+    border-radius: var(--radius-card); overflow: hidden;
+    border: 1px solid rgba(243,238,255,.08);
+    box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 24px 50px -24px rgba(0,0,0,.7);
+    transition: transform .25s cubic-bezier(.2,.9,.3,1.2), border-color .25s, box-shadow .25s;
+  }
+  .card.live { transform: translateY(-6px); border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 26px 60px -20px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .cover { position: relative; aspect-ratio: 16 / 10; background: #000; overflow: hidden; }
+  .cover canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .cover::after { /* CRT glass */
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px),
+      radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(0,0,0,.55));
+  }
+  .ver {
+    position: absolute; top: 12px; right: 12px; z-index: 2; font-weight: 800; font-size: 13px;
+    padding: 4px 10px; border-radius: var(--radius-chip); background: rgba(15,10,30,.7); color: var(--paper);
+    border: 1px solid rgba(243,238,255,.2); backdrop-filter: blur(4px);
+  }
+  .body { padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .body h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 1.05; color: var(--accent); }
+  .genre { margin: 0; font-weight: 600; text-transform: capitalize; }
+  .who { margin: 0; color: var(--muted); font-size: 15px; }
+  .actions { display: flex; gap: 10px; margin-top: auto; padding-top: 16px; flex-wrap: wrap; }
+  .play {
+    flex: 1 1 auto; display: inline-flex; justify-content: center; align-items: center; gap: 10px;
+    font-family: var(--display); font-size: 18px; text-decoration: none; color: #1b1430;
+    background: var(--accent); padding: 12px 18px; border-radius: 14px;
+    box-shadow: 0 4px 0 color-mix(in srgb, var(--accent) 50%, #000);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .play:active { transform: translateY(3px); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 50%, #000); }
+  .play svg { width: 14px; height: 14px; }
+  .alt {
+    display: inline-flex; align-items: center; padding: 12px 14px; border-radius: 14px; text-decoration: none;
+    font-weight: 600; font-size: 15px; color: var(--paper); border: 1px solid rgba(243,238,255,.2);
+  }
+  .alt:hover { border-color: var(--accent); }
+
+  .empty { padding: 40px 24px; border: 2px dashed var(--night-3); border-radius: var(--radius-card); color: var(--muted); }
+  .empty code, footer code { color: var(--paper); background: var(--night-2); padding: 2px 6px; border-radius: 6px; }
+
+  footer { border-top: 1px solid var(--night-3); padding: 22px 0 40px; color: var(--muted); font-size: 15px;
+    display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
+
+  @media (prefers-reduced-motion: reduce) {
+    h1.mark, h1.mark span { animation: none; }
+    .card, .card.live { transition: none; transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <span class="devtag"><i></i>Local dev server</span>
+    <h1 class="mark" aria-label="GStudio"></h1>
+    <p class="lede">Small games, built here and played first by us.
+      <small id="hint">Pick a cartridge and play. Hover a cover to see it move.</small></p>
+  </header>
+
+  <main>
+    <div class="shelf-head">
+      <h2>On the shelf</h2>
+      <p id="count"></p>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <footer>
+    <span>Play events go to the local ingest on <code>:8787</code>, then <code>npm run rollup</code>.</span>
+    <span>New game: <code>npm run new-game &lt;slug&gt;</code></span>
+  </footer>
+</div>
+
+<script type="module">
+const GAMES = /*__GAMES__*/[];
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canHover = matchMedia('(hover: hover)').matches;
+
+// ---------- wordmark: letters drop in one after another ----------
+const mark = document.querySelector('.mark');
+[...'GStudio'].forEach((ch, i) => {
+  const s = document.createElement('span');
+  s.textContent = ch; s.setAttribute('aria-hidden', 'true');
+  s.style.animationDelay = `${120 + i * 55}ms`;
+  mark.append(s);
+});
+
+// ---------- per-game identity ----------
+const TAU = Math.PI * 2;
+function hash(str) { let h = 2166136261; for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
+function rng(seed) { return () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822507) + 0x9e3779b9 >>> 0) / 4294967296); }
+
+function gear(ctx, x, y, r, teeth, a, fill, hole) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.beginPath();
+  for (let i = 0; i < teeth * 2; i++) {
+    const rr = i % 2 ? r * .82 : r, a0 = (i / (teeth * 2)) * TAU, a1 = ((i + 1) / (teeth * 2)) * TAU;
+    ctx.arc(0, 0, rr, a0, a1);
+  }
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 0, r * .32, 0, TAU); ctx.fillStyle = hole; ctx.fill();
+  for (let i = 0; i < 4; i++) { ctx.rotate(TAU / 4); ctx.fillRect(r * .38, -r * .06, r * .3, r * .12); }
+  ctx.restore();
+}
+
+const COVERS = {
+  gearhold: {
+    accent: '#f0b44c',
+    draw(ctx, w, h, t) {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#2b2f3a'); g.addColorStop(1, '#0d0f14');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      const s = Math.min(w, h);
+      gear(ctx, w * .18, h * .78, s * .42, 14, t * .4, '#7a5a2a', '#0d0f14');
+      gear(ctx, w * .86, h * .2, s * .34, 12, -t * .52, '#5d4826', '#2b2f3a');
+      gear(ctx, w * .62, h * .92, s * .22, 9, -t * .8, '#a87a33', '#0d0f14');
+      gear(ctx, w * .44, h * .1, s * .16, 8, t * 1.1, '#c8923c', '#2b2f3a');
+      // corridor vanishing lines
+      ctx.strokeStyle = 'rgba(240,180,76,.18)'; ctx.lineWidth = 1;
+      for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(w / 2, h / 2); ctx.lineTo(w / 2 + i * w * .2, h); ctx.stroke(); }
+      // crosshair, breathing
+      const cx = w / 2, cy = h / 2, r = s * (.11 + Math.sin(t * 3) * .01);
+      ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2.5; ctx.shadowColor = '#ffb23e'; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.stroke();
+      for (let i = 0; i < 4; i++) {
+        const a = i * TAU / 4; ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * r * .55, cy + Math.sin(a) * r * .55);
+        ctx.lineTo(cx + Math.cos(a) * r * 1.5, cy + Math.sin(a) * r * 1.5); ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    },
+  },
+  hyperline: {
+    accent: '#ff4f9a',
+    draw(ctx, w, h, t) {
+      const hz = h * .46;
+      const sky = ctx.createLinearGradient(0, 0, 0, hz);
+      sky.addColorStop(0, '#12052e'); sky.addColorStop(1, '#5a0f5e');
+      ctx.fillStyle = sky; ctx.fillRect(0, 0, w, hz);
+      // sun
+      const sun = ctx.createLinearGradient(0, hz - h * .32, 0, hz);
+      sun.addColorStop(0, '#ffe14d'); sun.addColorStop(1, '#ff4f9a');
+      ctx.fillStyle = sun; ctx.beginPath(); ctx.arc(w / 2, hz, h * .3, Math.PI, 0); ctx.fill();
+      ctx.fillStyle = '#5a0f5e';
+      for (let i = 1; i < 6; i++) ctx.fillRect(w / 2 - h * .3, hz - i * h * .05, h * .6, i * .9);
+      ctx.fillStyle = '#0a0418'; ctx.fillRect(0, hz, w, h - hz);
+      // rushing grid
+      ctx.strokeStyle = '#2ee6ff'; ctx.lineWidth = 1.4; ctx.shadowColor = '#2ee6ff'; ctx.shadowBlur = 8;
+      for (let i = -14; i <= 14; i++) { ctx.beginPath(); ctx.moveTo(w / 2 + i * 6, hz); ctx.lineTo(w / 2 + i * w * .16, h); ctx.stroke(); }
+      const off = (t * 1.6) % 1;
+      for (let i = 0; i < 12; i++) {
+        const z = (i + off) / 12, y = hz + (h - hz) * z * z;
+        ctx.globalAlpha = Math.min(1, z * 2); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      // obstacles flying at you
+      ctx.shadowColor = '#ff4f9a'; ctx.shadowBlur = 16;
+      for (let k = 0; k < 3; k++) {
+        const z = ((t * .5 + k / 3) % 1), p = z * z, lane = [-1, 0.6, -0.2][k];
+        const y = hz + (h - hz) * p, sz = 6 + p * h * .32, x = w / 2 + lane * p * w * .45;
+        ctx.fillStyle = '#ff4f9a'; ctx.globalAlpha = Math.min(1, z * 3);
+        ctx.fillRect(x - sz / 2, y - sz, sz, sz);
+        ctx.fillStyle = '#ffd1e6'; ctx.fillRect(x - sz / 2, y - sz, sz, sz * .12);
+      }
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    },
+  },
+  'tidepool-pals': {
+    accent: '#3fe0c5',
+    init(w, h) {
+      const r = rng(7);
+      return { bubbles: Array.from({ length: 26 }, () => ({ x: r(), y: r(), s: 2 + r() * 7, v: .04 + r() * .1 })) };
+    },
+    draw(ctx, w, h, t, st) {
+      const g = ctx.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, '#59e6d0'); g.addColorStop(.55, '#138a9a'); g.addColorStop(1, '#0b3d63');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      // light rays
+      ctx.fillStyle = 'rgba(255,255,255,.08)';
+      for (let i = 0; i < 5; i++) {
+        const x = (i / 5) * w + Math.sin(t * .6 + i) * 20;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 40, 0); ctx.lineTo(x - 30, h); ctx.lineTo(x - 80, h); ctx.fill();
+      }
+      // gem board
+      const cols = ['#ff6b8b', '#ffd23f', '#7b6cff', '#ff9f43', '#5cf2a1'];
+      const n = 6, m = 4, cell = Math.min(w / (n + 2), h / (m + 1.6)), ox = (w - n * cell) / 2, oy = (h - m * cell) / 2 + cell * .2;
+      for (let j = 0; j < m; j++) for (let i = 0; i < n; i++) {
+        const c = cols[(i * 3 + j * 2 + (i * j)) % cols.length];
+        const bob = Math.sin(t * 2.4 + i * .8 + j * 1.3) * cell * .06;
+        const x = ox + (i + .5) * cell, y = oy + (j + .5) * cell + bob, r = cell * .38;
+        ctx.fillStyle = 'rgba(0,30,50,.25)'; ctx.beginPath(); ctx.ellipse(x, y + r * .9, r * .8, r * .25, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(x - r * .35, y - r * .35, r * .25, 0, TAU); ctx.fill();
+        // tiny face
+        ctx.fillStyle = '#1b1430';
+        ctx.beginPath(); ctx.arc(x - r * .28, y + r * .05, r * .09, 0, TAU); ctx.arc(x + r * .28, y + r * .05, r * .09, 0, TAU); ctx.fill();
+        ctx.strokeStyle = '#1b1430'; ctx.lineWidth = Math.max(1, r * .08);
+        ctx.beginPath(); ctx.arc(x, y + r * .22, r * .16, .15 * Math.PI, .85 * Math.PI); ctx.stroke();
+      }
+      // bubbles
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.2;
+      for (const b of st.bubbles) {
+        const y = ((b.y - t * b.v) % 1 + 1) % 1;
+        ctx.beginPath(); ctx.arc(b.x * w + Math.sin(t * 2 + b.s) * 4, y * h, b.s, 0, TAU); ctx.stroke();
+      }
+    },
+  },
+};
+
+// Any game without bespoke art gets a generated cover in its own hue.
+function fallbackCover(game) {
+  const hue = hash(game.slug) % 360;
+  return {
+    accent: `hsl(${hue} 90% 66%)`,
+    init() { const r = rng(hash(game.slug)); return { shapes: Array.from({ length: 14 }, () => ({ x: r(), y: r(), s: .05 + r() * .12, sp: (r() - .5) * 2, k: Math.floor(r() * 3) })) }; },
+    draw(ctx, w, h, t, st) {
+      const g = ctx.createLinearGradient(0, 0, w, h);
+      g.addColorStop(0, `hsl(${hue} 60% 22%)`); g.addColorStop(1, `hsl(${(hue + 50) % 360} 70% 12%)`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      for (const s of st.shapes) {
+        const x = s.x * w, y = ((s.y + Math.sin(t * .5 + s.sp) * .05) * h), r = s.s * Math.min(w, h);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(t * s.sp);
+        ctx.strokeStyle = `hsl(${(hue + s.k * 40) % 360} 90% 70%)`; ctx.lineWidth = 3; ctx.beginPath();
+        if (s.k === 0) ctx.arc(0, 0, r, 0, TAU); else if (s.k === 1) ctx.rect(-r, -r, 2 * r, 2 * r);
+        else { ctx.moveTo(0, -r); ctx.lineTo(r, r); ctx.lineTo(-r, r); ctx.closePath(); }
+        ctx.stroke(); ctx.restore();
+      }
+      ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.font = `${Math.round(h * .3)}px Bungee, Impact, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(game.title.slice(0, 1).toUpperCase(), w / 2, h / 2);
+    },
+  };
+}
+
+if (!canHover) document.getElementById('hint').textContent = 'Pick a cartridge and play. Covers come alive as you scroll.';
+
+// ---------- cards ----------
+const grid = document.getElementById('grid');
+document.getElementById('count').textContent =
+  GAMES.length === 1 ? '1 game' : `${GAMES.length} games`;
+
+if (!GAMES.length) {
+  grid.innerHTML = `<div class="empty">No games on the shelf yet. Make one with <code>npm run new-game my-game</code>, then restart <code>npm run dev</code>.</div>`;
+}
+
+const PLAY_ICON = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1 0l9 5-9 5z" fill="currentColor"/></svg>';
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const cards = GAMES.map((game) => {
+  const cover = COVERS[game.slug] ?? fallbackCover(game);
+  const el = document.createElement('article');
+  el.className = 'card';
+  el.style.setProperty('--accent', cover.accent);
+  const href = `/${encodeURIComponent(game.slug)}/`;
+  el.innerHTML = `
+    <div class="cover"><canvas aria-hidden="true"></canvas><span class="ver">v${esc(game.version)}</span></div>
+    <div class="body">
+      <h3>${esc(game.title)}</h3>
+      <p class="genre">${esc(game.genre)}</p>
+      ${game.targetSegment ? `<p class="who">For ${esc(game.targetSegment)}</p>` : ''}
+      <div class="actions">
+        <a class="play" href="${href}">${PLAY_ICON}Play ${esc(game.title)}</a>
+        <a class="alt" href="${href}?ch=portal" title="Open as the web portal channel would">Play as portal</a>
+      </div>
+    </div>`;
+  grid.append(el);
+  return { el, cover, canvas: el.querySelector('canvas'), state: null, t: hash(game.slug) % 100 / 10, live: false, w: 0, h: 0 };
+});
+
+function size(c) {
+  const r = c.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+  c.w = r.width; c.h = r.height;
+  c.canvas.width = Math.round(r.width * dpr); c.canvas.height = Math.round(r.height * dpr);
+  const ctx = c.canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (!c.state) c.state = c.cover.init ? c.cover.init(c.w, c.h) : {};
+  render(c);
+}
+function render(c) { if (c.w) c.cover.draw(c.canvas.getContext('2d'), c.w, c.h, c.t, c.state); }
+
+const ro = new ResizeObserver((entries) => entries.forEach((e) => size(cards.find((c) => c.canvas === e.target))));
+cards.forEach((c) => ro.observe(c.canvas));
+document.fonts?.ready.then(() => cards.forEach(render));
+
+function setLive(c, on) { c.live = on && !reduceMotion; c.el.classList.toggle('live', on); if (c.live) loop(); }
+cards.forEach((c) => {
+  if (canHover) {
+    c.el.addEventListener('pointerenter', () => setLive(c, true));
+    c.el.addEventListener('pointerleave', () => setLive(c, c.el.contains(document.activeElement)));
+  }
+  c.el.addEventListener('focusin', () => setLive(c, true));
+  c.el.addEventListener('focusout', (e) => { if (!c.el.contains(e.relatedTarget)) setLive(c, false); });
+});
+// Touch screens have no hover, so covers play while they're on screen.
+if (!canHover && !reduceMotion) {
+  const io = new IntersectionObserver((es) => es.forEach((e) => {
+    const c = cards.find((x) => x.el === e.target); c.live = e.isIntersecting; if (c.live) loop();
+  }), { threshold: .5 });
+  cards.forEach((c) => io.observe(c.el));
+}
+
+let running = false, last = 0;
+function loop() {
+  if (running) return; running = true; last = performance.now();
+  requestAnimationFrame(function tick(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const live = cards.filter((c) => c.live);
+    live.forEach((c) => { c.t += dt; render(c); });
+    if (live.length) requestAnimationFrame(tick); else running = false;
+  });
+}
+</script>
+</body>
+</html>

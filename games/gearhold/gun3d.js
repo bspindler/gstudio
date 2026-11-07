@@ -1,5 +1,5 @@
-// Gearhold first-person weapons as small 3D models, rendered every frame with perspective so the gun
-// points into the screen at the crosshair. Flat-shaded polygons (diffuse + specular), painter-sorted.
+// Gearhold first-person weapons as small 3D models. gunTriangles() poses one for the renderer's
+// first-person pass so the gun points into the screen at the crosshair.
 // Gun space: x right, y down, z forward along the bore (metres, roughly).
 
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -145,50 +145,25 @@ function rotator(yaw, pitch, roll) {
     return [x1 * cy + z2 * sy, y2, -x1 * sy + z2 * cy];
   };
 }
-const L = norm([-0.45, -0.8, -0.45]); // toward the light: above, left, behind the viewer
+const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 
 /**
- * Draws a gun. pose: { pos, yaw, pitch, roll, kick }. view: { f, cx, cy, light: [r,g,b], flash }.
- * Returns the muzzle points on screen.
+ * The gun as triangles in view space (x right, y up, z toward the viewer; the camera looks down -z),
+ * in the renderer's vertex layout: position, normal, colour (sRGB), emissive flag.
+ * pose: { pos, yaw, pitch, roll, kick } in gun space (x right, y down, z forward).
+ * Returns { data, tips } where tips are the muzzle points in view space.
  */
-export function drawGun(g, gun, pose, view) {
+export function gunTriangles(gun, pose) {
   const R = rotator(pose.yaw, pose.pitch, pose.roll), K = rotator(0, pose.kick, 0), pv = gun.pivot;
-  const toCam = (p) => add(pose.pos, R(add(pv, K(sub(p, pv)))));
-  const toNrm = (n) => R(K(n));
-  const { f, cx, cy, light, flash } = view;
-  const list = [];
+  const toView = (p) => { const q = add(pose.pos, R(add(pv, K(sub(p, pv))))); return [q[0], -q[1], -q[2]]; };
+  const nView = (n) => { const q = R(K(n)); return [q[0], -q[1], -q[2]]; };
+  const out = [];
   for (const face of gun.faces) {
-    const pts = face.pts.map(toCam);
-    if (pts.some((p) => p[2] < 0.04)) continue;
-    let c = [0, 0, 0];
-    for (const p of pts) c = add(c, p);
-    c = mul(c, 1 / pts.length);
-    const n = toNrm(face.n);
-    if (dot(n, c) >= 0) continue; // facing away
-    let fill;
-    if (face.mat.glow) fill = face.mat.glow;
-    else {
-      const V = norm(mul(c, -1)), H = norm(add(L, V));
-      const diff = Math.max(0, dot(n, L)), spec = Math.pow(Math.max(0, dot(n, H)), face.mat.p) * face.mat.ks;
-      const rim = Math.pow(1 - Math.max(0, dot(n, V)), 3) * 0.18;
-      const k = 0.32 + diff * 0.78;
-      const rgb = face.mat.c.map((v, i) => {
-        const lit = v * k * light[i] + (spec + rim) * light[i] + flash * [1, 0.72, 0.42][i] * (0.35 + diff * 0.5);
-        return Math.round(Math.max(0, Math.min(1, lit)) * 255);
-      });
-      fill = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    const pts = face.pts.map(toView), n = nView(face.n);
+    const col = face.mat.glow ? hex(face.mat.glow) : face.mat.c, e = face.mat.glow ? 1 : 0;
+    for (let i = 1; i < pts.length - 1; i++) {
+      for (const p of [pts[0], pts[i], pts[i + 1]]) out.push(p[0], p[1], p[2], n[0], n[1], n[2], col[0], col[1], col[2], e);
     }
-    list.push({ d: Math.hypot(c[0], c[1], c[2]) + face.bias, pts, fill });
   }
-  list.sort((a, b) => b.d - a.d);
-  g.lineJoin = 'round';
-  g.lineWidth = Math.max(0.8, f * 0.0012);
-  for (const it of list) {
-    g.beginPath();
-    it.pts.forEach((p, i) => { const sx = cx + (f * p[0]) / p[2], sy = cy + (f * p[1]) / p[2]; if (i) g.lineTo(sx, sy); else g.moveTo(sx, sy); });
-    g.closePath();
-    g.fillStyle = it.fill; g.strokeStyle = it.fill;
-    g.fill(); g.stroke();
-  }
-  return gun.tips.map((t) => { const p = toCam(t); return [cx + (f * p[0]) / p[2], cy + (f * p[1]) / p[2]]; });
+  return { data: new Float32Array(out), tips: gun.tips.map(toView) };
 }
