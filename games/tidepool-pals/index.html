@@ -124,6 +124,83 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes shkL{10%{transform:translate(-6px,3px) rotate(-.6deg)}25%{transform:translate(6px,-4px) rotate(.6deg)}40%{transform:translate(-5px,3px)}55%{transform:translate(4px,-2px)}75%{transform:translate(-2px,1px)}}
 .hint{text-align:center;font-size:13px;color:var(--mist);font-weight:800;margin:0;min-height:18px}
 
+/* ---------- tides, helpers, rescue (play view) ---------- */
+.hud2{display:flex;align-items:stretch;gap:8px;min-height:46px}
+.hud2[hidden]{display:none!important}
+.tidem{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--panel);box-shadow:var(--rim);border-radius:16px;padding:5px 10px;transition:background .5s}
+.tidem.low{background:linear-gradient(180deg,rgba(150,120,70,.92),rgba(92,74,44,.92))}
+.tidem .ti{width:30px;height:30px;flex:none}
+.tidem .ti svg{width:100%;height:100%;display:block}
+.tidem .tt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.1}
+.tidem .tt b{font-family:var(--display);font-weight:400;font-size:16px;letter-spacing:.3px;white-space:nowrap}
+.tidem .tt span{font-size:12px;font-weight:800;color:var(--mist);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tidem.low .tt span{color:#F4E2BC}
+.tidem .tt span em{font-style:normal;color:var(--sand);font-weight:900}
+.pips{display:flex;gap:3px;flex:none}
+.pips i{width:8px;height:14px;border-radius:4px;background:rgba(255,255,255,.14)}
+.pips i.on{background:var(--aqua);box-shadow:0 0 6px rgba(61,220,203,.7)}
+.tidem.low .pips i.on{background:var(--sand);box-shadow:0 0 6px rgba(255,217,138,.7)}
+.pips i.last{animation:throb .9s ease-in-out infinite}
+.nextdir{flex:none;display:flex;flex-direction:column;align-items:center;gap:0;font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--mist)}
+.nextdir svg{width:24px;height:24px;display:block;transition:transform .4s}
+.tidem.soon{box-shadow:var(--rim),0 0 0 2px var(--sand)}
+.helper{position:relative;flex:none;width:58px;border:0;border-radius:16px;padding:0;background:var(--panel);box-shadow:var(--rim);cursor:pointer;display:grid;place-items:center}
+.helper .ring{position:absolute;inset:4px;border-radius:50%;background:conic-gradient(var(--aqua) calc(var(--p,0) * 1turn),rgba(255,255,255,.12) 0)}
+.helper .ring::after{content:'';position:absolute;inset:4px;border-radius:50%;background:#10364D}
+.helper .face{position:relative;width:40px;height:40px}
+.helper .face svg{width:100%;height:100%;display:block}
+.helper .tag2{position:absolute;bottom:-5px;left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;background:var(--abyss);color:var(--mist);border-radius:6px;padding:1px 5px;white-space:nowrap}
+.helper.ready .ring{background:conic-gradient(var(--sand) 1turn,transparent 0);animation:glowring 1.2s ease-in-out infinite}
+.helper.ready .tag2{background:var(--sand);color:var(--ink)}
+.helper.aim{box-shadow:var(--rim),0 0 0 3px var(--sand)}
+@keyframes glowring{50%{box-shadow:0 0 16px 3px rgba(255,217,138,.8)}}
+.board.aim .tile .tl{animation:aimpulse 1.2s ease-in-out infinite}
+@keyframes aimpulse{50%{transform:scale(.92)}}
+/* low tide: the water drains, the pool floor shows through */
+.board.low .slot{background:radial-gradient(circle at 50% 42%,#9C8656 0 40%,#7C6A44 72%)}
+.board.low .slot.alt{background:radial-gradient(circle at 50% 42%,#927D50 0 40%,#73623E 72%)}
+.slot.rock{background:radial-gradient(circle at 50% 45%,#0C3550 0 52%,#082A40 75%);box-shadow:inset 0 0 0 3px #56656D,inset 0 0 0 5px rgba(0,0,0,.25)}
+.slot.rock::after{content:'';position:absolute;inset:22% 18%;border-radius:50%;border-top:2px solid rgba(190,240,255,.35);border-bottom:2px solid rgba(190,240,255,.18)}
+.board.low .slot.rock{background:radial-gradient(circle at 50% 42%,#3E7E86 0 40%,#2D5F68 72%)}
+.board.low .slot.rock::after{display:none}
+.board.tidal .tile{transition:transform .62s cubic-bezier(.55,0,.25,1.12)}
+.sweep{position:absolute;inset:0;pointer-events:none;border-radius:16px;overflow:hidden}
+.sweep i{position:absolute;inset:0;background:linear-gradient(var(--sa),rgba(61,170,220,0) 0%,rgba(61,170,220,.55) 30%,rgba(220,255,250,.95) 46%,#fff 50%,rgba(61,170,220,.4) 56%,rgba(61,170,220,0) 100%);animation:sweep .9s cubic-bezier(.45,0,.3,1) forwards}
+.sweep.low i{background:linear-gradient(var(--sa),rgba(255,217,138,0) 0%,rgba(61,170,220,.6) 34%,rgba(220,255,250,.95) 48%,#fff 50%,rgba(232,201,133,.5) 58%,rgba(232,201,133,0) 100%)}
+@keyframes sweep{from{transform:translate(var(--sx0),var(--sy0))}to{transform:translate(var(--sx1),var(--sy1))}}
+.tidebanner{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;font-family:var(--display);font-size:clamp(28px,9cqw,44px);color:#fff;white-space:nowrap;text-shadow:0 3px 0 var(--ink),0 0 24px rgba(61,220,203,.9);animation:banner 1.3s ease-out forwards;display:flex;align-items:center;gap:8px}
+.tidebanner.low{text-shadow:0 3px 0 #4A3A1E,0 0 24px rgba(255,217,138,.9)}
+.tidebanner svg{width:1em;height:1em}
+@keyframes banner{0%{transform:translate(-50%,-50%) scale(.6);opacity:0}15%{transform:translate(-50%,-50%) scale(1.08);opacity:1}70%{opacity:1}100%{transform:translate(-50%,-60%) scale(1);opacity:0}}
+.washout{position:absolute;width:calc(100% / 7);height:calc(100% / 8);pointer-events:none;animation:washout .7s ease-in forwards}
+.washout svg{width:100%;height:100%;display:block}
+@keyframes washout{to{transform:translate(var(--wx),var(--wy)) scale(.4) rotate(40deg);opacity:0}}
+.exitmark{position:absolute;pointer-events:none;display:flex;align-items:center;justify-content:space-around;color:#BFF7EE;background:linear-gradient(var(--ed),rgba(61,220,203,.55),rgba(61,220,203,0));border-radius:8px}
+.exitmark svg{width:14px;height:14px;animation:nudge 1.4s ease-in-out infinite}
+@keyframes nudge{50%{transform:translate(var(--nx),var(--ny))}}
+.lost .tl{animation:bobble 2.2s ease-in-out infinite}
+@keyframes bobble{50%{transform:translateY(-6%) rotate(-4deg)}}
+.swimmer{position:absolute;width:calc(100% / 7);height:calc(100% / 8);pointer-events:none;animation:swimoff 1.1s cubic-bezier(.4,0,.6,1) forwards}
+.swimmer svg{width:100%;height:100%;display:block;animation:paddle .25s ease-in-out infinite alternate}
+@keyframes swimoff{20%{transform:scale(1.25)}100%{transform:translate(var(--wx),var(--wy)) scale(1);opacity:0}}
+@keyframes paddle{to{transform:rotate(8deg)}}
+.tile.lit .tl{animation:litglow 1s ease-in-out infinite}
+@keyframes litglow{50%{transform:scale(1.1);filter:drop-shadow(0 0 8px #FFF6A8)}}
+.helperfx{position:absolute;left:50%;top:50%;width:46%;transform:translate(-50%,-50%);pointer-events:none;animation:helperin .8s cubic-bezier(.3,1.4,.6,1) forwards}
+.helperfx svg{width:100%;display:block;filter:drop-shadow(0 8px 16px rgba(0,0,0,.5))}
+@keyframes helperin{0%{transform:translate(-50%,10%) scale(.3);opacity:0}35%{transform:translate(-50%,-50%) scale(1.05);opacity:1}75%{opacity:1}100%{transform:translate(-50%,-80%) scale(.9);opacity:0}}
+.tile.inked .tl{animation:spawn .4s cubic-bezier(.34,1.7,.6,1)}
+.helpers{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;-webkit-overflow-scrolling:touch}
+.hpick{flex:none;width:78px;display:flex;flex-direction:column;align-items:center;gap:2px;border:2px solid transparent;border-radius:14px;padding:6px 4px;background:var(--abyss);cursor:pointer;font-weight:900;font-size:12px;text-align:center}
+.hpick .hp{width:44px;height:44px}
+.hpick .hp svg{width:100%;height:100%}
+.hpick small{font-size:10px;color:var(--mist);font-weight:800;line-height:1.1}
+.hpick[aria-pressed="true"]{border-color:var(--aqua);background:rgba(61,220,203,.14)}
+.hpick .paid{font-size:9px;color:var(--coral);font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+.mech{display:flex;gap:8px;align-items:center;font-size:13px;font-weight:800;color:var(--foam);background:rgba(255,255,255,.06);border-radius:12px;padding:8px 10px}
+.mech svg{width:22px;height:22px;flex:none}
+.boostnote{font-size:12px;font-weight:900;color:var(--coral)}
+
 /* ---------- tabs ---------- */
 .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding-top:4px;padding-bottom:max(10px,env(safe-area-inset-bottom,0px))}
 .tab{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;padding:6px 0;border-radius:14px;font-weight:800;font-size:12px;color:var(--mist);cursor:pointer}
@@ -290,6 +367,10 @@ h3{font-family:var(--display);font-weight:400;font-size:19px;margin:0;color:var(
       <div class="goals" id="goals" aria-label="Goals"></div>
       <div class="moves" id="movesBox"><div class="label">Moves</div><b id="movesCount">0</b></div>
     </div>
+    <div class="hud2" id="hud2" hidden>
+      <button class="helper" id="helperBtn" data-act="helper" hidden><span class="ring"></span><span class="face" id="helperFace"></span><span class="tag2" id="helperTag"></span></button>
+      <div class="tidem" id="tideMeter" role="group" hidden></div>
+    </div>
     <div class="boardwrap" id="boardwrap"><div class="board" id="board" aria-label="Puzzle board"><div class="slots" id="slots"></div><div class="tiles" id="tiles"></div><div class="fx" id="fx"></div></div></div>
     <p class="hint" id="hint"></p>
   </section>
@@ -314,17 +395,24 @@ h3{font-family:var(--display);font-weight:400;font-size:19px;margin:0;color:var(
 
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
-import { buildBoard, collapse, counter, goalStatus, goalsMet, hasMoves, largestGroup, maskOf, mulberry32,
-  newProgress, addProgress, resolveTap, shuffle, starsFor, COLS, ROWS } from './board.js';
-import { levelDef } from './levels.js';
-import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, loadSave, recordWin,
-  resetProgress, sandDollarCost, shellDrop, takeShell, writeSave } from './save.js';
+import { ABILITIES, GRAVITY, activeMask, applyAbility, buildBoard, collapse, counter, doubleCounts, goalStatus, goalsMet,
+  hasMoves, helperCharge, largestGroup, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveTap, rockOf,
+  shuffle, starsFor, tidePhase, tideTurns, turnTide, COLS, ROWS } from './board.js';
+import { HELPER_LEVEL, levelDef, withoutTides } from './levels.js';
+import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, loadSave, palEarned, pickHelper,
+  recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, writeSave } from './save.js';
 
 const studio = createStudio({ game: 'tidepool-pals', version: '0.3.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
 const motion = () => !RM.matches;
+/** Tides feature flag (default on). The SDK assigns the variant and tracks exposure once. Only 'on' is served
+    today; adding 'off' to the list turns this into an A/B test. ?tides=off forces it off for local QA. */
+const TIDE_VARIANTS = ['on'];
+const TIDES = new URLSearchParams(location.search).get('tides') === 'off' ? 'off' : studio.flag('tides', TIDE_VARIANTS);
+const TIDES_ON = TIDES !== 'off';
+const playDef = (n) => (TIDES_ON ? levelDef(n) : withoutTides(levelDef(n)));
 
 /* ---------- art: tiles share gradients defined once ---------- */
 const TC = [ // base, light, dark
@@ -365,7 +453,25 @@ const wave = (vertical) => `<svg viewBox="0 0 40 40">${SHADOW}<circle cx="20" cy
 const WAVE_H = wave(false), WAVE_V = wave(true);
 const whirl = (c) => `<svg viewBox="0 0 40 40">${SHADOW}<circle cx="20" cy="20" r="16" fill="url(#tg${c})" stroke="${TC[c][2]}" stroke-width="1.6"/><g class="spin"><path d="M20 20m0-2.2a2.2 2.2 0 1 1-2.2 2.2a4.6 4.6 0 0 1 4.6-4.6a7 7 0 0 1 7 7a9.4 9.4 0 0 1-9.4 9.4a11.6 11.6 0 0 1-11.6-11.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></g><ellipse cx="14" cy="12" rx="6" ry="3.4" fill="url(#tspec)" transform="rotate(-28 14 12)"/></svg>`;
 const SAND = `<svg viewBox="0 0 40 40"><rect x="3" y="4" width="34" height="34" rx="9" fill="#7A5524" opacity=".55"/><rect x="3" y="2.5" width="34" height="33" rx="9" fill="url(#tsand)" stroke="#9C7230" stroke-width="1.4"/><path d="M8 11q12-5 24 0" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="2.2" stroke-linecap="round"/><g fill="#9C7230" opacity=".55"><circle cx="12" cy="20" r="1.3"/><circle cx="22" cy="17" r="1"/><circle cx="28" cy="25" r="1.4"/><circle cx="16" cy="28" r="1.1"/><circle cx="25" cy="31" r=".9"/></g><path d="M24 22l3 4h-6z" fill="#FFF2CF" opacity=".8"/></svg>`;
-const ICE = `<svg viewBox="0 0 40 40"><rect x="2" y="2" width="36" height="36" rx="9" fill="url(#tice)" stroke="#F2FDFF" stroke-opacity=".95" stroke-width="1.6"/><path d="M7 14L14 7h6L7 20z" fill="#fff" opacity=".55"/><path d="M27 33l4-6M31 27l3 1M27 33l-4 1" stroke="#fff" stroke-opacity=".8" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>`;
+// A pal tangled in a fishing net (same rules as the old ice): rope mesh with knots and a little float.
+const NET_LINES = [8, 16, 24, 32].map((x) => `<path d="M${x - 6} 3Q${x + 2} 20 ${x - 6} 37"/><path d="M3 ${x - 6}Q20 ${x + 2} 37 ${x - 6}"/>`).join('');
+const ICE = `<svg viewBox="0 0 40 40"><g fill="none" stroke-linecap="round"><g stroke="#4A3A22" stroke-width="3.4" opacity=".55">${NET_LINES}</g><g stroke="#D9B77A" stroke-width="2">${NET_LINES}</g></g><g fill="#B98E4E">${[[9, 10], [21, 12], [31, 11], [11, 22], [24, 23], [10, 32], [22, 32], [32, 30]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.7"/>`).join('')}</g><ellipse cx="33" cy="6" rx="4.6" ry="3.4" fill="#FF7A3D" stroke="#9C3A16" stroke-width="1.2"/><path d="M29 6h8" stroke="#fff" stroke-width="1.2"/></svg>`;
+// Ocean litter (same rules as sand): a can, plastic six-pack rings and a bottle, on a murky patch of silt.
+const SILT = `<rect x="3" y="4" width="34" height="34" rx="9" fill="#2E3A33" opacity=".6"/><rect x="3" y="2.5" width="34" height="33" rx="9" fill="#55635A" stroke="#3B463F" stroke-width="1.4"/><g fill="#7D8A7E" opacity=".7"><circle cx="9" cy="29" r="1.2"/><circle cx="31" cy="9" r="1"/><circle cx="30" cy="30" r="1.3"/></g>`;
+const LITTER = [
+  `<svg viewBox="0 0 40 40">${SILT}<g transform="rotate(-24 20 19)"><rect x="12" y="8" width="16" height="23" rx="3" fill="#E5463A" stroke="#7A1A14" stroke-width="1.3"/><rect x="12" y="15" width="16" height="6" fill="#fff" opacity=".9"/><ellipse cx="20" cy="8.5" rx="8" ry="2.6" fill="#D6DEE3" stroke="#7D8C96" stroke-width="1.1"/><rect x="14" y="10" width="2.6" height="19" rx="1.3" fill="#fff" opacity=".45"/><path d="M27 23l2 3-3 1" fill="none" stroke="#7A1A14" stroke-width="1"/></g></svg>`,
+  `<svg viewBox="0 0 40 40">${SILT}<g fill="none" stroke="#EAF6FF" stroke-width="2.6" opacity=".95">${[11, 20, 29].map((x) => `<ellipse cx="${x}" cy="14" rx="4.6" ry="5"/><ellipse cx="${x}" cy="25" rx="4.6" ry="5"/>`).join('')}</g><g fill="none" stroke="#9FC3D6" stroke-width="1" opacity=".8">${[11, 20, 29].map((x) => `<ellipse cx="${x}" cy="14" rx="4.6" ry="5"/><ellipse cx="${x}" cy="25" rx="4.6" ry="5"/>`).join('')}</g></svg>`,
+  `<svg viewBox="0 0 40 40">${SILT}<g transform="rotate(38 20 19)"><path d="M15 33V17q0-4 3-6v-4h4v4q3 2 3 6v16q0 2-2 2h-6q-2 0-2-2z" fill="#6FCF97" fill-opacity=".72" stroke="#2D7A50" stroke-width="1.3"/><rect x="17.5" y="4" width="5" height="3.5" rx="1" fill="#2F80ED"/><rect x="15" y="21" width="10" height="6" fill="#fff" opacity=".7"/><path d="M17 14v16" stroke="#fff" stroke-width="1.6" opacity=".6" stroke-linecap="round"/></g></svg>`,
+];
+// A stranded pal: a sea turtle hatchling in a life ring. It cannot be matched; get it to the open water.
+const LOST = `<svg viewBox="0 0 40 40"><ellipse cx="20" cy="37" rx="13" ry="3" fill="url(#tsh)"/><circle cx="20" cy="20" r="16.5" fill="none" stroke="#fff" stroke-width="6"/><g stroke="#FF5A4E" stroke-width="6" fill="none"><path d="M20 3.5a16.5 16.5 0 0 1 11.7 4.8"/><path d="M36.5 20a16.5 16.5 0 0 1-4.8 11.7"/><path d="M20 36.5a16.5 16.5 0 0 1-11.7-4.8"/><path d="M3.5 20a16.5 16.5 0 0 1 4.8-11.7"/></g><g fill="#7BD45A" stroke="#2E7A2A" stroke-width="1"><ellipse cx="12.5" cy="15.5" rx="3.6" ry="2" transform="rotate(-35 12.5 15.5)"/><ellipse cx="27.5" cy="15.5" rx="3.6" ry="2" transform="rotate(35 27.5 15.5)"/><ellipse cx="13" cy="26" rx="3" ry="1.8" transform="rotate(30 13 26)"/><ellipse cx="27" cy="26" rx="3" ry="1.8" transform="rotate(-30 27 26)"/><circle cx="20" cy="11" r="4.4"/></g><ellipse cx="20" cy="21" rx="7.4" ry="8.4" fill="#3E9A4A" stroke="#1F5E26" stroke-width="1.2"/><path d="M20 14.5l3.4 2.5v4.5L20 24l-3.4-2.5V17z" fill="#58B85A" stroke="#1F5E26" stroke-width=".8"/><circle cx="18.3" cy="10.4" r="1.3" fill="#14202B"/><circle cx="21.7" cy="10.4" r="1.3" fill="#14202B"/><circle cx="18.7" cy="10" r=".45" fill="#fff"/><circle cx="22.1" cy="10" r=".45" fill="#fff"/></svg>`;
+// Tide icons and direction arrows.
+const TIDE_HIGH = `<svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="url(#twave)"/><path d="M5 14q2.5-3 5 0t5 0 5 0 5 0M5 20q2.5-3 5 0t5 0 5 0 5 0" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+const TIDE_LOW = `<svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="13" fill="url(#tsand)"/><path d="M5 21q2.5-2 5 0t5 0 5 0 5 0" fill="none" stroke="#3DDCCB" stroke-width="2.2" stroke-linecap="round"/><circle cx="11" cy="12" r="2" fill="#9C7230"/><circle cx="19" cy="10" r="1.4" fill="#9C7230"/></svg>`;
+const ROT = { down: 0, left: 90, up: 180, right: 270 };
+const ARROW = (dir, color = 'currentColor') => `<svg viewBox="0 0 24 24" style="transform:rotate(${ROT[dir]}deg)" aria-hidden="true"><path d="M12 4v14M6 12l6 6 6-6" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const DIR_WORD = { down: 'down', up: 'up', left: 'left', right: 'right' };
+const EDGE_WORD = { down: 'bottom', left: 'left', right: 'right' };
 const ICE_ICON = `<svg viewBox="0 0 40 40">${TILES[2].replace(/^<svg[^>]*>|<\/svg>$/g, '')}${ICE.replace(/^<svg[^>]*>|<\/svg>$/g, '')}</svg>`;
 const PEARL = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12.5" r="9" fill="url(#tpearl)" stroke="#B9A8E8" stroke-width="1.2"/><ellipse cx="9" cy="8.6" rx="3.2" ry="2" fill="#fff"/></svg>`;
 const SANDDOLLAR = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#F1DDB0" stroke="#C9A66B" stroke-width="1.4"/><g fill="none" stroke="#C9A66B" stroke-width="1.4" stroke-linecap="round"><path d="M12 5.5v4M12 14.5v4M6 9.5l3.5 1.6M18 9.5l-3.5 1.6M7.5 16.5l3-2.5M16.5 16.5l-3-2.5"/></g><circle cx="12" cy="12" r="1.6" fill="#C9A66B"/></svg>`;
@@ -522,6 +628,15 @@ const sfx = (() => {
     win() { [523, 659, 784, 1046].forEach((f, i) => tone(f, .28, { type: 'triangle', vol: .2, at: i * .11 })); tone(1568, .5, { vol: .12, at: .46 }); },
     lose() { [392, 330, 262].forEach((f, i) => tone(f, .3, { type: 'triangle', vol: .16, at: i * .16 })); },
     crack() { noise(.25, { vol: .35, f: 3000, type: 'highpass' }); tone(784, .4, { type: 'triangle', vol: .15, at: .15, to: 1568 }); },
+    // the tide: a long surf wash (rising sweeps up, falling sweeps down) under a soft two-note swell
+    tide(rising) {
+      noise(1.1, { vol: .32, f: rising ? 250 : 2600, to: rising ? 2600 : 220, type: 'bandpass', q: .8 });
+      noise(.7, { vol: .18, f: 900, to: 300, at: .25 });
+      const [a, b] = rising ? [294, 440] : [440, 294];
+      tone(a, .5, { type: 'sine', vol: .12, to: b }); tone(b * 2, .35, { type: 'triangle', vol: .05, at: .3 });
+    },
+    rescue() { [659, 784, 988, 1319].forEach((f, i) => tone(f, .18, { type: 'triangle', vol: .16, at: i * .08 })); noise(.4, { vol: .15, f: 600, to: 3000, type: 'bandpass', q: 2, at: .1 }); },
+    helper() { tone(523, .2, { type: 'triangle', vol: .14, to: 1046 }); tone(784, .25, { type: 'sine', vol: .1, at: .08, to: 1568 }); },
   };
 })();
 function buzz(p) { if (!S.settings.haptics || !navigator.vibrate) return; try { navigator.vibrate(p); } catch (e) { /* not supported */ } }
@@ -550,8 +665,15 @@ function confetti() {
 /* ---------- level text ---------- */
 const CHAPTERS = ['The Shallows', 'Coral Reef', 'Kelp Forest', 'Sunken Ship', 'Twilight Drop', 'The Deep', 'Abyssal Plain', 'Vent Gardens'];
 function chapter(n) { const i = Math.floor((n - 1) / 10); const nm = CHAPTERS[i % CHAPTERS.length]; return i >= CHAPTERS.length ? `${nm} ${Math.floor(i / CHAPTERS.length) + 1}` : nm; }
-function goalIcon(g) { return g.t === 'collect' ? TILES[g.c] : g.t === 'sand' ? SAND : ICE_ICON; }
-function goalText(g) { return g.t === 'collect' ? `Collect ${g.need} ${TILE_NAME[g.c]}` : g.t === 'sand' ? `Break all ${g.need} sand` : `Free ${g.need} frozen pal${g.need > 1 ? 's' : ''}`; }
+function goalIcon(g) { return g.t === 'collect' ? TILES[g.c] : g.t === 'sand' ? SAND : g.t === 'litter' ? LITTER[0] : g.t === 'rescue' ? LOST : ICE_ICON; }
+function goalText(g) {
+  const s = g.need > 1 ? 's' : '';
+  if (g.t === 'collect') return `Collect ${g.need} ${TILE_NAME[g.c]}`;
+  if (g.t === 'sand') return `Break all ${g.need} sand`;
+  if (g.t === 'litter') return `Clean up ${g.need} litter`;
+  if (g.t === 'rescue') return `Rescue ${g.need} stranded pal${s}`;
+  return `Untangle ${g.need} pal${s}`;
+}
 
 /* ---------- game state ---------- */
 const newId = counter();
@@ -562,16 +684,21 @@ let idleT = 0;
 
 function tileHTML(cell) {
   if (cell.k === 'sand') return SAND;
+  if (cell.k === 'litter') return LITTER[cell.v % 3];
+  if (cell.k === 'lost') return LOST;
   if (cell.k === 'sp') return cell.s === 'bomb' ? BOMB : cell.s === 'wave-h' ? WAVE_H : cell.s === 'wave-v' ? WAVE_V : whirl(cell.c);
   return TILES[cell.c];
 }
 const SP_NAME = { bomb: 'Urchin bomb', 'wave-h': 'Row wave', 'wave-v': 'Column wave', whirl: 'Whirlpool' };
+const LITTER_NAME = ['Can', 'Plastic rings', 'Bottle'];
 function tileLabel(cell) {
   if (cell.k === 'sand') return 'Sand';
+  if (cell.k === 'litter') return LITTER_NAME[cell.v % 3] + ' (litter)';
+  if (cell.k === 'lost') return 'Stranded pal: get it to the open water';
   if (cell.k === 'sp') return SP_NAME[cell.s] + (cell.s === 'whirl' ? ' (' + TILE_NAME[cell.c] + ')' : '');
-  return (cell.ice ? 'Frozen ' : '') + TILE_NAME[cell.c];
+  return (cell.ice ? 'Tangled ' : '') + TILE_NAME[cell.c];
 }
-const sig = (cell) => cell.k === 'pal' ? 'p' + cell.c : cell.k === 'sp' ? cell.s + cell.c : 's';
+const sig = (cell) => cell.k === 'pal' ? 'p' + cell.c : cell.k === 'sp' ? cell.s + cell.c : cell.k === 'litter' ? 'l' + cell.v : cell.k;
 function makeEl(cell) {
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'tile'; el.dataset.id = cell.id;
@@ -583,25 +710,45 @@ function paint(el, cell) {
   el._sig = sig(cell);
   el.innerHTML = `<span class="tl">${tileHTML(cell)}</span>${cell.ice ? `<span class="ice">${ICE}</span>` : ''}`;
   el.classList.toggle('sp', cell.k === 'sp');
+  el.classList.toggle('lost', cell.k === 'lost');
   el._ice = !!cell.ice;
   el.setAttribute('aria-label', tileLabel(cell));
-  if (cell.k === 'sand' || cell.ice) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled');
+  if (cell.k === 'sand' || cell.k === 'litter' || cell.k === 'lost' || cell.ice) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled');
 }
 function place(el, r, c) { el.style.transform = `translate(${c * 100}%,${r * 100}%)`; }
 function placeNow(el, r, c) { el.classList.add('now'); place(el, r, c); void el.offsetWidth; el.classList.remove('now'); }
 
-/** Makes the DOM match the grid. New cells drop in from `from` (id -> start row). */
-function render(from = new Map()) {
+/** Spawn list from collapse -> id -> [startRow, startCol] for render. */
+const fromOf = (spawned) => new Map(spawned.map((s) => [s.id, [s.fromR, s.fromC]]));
+/**
+ * Makes the DOM match the grid. New cells slide in from `from` (id -> [row, col], or a start row).
+ * With `stagger` = a gravity direction, pieces nearest the side they move toward set off first, so a tide
+ * turn rolls across the board like water instead of everything jumping at once.
+ */
+function render(from = new Map(), stagger = null) {
   const seen = new Set();
   const later = [];
+  const delay = (r, c) => {
+    if (!stagger || !motion()) return '';
+    const [dr, dc] = GRAVITY[stagger];
+    const d = dr > 0 ? ROWS - 1 - r : dr < 0 ? r : dc > 0 ? COLS - 1 - c : c;
+    return (Math.max(0, d) * 45) + 'ms';
+  };
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
     const cell = grid[r][c]; if (!cell) continue;
     seen.add(cell.id);
     let el = els.get(cell.id);
-    if (!el) { el = makeEl(cell); els.set(cell.id, el); placeNow(el, from.has(cell.id) ? from.get(cell.id) : r, c); later.push([el, r, c]); continue; }
+    if (!el) {
+      el = makeEl(cell); els.set(cell.id, el);
+      const f = from.get(cell.id), [fr, fc] = Array.isArray(f) ? f : [f ?? r, c];
+      placeNow(el, fr, fc); later.push([el, r, c]);
+      el.style.transitionDelay = delay(Math.max(0, Math.min(ROWS - 1, fr)), Math.max(0, Math.min(COLS - 1, fc)));
+      continue;
+    }
     if (el._sig !== sig(cell)) paint(el, cell);
     else if (el._ice && !cell.ice) thaw(el, cell);
     el._r = r; el._c = c;
+    el.style.transitionDelay = delay(r, c);
     place(el, r, c);
   }
   for (const [el, r, c] of later) { el._r = r; el._c = c; }
@@ -621,34 +768,55 @@ function drawSlots() {
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
     if (!mask[r][c]) continue;
     const R = '16px', rad = [!open(r - 1, c) && !open(r, c - 1), !open(r - 1, c) && !open(r, c + 1), !open(r + 1, c) && !open(r, c + 1), !open(r + 1, c) && !open(r, c - 1)].map((x) => x ? R : '0').join(' ');
-    h += `<i class="slot${(r + c) % 2 ? ' alt' : ''}" style="left:${(c / COLS * 100).toFixed(3)}%;top:${(r / ROWS * 100).toFixed(3)}%;border-radius:${rad}"></i>`;
+    const rk = lvl?.rock?.[r]?.[c];
+    h += `<i class="slot${(r + c) % 2 ? ' alt' : ''}${rk ? ' rock' : ''}" style="left:${(c / COLS * 100).toFixed(3)}%;top:${(r / ROWS * 100).toFixed(3)}%;border-radius:${rk ? '30%' : rad}"></i>`;
   }
   slotsEl.innerHTML = h;
+  drawExit();
+}
+/** The open-water edge stranded pals swim out through: a glowing strip with chevrons just outside the board. */
+function drawExit() {
+  $('exitmark')?.remove();
+  const ex = lvl?.exit; if (!ex) return;
+  const d = document.createElement('div');
+  d.id = 'exitmark'; d.className = 'exitmark'; d.setAttribute('aria-hidden', 'true');
+  const pos = { down: 'left:4%;right:4%;top:100%;height:5.5%;--ed:180deg;--nx:0;--ny:3px', left: 'top:4%;bottom:4%;right:100%;width:6%;flex-direction:column;--ed:270deg;--nx:-3px;--ny:0', right: 'top:4%;bottom:4%;left:100%;width:6%;flex-direction:column;--ed:90deg;--nx:3px;--ny:0' }[ex];
+  d.style.cssText = pos;
+  d.innerHTML = ARROW(ex).repeat(4);
+  boardEl.appendChild(d);
 }
 
 /* ---------- starting a level ---------- */
+/** Props every level_end carries: whether the level had tides (and the flag), and which helper came along. */
+const endProps = () => ({ tides: lvl.def.tide ? 'on' : levelDef(lvl.n).tide ? 'off' : 'none', helper: lvl.helper || 'none',
+  tide_turns: lvl.turns, rescued: lvl.prog.rescue || 0, helper_uses: lvl.helperUses });
 function abandon() {
-  if (lvl && !lvl.over) { studio.track('level_end', { level: lvl.n, result: 'quit', score: 0, moves_left: lvl.moves }); lvl.over = true; }
+  if (lvl && !lvl.over) { studio.track('level_end', { level: lvl.n, result: 'quit', score: 0, moves_left: lvl.moves, ...endProps() }); lvl.over = true; }
 }
 function freeCell() {
   const opts = [];
   for (let r = 2; r < ROWS - 2; r++) for (let c = 1; c < COLS - 1; c++) { const x = grid[r][c]; if (x && x.k === 'pal' && !x.ice) opts.push([r, c]); }
   return opts.length ? opts[Math.floor(rng() * opts.length)] : null;
 }
-function startLevel(n, picks = []) {
-  const def = levelDef(n);
-  const run = { n, def, moves: def.moves, prog: newProgress(), assisted: false, shellDrop: false, shellTaken: false, over: false, boosters: [], specials: 0, replay: (S.stars[n] || 0) > 0 };
+function startLevel(n, picks = [], helperId = null) {
+  const def = playDef(n);
+  const run = { n, def, moves: def.moves, prog: newProgress(), assisted: false, shellDrop: false, shellTaken: false, over: false, boosters: [], specials: 0, replay: (S.stars[n] || 0) > 0,
+    made: 0, turns: 0, phase: 'high', dir: 'down', rock: rockOf(def), exit: def.exit || null, helper: null, helperEarned: true, charge: 0, helperUses: 0, double: false };
+  // A helper the player only has from a purchase counts as a boost (assisted: no shell), like boosters.
+  if (helperId && n >= HELPER_LEVEL && !pickHelper(S, run, helperId)) return false;
   // Boosters are paid in pearls and mark the run assisted (no shell on this win).
   if (!buyBoosters(S, run, picks)) { toast('Not enough pearls for those boosters'); return false; }
+  if (run.helper && !run.helperEarned) { run.assisted = true; run.shellDrop = false; }
   abandon();
   lvl = run;
   for (const id of lvl.boosters) ev('booster_used', { level: n, booster: id, pearls: BOOSTERS.find((b) => b.id === id).pearls });
   if (lvl.boosters.length) persist();
-  busy = false;
+  busy = false; aiming = false;
   for (const el of els.values()) el.remove();
   els.clear(); fxEl.innerHTML = '';
+  boardEl.classList.remove('low', 'tidal', 'aim');
   mask = maskOf(def);
-  grid = buildBoard(def, rng, newId);
+  grid = buildBoard(def, rng, newId, 'high');
   for (const id of lvl.boosters) {
     if (id === 'moves3') lvl.moves += 3;
     const at = id === 'moves3' ? null : freeCell();
@@ -661,23 +829,31 @@ function startLevel(n, picks = []) {
   render(motion() ? from : new Map());
   hud(true);
   $('hint').textContent = `Level ${n} · ${chapter(n)}`;
-  studio.track('level_start', { level: n, replay: lvl.replay, boosters: lvl.boosters.join(',') });
+  studio.track('level_start', { level: n, replay: lvl.replay, boosters: lvl.boosters.join(','), tides: lvl.def.tide ? 'on' : levelDef(n).tide ? 'off' : 'none', helper: lvl.helper || 'none' });
   armIdle();
   return true;
 }
 
 /* ---------- a move ---------- */
+let aiming = false; // a targeted helper ability is waiting for the player to tap a cell
+const active = () => activeMask(mask, lvl.rock, lvl.phase);
 function onTileTap(el) {
   sfx.unlock();
   if (busy || !lvl || lvl.over) return;
   const r = el._r, c = el._c;
+  if (aiming) { useHelper(r, c); return; }
   const res = resolveTap(grid, r, c, newId);
   clearHint();
   if (!res.ok) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); sfx.bad(); armIdle(); return; }
-  busy = true; lvl.moves--;
+  busy = true; lvl.moves--; lvl.made++;
   grid = res.grid;
+  // Lumen's lit move counts double toward colour goals.
+  const doubled = lvl.double && res.kind === 'group';
+  if (lvl.double) { lvl.double = false; document.querySelectorAll('.tile.lit').forEach((t) => t.classList.remove('lit')); }
+  const counts = doubled ? doubleCounts(res.counts) : res.counts;
   const before = goalStatus(lvl.def, lvl.prog).map((g) => g.got);
-  addProgress(lvl.prog, res.counts);
+  addProgress(lvl.prog, counts);
+  chargeHelper(res.counts);
 
   // effects first, then pops
   const big = res.kind !== 'group';
@@ -685,9 +861,21 @@ function onTileTap(el) {
   if (res.kind === 'group') { sfx.pop(res.cleared.length); buzz(12); }
   else if (res.kind === 'combo') { sfx.combo(); buzz([30, 30, 60]); shake('l'); }
   else { const k = res.effects[0].kind; k === 'bomb' ? sfx.boom() : k === 'whirl' ? sfx.whirl() : sfx.wave(); buzz(35); shake(res.effects.length > 1 ? 'l' : 's'); }
+  animateResult(res);
+  if (res.spawned) lvl.specials++;
+  // goal floaters
+  const after = goalStatus(lvl.def, lvl.prog);
+  const gained = after.reduce((a, g, i) => a + (g.got - before[i]), 0);
+  if (gained && !res.spawned) floatAt(r, c, (doubled ? '×2 +' : '+') + gained);
+  hud();
+
+  setTimeout(() => settle(afterMove), big ? 260 : 170);
+}
+
+/** Pops, crumbles, thaws, recolours and new specials for a tap or helper result. */
+function animateResult(res) {
   if (res.broke.length) setTimeout(() => sfx.sand(), 60);
   if (res.freed.length) setTimeout(() => sfx.ice(), 90);
-
   let budget = motion() ? 70 : 0;
   const per = Math.max(2, Math.min(6, Math.floor(70 / Math.max(1, res.cleared.length + res.broke.length))));
   for (const { r: y, c: x, cell } of res.cleared) {
@@ -698,30 +886,164 @@ function onTileTap(el) {
   for (const { r: y, c: x, cell } of res.broke) {
     const t = els.get(cell.id); if (!t) continue;
     retire(t, cell.id, 'crumble', 320);
-    if (budget > 0) { burst(y, x, '#E8C27A', per); budget -= per; }
+    if (budget > 0) { burst(y, x, cell.k === 'litter' ? '#B9C7BD' : '#E8C27A', per); budget -= per; }
   }
   for (const { cell } of res.freed) { const t = els.get(cell.id); if (t) thaw(t, cell); }
-  if (res.spawned) {
-    lvl.specials++;
-    setTimeout(() => {
-      if (els.has(res.spawned.cell.id) || grid[res.spawned.r][res.spawned.c]?.id !== res.spawned.cell.id) return;
-      const el2 = makeEl(res.spawned.cell); els.set(res.spawned.cell.id, el2); el2._r = res.spawned.r; el2._c = res.spawned.c;
-      placeNow(el2, res.spawned.r, res.spawned.c); el2.classList.add('spawn'); sfx.spawn();
-      floatAt(res.spawned.r, res.spawned.c, SP_NAME[res.spawned.cell.s] + '!');
-    }, 120);
+  for (const { cell } of res.recolored || []) {
+    const t = els.get(cell.id); if (!t) continue;
+    paint(t, cell); t.classList.remove('inked'); void t.offsetWidth; t.classList.add('inked');
   }
-  // goal floaters
-  const after = goalStatus(lvl.def, lvl.prog);
-  const gained = after.reduce((a, g, i) => a + (g.got - before[i]), 0);
-  if (gained && !res.spawned) floatAt(r, c, '+' + gained);
-  hud();
+  const news = [...(res.spawned ? [res.spawned] : []), ...(res.made || [])];
+  news.forEach((sp, i) => setTimeout(() => {
+    if (els.has(sp.cell.id) || grid[sp.r][sp.c]?.id !== sp.cell.id) return;
+    const el2 = makeEl(sp.cell); els.set(sp.cell.id, el2); el2._r = sp.r; el2._c = sp.c;
+    placeNow(el2, sp.r, sp.c); el2.classList.add('spawn'); sfx.spawn();
+    if (i === 0) floatAt(sp.r, sp.c, SP_NAME[sp.cell.s] + '!');
+  }, 120 + i * 90));
+}
 
+/** Gravity in the current tide's direction, then any stranded pal at the exit swims off, until nothing moves. */
+function settle(done) {
+  const { spawned } = collapse(grid, active(), rng, lvl.def.colors, newId, lvl.dir);
+  render(fromOf(spawned));
   setTimeout(() => {
-    const { spawned } = collapse(grid, mask, rng, lvl.def.colors, newId);
-    const from = new Map(spawned.map((s) => [s.id, s.fromR]));
-    render(from);
-    setTimeout(() => { busy = false; check(); }, 340);
-  }, big ? 260 : 170);
+    const saved = rescueLost(grid, active(), lvl.exit);
+    if (!saved.length) { done(); return; }
+    for (const s of saved) swimOff(s);
+    addProgress(lvl.prog, { rescue: saved.length });
+    hud();
+    ev('pal_rescued', { level: lvl.n, rescued: lvl.prog.rescue, moves_left: lvl.moves, tide: lvl.phase });
+    setTimeout(() => settle(done), motion() ? 520 : 60);
+  }, 340);
+}
+
+function afterMove() {
+  if (!lvl || lvl.over) return;
+  if (tideTurns(lvl.def.tide, lvl.made) && !goalsMet(lvl.def, lvl.prog) && lvl.moves > 0) { turnTideNow(() => { busy = false; check(); }); return; }
+  busy = false; check();
+}
+
+/* ---------- the tide turns: the board breathes ---------- */
+function turnTideNow(done) {
+  const tp = tidePhase(lvl.def.tide, lvl.made);
+  const rising = tp.phase === 'high';
+  lvl.phase = tp.phase; lvl.dir = tp.dir; lvl.turns++;
+  if (lvl.turns === 1) ev('tide_turn', { level: lvl.n, to: tp.phase, dir: tp.dir, move: lvl.made });
+  clearHint();
+  const m = motion();
+  sfx.tide(rising); buzz(rising ? [15, 40, 25] : [25, 40, 15]);
+  // 1. the waterline sweeps across in the direction the pieces are about to move
+  if (m) {
+    const [dr, dc] = GRAVITY[tp.dir];
+    const s = document.createElement('div');
+    s.className = 'sweep' + (rising ? '' : ' low');
+    s.style.cssText = `--sa:${{ down: 'to bottom', up: 'to top', left: 'to left', right: 'to right' }[tp.dir]};--sx0:${-dc * 100}%;--sy0:${-dr * 100}%;--sx1:${dc * 100}%;--sy1:${dr * 100}%`;
+    s.innerHTML = '<i></i>';
+    fxEl.appendChild(s); setTimeout(() => s.remove(), 950);
+    const b = document.createElement('div');
+    b.className = 'tidebanner' + (rising ? '' : ' low');
+    b.innerHTML = `${rising ? 'High tide' : 'Low tide'} ${ARROW(tp.dir, '#fff')}`;
+    fxEl.appendChild(b); setTimeout(() => b.remove(), 1350);
+    // the slab tips toward the new gravity for a moment
+    boardEl.style.setProperty('--rx', (7 - dr * 5).toFixed(1) + 'deg');
+    boardEl.style.setProperty('--ry', (dc * 7).toFixed(1) + 'deg');
+    setTimeout(() => { boardEl.style.removeProperty('--rx'); boardEl.style.removeProperty('--ry'); }, 900);
+  }
+  // 2. halfway through the sweep the water level changes and everything slides
+  setTimeout(() => {
+    const t = turnTide(grid, mask, lvl.rock, tp.phase, tp.dir, rng, lvl.def.colors, newId);
+    for (const w of t.washed) washAway(w);
+    if (t.washed.length) {
+      const before = goalStatus(lvl.def, lvl.prog).map((g) => g.got);
+      addProgress(lvl.prog, t.counts); chargeHelper(t.counts);
+      const gained = goalStatus(lvl.def, lvl.prog).reduce((a, g, i) => a + (g.got - before[i]), 0);
+      if (gained) floatAt(ROWS / 2 + 1, (COLS - 1) / 2, `+${gained} washed out`);
+    }
+    boardEl.classList.toggle('low', !rising);
+    if (m) boardEl.classList.add('tidal');
+    drawSlots();
+    render(fromOf(t.spawned), tp.dir);
+    hud();
+    // 3. once the slide lands, anyone at the exit swims off, then play on
+    setTimeout(() => {
+      boardEl.classList.remove('tidal');
+      for (const el of els.values()) el.style.transitionDelay = '';
+      settle(done);
+    }, m ? 900 : 60);
+  }, m ? 330 : 0);
+}
+
+/** A rock-pool piece washing out to sea as the tide comes in. */
+function washAway({ r, c, cell }) {
+  const t = els.get(cell.id);
+  if (t) { t.remove(); els.delete(cell.id); }
+  if (!motion()) return;
+  const d = document.createElement('div');
+  d.className = 'washout';
+  const out = c < COLS / 2 ? -1 : 1;
+  d.style.cssText = `left:${c / COLS * 100}%;top:${r / ROWS * 100}%;--wx:${out * 160}%;--wy:${(r < ROWS / 2 ? -1 : 1) * 80}%`;
+  d.innerHTML = tileHTML(cell);
+  fxEl.appendChild(d); setTimeout(() => d.remove(), 720);
+  burst(r, c, '#BFF7EE', 4);
+}
+
+/** A rescued pal swims off the board through the exit edge, trailing bubbles. */
+function swimOff({ r, c, cell }) {
+  const t = els.get(cell.id);
+  if (t) { t.remove(); els.delete(cell.id); }
+  sfx.rescue(); buzz([20, 30, 20, 30, 40]);
+  setTimeout(() => floatAt(r, c, 'Rescued!'), 30); // after the swimmer, so the text sits on top
+  if (!motion()) return;
+  const [dr, dc] = GRAVITY[lvl.exit];
+  const d = document.createElement('div');
+  d.className = 'swimmer';
+  d.style.cssText = `left:${c / COLS * 100}%;top:${r / ROWS * 100}%;--wx:${dc * 420}%;--wy:${dr * 420}%`;
+  d.innerHTML = LOST;
+  fxEl.appendChild(d); setTimeout(() => d.remove(), 1150);
+  for (let i = 0; i < 3; i++) setTimeout(() => burst(r + dr * (i + 1) * .6, c + dc * (i + 1) * .6, '#E6FFFB', 4), i * 120);
+}
+
+/* ---------- helper: your pal in play ---------- */
+function chargeHelper(counts) {
+  if (!lvl.helper) return;
+  const need = ABILITIES[lvl.helper].charge;
+  lvl.charge = Math.min(need, lvl.charge + helperCharge(counts, lvl.helper));
+}
+function helperReady() { return !!lvl?.helper && lvl.charge >= ABILITIES[lvl.helper].charge; }
+function onHelper() {
+  if (busy || !lvl || lvl.over) return;
+  const ab = ABILITIES[lvl.helper];
+  const cr = CREATURES.find((x) => x.id === lvl.helper);
+  if (!helperReady()) { toast(`${cr.name} charges as you clear ${TILE_NAME[ab.tc]} pals: ${lvl.charge} of ${ab.charge}`); return; }
+  if (aiming) { setAim(false); $('hint').textContent = `Level ${lvl.n} · ${chapter(lvl.n)}`; return; }
+  if (ab.target) { setAim(true); $('hint').textContent = `${ab.name}: tap the board. Tap ${cr.name} again to cancel.`; sfx.tap(); return; }
+  useHelper(0, 0);
+}
+function setAim(on) { aiming = on; boardEl.classList.toggle('aim', on); $('helperBtn').classList.toggle('aim', on); }
+function useHelper(r, c) {
+  const id = lvl.helper, ab = ABILITIES[id];
+  const res = applyAbility(grid, id, r, c, rng, newId);
+  if (!res.ok) { toast(`${ab.name} can't do anything there. Try another spot.`); sfx.bad(); return; }
+  setAim(false); clearHint();
+  $('hint').textContent = `Level ${lvl.n} · ${chapter(lvl.n)}`;
+  busy = true; lvl.charge = 0; lvl.helperUses++;
+  grid = res.grid;
+  addProgress(lvl.prog, res.counts); // a helper's own clears never recharge it
+  ev('helper_used', { level: lvl.n, pal: id, ability: ab.name, earned: !!lvl.helperEarned, use: lvl.helperUses });
+  const cr = CREATURES.find((x) => x.id === id);
+  if (motion()) { const f = document.createElement('div'); f.className = 'helperfx'; f.innerHTML = creatureSVG(cr, false); fxEl.appendChild(f); setTimeout(() => f.remove(), 820); }
+  sfx.helper(); buzz([15, 25, 35]);
+  for (const e of res.effects) fxFor(e);
+  animateResult(res);
+  if (res.double) {
+    lvl.double = true;
+    for (const [y, x] of res.highlight) els.get(grid[y][x].id)?.classList.add('lit');
+    floatAt(res.highlight[0][0], res.highlight[0][1], 'Counts double!');
+  }
+  if (res.cleared.length || res.broke.length) shake('s');
+  hud();
+  const moved = res.cleared.length || res.broke.length;
+  setTimeout(() => (moved ? settle(() => { busy = false; check(); }) : (busy = false, check())), moved ? 300 : 120);
 }
 
 function check() {
@@ -791,6 +1113,32 @@ function hud(reset = false) {
   lastGot = gs.map((g) => g.got);
   $('movesCount').textContent = lvl.moves;
   $('movesBox').classList.toggle('low', lvl.moves <= 3);
+  hudTideHelper();
+}
+/** Second HUD row: the helper (charge ring) and the tide meter (current tide, moves until it turns, next pull). */
+function hudTideHelper() {
+  const tide = lvl.def.tide, hb = $('helperBtn'), tm = $('tideMeter');
+  $('hud2').hidden = !tide && !lvl.helper;
+  hb.hidden = !lvl.helper;
+  if (lvl.helper) {
+    const ab = ABILITIES[lvl.helper], cr = CREATURES.find((x) => x.id === lvl.helper), ready = helperReady();
+    if (hb._for !== lvl.helper) { $('helperFace').innerHTML = creatureSVG(cr, false); hb._for = lvl.helper; }
+    hb.style.setProperty('--p', (lvl.charge / ab.charge).toFixed(3));
+    hb.classList.toggle('ready', ready);
+    $('helperTag').textContent = ready ? 'Tap!' : `${lvl.charge}/${ab.charge}`;
+    hb.setAttribute('aria-label', `${cr.name}: ${ab.name}. ${ab.desc} ${ready ? 'Ready: tap to use.' : `Charges with ${TILE_NAME[ab.tc]} pals, ${lvl.charge} of ${ab.charge}.`}`);
+  }
+  tm.hidden = !tide;
+  if (!tide) return;
+  const tp = tidePhase(tide, lvl.made), low = tp.phase === 'low';
+  const nextName = low ? 'High tide' : 'Low tide';
+  tm.className = 'tidem' + (low ? ' low' : '') + (tp.left === 1 ? ' soon' : '');
+  const pips = Array.from({ length: tp.total }, (_, i) => `<i class="${i < tp.left ? 'on' : ''}${i === tp.left - 1 && tp.left === 1 ? ' last' : ''}"></i>`).join('');
+  tm.innerHTML = `<span class="ti">${low ? TIDE_LOW : TIDE_HIGH}</span>
+    <div class="tt"><b>${low ? 'Low tide' : 'High tide'} ${ARROW(tp.dir).replace('<svg ', '<svg width="14" height="14" ')}</b><span>${nextName} in <em>${tp.left}</em> move${tp.left > 1 ? 's' : ''}</span></div>
+    <div class="pips" aria-hidden="true">${pips}</div>
+    <div class="nextdir">${ARROW(tp.nextDir)}next</div>`;
+  tm.setAttribute('aria-label', `${low ? 'Low' : 'High'} tide, pieces move ${DIR_WORD[tp.dir]}. ${nextName} in ${tp.left} move${tp.left > 1 ? 's' : ''}, then pieces move ${DIR_WORD[tp.nextDir]}.`);
 }
 let lastPearls = S.pearls;
 function pearlsChanged() { if (S.pearls !== lastPearls) { bumpEl($('pearlChip')); lastPearls = S.pearls; } hud(); }
@@ -803,7 +1151,7 @@ function win() {
   const rec = recordWin(S, lvl.n, stars);
   lvl.shellDrop = shellDrop(lvl, rec.prevBest, stars);
   persist(); pearlsChanged(); sfx.win(); buzz([20, 40, 20]);
-  studio.track('level_end', { level: lvl.n, result: 'win', score: stars, moves_left: lvl.moves, specials: lvl.specials, assisted: lvl.assisted });
+  studio.track('level_end', { level: lvl.n, result: 'win', score: stars, moves_left: lvl.moves, specials: lvl.specials, assisted: lvl.assisted, ...endProps() });
   const pearlLine = rec.pearls ? `+${rec.pearls} pearls` : 'No new stars this time';
   showModal(`${confetti()}<div class="label">Level ${lvl.n} cleared</div><div class="stars">${[1, 2, 3].map((i) => STAR(i <= stars)).join('')}</div>
     ${!lvl.assisted ? (lvl.shellDrop ? `<h2>Splendid!</h2><div class="shellart">${SHELL}</div><p class="muted">${pearlLine}, and a shell washed up on the shore.</p>
@@ -811,14 +1159,14 @@ function win() {
     <p class="fine">${oddsLine()}</p>`
     : `<h2>${rec.prevBest >= 3 ? 'Still perfect!' : 'Nice run!'}</h2><p class="muted">${pearlLine}. Beat your best star score here to find another shell.</p>
     <div class="row"><button class="btn buy" data-act="next">Next level</button><button class="btn ghost" data-act="map">Map</button></div>`)
-    : `<h2>Splendid!</h2><p class="muted">${pearlLine}. Boosted levels don't wash up a shell: shells come from levels cleared without boosters or extra moves.</p>
+    : `<h2>Splendid!</h2><p class="muted">${pearlLine}. Boosted levels don't wash up a shell: shells come from levels cleared without boosters, extra moves or a bought helper.</p>
     <div class="row"><button class="btn buy" data-act="next">Next level</button><button class="btn ghost" data-act="map">Map</button></div>`}`);
 }
 function outOfMoves() {
   lvl.over = true;
   clearHint(); sfx.lose();
   const done = goalStatus(lvl.def, lvl.prog).reduce((a, g) => a + g.got / g.need, 0) / lvl.def.goals.length;
-  studio.track('level_end', { level: lvl.n, result: 'lose', score: Math.round(done * 100), moves_left: 0, specials: lvl.specials, assisted: lvl.assisted });
+  studio.track('level_end', { level: lvl.n, result: 'lose', score: Math.round(done * 100), moves_left: 0, specials: lvl.specials, assisted: lvl.assisted, ...endProps() });
   outOfMovesModal();
 }
 function outOfMovesModal() {
@@ -843,23 +1191,48 @@ function addMoves() {
 function afterLevelScreen() { studio.feedback.maybePrompt(); }
 
 /* ---------- pre-level sheet with boosters ---------- */
-let picked = new Set(), sheetLevel = 1;
+let picked = new Set(), sheetLevel = 1, sheetHelper = null, lastHelper = null;
 function openLevel(n) {
   sheetLevel = n; picked = new Set();
+  // Remember the last helper, but only pre-pick one that was earned: a bought-only pal must be chosen on purpose.
+  sheetHelper = n >= HELPER_LEVEL && lastHelper && S.album[lastHelper] && palEarned(S, lastHelper) ? lastHelper : null;
   renderLevelSheet();
 }
+/** One line per board mechanic the level uses, so every new idea is explained before play. */
+function mechanicsLines(def) {
+  const out = [];
+  if (def.tide) out.push(`${TIDE_HIGH}<span><b>Tide:</b> high for ${def.tide.high} moves (pals fall down), then low for ${def.tide.low} (pals move ${DIR_WORD[def.tide.dir]}). The meter shows when it turns.</span>`);
+  if (def.layout.some((r) => r.includes('o'))) out.push(`${TIDE_LOW}<span><b>Rock pools</b> hold pals at low tide. When the tide rises they wash out and count toward your goals.</span>`);
+  if (def.exit) out.push(`${LOST}<span><b>Rescue:</b> get the stranded pal to the open water at the ${EDGE_WORD[def.exit]} edge.</span>`);
+  if (levelDef(sheetLevel).tide && !def.tide) out.push(`${TIDE_HIGH}<span>Calm water today: the tide stays high.</span>`);
+  return out.map((l) => `<div class="mech">${l}</div>`).join('');
+}
+function helperPicker(n) {
+  if (n < HELPER_LEVEL) return '';
+  const owned = CREATURES.filter((c) => S.album[c.id]);
+  if (!owned.length) return `<div><div class="label" style="margin-bottom:6px">Helper</div><p class="muted">Pals you find in shells can help from here on. Clear levels to find one.</p></div>`;
+  const sel = sheetHelper && ABILITIES[sheetHelper], selCr = sheetHelper && CREATURES.find((c) => c.id === sheetHelper);
+  const bought = sheetHelper && !palEarned(S, sheetHelper);
+  return `<div><div class="label" style="margin-bottom:6px">Helper (optional)</div>
+    <div class="helpers">${owned.map((c) => { const on = c.id === sheetHelper, paid = !palEarned(S, c.id); return `<button class="hpick" data-act="pick-helper" data-id="${c.id}" aria-pressed="${on}"><span class="hp">${creatureSVG(c, false)}</span>${c.name}<small>${ABILITIES[c.id].name}</small>${paid ? '<span class="paid">Boosted</span>' : ''}</button>`; }).join('')}</div>
+    ${sel ? `<p class="muted" style="margin-top:4px"><b style="color:var(--sand)">${selCr.name} · ${sel.name}:</b> ${sel.desc} Charges with ${sel.charge} ${TILE_NAME[sel.tc]} pals.</p>` : '<p class="fine">Pick a pal to bring along. It charges as you clear its colour.</p>'}
+    ${bought ? `<p class="boostnote">Boosted: no shell this level. ${selCr.name} came from a purchase, so it counts as a boost. Find one in a shell to help for free.</p>` : ''}</div>`;
+}
 function renderLevelSheet() {
-  const n = sheetLevel, def = levelDef(n), best = S.stars[n] || 0;
+  const n = sheetLevel, def = playDef(n), best = S.stars[n] || 0;
   const gs = goalStatus(def, newProgress());
   const cost = BOOSTERS.filter((b) => picked.has(b.id)).reduce((a, b) => a + b.pearls, 0);
+  const boosted = picked.size || (sheetHelper && !palEarned(S, sheetHelper));
   showModal(`<div class="sheethead"><div><div class="label">${chapter(n)}</div><h2>Level ${n}</h2></div><button class="close" data-act="close" aria-label="Close">${X_ICON}</button></div>
     <div class="ggrid">${gs.map((g) => `<div class="g"><span class="gi">${goalIcon(g)}</span>${g.need}</div>`).join('')}<div class="g"><span class="gi" style="display:grid;place-items:center;font-family:var(--display);font-size:28px">${def.moves}</span>moves</div></div>
     <p class="muted" style="text-align:center">${gs.map(goalText).join(' · ')}${best ? ` · Best: ${'★'.repeat(best)}${'☆'.repeat(3 - best)}` : ''}</p>
     ${def.intro ? `<div class="intro"><b>New!</b><span>${def.intro}</span></div>` : ''}
+    ${mechanicsLines(def)}
+    ${helperPicker(n)}
     <div><div class="label" style="margin-bottom:6px">Boosters (optional)</div>
     <div class="boosts">${BOOSTERS.map((b) => { const on = picked.has(b.id), can = on || S.pearls - cost >= b.pearls; return `<button class="boost" data-act="boost" data-id="${b.id}" aria-pressed="${on}" ${can ? '' : 'disabled'}><span class="bi">${b.id === 'moves3' ? `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="url(#twave)"/><text x="20" y="27" text-anchor="middle" font-family="Bagel Fat One, sans-serif" font-size="18" fill="#fff">+3</text></svg>` : b.id === 'bomb' ? BOMB : WAVE_H}</span>${b.name}<span class="bp">${PEARL}${b.pearls}</span></button>`; }).join('')}</div>
-    <p class="fine" style="margin-top:6px">Boosted levels don't wash up a shell. Shells only come from levels cleared without boosters or extra moves.</p></div>
-    <button class="btn buy" data-act="start">${picked.size ? `Play with boosters · ${cost} pearls` : 'Play'}</button>`, true);
+    <p class="fine" style="margin-top:6px">Boosted levels don't wash up a shell. Shells only come from levels cleared without boosters, extra moves or a bought helper.</p></div>
+    <button class="btn buy" data-act="start">${picked.size ? `Play with boosters · ${cost} pearls` : boosted ? 'Play boosted' : 'Play'}</button>`, true);
 }
 
 /* ---------- collection ---------- */
@@ -1016,7 +1389,9 @@ document.addEventListener('click', (e) => {
     case 'play-next': openLevel(S.level); break;
     case 'open-level': sfx.tap(); openLevel(+b.dataset.n); break;
     case 'boost': { const id = b.dataset.id; picked.has(id) ? picked.delete(id) : picked.add(id); sfx.tap(); renderLevelSheet(); break; }
-    case 'start': closeModal(); if (!startLevel(sheetLevel, [...picked])) renderLevelSheet(); else pearlsChanged(); break;
+    case 'pick-helper': { const id = b.dataset.id; sheetHelper = sheetHelper === id ? null : id; sfx.tap(); renderLevelSheet(); break; }
+    case 'helper': onHelper(); break;
+    case 'start': closeModal(); if (!startLevel(sheetLevel, [...picked], sheetHelper)) renderLevelSheet(); else { lastHelper = sheetHelper || lastHelper; pearlsChanged(); } break;
     case 'buy-moves':
       buy(CATALOG.moves).then((ok) => {
         if (ok) { ev('booster_used', { level: lvl.n, booster: 'moves5', pearls: 0 }); addMoves(); afterLevelScreen(); }
@@ -1031,7 +1406,7 @@ document.addEventListener('click', (e) => {
       persist(); hud(); ctx = 'shop'; offerShell(); break;
     case 'buy-starter':
       buy(CATALOG.starter).then((ok) => {
-        if (ok && !S.starter) { S.starter = true; S.pearls += 500; const pal = CREATURES.find((c) => c.id === STARTER_PAL); const { dup } = addPal(S, pal.id); persist(); toast(dup ? `+500 pearls and another ${pal.name} (+25 pearls, +1 sand dollar)` : `+500 pearls and ${pal.name} joined your album`); }
+        if (ok && !S.starter) { S.starter = true; S.pearls += 500; const pal = CREATURES.find((c) => c.id === STARTER_PAL); const { dup } = addPal(S, pal.id, 'bought'); persist(); toast(dup ? `+500 pearls and another ${pal.name} (+25 pearls, +1 sand dollar)` : `+500 pearls and ${pal.name} joined your album`); }
         pearlsChanged(); renderCurrent();
       }); break;
     case 'buy-pouch': buy(CATALOG.pouch).then((ok) => { if (ok) { S.pearls += 200; persist(); sfx.coin(); } pearlsChanged(); renderCurrent(); }); break;
