@@ -438,71 +438,165 @@ export const FX_ART = {
 };
 
 // ---------- first-person weapons ----------
+// Guns are drawn upright in a local frame (muzzle up at y = -96, base at y = 0), then tilted so they
+// point from the lower right toward the crosshair. A part-human, part-robot hand grips each one.
+const METAL = [[0, '#15171a'], [0.2, '#4b525b'], [0.42, '#c3ccd5'], [0.56, '#7d8690'], [0.82, '#2a2e33'], [1, '#0f1012']];
+const SKIN = [[0, '#efc0a2'], [0.45, '#c78466'], [1, '#7a4530']];
+function trap(g, x, y0, hw0, y1, hw1) {
+  g.beginPath(); g.moveTo(x - hw0, y0); g.lineTo(x + hw0, y0); g.lineTo(x + hw1, y1); g.lineTo(x - hw1, y1); g.closePath();
+}
+function capsule(g, x0, y0, x1, y1, w, color) {
+  g.lineCap = 'round'; g.strokeStyle = color; g.lineWidth = w;
+  g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+}
+const HAND_PATH = (g) => {
+  g.beginPath(); g.moveTo(-12, -14);
+  g.bezierCurveTo(-2, -24, 20, -20, 28, -6);
+  g.bezierCurveTo(33, 6, 24, 17, 10, 17);
+  g.bezierCurveTo(-4, 17, -14, 9, -14, -2);
+  g.closePath();
+};
+// Where the grafted steel plate meets the skin, top to bottom.
+const GRAFT = [[6, -26], [2, -14], [8, -6], [1, 2], [5, 10], [-1, 22]];
+const STEEL = [[0, '#7a8898'], [0.45, '#3c4654'], [1, '#161b22']];
+// Finger joints, so the glow pass can light them.
+function fingerJoints() {
+  const out = [];
+  for (let i = 0; i < 4; i++) {
+    let x = -11 + i * 1.4, y = -11 + i * 7.2;
+    const dx = -0.94, dy = 0.34 + i * 0.05;
+    for (const len of [6.5, 5.5, 4.5]) { out.push([x, y, i]); x += dx * len; y += dy * len; }
+    out.push([x, y, i]);
+  }
+  return out;
+}
+function cyberHand(g) {
+  // sleeve and cuff
+  g.fillStyle = lin(g, 10, 10, 50, 70, [[0, '#41463b'], [1, '#111310']]);
+  g.beginPath(); g.moveTo(6, 22); g.lineTo(34, 8); g.lineTo(74, 70); g.lineTo(20, 96); g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 0.8;
+  g.beginPath(); g.moveTo(22, 16); g.lineTo(46, 84); g.stroke();
+  g.fillStyle = '#22251e';
+  g.beginPath(); g.moveTo(3, 19); g.lineTo(34, 5); g.lineTo(38, 12); g.lineTo(8, 27); g.closePath(); g.fill();
+  // robotic wrist with pistons
+  g.fillStyle = lin(g, 0, 0, 32, 0, STEEL);
+  g.beginPath(); g.moveTo(-1, 9); g.lineTo(26, -3); g.lineTo(33, 7); g.lineTo(5, 20); g.closePath(); g.fill();
+  capsule(g, 4, 5, 12, 18, 2.4, '#b3bcc6'); capsule(g, 16, 0, 24, 13, 2.4, '#b3bcc6');
+  capsule(g, 4, 5, 8, 11, 2.8, '#1b2027'); capsule(g, 16, 0, 20, 6, 2.8, '#1b2027');
+  // robotic fingers wrapped round the front of the grip (drawn under the hand)
+  const joints = fingerJoints();
+  for (let i = 0; i < 4; i++) {
+    const js = joints.filter((j) => j[2] === i);
+    for (let k = 0; k < 3; k++) {
+      const [x0, y0] = js[k], [x1, y1] = js[k + 1], w = 6.4 - k * 0.8;
+      capsule(g, x0, y0, x1, y1, w + 1.4, '#0c0f13');
+      capsule(g, x0, y0, x1, y1, w, k % 2 ? '#4a5563' : '#5b6878');
+      capsule(g, x0 - 0.3, y0 - 1.2, x1 - 0.3, y1 - 1.2, 1.1, 'rgba(220,235,255,.45)');
+    }
+    for (const [x, y] of js) { g.fillStyle = '#12161b'; g.beginPath(); g.arc(x, y, 1.9, 0, 7); g.fill(); }
+  }
+  // back of the hand: human skin with knuckles and tendons
+  HAND_PATH(g);
+  g.fillStyle = lin(g, -10, -18, 28, 16, SKIN); g.fill();
+  g.strokeStyle = 'rgba(255,228,205,.3)'; g.lineWidth = 0.7;
+  for (const [x0, y0, x1, y1] of [[10, -14, 16, 8], [15, -15, 22, 4], [20, -12, 25, 1]]) {
+    g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2 + 1.5, (y0 + y1) / 2, x1, y1); g.stroke();
+  }
+  g.strokeStyle = 'rgba(90,40,25,.5)'; g.lineWidth = 0.6;
+  g.beginPath(); g.moveTo(12, 9); g.lineTo(20, 5); g.stroke();
+  // steel plate grafted over the knuckle side, with a jagged edge
+  g.save(); HAND_PATH(g); g.clip();
+  g.fillStyle = lin(g, -16, -20, 8, 20, STEEL);
+  g.beginPath(); g.moveTo(-18, -28);
+  for (const [x, y] of GRAFT) g.lineTo(x, y);
+  g.lineTo(-18, 22); g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 0.7;
+  g.beginPath(); g.moveTo(-14, -7); g.lineTo(3, -9); g.stroke();
+  g.beginPath(); g.moveTo(-14, 6); g.lineTo(1, 5); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.18)';
+  g.beginPath(); g.moveTo(-14, -6); g.lineTo(3, -8); g.stroke();
+  for (const [x, y] of [[-5, -15], [1, -17], [-8, -1], [-4, 12]]) rivet(g, x, y, 1);
+  for (let i = 0; i < 4; i++) { g.fillStyle = '#20262e'; g.beginPath(); g.ellipse(-11 + i * 1.4, -11 + i * 7.2, 3.4, 2.6, 0.3, 0, 7); g.fill(); }
+  g.restore();
+  // human thumb along the side of the gun
+  capsule(g, -8, -13, -18, -35, 8.4, '#5e3524');
+  g.save(); g.lineCap = 'round'; g.lineWidth = 7.2; g.strokeStyle = lin(g, -19, 0, -6, 0, SKIN);
+  g.beginPath(); g.moveTo(-8, -13); g.lineTo(-18, -35); g.stroke(); g.restore();
+  g.strokeStyle = 'rgba(120,60,40,.45)'; g.lineWidth = 0.6;
+  g.beginPath(); g.moveTo(-13.5, -22); g.lineTo(-10, -23.5); g.stroke();
+  g.fillStyle = 'rgba(255,222,208,.85)'; g.beginPath(); g.ellipse(-17.4, -33, 2.1, 2.9, -0.42, 0, 7); g.fill();
+}
+function cyberHandGlow(g) {
+  g.save(); HAND_PATH(g); g.clip();
+  g.strokeStyle = '#6ff2ff'; g.lineWidth = 1.1; g.lineJoin = 'round';
+  g.beginPath(); GRAFT.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+  g.restore();
+  g.fillStyle = '#ffa040';
+  for (const [x, y] of fingerJoints()) { g.beginPath(); g.arc(x, y, 0.9, 0, 7); g.fill(); }
+}
+
 // Returns a base canvas (lit by the room), a glow canvas (always bright) and muzzle points,
 // all sized for a gun `h` device pixels tall.
 export function makeGuns(h) {
-  const sc = h / 80;
-  const make = (w, draw, glow, tips) => {
-    const base = canvas(Math.ceil(w * sc), Math.ceil(h)), gl = canvas(base.width, base.height);
-    const g = base.getContext('2d'), gg = gl.getContext('2d');
-    g.scale(sc, sc); gg.scale(sc, sc);
-    draw(g); glow(gg);
-    return { base, glow: gl, tips: tips.map(([x, y]) => [x * sc, y * sc]) };
+  const sc = h / 100, CW = 132, CH = 116, ANG = -0.62, OX = 74, OY = 88;
+  const toCanvas = ([x, y]) => [(OX + x * Math.cos(ANG) - y * Math.sin(ANG)) * sc, (OY + x * Math.sin(ANG) + y * Math.cos(ANG)) * sc];
+  const make = (draw, glow, tips) => {
+    const base = canvas(Math.ceil(CW * sc), Math.ceil(CH * sc)), gl = canvas(base.width, base.height);
+    for (const [c, fn] of [[base, draw], [gl, glow]]) {
+      const g = c.getContext('2d');
+      g.scale(sc, sc); g.translate(OX, OY); g.rotate(ANG);
+      fn(g);
+    }
+    return { base, glow: gl, tips: tips.map(toCanvas) };
   };
-  const metal = (g, x0, x1) => lin(g, x0, 0, x1, 0, [[0, '#1a1c20'], [0.22, '#5a626c'], [0.42, '#c9d1da'], [0.55, '#8a939d'], [0.8, '#3a3f46'], [1, '#141619']]);
-  const copper = (g, x0, x1) => lin(g, x0, 0, x1, 0, [[0, '#3a1b07'], [0.35, '#c27a3a'], [0.5, '#ffd09a'], [0.7, '#a35c25'], [1, '#2a1205']]);
 
-  const bolt = make(100, (g) => {
-    // grip and side shroud
-    g.fillStyle = lin(g, 56, 0, 80, 0, [[0, '#121417'], [0.5, '#2c3036'], [1, '#0d0e10']]);
-    g.beginPath(); g.moveTo(58, 80); g.lineTo(62, 60); g.lineTo(74, 62); g.lineTo(76, 80); g.closePath(); g.fill();
-    g.fillStyle = 'rgba(255,255,255,.07)';
-    for (let y = 66; y < 80; y += 3) g.fillRect(62, y, 12, 1);
-    // receiver
-    g.fillStyle = metal(g, 30, 70);
-    g.beginPath(); g.moveTo(30, 80); g.lineTo(70, 80); g.lineTo(63, 44); g.lineTo(37, 44); g.closePath(); g.fill();
-    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(38, 58, 24, 1);
-    for (let i = 0; i < 4; i++) g.fillRect(41 + i * 5, 66, 2.4, 10);
-    // barrel
-    g.fillStyle = metal(g, 41, 59);
-    g.beginPath(); g.moveTo(40, 46); g.lineTo(60, 46); g.lineTo(55, 6); g.lineTo(45, 6); g.closePath(); g.fill();
-    for (const y of [13, 21, 29, 37]) {
-      const t = (y - 6) / 40, hw = 5 + t * 5 + 2;
-      g.fillStyle = copper(g, 50 - hw, 50 + hw);
-      g.beginPath(); g.ellipse(50, y, hw, 2.4, 0, 0, 7); g.fill();
-      g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(50 - hw, y + 1.6, hw * 2, 0.8);
+  const bolt = make((g) => {
+    g.fillStyle = lin(g, 4, 0, 24, 0, [[0, '#0d0e10'], [0.5, '#2c3036'], [1, '#0d0e10']]);
+    g.beginPath(); g.moveTo(4, -4); g.lineTo(18, -6); g.lineTo(24, 26); g.lineTo(8, 30); g.closePath(); g.fill();
+    trap(g, 0, -46, 14, 6, 21); g.fillStyle = lin(g, -21, 0, 21, 0, METAL); g.fill();
+    trap(g, 0, -46, 3, 6, 5); g.fillStyle = 'rgba(255,255,255,.1)'; g.fill();
+    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(-16, -30, 32, 0.8); g.fillRect(-18, -12, 36, 0.8);
+    for (let y = -40; y < -18; y += 4) g.fillRect(9, y, 6, 1.6);
+    g.fillStyle = '#16181b'; g.fillRect(-21.5, -37, 7, 31); bevel(g, -21.5, -37, 7, 31, 0.15, 0.5, 0.6);
+    trap(g, 0, -96, 5.5, -44, 9); g.fillStyle = lin(g, -9, 0, 9, 0, METAL); g.fill();
+    for (const y of [-88, -79, -70, -61, -52]) {
+      const hw = 5.5 + ((y + 96) / 52) * 3.5 + 2.6;
+      g.fillStyle = lin(g, -hw, 0, hw, 0, [[0, '#3a1b07'], [0.35, '#c27a3a'], [0.5, '#ffd09a'], [0.7, '#a35c25'], [1, '#2a1205']]);
+      g.beginPath(); g.ellipse(0, y, hw, 2.6, 0, 0, 7); g.fill();
+      g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(0, y + 1.6, hw, 1, 0, 0, Math.PI); g.fill();
     }
-    g.fillStyle = '#0b0c0e'; g.beginPath(); g.ellipse(50, 6.5, 5, 1.6, 0, 0, 7); g.fill();
-    // top sight
-    g.fillStyle = '#1c1f23'; g.fillRect(48, 40, 4, 6);
-    // side energy cell housing
-    g.fillStyle = '#23272c'; g.fillRect(24, 52, 9, 22);
-    g.strokeStyle = 'rgba(255,255,255,.15)'; g.strokeRect(24, 52, 9, 22);
+    g.fillStyle = '#060708'; g.beginPath(); g.ellipse(0, -96, 5.5, 2, 0, 0, 7); g.fill();
+    g.fillStyle = '#1a1c20'; g.fillRect(-2.5, -50, 5, 5);
+    cyberHand(g);
   }, (g) => {
-    g.fillStyle = lin(g, 0, 54, 0, 72, [[0, '#c8fbff'], [1, '#2fd8ff']]); g.fillRect(26, 54, 5, 18);
-    g.fillStyle = '#7ff4ff'; g.beginPath(); g.ellipse(50, 6.5, 3, 0.9, 0, 0, 7); g.fill();
-    g.fillStyle = '#ff5a3a'; g.fillRect(49, 41, 2, 1.5);
-  }, [[50, 6]]);
+    g.fillStyle = lin(g, 0, -34, 0, -8, [[0, '#d8fdff'], [1, '#2fd8ff']]); g.fillRect(-19.6, -34, 3.2, 26);
+    g.strokeStyle = '#7ff4ff'; g.lineWidth = 0.8; g.beginPath(); g.ellipse(0, -96, 4.2, 1.4, 0, 0, 7); g.stroke();
+    g.fillStyle = '#ff5a3a'; g.fillRect(-1, -48.5, 2, 1.4);
+    cyberHandGlow(g);
+  }, [[0, -96]]);
 
-  const scatter = make(120, (g) => {
-    g.fillStyle = lin(g, 86, 0, 110, 0, [[0, '#121417'], [0.5, '#2c3036'], [1, '#0d0e10']]);
-    g.beginPath(); g.moveTo(88, 80); g.lineTo(92, 58); g.lineTo(104, 60); g.lineTo(106, 80); g.closePath(); g.fill();
-    for (const cx of [46, 74]) {
-      g.fillStyle = metal(g, cx - 14, cx + 14);
-      g.beginPath(); g.moveTo(cx - 15, 60); g.lineTo(cx + 15, 60); g.lineTo(cx + 8, 12); g.lineTo(cx - 8, 12); g.closePath(); g.fill();
-      g.fillStyle = '#070809'; g.beginPath(); g.ellipse(cx, 12.5, 7, 2.6, 0, 0, 7); g.fill();
-      g.strokeStyle = '#9aa2ab'; g.lineWidth = 0.8; g.beginPath(); g.ellipse(cx, 12.5, 7.6, 2.9, 0, 0, 7); g.stroke();
+  const scatter = make((g) => {
+    g.fillStyle = lin(g, 4, 0, 24, 0, [[0, '#0d0e10'], [0.5, '#2c3036'], [1, '#0d0e10']]);
+    g.beginPath(); g.moveTo(4, -4); g.lineTo(20, -6); g.lineTo(26, 26); g.lineTo(8, 30); g.closePath(); g.fill();
+    for (const x of [-8.5, 8.5]) {
+      trap(g, x, -92, 5.6, -40, 8.4); g.fillStyle = lin(g, x - 8.4, 0, x + 8.4, 0, METAL); g.fill();
+      g.fillStyle = '#050607'; g.beginPath(); g.ellipse(x, -92, 5.6, 2.1, 0, 0, 7); g.fill();
+      g.strokeStyle = '#9aa2ab'; g.lineWidth = 0.7; g.beginPath(); g.ellipse(x, -92, 6.1, 2.4, 0, 0, 7); g.stroke();
+      g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(x - 6.5, -70, 13, 1.2);
     }
-    g.fillStyle = metal(g, 22, 98);
-    g.beginPath(); g.moveTo(20, 80); g.lineTo(100, 80); g.lineTo(92, 46); g.lineTo(28, 46); g.closePath(); g.fill();
-    hazardBand(g, 30, 50, 60, 5);
-    g.fillStyle = 'rgba(0,0,0,.4)';
-    for (let i = 0; i < 6; i++) g.fillRect(36 + i * 8, 62, 3, 14);
-    g.fillStyle = '#1c1f23'; g.fillRect(56, 40, 8, 7);
+    trap(g, 0, -46, 19, 6, 27); g.fillStyle = lin(g, -27, 0, 27, 0, METAL); g.fill();
+    hazardBand(g, -18, -42, 36, 5);
+    g.fillStyle = 'rgba(0,0,0,.45)';
+    for (let i = 0; i < 5; i++) g.fillRect(-15 + i * 7, -30, 3, 14);
+    g.fillStyle = '#1a1c20'; g.fillRect(-4, -50, 8, 6);
+    cyberHand(g);
   }, (g) => {
     g.fillStyle = '#ffa030';
-    for (let i = 0; i < 4; i++) g.fillRect(44 + i * 9, 57, 5, 2);
-  }, [[46, 12], [74, 12]]);
+    for (let i = 0; i < 4; i++) g.fillRect(-13 + i * 7, -35, 4, 1.6);
+    g.fillStyle = 'rgba(255,140,40,.9)';
+    for (const x of [-8.5, 8.5]) { g.beginPath(); g.ellipse(x, -92, 2.4, 0.8, 0, 0, 7); g.fill(); }
+    cyberHandGlow(g);
+  }, [[-8.5, -92], [8.5, -92]]);
 
   return [bolt, scatter];
 }

@@ -243,7 +243,15 @@ const artFor = (k) => (k === 'o'
   : ENEMY_ART[k]);
 
 // ---------- level state ----------
-const P = { x: 0, y: 0, a: 0, hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, bob: 0, recoil: 0, flash: 0, flashRot: 0 };
+const P = {
+  x: 0, y: 0, a: 0, hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, bob: 0, bobAmp: 0, recoil: 0, flash: 0, flashRot: 0,
+  vx: 0, vy: 0, av: 0, look: 0, kick: 0, swayX: 0, swayY: 0, hitMark: 0, hitKill: false, tracer: 0, tracerTo: null,
+};
+const LOOK_MAX = 0.42; // tan of the steepest up/down look
+let sens = 1;
+try { sens = Math.max(0.3, Math.min(3, Number(localStorage.getItem('gearhold.sens')) || 1)); } catch { /* default */ }
+// Where the crosshair points: P.look plus recoil kick plus a little walk bob. Rendering and shooting share it.
+const viewLook = () => P.look + P.kick + Math.sin(P.bob * 2) * 0.006 * P.bobAmp;
 let level = 0, mw = 0, mh = 0, grid = [], doorOpen = new Float32Array(0), doorMoving = new Uint8Array(0);
 let enemies = [], items = [], shots = [], fx = [], foes = 0;
 let kills = 0, levelTime = 0, noiseRadius = 0, msgTime = 0, lockedNag = 0, hurtFx = 0, glowFx = 0, shake = 0;
@@ -269,7 +277,7 @@ function loadLevel(i) {
   doorOpen = new Float32Array(mw * mh);
   doorMoving = new Uint8Array(mw * mh);
   enemies = []; items = []; shots = []; fx = [];
-  Object.assign(P, { hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, recoil: 0, flash: 0 });
+  Object.assign(P, { hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, recoil: 0, flash: 0, vx: 0, vy: 0, av: 0, look: 0, kick: 0, hitMark: 0, tracer: 0 });
   for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
     const c = map[y][x];
     grid[y * mw + x] = c === 'S' || STATS[c] || ITEM_SCALE[c] ? '.' : c;
@@ -392,7 +400,11 @@ function lightAt(x, y) {
 
 // ---------- view sizing and adaptive quality ----------
 let H = 360, W = 640, img = null, px = null, zbuf = null, bimg = null, bpx = null;
-let rowDist = new Float32Array(0), rowFog = new Float32Array(0), rowSmooth = new Uint8Array(0), quality = coarse ? 0.42 : 0.55;
+// Projection: `plane` is the camera plane half-width (horizontal FOV); `proj` is pixels per unit at
+// distance 1, the same both ways so pixels are square and hit tests match what is drawn.
+let plane = 0.66, proj = 360;
+// Floor and ceiling rows indexed by distance from the horizon row.
+let distT = new Float32Array(0), fogT = new Float32Array(0), smoothT = new Uint8Array(0), quality = coarse ? 0.42 : 0.55;
 const vfac = new Float32Array(TS);
 for (let i = 0; i < TS; i++) {
   const v = i / TS;
@@ -411,17 +423,20 @@ function allocView() {
   zbuf = new Float32Array(W);
   bloom.width = Math.ceil(W / 4); bloom.height = Math.ceil(H / 4);
   bimg = bctx.createImageData(bloom.width, bloom.height); bpx = new Uint32Array(bimg.data.buffer);
-  rowDist = new Float32Array(H); rowFog = new Float32Array(H); rowSmooth = new Uint8Array(H);
-  for (let y = H / 2; y < H; y++) {
-    rowDist[y] = H / 2 / (y - H / 2 + 0.5);
-    rowFog[y] = Math.exp(-rowDist[y] * FOG);
-    rowSmooth[y] = (rowDist[y] * TS * 1.4) / W < 0.6 ? 1 : 0; // texels per pixel: smooth when magnified
+  plane = Math.max(0.5, Math.min(1.0, (0.5 * W) / H));
+  proj = W / (2 * plane);
+  const n = H * 2 + Math.ceil(proj) + 4;
+  distT = new Float32Array(n); fogT = new Float32Array(n); smoothT = new Uint8Array(n);
+  for (let k = 0; k < n; k++) {
+    distT[k] = proj / 2 / (k + 0.5);
+    fogT[k] = Math.exp(-distT[k] * FOG);
+    smoothT[k] = (distT[k] * TS * 2 * plane) / W < 0.6 ? 1 : 0; // texels per pixel: smooth when magnified
   }
 }
 function resize() {
   const dpr = Math.min(2, devicePixelRatio || 1);
   hands.width = Math.round(innerWidth * 1.04 * dpr); hands.height = Math.round(innerHeight * 1.04 * dpr);
-  GUNS = makeGuns(Math.min(hands.height * 0.44, hands.width * 0.5));
+  GUNS = makeGuns(Math.min(hands.height * 0.4, hands.width * 0.62));
   bloom.style.filter = `blur(${Math.max(4, Math.round(innerHeight / 55))}px) brightness(1.5)`;
   allocView();
 }
@@ -492,34 +507,35 @@ function bilerp(t, u, v) {
 // 4x4 ordered dither thresholds: see-through smoke without per-pixel blending.
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
 const drawList = [];
+let hazeR = 0, hazeG = 0, hazeB = 0;
+// One floor (or ceiling) pixel, `k` rows from the horizon, along ray (rdx, rdy).
+function planeTexel(k, rdx, rdy, ceil) {
+  const rd = distT[k], fx = P.x + rdx * rd, fy = P.y + rdy * rd;
+  let li = ((fy * LM) | 0) * lmW + ((fx * LM) | 0);
+  if (li < 0 || li >= ao.length) li = 0;
+  const fog = fogT[k], f = fog * ao[li] * (ceil ? 0.8 : 1), l3 = li * 3, kk = 1 - fog;
+  const t = ceil ? (lampCell[(fy | 0) * mw + (fx | 0)] ? TEX.lamp : TEX.ceil) : TEX.floor;
+  const texel = smoothT[k] ? bilerp(t, fx * TS - 0.5, fy * TS - 0.5) : t[((((fy * TS) | 0) & TM) << TB) | (((fx * TS) | 0) & TM)];
+  return lit(texel, frameL[l3] * f, frameL[l3 + 1] * f, frameL[l3 + 2] * f, hazeR * kk, hazeG * kk, hazeB * kk);
+}
+
 function render(now) {
   applyLights();
-  const dirX = Math.cos(P.a), dirY = Math.sin(P.a), plX = -dirY * 0.66, plY = dirX * 0.66;
-  const half = H / 2, L = frameL, A = ao, lw = lmW, lmax = A.length - 1;
-  const [hr, hg, hb] = mood.haze;
-  const floorT = TEX.floor, ceilT = TEX.ceil, lampT = TEX.lamp;
+  const dirX = Math.cos(P.a), dirY = Math.sin(P.a), plX = -dirY * plane, plY = dirX * plane;
+  // Looking up or down shifts the horizon row (y-shearing); the crosshair stays at the centre row.
+  const hz = Math.round(H / 2 + viewLook() * proj), L = frameL, lw = lmW, lmax = ao.length - 1;
+  [hazeR, hazeG, hazeB] = mood.haze;
+  const hr = hazeR, hg = hazeG, hb = hazeB;
 
   for (let x = 0; x < W; x++) {
     const cam = (2 * x) / W - 1, rdx = dirX + plX * cam, rdy = dirY + plY * cam;
     const h = castRay(P.x, P.y, rdx, rdy);
     const dist = Math.max(h.dist, 0.001);
     zbuf[x] = dist;
-    const lineH = H / dist, y0 = Math.floor(half - lineH / 2), y1 = Math.floor(half + lineH / 2);
+    const lineH = proj / dist, y0 = Math.floor(hz - lineH / 2), y1 = Math.floor(hz + lineH / 2);
 
-    // floor below the wall, ceiling mirrored above it
-    for (let y = Math.max(half, y1 - 1); y < H; y++) {
-      const rd = rowDist[y], fx = P.x + rdx * rd, fy = P.y + rdy * rd;
-      const smooth = rowSmooth[y];
-      const ti = smooth ? 0 : ((((fy * TS) | 0) & TM) << TB) | (((fx * TS) | 0) & TM);
-      let li = ((fy * LM) | 0) * lw + ((fx * LM) | 0);
-      if (li < 0 || li > lmax) li = 0;
-      const fog = rowFog[y], f = fog * A[li], l3 = li * 3, k = 1 - fog;
-      const lr = L[l3] * f, lg = L[l3 + 1] * f, lb = L[l3 + 2] * f;
-      const ct = lampCell[(fy | 0) * mw + (fx | 0)] ? lampT : ceilT;
-      const u = fx * TS - 0.5, v = fy * TS - 0.5;
-      px[y * W + x] = lit(smooth ? bilerp(floorT, u, v) : floorT[ti], lr, lg, lb, hr * k, hg * k, hb * k);
-      px[(H - 1 - y) * W + x] = lit(smooth ? bilerp(ct, u, v) : ct[ti], lr * 0.8, lg * 0.8, lb * 0.8, hr * k, hg * k, hb * k);
-    }
+    for (let y = Math.max(0, hz, y1 - 1); y < H; y++) px[y * W + x] = planeTexel(y - hz, rdx, rdy, false);
+    for (let y = Math.min(H - 1, hz - 1, y0 + 1); y >= 0; y--) px[y * W + x] = planeTexel(hz - 1 - y, rdx, rdy, true);
 
     // wall or door
     const t = TEX[h.c] || TEX['#'];
@@ -533,10 +549,10 @@ function render(now) {
     const fog = Math.exp(-dist * FOG), k = 1 - fog, sf = fog * (h.side ? 0.8 : 1), l3 = li * 3;
     const lr = L[l3] * sf, lg = L[l3 + 1] * sf, lb = L[l3 + 2] * sf;
     const ys = Math.max(0, y0), ye = Math.min(H, y1 + 1), step = TS / lineH;
-    let tpos = (ys - half + lineH / 2) * step;
+    let tpos = (ys - hz + lineH / 2) * step;
     const hk = hr * k, gk = hg * k, bk = hb * k;
     for (let y = ys; y < ye; y++) {
-      const ty = Math.min(TM, tpos | 0), v = vfac[ty];
+      const ty = Math.max(0, Math.min(TM, tpos | 0)), v = vfac[ty];
       const texel = smooth ? bilerp(t, uf - 0.5, Math.max(0, Math.min(TM - 1, tpos - 0.5))) : t[(ty << TB) | tx];
       tpos += step;
       px[y * W + x] = lit(texel, lr * v, lg * v, lb * v, hk, gk, bk);
@@ -549,6 +565,7 @@ function render(now) {
     const alive = !e.dead;
     const tex = alive ? (e.atk > 0 ? e.attack : e.frames[Math.floor(e.anim * 4) % 2]) : e.dead;
     const z = alive ? e.z + (e.kind === 'd' ? Math.sin(now / 300 + e.anim) * 0.04 : 0) : 0;
+    e.tex = tex; e.zNow = z; // what is on screen is what shots test against
     if (alive) drawList.push({ x: e.x, y: e.y, shadow: e.radius * (e.kind === 'd' ? 0.8 : 1.1), bias: 0.01 });
     drawList.push({ x: e.x, y: e.y, tex, scale: alive ? e.scale : Math.max(0.5, e.scale * 0.7), z, flash: alive && e.flash > 0 });
   }
@@ -570,9 +587,9 @@ function render(now) {
     const sx = s.x - P.x, sy = s.y - P.y;
     const tX = inv * (dirY * sx - dirX * sy), tY = inv * (-plY * sx + plX * sy);
     if (tY < (s.near || 0.1)) continue;
-    const scrX = (W / 2) * (1 + tX / tY), unit = H / tY;
+    const scrX = (W / 2) * (1 + tX / tY), unit = proj / tY;
     if (s.shadow) {
-      const sw = unit * s.shadow * 2.2, sh2 = sw * 0.2, cy = half + unit * 0.5;
+      const sw = unit * s.shadow * 2.2, sh2 = sw * 0.2, cy = hz + unit * 0.5;
       const xs = Math.max(0, Math.floor(scrX - sw / 2)), xe = Math.min(W, Math.ceil(scrX + sw / 2));
       const ys = Math.max(0, Math.floor(cy - sh2 / 2)), ye = Math.min(H, Math.ceil(cy + sh2 / 2));
       for (let x = xs; x < xe; x++) {
@@ -587,7 +604,7 @@ function render(now) {
       }
       continue;
     }
-    const sh = unit * s.scale, bottom = half + unit * 0.5 - unit * s.z, top = bottom - sh, left = scrX - sh / 2;
+    const sh = unit * s.scale, bottom = hz + unit * 0.5 - unit * s.z, top = bottom - sh, left = scrX - sh / 2;
     const xs = Math.max(0, Math.floor(left)), xe = Math.min(W, Math.floor(left + sh));
     const ys = Math.max(0, Math.ceil(top)), ye = Math.min(H, Math.floor(bottom));
     if (xs >= xe || ys >= ye) continue;
@@ -630,9 +647,11 @@ function drawHands(now) {
   hctx.clearRect(0, 0, cw, ch);
   if (mode !== 'play' && mode !== 'paused') return;
   const gun = GUNS[P.weapon];
-  const bx = Math.sin(P.bob) * ch * 0.016, by = Math.abs(Math.cos(P.bob)) * ch * 0.014;
-  const gw = gun.base.width, gh = gun.base.height;
-  const gx = cw / 2 - gw / 2 + bx + cw * 0.02, gy = ch - gh + ch * 0.04 + by + P.recoil * ch * 0.05;
+  const amp = P.bobAmp, bx = Math.sin(P.bob) * ch * 0.014 * amp, by = Math.abs(Math.cos(P.bob)) * ch * 0.016 * amp;
+  const gw = gun.base.width, gh = gun.base.height, [mx0, my0] = gun.tips[0];
+  // Muzzle sits just below and right of the crosshair; sway lags behind turning and strafing.
+  const gx = cw / 2 + gh * 0.12 - mx0 + bx + P.swayX * ch + P.recoil * gh * 0.03;
+  const gy = ch * 0.5 + gh * 0.18 - my0 + by + P.swayY * ch + P.recoil * gh * 0.07;
   hctx.drawImage(gun.base, gx, gy);
   // light the gun with the room
   const [r, g, b] = lightAt(P.x, P.y);
@@ -668,7 +687,22 @@ function drawHands(now) {
       hctx.restore();
     }
   }
+  if (P.tracer > 0) {
+    const [tx0, ty0] = gun.tips[0], a = P.tracer / 0.07;
+    const lg = hctx.createLinearGradient(gx + tx0, gy + ty0, cw / 2, ch / 2);
+    lg.addColorStop(0, `rgba(160,250,255,${0.9 * a})`); lg.addColorStop(1, 'rgba(160,250,255,0)');
+    hctx.strokeStyle = lg; hctx.lineWidth = Math.max(2, ch * 0.006); hctx.lineCap = 'round';
+    hctx.beginPath(); hctx.moveTo(gx + tx0, gy + ty0); hctx.lineTo(cw / 2, ch / 2); hctx.stroke();
+  }
   hctx.globalCompositeOperation = 'source-over';
+  if (P.hitMark > 0) {
+    const a = P.hitMark / 0.2, r0 = ch * 0.014, r1 = ch * 0.03;
+    hctx.strokeStyle = P.hitKill ? `rgba(255,70,50,${a})` : `rgba(255,255,255,${a})`;
+    hctx.lineWidth = Math.max(2, ch * 0.004); hctx.lineCap = 'round';
+    hctx.beginPath();
+    for (const [sx2, sy2] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { hctx.moveTo(cw / 2 + sx2 * r0, ch / 2 + sy2 * r0); hctx.lineTo(cw / 2 + sx2 * r1, ch / 2 + sy2 * r1); }
+    hctx.stroke();
+  }
   // crosshair
   const cx = cw / 2, cy = ch / 2, s = Math.max(4, ch * 0.009), gap = s * 0.8;
   hctx.strokeStyle = 'rgba(0,0,0,.5)'; hctx.lineWidth = Math.max(3, s * 0.5);
@@ -760,30 +794,55 @@ function hurt(n) {
   sfx.hurt();
   if (P.hp <= 0) { sfx.die(); endLevel('lose'); }
 }
-function hitscan(ang, dmg) {
+// Is there a solid pixel of the sprite near (u, v)? A few texels of slack, no more.
+function opaqueNear(tex, u, v) {
+  const cx = (u * TS) | 0, cy = (v * TS) | 0;
+  for (let oy = -3; oy <= 3; oy += 3) for (let ox = -3; ox <= 3; ox += 3) {
+    const x = cx + ox, y = cy + oy;
+    if (x >= 0 && y >= 0 && x <= TM && y <= TM && tex[(y << TB) | x] >>> 24) return true;
+  }
+  return false;
+}
+// A shot travels along the crosshair in 3D: angle `ang` sideways and slope `slope` up or down.
+// It hits the first thing whose drawn pixels it passes through: a machine, the floor, the ceiling or a wall.
+function hitscan(ang, slope, dmg) {
   const dx = Math.cos(ang), dy = Math.sin(ang);
   const wall = castRay(P.x, P.y, dx, dy).dist;
-  let best = null, bestAlong = wall;
+  const planeHit = slope < -1e-4 ? 0.5 / -slope : slope > 1e-4 ? 0.5 / slope : Infinity;
+  const reach = Math.min(wall, planeHit);
+  let best = null, bestAlong = reach;
   for (const e of enemies) {
-    if (e.dead) continue;
+    if (e.dead || !e.tex) continue;
     const vx = e.x - P.x, vy = e.y - P.y, along = vx * dx + vy * dy;
-    if (along <= 0 || along >= bestAlong) continue;
-    if (Math.abs(vx * dy - vy * dx) < e.radius) { best = e; bestAlong = along; }
+    if (along <= 0.05 || along >= bestAlong) continue;
+    const u = 0.5 - (vy * dx - vx * dy) / e.scale;
+    if (u < 0 || u >= 1) continue;
+    const za = 0.5 + slope * along, v = (e.zNow + e.scale - za) / e.scale;
+    if (v < 0 || v >= 1) continue;
+    if (opaqueNear(e.tex, u, v)) { best = e; bestAlong = along; }
   }
-  const d = best ? bestAlong - 0.25 : wall - 0.06;
-  const hx = P.x + dx * d, hy = P.y + dy * d, hz = best ? best.z + best.scale * 0.45 : rand(0.3, 0.6);
+  const d = best ? bestAlong - 0.2 : reach - 0.06;
+  const hx = P.x + dx * d, hy = P.y + dy * d, hz = Math.max(0.02, Math.min(0.98, 0.5 + slope * d));
   sparks(hx, hy, hz, best ? 4 : 5, P.weapon ? FX_ART.ember : FX_ART.cyan);
   if (!best && Math.random() < 0.5) smoke(hx, hy, hz, 0.16);
-  if (best) damageEnemy(best, dmg);
+  P.tracerTo = [hx, hy, hz];
+  if (best) {
+    damageEnemy(best, dmg);
+    P.hitMark = 0.2; P.hitKill = P.hitKill || !!best.dead;
+  }
 }
 function fire() {
   if (P.weapon === 1 && P.shells <= 0) { P.weapon = 0; say('Out of shells. Bolt gun ready.'); return; }
+  const slope = viewLook();
+  P.hitKill = false;
   if (P.weapon === 1) {
     P.shells -= 1; P.cd = 0.8; sfx.scatter(); shake = Math.max(shake, 0.25);
-    for (let i = 0; i < 7; i++) hitscan(P.a + (Math.random() - 0.5) * 0.17, 9);
+    for (let i = 0; i < 7; i++) hitscan(P.a + (Math.random() - 0.5) * 0.15, slope + (Math.random() - 0.5) * 0.1, 9);
+    P.kick += 0.05;
   } else {
     P.cd = 0.26; sfx.bolt();
-    hitscan(P.a + (Math.random() - 0.5) * 0.012, 14);
+    hitscan(P.a, slope, 14);
+    P.kick += 0.014; P.tracer = 0.07;
   }
   P.flash = 0.07; P.recoil = 1; P.flashRot = Math.random() * 6; noiseRadius = 12;
 }
@@ -880,8 +939,8 @@ function updateWorld(dt) {
 
 // ---------- input ----------
 const keys = {};
-let fireHeld = false, mouseDX = 0;
-const touch = { stickId: null, sx: 0, sy: 0, mx: 0, my: 0, lookId: null, lx: 0, turn: 0 };
+let fireHeld = false, mouseDX = 0, mouseDY = 0;
+const touch = { stickId: null, sx: 0, sy: 0, mx: 0, my: 0, lookId: null, lx: 0, ly: 0, turn: 0, pitch: 0 };
 
 addEventListener('keydown', (e) => {
   if (mode !== 'play') return;
@@ -895,7 +954,7 @@ addEventListener('keydown', (e) => {
 addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Space') fireHeld = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; fireHeld = false; if (mode === 'play') pause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') pause(); });
-addEventListener('mousemove', (e) => { if (document.pointerLockElement === view) mouseDX += e.movementX; });
+addEventListener('mousemove', (e) => { if (document.pointerLockElement === view) { mouseDX += e.movementX; mouseDY += e.movementY; } });
 document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && mode === 'play' && !coarse) pause(); });
 function lockPointer() {
   if (coarse || document.pointerLockElement) return;
@@ -911,7 +970,7 @@ stage.addEventListener('pointerdown', (e) => {
     touch.stickId = e.pointerId; touch.sx = e.clientX; touch.sy = e.clientY;
     for (const id of ['stick', 'knob']) { const el = $(id); el.hidden = false; el.style.left = `${e.clientX}px`; el.style.top = `${e.clientY}px`; }
   } else if (touch.lookId === null) {
-    touch.lookId = e.pointerId; touch.lx = e.clientX;
+    touch.lookId = e.pointerId; touch.lx = e.clientX; touch.ly = e.clientY;
   }
 });
 stage.addEventListener('pointermove', (e) => {
@@ -921,6 +980,7 @@ stage.addEventListener('pointermove', (e) => {
     $('knob').style.left = `${touch.sx + dx}px`; $('knob').style.top = `${touch.sy + dy}px`;
   } else if (e.pointerId === touch.lookId) {
     touch.turn += e.clientX - touch.lx; touch.lx = e.clientX;
+    touch.pitch += e.clientY - touch.ly; touch.ly = e.clientY;
   }
 });
 function release(e) {
@@ -957,24 +1017,49 @@ function updateHud() {
 // ---------- flow ----------
 function update(dt) {
   levelTime += dt;
-  let fwd = 0, str = 0, turn = 0;
+  let fwd = 0, str = 0, turn = 0, pitch = 0;
   if (keys.KeyW || keys.ArrowUp) fwd += 1;
   if (keys.KeyS || keys.ArrowDown) fwd -= 1;
   if (keys.KeyA) str -= 1;
   if (keys.KeyD) str += 1;
   if (keys.ArrowLeft || keys.KeyQ) turn -= 1;
   if (keys.ArrowRight || keys.KeyE) turn += 1;
+  if (keys.KeyR || keys.PageUp) pitch += 1;
+  if (keys.KeyF || keys.PageDown) pitch -= 1;
   fwd += touch.my; str += touch.mx;
-  P.a += turn * 2.6 * dt + mouseDX * 0.0024 + touch.turn * 0.007;
-  mouseDX = 0; touch.turn = 0;
+
+  // Looking: mouse and touch are applied raw (precise aim); keys ramp up and down smoothly.
+  const a0 = P.a, l0 = P.look;
+  P.av += (turn * 2.7 - P.av) * (1 - Math.exp(-dt * 12));
+  P.a += P.av * dt + mouseDX * 0.0022 * sens + touch.turn * 0.0062 * sens;
+  P.look += pitch * 1.1 * dt - mouseDY * 0.0022 * sens - touch.pitch * 0.0048 * sens;
+  P.look = Math.max(-LOOK_MAX, Math.min(LOOK_MAX, P.look));
+  mouseDX = mouseDY = 0; touch.turn = touch.pitch = 0;
+  P.kick *= Math.exp(-dt * 7);
+
+  // Moving: velocity eases toward the wanted speed, so starts and stops feel weighty but quick.
   const len = Math.hypot(fwd, str);
   if (len > 1) { fwd /= len; str /= len; }
   const run = keys.ShiftLeft || keys.ShiftRight ? 1.45 : 1;
-  const sp = 3.3 * run * dt, cx = Math.cos(P.a), sy = Math.sin(P.a);
-  tryMove(P, (cx * fwd - sy * str) * sp, (sy * fwd + cx * str) * sp, 0.25);
-  if (len > 0.1) P.bob += dt * 9 * run; else P.bob *= 0.9;
+  const cx = Math.cos(P.a), sy = Math.sin(P.a), maxSp = 3.6 * run;
+  const k = 1 - Math.exp(-dt * (len > 0.05 ? 9 : 7));
+  P.vx += ((cx * fwd - sy * str) * maxSp - P.vx) * k;
+  P.vy += ((sy * fwd + cx * str) * maxSp - P.vy) * k;
+  const ox = P.x, oy = P.y;
+  tryMove(P, P.vx * dt, P.vy * dt, 0.25);
+  if (Math.abs(P.x - ox) < Math.abs(P.vx * dt) * 0.5) P.vx *= 0.5; // slid into a wall
+  if (Math.abs(P.y - oy) < Math.abs(P.vy * dt) * 0.5) P.vy *= 0.5;
+  const speed = Math.hypot(P.vx, P.vy);
+  P.bob += dt * speed * 2.5;
+  P.bobAmp += (Math.min(1, speed / 3.6) - P.bobAmp) * (1 - Math.exp(-dt * 8));
 
-  P.cd -= dt; P.flash -= dt; P.recoil = Math.max(0, P.recoil - dt * 6);
+  // Gun sway: lags behind turning, pitching and strafing.
+  const yawRate = (P.a - a0) / Math.max(dt, 1e-3), pitchRate = (P.look - l0) / Math.max(dt, 1e-3);
+  const strafeV = -sy * P.vx + cx * P.vy, ks = 1 - Math.exp(-dt * 9);
+  P.swayX += (Math.max(-0.06, Math.min(0.06, -yawRate * 0.012 - strafeV * 0.006)) - P.swayX) * ks;
+  P.swayY += (Math.max(-0.05, Math.min(0.05, pitchRate * 0.03)) - P.swayY) * ks;
+
+  P.cd -= dt; P.flash -= dt; P.tracer -= dt; P.hitMark -= dt; P.recoil = Math.max(0, P.recoil - dt * 6);
   if (fireHeld && P.cd <= 0) fire();
   if (P.flash > 0) addLight(P.x + cx * 0.5, P.y + sy * 0.5, P.weapon ? 6 : 4.5, P.weapon ? [1, 0.7, 0.35] : [0.5, 0.95, 1], P.weapon ? 1.6 : 1.1);
   updateWorld(dt);
@@ -997,7 +1082,7 @@ function loop(now) {
   last = now;
   const t0 = performance.now();
   if (mode === 'play') update(dt);
-  else if (mode === 'title') P.a += dt * 0.12;
+  else if (mode === 'title') { P.a += dt * 0.12; P.look *= 0.95; }
   if (mode !== 'paused') updateFx(dt);
   shake = Math.max(0, shake - dt * 2.5);
   if (shake > 0.01) {
@@ -1026,8 +1111,8 @@ function showOverlay(title, tag, detail, stats, buttons) {
     box.append(b);
   }
   $('help').textContent = coarse
-    ? 'Left thumb: move. Drag on the right: turn. FIRE to shoot, SWAP to change weapon.'
-    : 'Mouse or arrow keys: turn. WASD: move. Click or Space: fire. 1 / 2: weapon. Shift: run. Esc: pause.';
+    ? 'Left thumb: move. Drag on the right: aim (left, right, up, down). FIRE to shoot, SWAP to change weapon.'
+    : 'Mouse: aim. WASD: move. Click or Space: fire. 1 / 2: weapon. Shift: run. Arrows, R / F: turn and look without a mouse. Esc: pause.';
   overlay.hidden = false;
   $('hud').hidden = true;
   $('touchui').hidden = true;
@@ -1061,8 +1146,18 @@ function pause() {
   mode = 'paused';
   fireHeld = false;
   if (document.pointerLockElement) document.exitPointerLock();
-  showOverlay('PAUSED', `${level + 1} · ${LEVELS[level].name}`, '', `Integrity ${P.hp} · scrapped ${kills}/${foes}`, [
+  pauseMenu();
+}
+function setSens(v) {
+  sens = Math.round(Math.max(0.3, Math.min(3, v)) * 10) / 10;
+  try { localStorage.setItem('gearhold.sens', String(sens)); } catch { /* memory only */ }
+  pauseMenu();
+}
+function pauseMenu() {
+  showOverlay('PAUSED', `${level + 1} · ${LEVELS[level].name}`, `Aim sensitivity ${sens.toFixed(1)}`, `Integrity ${P.hp} · scrapped ${kills}/${foes}`, [
     ['Resume', resume],
+    ['Aim −', () => setSens(sens - 0.1), true],
+    ['Aim +', () => setSens(sens + 0.1), true],
     ['Restart level', () => { studio.track('level_end', { level: level + 1, result: 'quit', kills, secs: Math.round(levelTime) }); startLevel(level); }, true],
   ]);
 }
