@@ -7,12 +7,34 @@ export const KEY = 'tidepool_v2', KEY_V1 = 'tidepool_v1';
 const START_PEARLS = 120;
 
 export function fresh() {
-  return { v: 2, level: 1, stars: {}, pearls: START_PEARLS, shells: 0, sandDollars: 0, album: {}, claimed: {},
-    starter: false, decor: {}, settings: { sound: true, haptics: true } };
+  return { v: 2, level: 1, stars: {}, pearls: START_PEARLS, shells: 0, sandDollars: 0, album: {}, sources: {}, claimed: {},
+    starter: false, decor: {}, settings: { sound: true, haptics: true }, reef: { claimed: {}, seen: {} } };
 }
 
 const obj = (x) => (x && typeof x === 'object' && !Array.isArray(x) ? x : {});
+/** Reef fields (see reef.js). `seen: null` marks a save from before the reef: reef.initReef fills it from progress,
+ *  so old progress is not replayed as stage-ups, while thriving rewards still wait to be claimed once. */
+const reefOf = (r) => { const o = obj(r); return { claimed: { ...obj(o.claimed) }, seen: o.seen && typeof o.seen === 'object' && !Array.isArray(o.seen) ? { ...o.seen } : null }; };
 const num = (x, d) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : d);
+
+/**
+ * Where each pal copy came from: { [id]: { earned, bought } }. Earned = a shell or sand dollars (play);
+ * bought = the Starter Pack. Saves from before sources existed carry none, so they are inferred: every copy
+ * counts as earned, except that a player who bought the Starter Pack and owns exactly one Snapjaw got that
+ * Snapjaw from the pack (bought). With two or more Snapjaws, one is bought and the rest earned.
+ */
+function migrateSources(raw, album, starter) {
+  const out = {};
+  const given = obj(raw);
+  for (const [id, n0] of Object.entries(album)) {
+    const n = Math.max(0, Math.floor(num(n0, 0)));
+    if (!n) continue;
+    const g = obj(given[id]);
+    if ('earned' in g || 'bought' in g) { out[id] = { earned: Math.floor(num(g.earned, 0)), bought: Math.floor(num(g.bought, 0)) }; continue; }
+    out[id] = starter && id === STARTER_PAL ? { earned: n - 1, bought: 1 } : { earned: n, bought: 0 };
+  }
+  return out;
+}
 
 /** Any stored value in, a valid v2 save out. v1 saves keep everything and gain stars and sand dollars. */
 export function migrate(raw) {
@@ -24,14 +46,16 @@ export function migrate(raw) {
     for (let n = 1; n < level; n++) stars[n] = 1; // v1 had no stars; passed levels count as cleared
     const sandDollars = Object.values(album).reduce((a, n) => a + Math.max(0, num(n, 0) - 1), 0);
     return { ...fresh(), level, stars, pearls: num(raw.pearls, START_PEARLS), shells: Math.floor(num(raw.shells, 0)),
-      sandDollars, album, claimed: { ...obj(raw.claimed) }, starter: !!raw.starter };
+      sandDollars, album, sources: migrateSources(null, album, !!raw.starter), claimed: { ...obj(raw.claimed) }, starter: !!raw.starter, reef: reefOf(null) };
   }
   if (raw.v === 2) {
     const f = fresh();
+    const album = { ...obj(raw.album) };
     return { ...f, ...raw, v: 2, level: Math.max(1, Math.floor(num(raw.level, 1))), pearls: num(raw.pearls, f.pearls),
       shells: Math.floor(num(raw.shells, 0)), sandDollars: Math.floor(num(raw.sandDollars, 0)),
-      stars: { ...obj(raw.stars) }, album: { ...obj(raw.album) }, claimed: { ...obj(raw.claimed) }, decor: { ...obj(raw.decor) },
-      starter: !!raw.starter, settings: { ...f.settings, ...obj(raw.settings) } };
+      stars: { ...obj(raw.stars) }, album, sources: migrateSources(raw.sources, album, !!raw.starter),
+      claimed: { ...obj(raw.claimed) }, decor: { ...obj(raw.decor) },
+      starter: !!raw.starter, settings: { ...f.settings, ...obj(raw.settings) }, reef: reefOf(raw.reef) };
   }
   return fresh();
 }
@@ -74,9 +98,18 @@ export function bankShell(S, lvl) {
 export function takeShell(S) { if (S.shells <= 0) return false; S.shells -= 1; return true; }
 
 /* ---------- pals and sand dollars ---------- */
-export function addPal(S, id) {
+/** The pal the Starter Pack (a purchase) includes. */
+export const STARTER_PAL = 'snapjaw';
+function noteSource(S, id, source) {
+  if (!S.sources) S.sources = {};
+  const s = S.sources[id] || (S.sources[id] = { earned: 0, bought: 0 });
+  if (source === 'bought') s.bought += 1; else s.earned += 1;
+}
+/** Adds a pal copy. source: 'earned' (a shell or sand dollars) or 'bought' (the Starter Pack). */
+export function addPal(S, id, source = 'earned') {
   const n = (S.album[id] || 0) + 1;
   S.album[id] = n;
+  noteSource(S, id, source);
   const dup = n > 1;
   if (dup) { S.pearls += 25; S.sandDollars += 1; }
   return { dup, n };
@@ -89,6 +122,23 @@ export function buyPalWithSandDollars(S, creature) {
   if (S.album[creature.id] || S.sandDollars < cost) return false;
   S.sandDollars -= cost;
   S.album[creature.id] = 1;
+  noteSource(S, creature.id, 'earned');
+  return true;
+}
+
+/* ---------- helpers (a pal you bring into a level) ---------- */
+/** True if the player got at least one copy of this pal through play (a shell or sand dollars). */
+export function palEarned(S, id) { return (S.sources?.[id]?.earned || 0) > 0; }
+/**
+ * Brings an owned pal into the level as its helper. A pal the player only has from a purchase counts as a
+ * boost: the run is assisted and forfeits that win's shell, exactly like a booster.
+ */
+export function pickHelper(S, lvl, id) {
+  if (!id) { lvl.helper = null; return true; }
+  if (!S.album[id]) return false;
+  lvl.helper = id;
+  lvl.helperEarned = palEarned(S, id);
+  if (!lvl.helperEarned) { lvl.assisted = true; lvl.shellDrop = false; }
   return true;
 }
 

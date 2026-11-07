@@ -2,10 +2,14 @@
 export type Rarity = 'common' | 'rare' | 'epic';
 export type Save = {
   v: 2; level: number; stars: Record<number, number>; pearls: number; shells: number; sandDollars: number;
-  album: Record<string, number>; claimed: Record<number, boolean>; starter: boolean; decor: Record<string, boolean>;
+  album: Record<string, number>; sources: Record<string, { earned: number; bought: number }>; claimed: Record<number, boolean>; starter: boolean; decor: Record<string, boolean>;
   settings: { sound: boolean; haptics: boolean };
+  /** Reef restoration: thriving rewards claimed, and the highest stage already celebrated per pool (null: not yet initialised). */
+  reef: { claimed: Record<number, boolean>; seen: Record<number, number> | null };
 };
-export type LevelRun = { n: number; assisted: boolean; shellDrop: boolean; shellTaken: boolean; boosters?: string[] };
+export type LevelRun = {
+  n: number; assisted: boolean; shellDrop: boolean; shellTaken: boolean; boosters?: string[]; helper?: string | null; helperEarned?: boolean;
+};
 export type Storage = { getItem(k: string): string | null; setItem(k: string, v: string): void };
 
 export declare const KEY: string;
@@ -21,7 +25,10 @@ export declare function recordWin(S: Save, n: number, stars: number): { prevBest
 export declare function shellDrop(lvl: LevelRun, prevBest: number, stars: number): boolean;
 export declare function bankShell(S: Save, lvl: LevelRun): boolean;
 export declare function takeShell(S: Save): boolean;
-export declare function addPal(S: Save, id: string): { dup: boolean; n: number };
+export declare const STARTER_PAL: string;
+export declare function addPal(S: Save, id: string, source?: 'earned' | 'bought'): { dup: boolean; n: number };
+export declare function palEarned(S: Save, id: string): boolean;
+export declare function pickHelper(S: Save, lvl: LevelRun, id: string | null): boolean;
 export declare function sandDollarCost(rar: Rarity): number;
 export declare function buyPalWithSandDollars(S: Save, creature: { id: string; rar: Rarity }): boolean;
 export declare function buyBoosters(S: Save, lvl: LevelRun, ids: string[]): boolean;

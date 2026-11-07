@@ -1,76 +1,105 @@
 // Tidepool Pals levels. Pure data and a seeded generator, no DOM.
-// Layout: 8 rows of 7 characters. '.' pal, 'i' frozen pal, 's' sand, 'x' hole (not part of the pool).
-// Goals: { t:'collect', c, n } (colour index), { t:'sand' } (clear all of it), { t:'ice', n? } (free n pals, default all).
-import { COLS, ROWS, hashSeed, mulberry32 } from './board.js';
+// Layout: 8 rows of 7 characters. '.' pal, 'i' pal tangled in a net, 's' sand, 'l' litter (cans, rings, bottles),
+// 'o' rock pool (holds pals only at low tide), 'P' stranded pal, 'x' hole (not part of the pool).
+// Goals: { t:'collect', c, n } (colour index), { t:'litter' } / { t:'sand' } (clear all of it),
+// { t:'ice', n? } (untangle n pals, default all), { t:'rescue', n? } (rescue n stranded pals, default all).
+// Tide: { high, low, dir }: high tide for `high` moves (gravity down), then low tide for `low` moves (gravity `dir`).
+// Exit: the edge stranded pals swim out through ('down', or the low tide's 'left' / 'right').
+// Pool: which reef pool the level restores (reef.js reads levelFor(n).pool).
+import { COLS, ROWS, atExit, hashSeed, maskOf, mulberry32 } from './board.js';
 
 const FULL = ['.......', '.......', '.......', '.......', '.......', '.......', '.......', '.......'];
-const L = (n, moves, colors, goals, layout = FULL, intro) => ({ n, moves, colors, goals, layout, ...(intro ? { intro } : {}) });
+const L = (n, moves, colors, goals, layout = FULL, extra = {}) => ({ n, moves, colors, goals, layout, ...extra });
 const C = (c, n) => ({ t: 'collect', c, n });
-const SAND = { t: 'sand' };
+const LITTER = { t: 'litter' };
 const ICE = (n) => ({ t: 'ice', n });
+const RESCUE = (n) => ({ t: 'rescue', n });
+const T = (high, low, dir) => ({ high, low, dir });
 
-/* Hand-authored 1-20: one new idea at a time. Colours: 0 Coral, 1 Sunstar, 2 Droplet, 3 Gem, 4 Kelp. */
-export const AUTHORED = [
-  L(1, 18, 4, [C(0, 12)], FULL, 'Tap two or more matching pals that touch.'),
-  L(2, 20, 4, [C(1, 18)], FULL, 'Clear 5 or more at once to make an urchin bomb. Tap it to blast the pals around it.'),
-  L(3, 22, 4, [C(0, 10), C(2, 10)], FULL, 'Two goals this time. Fill both bars to win.'),
-  L(4, 20, 4, [SAND],
-    ['.......', '.......', '.......', '.......', '.......', '.......', '..sss..', '.sssss.'],
-    'Sand! Clear pals right next to sand to break it. Break all the sand to win.'),
-  L(5, 22, 4, [C(2, 22)],
+/** Helpers (a pal you bring into a level) unlock at this level. */
+export const HELPER_LEVEL = 4;
+/** Levels 1-10 restore pool 0, 11-20 pool 1, and so on every 10 levels. */
+export const poolOf = (n) => Math.floor((n - 1) / 10);
+
+/* Hand-authored 1-20: one new idea at a time, and the tide arrives early. Colours: 0 Coral, 1 Sunstar,
+   2 Droplet, 3 Gem, 4 Kelp. */
+const RAW = [
+  L(1, 18, 4, [C(0, 12)], FULL, { intro: 'Tap two or more matching pals that touch.' }),
+  L(2, 20, 4, [C(1, 18)], FULL, { intro: 'Clear 5 or more at once to make an urchin bomb. Tap it to blast the pals around it.' }),
+  L(3, 22, 4, [C(2, 16)], FULL, { tide: T(6, 2, 'up'),
+    intro: 'The tide turns! Watch the tide meter: after 6 moves the water drains for 2 moves, and the pals tumble up instead of down. New pals wash in from the bottom.' }),
+  L(4, 22, 4, [C(0, 10), C(2, 10)], FULL, { tide: T(6, 2, 'up'),
+    intro: 'Two goals this time: fill both to win. And a pal can help now: pick a helper below. It charges as you clear its colour; tap it when it glows.' }),
+  L(5, 20, 4, [RESCUE(1), C(1, 12)],
+    ['...P...', '.......', '.......', '.......', '.......', '.......', '.......', '.......'],
+    { exit: 'down', intro: 'A pal is stranded! Clear the pals under it so it sinks to the open water at the bottom. Stranded pals can\'t be matched, and blasts never hurt them.' }),
+  L(6, 22, 4, [C(3, 16)],
+    ['.......', '.......', '.......', '.......', '.......', '.......', 'oo...oo', 'oo...oo'],
+    { tide: T(4, 3, 'up'), intro: 'Rock pools! The dark pools only hold pals at low tide. When the tide comes back in, those pals wash out to sea, and they count toward your goals.' }),
+  L(7, 22, 4, [LITTER],
+    ['.......', '.......', '.......', '.......', '.......', '.......', '..lll..', '.lllll.'],
+    { tide: T(6, 2, 'up'), intro: 'Litter! Clear pals right next to cans, rings and bottles to pick them up. Clean up all of it to win.' }),
+  L(8, 24, 5, [C(4, 20)], FULL, { tide: T(4, 3, 'right'),
+    intro: 'A sideways tide! At low tide this pool drains to the right: pals slide right and new ones wash in from the left. The arrow on the tide meter shows where the next tide pulls.' }),
+  L(9, 24, 5, [C(2, 20)],
     ['x.....x', '.......', '.......', '.......', '.......', '.......', '.......', 'x.....x'],
-    'Pools come in all shapes. Clear 7 or more for a wave: it sweeps a whole row or column.'),
-  L(6, 26, 4, [SAND, C(3, 14)],
-    ['x.....x', '.......', '.......', '.......', '.......', 'ss...ss', 's.....s', 'ss...ss']),
-  L(7, 22, 5, [ICE(4)],
+    { tide: T(5, 3, 'left'), intro: 'Pools come in all shapes. Clear 7 or more for a wave: it sweeps a whole row or column.' }),
+  L(10, 24, 5, [ICE(4)],
     ['.......', '.......', '.......', '.i...i.', '.......', '.i...i.', '.......', '.......'],
-    'Frozen pals! Clear pals next to the ice to free them. Frozen pals stay put until they thaw.'),
-  L(8, 24, 5, [C(1, 24)], FULL, 'Clear 9 or more for a whirlpool: it swirls away every pal of its colour.'),
-  L(9, 26, 5, [ICE(4), SAND],
-    ['.......', '.......', '..i.i..', '.......', '..i.i..', '.......', 'sss.sss', '.......']),
-  L(10, 26, 5, [C(0, 16), C(3, 16)],
+    { tide: T(5, 3, 'up'), intro: 'Pals tangled in nets! Clear pals next to a net to untangle them. Tangled pals stay put, whatever the tide does, until they are free.' }),
+  L(11, 26, 5, [RESCUE(1), C(0, 12)],
+    ['.......', '.P.....', '.......', '.......', '.......', '.......', '.......', '.......'],
+    { tide: T(3, 3, 'right'), exit: 'right', intro: 'This pal needs the low tide: it drifts right as the water drains. Clear its row to let it reach the open water on the right.' }),
+  L(12, 26, 5, [C(1, 24)],
+    ['o.....o', 'o.....o', '.......', '.......', '.......', '.......', '.......', '.......'],
+    { tide: T(4, 3, 'left'), intro: 'Clear 9 or more for a whirlpool: it swirls away every pal of its colour.' }),
+  L(13, 26, 5, [C(0, 16), C(3, 16)],
     ['.......', 'x.....x', 'xx...xx', 'xx...xx', 'x.....x', '.......', '.......', '.......'],
-    'Tap a special that touches another special to combine them into a bigger blast.'),
-  L(11, 26, 5, [SAND],
-    ['x.....x', '.......', '.......', '.......', 's.....s', 'ss...ss', 'sss.sss', 'x.....x']),
-  L(12, 26, 5, [ICE(8), C(2, 18)],
-    ['.......', '.......', '..iii..', '..i.i..', '..iii..', '.......', '.......', '.......']),
-  L(13, 28, 5, [C(0, 15), C(4, 15), SAND],
-    ['.......', '.......', '.......', '.......', '.......', '.......', 's.....s', 'ss...ss']),
-  L(14, 26, 5, [C(3, 28)],
-    ['.......', '.......', '.......', '..xxx..', '..xxx..', '.......', '.......', '.......']),
-  L(15, 26, 5, [ICE(10)],
-    ['.......', 'i.....i', '.i...i.', '...i...', '...i...', '.i...i.', 'i.....i', '.......']),
-  L(16, 28, 5, [SAND, ICE(4)],
-    ['.......', '.......', '.i...i.', '.......', '.i...i.', '.......', 'ss...ss', 'sss.sss']),
-  L(17, 26, 5, [C(1, 14), C(3, 14)],
-    ['xx...xx', 'x.....x', '.......', '.......', '.......', '.......', 'x.....x', 'xx...xx']),
-  L(18, 28, 5, [SAND, C(2, 18)],
-    ['x.....x', '.......', '.......', 's.....s', 'ss...ss', '.......', '.......', 'x.....x']),
-  L(19, 28, 5, [ICE(6), C(0, 18)],
-    ['.......', '.x...x.', '..i.i..', '...i...', '..i.i..', '.x...x.', '...i...', '.......']),
-  L(20, 32, 5, [SAND, ICE(4), C(4, 16)],
-    ['x.....x', '.......', '.i...i.', '.......', '.i...i.', '.......', 'ss...ss', 'sss.sss'],
-    'A big one to finish the first stretch: sand, ice and a colour goal all at once.'),
+    { tide: T(5, 2, 'up'), intro: 'Tap a special that touches another special to combine them into a bigger blast.' }),
+  L(14, 28, 5, [LITTER, ICE(4)],
+    ['.......', '.......', '.i...i.', '.......', '.i...i.', '.......', 'll...ll', 'lll.lll'],
+    { tide: T(4, 3, 'right') }),
+  L(15, 28, 5, [RESCUE(2)],
+    ['.P...P.', '.......', '.......', '.l...l.', '.......', '.......', '.......', '.......'],
+    { tide: T(5, 2, 'up'), exit: 'down', intro: 'Two pals this time, with litter in the way. Careful: at low tide they float back up.' }),
+  L(16, 26, 5, [C(2, 22)],
+    ['.......', '.......', 'o.....o', 'o.....o', 'o.....o', 'o.....o', '.......', '.......'],
+    { tide: T(4, 3, 'left') }),
+  L(17, 28, 5, [ICE(10)],
+    ['.......', 'i.....i', '.i...i.', '...i...', '...i...', '.i...i.', 'i.....i', '.......'],
+    { tide: T(4, 3, 'up') }),
+  L(18, 28, 5, [LITTER, C(2, 18)],
+    ['x.....x', '.......', '.......', 'l.....l', 'll...ll', '.......', '.......', 'x.....x'],
+    { tide: T(4, 3, 'right') }),
+  L(19, 28, 5, [RESCUE(1), LITTER],
+    ['.......', '....P..', '.......', '.......', '.......', '.......', 'll...ll', 'lll.lll'],
+    { tide: T(3, 4, 'left'), exit: 'left' }),
+  L(20, 32, 5, [LITTER, ICE(4), C(4, 16)],
+    ['x.....x', '.......', '.i...i.', '.......', '.i...i.', 'o.....o', 'll...ll', 'lll.lll'],
+    { tide: T(4, 3, 'right'), intro: 'A big one to finish the first stretch: litter, nets, a colour goal and a sideways tide.' }),
 ];
+export const AUTHORED = RAW.map((d) => ({ ...d, pool: poolOf(d.n) }));
 
 /* ---------- measuring a level ---------- */
 const count = (def, ch) => def.layout.reduce((a, row) => a + [...row].filter((x) => x === ch).length, 0);
 export function features(def) {
   const collectGoals = def.goals.filter((g) => g.t === 'collect').length;
-  return { sand: count(def, 's'), ice: count(def, 'i'), holes: count(def, 'x'), collectGoals, goals: def.goals.length, colors: def.colors };
+  return { sand: count(def, 's'), litter: count(def, 'l'), ice: count(def, 'i'), holes: count(def, 'x'),
+    rock: count(def, 'o'), rescue: count(def, 'P'), tide: !!def.tide,
+    sideways: !!def.tide && def.tide.dir !== 'up', collectGoals, goals: def.goals.length, colors: def.colors };
 }
 /** Rough number of moves the goals take for a typical player. */
 function workload(def) {
   const f = features(def);
-  const parts = def.goals.map((g) => g.t === 'collect' ? g.n / 2.4 : g.t === 'sand' ? f.sand : 1.1 * (g.n ?? f.ice));
+  const parts = def.goals.map((g) => g.t === 'collect' ? g.n / 2.4 : g.t === 'sand' ? f.sand : g.t === 'litter' ? f.litter
+    : g.t === 'rescue' ? 7 * (g.n ?? f.rescue) : 1.1 * (g.n ?? f.ice));
   const max = Math.max(...parts), sum = parts.reduce((a, b) => a + b, 0);
   return max + 0.6 * (sum - max);
 }
-/** Higher is harder: work per move, made harder by holes (fewer matches) and a fifth colour. */
+/** Higher is harder: work per move, made harder by holes (fewer matches), a fifth colour and a sideways tide. */
 export function difficulty(def) {
   const f = features(def);
-  return (workload(def) * (1 + (f.holes / (ROWS * COLS)) * 0.6) * (def.colors === 5 ? 1.15 : 1)) / def.moves;
+  return (workload(def) * (1 + (f.holes / (ROWS * COLS)) * 0.6) * (def.colors === 5 ? 1.15 : 1) * (f.sideways ? 1.05 : 1)) / def.moves;
 }
 
 /* ---------- procedural levels beyond 20 ---------- */
@@ -86,6 +115,14 @@ const MASKS = [
   ['xx...xx', 'x.....x', '.......', '.......', '.......', '.......', 'x.....x', 'xx...xx'],
   ['x..x..x', '.......', '.......', 'x.....x', 'x.....x', '.......', '.......', 'x..x..x'],
 ];
+// Rock-pool templates: cells that turn into rock pools where the layout is still a plain pal.
+const ROCKS = [
+  [[6, 0], [6, 1], [7, 0], [7, 1], [6, 5], [6, 6], [7, 5], [7, 6]],
+  [[0, 0], [1, 0], [0, 6], [1, 6]],
+  [[2, 0], [3, 0], [4, 0], [5, 0], [2, 6], [3, 6], [4, 6], [5, 6]],
+  [[3, 2], [3, 3], [3, 4], [4, 2], [4, 3], [4, 4]],
+];
+const TIDE_DIRS = ['up', 'left', 'right'];
 
 export function generateLevel(n) {
   const rng = mulberry32(hashSeed('tidepool:' + n));
@@ -99,7 +136,7 @@ export function generateLevel(n) {
   const open = (r, c) => cells[r][c] === '.';
 
   // 2. Which goals: more of them, mixed together, as tiers go up.
-  const kinds = ['collect', 'sand', 'ice'];
+  const kinds = ['collect', 'litter', 'ice'];
   for (let i = kinds.length - 1; i > 0; i--) { const j = int(0, i); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
   let k = 1;
   if (rng() < Math.min(0.85, 0.3 + 0.12 * tier)) k++;
@@ -110,22 +147,24 @@ export function generateLevel(n) {
   // Obstacles never crowd out the plain pals you match with; three-goal levels get lighter obstacles.
   let budget = cells.flat().filter((ch) => ch === '.').length - 26;
   const lighten = (x) => Math.min(budget, k === 3 ? Math.round(x * 0.7) : x);
-  // 3. Sand fills up from the bottom in mirrored pairs; it can also show up as a plain obstacle later on.
-  const wantSand = lighten(chosen.includes('sand') ? Math.min(16, 6 + Math.floor(tier * 1.1) + int(0, 3))
+  // 3. Litter fills up from the bottom in mirrored pairs; sand can also show up as a plain obstacle later on.
+  const goalLitter = chosen.includes('litter');
+  const wantBlock = lighten(goalLitter ? Math.min(16, 6 + Math.floor(tier * 1.1) + int(0, 3))
     : tier >= 2 && rng() < 0.35 ? int(3, 6) : 0);
-  let sand = 0;
+  const ch = goalLitter ? 'l' : 's';
+  let blocks = 0;
   const band = tier >= 4 && rng() < 0.4 ? [4, 3, 5] : [7, 6, 5, 4];
   for (const r of band) {
-    for (let c = 0; c <= 3 && sand < wantSand; c++) {
+    for (let c = 0; c <= 3 && blocks < wantBlock; c++) {
       const m = COLS - 1 - c;
       if (!open(r, c) || !open(r, m)) continue;
-      if (c === m) { cells[r][c] = 's'; sand++; } else if (wantSand - sand >= 2) { cells[r][c] = 's'; cells[r][m] = 's'; sand += 2; }
+      if (c === m) { cells[r][c] = ch; blocks++; } else if (wantBlock - blocks >= 2) { cells[r][c] = ch; cells[r][m] = ch; blocks += 2; }
     }
   }
-  budget -= sand;
-  if (chosen.includes('sand') && sand > 0) goals.push(SAND);
+  budget -= blocks;
+  if (goalLitter && blocks > 0) goals.push(LITTER);
 
-  // 4. Frozen pals in mirrored pairs in the middle rows.
+  // 4. Netted pals in mirrored pairs in the middle rows.
   if (chosen.includes('ice')) {
     const wantIce = lighten(Math.min(12, 3 + Math.floor(tier * 0.8) + int(0, 2)));
     let ice = 0, guard = 0;
@@ -150,8 +189,34 @@ export function generateLevel(n) {
   // Keep goals within the 3 the HUD shows: a two-colour goal next to two obstacle goals drops its second colour.
   while (goals.length > 3) goals.pop();
 
-  const def = { n, moves: 0, colors: 5, goals, layout: cells.map((row) => row.join('')) };
-  // 6. Moves: the goals' workload times a slack that tightens tier by tier.
+  // 6. Tides: most levels breathe; the low tide pulls up or sideways.
+  const extra = {};
+  if (rng() < Math.min(0.9, 0.7 + 0.03 * tier)) {
+    extra.tide = T(int(3, 6), int(2, 4), TIDE_DIRS[int(0, 2)]);
+  }
+  // 7. A rescue now and then (it replaces the last goal when the HUD is full), else maybe rock pools.
+  if (rng() < Math.min(0.4, 0.22 + 0.02 * tier)) {
+    const pals = tier >= 4 && rng() < 0.4 ? 2 : 1;
+    const exit = extra.tide && extra.tide.dir !== 'up' && rng() < 0.5 ? extra.tide.dir : 'down';
+    let placed = 0, guard = 0;
+    const m = cells.map((row) => row.map((x) => x !== 'x'));
+    while (placed < pals && guard++ < 200) {
+      const r = exit === 'down' ? int(0, 2) : int(0, 5);
+      const c = exit === 'down' ? int(1, 5) : exit === 'right' ? int(0, 2) : int(4, 6);
+      if (!open(r, c) || atExit(m, r, c, exit)) continue;
+      cells[r][c] = 'P'; placed++;
+    }
+    if (placed) {
+      if (goals.length >= 3) goals.pop();
+      goals.unshift(RESCUE(placed));
+      extra.exit = exit;
+    }
+  } else if (extra.tide && rng() < 0.4) {
+    for (const [r, c] of ROCKS[int(0, ROCKS.length - 1)]) if (open(r, c)) cells[r][c] = 'o';
+  }
+
+  const def = { n, moves: 0, colors: 5, goals, layout: cells.map((row) => row.join('')), ...extra, pool: poolOf(n) };
+  // 8. Moves: the goals' workload times a slack that tightens tier by tier.
   const slack = Math.max(1.12, 1.55 - 0.045 * tier);
   const holesFactor = 1 + (features(def).holes / (ROWS * COLS)) * 0.6;
   def.moves = Math.max(16, Math.min(40, Math.round(workload(def) * holesFactor * slack) + 5));
@@ -159,6 +224,18 @@ export function generateLevel(n) {
 }
 
 export function levelDef(n) { return n >= 1 && n <= AUTHORED.length ? AUTHORED[n - 1] : generateLevel(n); }
+/** The level for number n, with its `pool` index. Same as levelDef; reef.js reads levelFor(n).pool. */
+export const levelFor = levelDef;
+
+/**
+ * The level with tides switched off (the `tides` flag): high tide only. Rock pools stay water for good, so
+ * they become holes, and a stranded pal's exit moves to the bottom edge (the only way high tide carries it).
+ */
+export function withoutTides(def) {
+  if (!def.tide) return def;
+  const { tide, ...rest } = def;
+  return { ...rest, layout: def.layout.map((row) => row.replace(/o/g, 'x')), ...(def.exit ? { exit: 'down' } : {}) };
+}
 
 /* ---------- validation: what makes a level playable at all ---------- */
 export function validateLevel(def) {
@@ -167,11 +244,12 @@ export function validateLevel(def) {
   if (!Array.isArray(def.layout) || def.layout.length !== ROWS) { e.push(`layout needs ${ROWS} rows`); return e; }
   def.layout.forEach((row, r) => {
     if (row.length !== COLS) e.push(`row ${r} needs ${COLS} cells`);
-    if (/[^.six]/.test(row)) e.push(`row ${r} has an unknown cell`);
+    if (/[^.sixloP]/.test(row)) e.push(`row ${r} has an unknown cell`);
   });
   const f = features(def);
   const playable = ROWS * COLS - f.holes, plain = count(def, '.');
   if (playable < 36) e.push('too few playable cells');
+  if (playable - f.rock < 32) e.push('too few playable cells at high tide');
   if (plain < 20) e.push('too few plain pals to make matches');
   // every playable cell connects to every other one
   const seen = new Set(), start = [];
@@ -194,10 +272,32 @@ export function validateLevel(def) {
       if (!(g.c >= 0 && g.c < def.colors)) e.push('collect colour not in play');
       if (!(g.n >= 1 && g.n <= def.moves * 2.5)) e.push('collect target out of reach');
     } else if (g.t === 'sand') { if (f.sand < 1) e.push('sand goal without sand'); }
-    else if (g.t === 'ice') { if (f.ice < 1 || (g.n ?? f.ice) > f.ice || (g.n ?? 1) < 1) e.push('ice goal does not match the frozen pals'); }
+    else if (g.t === 'litter') { if (f.litter < 1) e.push('litter goal without litter'); }
+    else if (g.t === 'ice') { if (f.ice < 1 || (g.n ?? f.ice) > f.ice || (g.n ?? 1) < 1) e.push('ice goal does not match the netted pals'); }
+    else if (g.t === 'rescue') { if (f.rescue < 1 || (g.n ?? f.rescue) > f.rescue || (g.n ?? 1) < 1) e.push('rescue goal does not match the stranded pals'); }
     else e.push('unknown goal');
   }
-  if (def.goals.filter((g) => g.t === 'sand').length > 1 || def.goals.filter((g) => g.t === 'ice').length > 1) e.push('duplicate goal');
-  if (f.sand > 18) e.push('too much sand');
+  for (const t of ['sand', 'litter', 'ice', 'rescue']) if (def.goals.filter((g) => g.t === t).length > 1) e.push('duplicate goal');
+  if (f.sand + f.litter > 18) e.push('too much sand and litter');
+  // tides
+  if (def.tide) {
+    const { high, low, dir } = def.tide;
+    if (!(Number.isInteger(high) && high >= 2 && high <= 10)) e.push('high tide must last 2-10 moves');
+    if (!(Number.isInteger(low) && low >= 1 && low <= 8)) e.push('low tide must last 1-8 moves');
+    if (!TIDE_DIRS.includes(dir)) e.push('low tide pulls up, left or right');
+  }
+  if (f.rock && !def.tide) e.push('rock pools need a tide');
+  // rescue
+  const hasRescue = def.goals.some((g) => g.t === 'rescue');
+  if (f.rescue && !hasRescue) e.push('stranded pals without a rescue goal');
+  if (hasRescue) {
+    if (!['down', 'left', 'right'].includes(def.exit)) e.push('a rescue needs an exit edge');
+    else {
+      if (def.exit !== 'down' && def.tide?.dir !== def.exit) e.push('a side exit needs a low tide that pulls that way');
+      const mask = maskOf(def);
+      def.layout.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === 'P' && atExit(mask, r, c, def.exit)) e.push('a stranded pal starts at the exit'); }));
+    }
+    if (f.rock) e.push('rescue levels have no rock pools');
+  }
   return e;
 }

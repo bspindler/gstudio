@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { EVENT_NAMES } from '../src/index.js';
 
 import {
-  BOOSTERS, DECOR, KEY, KEY_V1, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, fresh,
-  loadSave, migrate, recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, type LevelRun,
+  BOOSTERS, DECOR, KEY, KEY_V1, STARTER_PAL, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, fresh,
+  loadSave, migrate, palEarned, pickHelper, recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, type LevelRun,
 } from '../../../games/tidepool-pals/save.js';
 
 const memory = (init: Record<string, string> = {}) => {
@@ -116,6 +116,70 @@ describe('tidepool save: no paid path to a random reward', () => {
     expect(buyDecor(S, d.id)).toBe(false); // already owned
     expect(buyDecor({ ...fresh(), pearls: 0 }, d.id)).toBe(false);
     for (const x of DECOR) expect(Object.keys(x).sort()).toEqual(['id', 'name', 'pearls']);
+  });
+});
+
+describe('tidepool save: helpers count as earned only when the pal came from play', () => {
+  it('a pal whose only copy was bought (the Starter Pack) makes the level assisted when used as a helper', () => {
+    const S = fresh();
+    addPal(S, STARTER_PAL, 'bought');
+    expect(palEarned(S, STARTER_PAL)).toBe(false);
+    const lvl = run();
+    expect(pickHelper(S, lvl, STARTER_PAL)).toBe(true);
+    expect(lvl).toMatchObject({ helper: STARTER_PAL, helperEarned: false, assisted: true, shellDrop: false });
+    expect(shellDrop(lvl, 0, 3)).toBe(false);
+    lvl.shellDrop = true; // even if something wrongly set it, banking refuses
+    expect(bankShell(S, lvl)).toBe(false);
+    expect(S.shells).toBe(0);
+  });
+
+  it('an earned pal (shell or sand dollars) helps without assisting; owning an earned copy is enough', () => {
+    const S = fresh();
+    addPal(S, 'fizz');
+    const a = run();
+    expect(pickHelper(S, a, 'fizz')).toBe(true);
+    expect(a).toMatchObject({ assisted: false, helperEarned: true });
+    addPal(S, STARTER_PAL, 'bought');
+    addPal(S, STARTER_PAL); // later found in a shell
+    const b = run();
+    pickHelper(S, b, STARTER_PAL);
+    expect(b.assisted).toBe(false);
+    expect(S.sources[STARTER_PAL]).toEqual({ earned: 1, bought: 1 });
+  });
+
+  it('sand-dollar trades record the pal as earned', () => {
+    const S = { ...fresh(), sandDollars: 99 };
+    buyPalWithSandDollars(S, { id: 'marlo', rar: 'epic' });
+    expect(palEarned(S, 'marlo')).toBe(true);
+  });
+
+  it('cannot bring a pal the player does not own, and no helper is fine', () => {
+    const lvl = run();
+    expect(pickHelper(fresh(), lvl, 'lumen')).toBe(false);
+    expect(pickHelper(fresh(), lvl, null)).toBe(true);
+    expect(lvl.assisted).toBe(false);
+  });
+
+  it('migration: old album entries count as earned, except a Starter Pack buyer\'s single Snapjaw', () => {
+    const bought = migrate({ ...fresh(), sources: undefined, starter: true, album: { snapjaw: 1, fizz: 2 } });
+    expect(bought.sources).toEqual({ snapjaw: { earned: 0, bought: 1 }, fizz: { earned: 2, bought: 0 } });
+    expect(palEarned(bought, 'snapjaw')).toBe(false);
+    const two = migrate({ ...fresh(), sources: undefined, starter: true, album: { snapjaw: 2 } });
+    expect(palEarned(two, 'snapjaw')).toBe(true);
+    const noPack = migrate({ ...fresh(), sources: undefined, starter: false, album: { snapjaw: 1 } });
+    expect(palEarned(noPack, 'snapjaw')).toBe(true);
+    const v1 = migrate({ ...V1, album: { snapjaw: 1 } });
+    expect(palEarned(v1, 'snapjaw')).toBe(false);
+    // sources already in the save are kept as they are
+    const kept = migrate({ ...fresh(), album: { snapjaw: 1 }, sources: { snapjaw: { earned: 1, bought: 0 } }, starter: true });
+    expect(palEarned(kept, 'snapjaw')).toBe(true);
+  });
+
+  it('the page wires the rule: the Starter Pack adds its pal as bought, and the helper goes through pickHelper', () => {
+    const html = readFileSync(new URL('../../../games/tidepool-pals/index.html', import.meta.url), 'utf8');
+    expect(html).toMatch(/addPal\(S, [^)]*'bought'\)/);
+    expect(html).toMatch(/pickHelper\(S, run, /);
+    expect(html).toContain('Boosted: no shell this level');
   });
 });
 
