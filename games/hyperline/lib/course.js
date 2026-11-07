@@ -1,0 +1,198 @@
+// Data-driven course generator. A course is a sorted list of world objects built from a library
+// of patterns; the only randomness is the seeded rng, so a seed always builds the same course
+// (the daily run seeds it from the UTC date). No DOM; tested in hyperline-course.test.ts.
+//
+// Object kinds (x = start along the track, all in units):
+//   spike {x, y, inv}     0.8 wide; inv hangs from a ceiling at y
+//   block {x, w, h}       solid; stand on top, crash into the side
+//   pit   {x, w}          no track; fall and the run ends
+//   chip  {x, y}          pickup
+//   bar   {x, w, y}       low ceiling from y up BAR_H; any jump under it crashes
+//   pad   {x, w}          launches the runner at PAD_V
+//   mover {x, w, base, amp, k, ph}  platform bobbing at base + amp*sin(runnerX*k + ph)
+//   flip  {x, w}          gravity points up; the runner rides the ceiling track at CEIL_Y
+
+import { mulberry32 } from './rng.js';
+import { AIR, BAR_Y, CEIL_Y, GRAV, JV, PAD_AIR, PAD_V, PS, sectorAt, speedAt, STEP } from './world.js';
+
+const SW = 0.8; // spike width
+const range = (x) => speedAt(x) * AIR;
+
+// Times when a normal jump is above a ground spike's hitbox (top 0.58 plus 0.08 slack).
+const H0 = 0.66;
+const T1 = (JV - Math.sqrt(JV * JV - 2 * GRAV * H0)) / GRAV;
+const T2 = (JV + Math.sqrt(JV * JV - 2 * GRAV * H0)) / GRAV;
+
+function spikes(o, x, n, y = 0, inv = false) {
+  for (let i = 0; i < n; i++) o.push({ t: 'spike', x: x + i * SW, y, inv });
+  return n * SW;
+}
+
+/** Jump-start window (runner left edge) that clears a ground spike cluster at sx of n spikes. */
+function spikeWindow(sx, n, v) {
+  const a = sx + 0.2, b = sx + (n - 1) * SW + 0.6;
+  return [b - 0.16 - T2 * v, a - 0.64 - T1 * v];
+}
+
+/**
+ * The pattern library. sector: first sector it can appear in. weight(s): how often, by sector.
+ * build(x, d, rng) returns { o: objects, len }, where d in [0, 1] is the difficulty at x.
+ */
+export const PATTERNS = [
+  { id: 'spikes', sector: 0, weight: () => 3.4,
+    build(x, d, r) {
+      const o = [], n = 1 + Math.floor(r() * (d > 0.25 ? 3 : 2));
+      const len = spikes(o, x, n);
+      o.push({ t: 'chip', x: x + len / 2, y: 2.7 });
+      return { o, len };
+    } },
+  { id: 'block', sector: 0, weight: () => 2,
+    build(x, d, r) {
+      const o = [], w = 2 + Math.floor(r() * 3);
+      o.push({ t: 'block', x, w, h: 1 });
+      if (d > 0.35 && w >= 3 && r() < 0.55) o.push({ t: 'spike', x: x + w / 2 - 0.4, y: 1, inv: false });
+      else o.push({ t: 'chip', x: x + w / 2, y: 1.6 });
+      return { o, len: w };
+    } },
+  { id: 'steps', sector: 0, weight: () => 1.4,
+    build(x) {
+      return { o: [{ t: 'block', x, w: 2, h: 1 }, { t: 'block', x: x + 2, w: 2, h: 2 }, { t: 'chip', x: x + 3, y: 2.6 }], len: 4 };
+    } },
+  { id: 'pit', sector: 0, weight: () => 1.7,
+    build(x, d, r) {
+      const w = Math.min(range(x) * 0.66, 1.8 + r() * (0.5 + d * 0.7));
+      return { o: [{ t: 'pit', x, w }, { t: 'chip', x: x + w / 2, y: 2.3 }], len: w };
+    } },
+  { id: 'blockSpike', sector: 0, weight: () => 1.5,
+    build(x) {
+      return { o: [{ t: 'block', x, w: 2, h: 1 }, { t: 'spike', x: x + 2, y: 0, inv: false }], len: 2.8 };
+    } },
+
+  // Sector 1: low ceilings. Stay grounded; chips run along the floor underneath.
+  { id: 'bar', sector: 1, weight: (s) => (s === 1 ? 3 : 1.6),
+    build(x, d, r) {
+      const lead = range(x) * 0.5, w = 2.5 + r() * (2 + d * 1.5), bx = x + lead;
+      const o = [{ t: 'bar', x: bx, w, y: BAR_Y }];
+      for (let k = 0.6; k < w - 0.3; k += 1.1) o.push({ t: 'chip', x: bx + k, y: 0.45 });
+      return { o, len: lead + w };
+    } },
+  { id: 'spikeBar', sector: 1, weight: (s) => (s === 1 ? 1.4 : 1),
+    build(x, d, r) {
+      const o = [];
+      spikes(o, x, 1);
+      const bx = x + range(x) + 1.2, w = 2 + r() * 2;
+      o.push({ t: 'chip', x: x + 0.4, y: 2.7 }, { t: 'bar', x: bx, w, y: BAR_Y });
+      return { o, len: bx - x + w };
+    } },
+
+  // Sector 2: jump pads, over a long pit or up a wall too tall to jump.
+  { id: 'padPit', sector: 2, weight: (s) => (s === 2 ? 2.6 : 1.1),
+    build(x, d, r) {
+      const v = speedAt(x), rp = v * PAD_AIR, px = x + 0.5;
+      const pw = rp * (0.48 + r() * 0.1), pitX = px + 2.2;
+      const o = [{ t: 'pad', x: px, w: 1.6 }, { t: 'pit', x: pitX, w: pw }];
+      for (const f of [0.3, 0.5, 0.7]) {
+        const t = f * PAD_AIR;
+        o.push({ t: 'chip', x: px + f * rp, y: PAD_V * t - (GRAV / 2) * t * t + PS / 2 });
+      }
+      return { o, len: Math.max(pitX + pw, px + rp + 1.5) - x };
+    } },
+  { id: 'padWall', sector: 2, weight: (s) => (s === 2 ? 1.6 : 0.9),
+    build(x, d, r) {
+      const v = speedAt(x), px = x + 0.5, wx = px + 3, ww = 3 + r() * 2;
+      const o = [{ t: 'pad', x: px, w: 1.4 }, { t: 'block', x: wx, w: ww, h: 3 }, { t: 'chip', x: wx + ww / 2, y: 3.5 }];
+      return { o, len: Math.max(wx + ww + 0.32 * v + 1, px + PAD_AIR * v + 1.5) - x };
+    } },
+
+  // Sector 3: double spikes. The second cluster sits where a held jump re-launches on landing.
+  { id: 'twin', sector: 3, weight: (s) => (s === 3 ? 2.8 : 1.4),
+    build(x, d, r) {
+      const v = speedAt(x + 4), nA = 2, nB = 1 + Math.floor(r() * 2);
+      const o = [], ax = x + 1;
+      spikes(o, ax, nA);
+      const [lo, hi] = spikeWindow(ax, nA, v);
+      const land = (lo + hi) / 2 + AIR * v;
+      const next = land + v * STEP;
+      const [blo, bhi] = spikeWindow(0, nB, v);
+      const bx = next - (blo + bhi) / 2;
+      spikes(o, bx, nB);
+      o.push({ t: 'chip', x: ax + nA * SW / 2, y: 2.7 }, { t: 'chip', x: bx + nB * SW / 2, y: 2.7 });
+      return { o, len: bx + nB * SW - x + 0.5 };
+    } },
+
+  // Sector 4: a bobbing platform across a pit too long to jump in one go.
+  { id: 'mover', sector: 4, weight: (s) => (s === 4 ? 2.6 : 1.3),
+    build(x, d, r) {
+      const g = Math.min(range(x) * 0.45, 3.2), pw = 2.6, pitX = x + 0.5;
+      const o = [
+        { t: 'pit', x: pitX, w: g + pw + g },
+        { t: 'mover', x: pitX + g, w: pw, base: 0.75, amp: 0.45, k: 0.55, ph: r() * Math.PI * 2 },
+        { t: 'chip', x: pitX + g + pw / 2, y: 1.4 },
+      ];
+      return { o, len: 0.5 + g + pw + g + 1 };
+    } },
+
+  // Sector 5: gravity flips. Ride the ceiling; spikes hang from it; jumping drops you down.
+  { id: 'flip', sector: 5, weight: (s) => (s === 5 ? 2.4 : 1.1),
+    build(x, d, r) {
+      const v = speedAt(x), zx = x + 0.5, L = 13 + r() * 5 + d * 2;
+      const o = [{ t: 'flip', x: zx, w: L }, { t: 'pit', x: zx + 3, w: L - 6 }];
+      const gap = Math.max(range(x) * 0.95, 4.6);
+      let sx = zx + 8;
+      while (sx <= zx + L - 4) {
+        const n = 1 + Math.floor(r() * 2);
+        spikes(o, sx, n, CEIL_Y, true);
+        sx += n * SW + gap + r() * 1.5;
+      }
+      for (let cx = zx + 4.5; cx < zx + L - 1; cx += 1.6) {
+        if (!o.some((q) => q.t === 'spike' && Math.abs(q.x + 0.4 - cx) < 1.2)) o.push({ t: 'chip', x: cx, y: CEIL_Y - PS / 2 - 0.05 });
+      }
+      return { o, len: 0.5 + L + 0.32 * v + 1.5 };
+    } },
+];
+
+const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
+
+/** The pattern each sector opens with: the obstacle it introduces. */
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip' };
+
+export function createCourse(seed) {
+  return { seed: seed >>> 0, rng: mulberry32(seed), objs: [], nextX: 24, introduced: [], last: '', count: 0 };
+}
+
+/** Appends patterns until the course reaches untilX. Idempotent for x already built. */
+export function extendCourse(c, untilX) {
+  const r = c.rng;
+  while (c.nextX < untilX) {
+    const x = c.nextX, s = sectorAt(x), d = Math.min(1, x / 900);
+    let p;
+    const intro = INTRO[s];
+    if (intro && !c.introduced.includes(s)) { c.introduced.push(s); p = BY_ID[intro]; }
+    else {
+      const avail = PATTERNS.filter((q) => q.sector <= s);
+      const ws = avail.map((q) => q.weight(s) * (q.id === c.last ? 0.4 : 1));
+      let k = r() * ws.reduce((a, b) => a + b, 0), i = 0;
+      while (i < ws.length - 1 && (k -= ws[i]) >= 0) i++;
+      p = avail[i];
+    }
+    const { o, len } = p.build(x, d, r);
+    o.sort((a, b) => a.x - b.x);
+    const g = c.count++;
+    for (const ob of o) { ob.p = p.id; ob.g = g; c.objs.push(ob); }
+    c.last = p.id;
+    c.nextX += len + Math.max(3.4, 6.2 - d * 2.6, speedAt(x) * 0.42) + r() * 2.2;
+  }
+}
+
+/** Index of the first object with x >= v (objects are sorted by x). */
+export function lowerBound(objs, v) {
+  let lo = 0, hi = objs.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (objs[m].x < v) lo = m + 1; else hi = m; }
+  return lo;
+}
+
+/** Drops objects far behind x so long runs stay cheap. */
+export function pruneCourse(c, x) {
+  const i = lowerBound(c.objs, x - 40);
+  if (i > 200) c.objs.splice(0, i);
+}

@@ -1,0 +1,26 @@
+export type Mode = 'endless' | 'daily';
+export type RunStats = {
+  mode: Mode; dist: number; chips: number; streak: number; maxStreak: number; chipPts: number; near: number;
+  maxAirSpikes: number; pads: number; bars: number; flips: number; sector: number; cleanSector: number;
+};
+export type MetaEvent = { t: string; spikes?: number; sector?: number; margin?: number };
+export type Mission = { id: string; text: string; stat: keyof RunStats; target: number; reward: number; mode?: Mode };
+export type Save = {
+  v: 3; credits: number; owned: Record<string, number>; eq: string; trails: Record<string, number>; trail: string;
+  best: number; runs: number; crates: number; opened: number; top: { run: number; d: number; at: number }[];
+  daily: { day: string; best: number }; missions: string[]; missionSeq: number;
+  settings: { sound: boolean; music: boolean; haptics: boolean }; mode: Mode;
+};
+export const CHIP_CR: number;
+export const NEAR_CR: number;
+export function chipMultiplier(streak: number): number;
+export function newRunStats(mode: Mode): RunStats;
+export function applyEvent(s: RunStats, ev: MetaEvent): RunStats;
+export function runCredits(s: RunStats): number;
+export const MISSIONS: Mission[];
+export function missionById(id: string): Mission | undefined;
+export function missionProgress(m: Mission, s: RunStats): number;
+export function checkMissions(active: string[], s: RunStats): string[];
+export function rollMission(seq: number, active: string[]): { id: string; seq: number };
+export function freshSave(): Save;
+export function migrateSave(raw: unknown): Save;

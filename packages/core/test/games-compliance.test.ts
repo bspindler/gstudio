@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { complianceViolations, gameSources } from '../src/index.js';
+import { EVENT_NAMES, complianceViolations, gameSources } from '../src/index.js';
 
 // Static checks on every game in games/ for the hard rules that can be seen in source.
 const GAMES = readdirSync(new URL('../../../games/', import.meta.url), { withFileTypes: true })
@@ -13,6 +13,11 @@ const src = (slug: string) => readFileSync(new URL(`../../../games/${slug}/index
 describe.each(GAMES)('%s compliance', (slug) => {
   it('breaks no compliance rule (every .html and .js file)', () => {
     expect(complianceViolations(gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url))))).toEqual([]);
+  });
+
+  it('tracks only event names the ingest accepts (an unknown name rejects the whole batch)', () => {
+    const names = [...gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url))).matchAll(/\.track\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    for (const n of names) expect(EVENT_NAMES, `${slug} tracks '${n}'`).toContain(n);
   });
 });
 

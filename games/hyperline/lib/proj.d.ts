@@ -1,0 +1,11 @@
+export type Vec3 = [number, number, number];
+export type Camera = { eye: Vec3; f: Vec3; r: Vec3; u: Vec3; focal: number; w: number; h: number; cx: number; cy: number; near: number };
+export type Mesh = { verts: Vec3[]; faces: number[][] };
+export function makeCamera(eye: Vec3, target: Vec3, fovDeg: number, w: number, h: number, near?: number): Camera;
+export function toView(cam: Camera, x: number, y: number, z: number): Vec3;
+export function project(cam: Camera, x: number, y: number, z: number): { x: number; y: number; z: number; s: number } | null;
+export function clipToNear(cam: Camera, a: Vec3, b: Vec3): [Vec3, Vec3] | null;
+export function faceVisible(pts: { x: number; y: number }[]): boolean;
+export function rotateXYZ(v: Vec3, ax: number, ay: number, az: number): Vec3;
+export function faceNormal(pts: Vec3[]): Vec3;
+export const MESHES: Record<'cube' | 'hex' | 'octa' | 'pyramid', Mesh>;
