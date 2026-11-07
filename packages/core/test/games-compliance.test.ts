@@ -19,7 +19,7 @@ describe.each(GAMES)('%s compliance', (slug) => {
   });
 
   it('has inline module scripts that parse (catches duplicate declarations after merges)', () => {
-    const scripts = [...src(slug).matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+    const scripts = [...src(slug).matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1] ?? '');
     const dir = mkdtempSync(join(tmpdir(), `game-${slug}-`));
     scripts.forEach((code, i) => {
       const file = join(dir, `inline-${i}.mjs`);
@@ -29,7 +29,7 @@ describe.each(GAMES)('%s compliance', (slug) => {
   });
 
   it('tracks only event names the ingest accepts (an unknown name rejects the whole batch)', () => {
-    const names = [...gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url))).matchAll(/\.track\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+    const names = [...gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url))).matchAll(/\.track\(\s*['"]([^'"]+)['"]/g)].map((m) => m[1] ?? '');
     for (const n of names) expect(EVENT_NAMES, `${slug} tracks '${n}'`).toContain(n);
   });
 });
