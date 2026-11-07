@@ -132,7 +132,7 @@
     <div class="panel hp" id="hpbox"><span class="label">Integrity</span><b id="hp">100</b><div class="bar"><i id="hpbar"></i></div></div>
     <div class="panel mid"><div id="lvl"></div><div><span class="label wide">Scrapped </span><span id="kills"></span></div></div>
     <div style="display:flex;gap:8px;align-items:flex-start">
-      <div class="panel ammo"><div><div class="label" id="wname">Bolt gun</div><b id="ammo">&infin;</b></div><span id="key" hidden></span></div>
+      <div class="panel ammo"><div><div class="label" id="wname">Hand cannon</div><b id="ammo">&infin;</b></div><span id="key" hidden></span></div>
       <div class="btns"><button id="mute" aria-label="Sound on or off">SND</button><button id="pause" aria-label="Pause">II</button></div>
     </div>
   </div>
@@ -216,7 +216,7 @@ function noise(dur, vol, freq, type = 'lowpass') {
   s.start(t, Math.random() * 0.5); s.stop(t + dur);
 }
 const sfx = {
-  bolt() { tone(1400, 220, 0.14, 'sawtooth', 0.05); tone(700, 120, 0.1, 'square', 0.04); noise(0.08, 0.14, 4500); },
+  bolt() { noise(0.35, 0.45, 1800); noise(0.08, 0.3, 6000, 'highpass'); tone(140, 38, 0.3, 'sawtooth', 0.13); tone(1300, 900, 0.03, 'square', 0.03, 0.33); },
   scatter() { noise(0.4, 0.42, 1100); noise(0.12, 0.3, 5000, 'highpass'); tone(160, 40, 0.3, 'sawtooth', 0.12); tone(900, 700, 0.06, 'square', 0.05, 0.38); },
   orb() { tone(240, 760, 0.28, 'sine', 0.06); tone(480, 1500, 0.2, 'triangle', 0.02); },
   hurt() { tone(180, 50, 0.25, 'square', 0.1); noise(0.12, 0.12, 900); },
@@ -436,7 +436,7 @@ function allocView() {
 function resize() {
   const dpr = Math.min(2, devicePixelRatio || 1);
   hands.width = Math.round(innerWidth * 1.04 * dpr); hands.height = Math.round(innerHeight * 1.04 * dpr);
-  GUNS = makeGuns(Math.min(hands.height * 0.4, hands.width * 0.62));
+  GUNS = makeGuns(Math.min(hands.height * 0.5, hands.width * 0.62));
   bloom.style.filter = `blur(${Math.max(4, Math.round(innerHeight / 55))}px) brightness(1.5)`;
   allocView();
 }
@@ -648,38 +648,45 @@ function drawHands(now) {
   if (mode !== 'play' && mode !== 'paused') return;
   const gun = GUNS[P.weapon];
   const amp = P.bobAmp, bx = Math.sin(P.bob) * ch * 0.014 * amp, by = Math.abs(Math.cos(P.bob)) * ch * 0.016 * amp;
-  const gw = gun.base.width, gh = gun.base.height, [mx0, my0] = gun.tips[0];
+  const gw = gun.base.width, gh = gun.base.height, [mx0, my0] = gun.tips[0], [pvx, pvy] = gun.pivot;
   // Muzzle sits just below and right of the crosshair; sway lags behind turning and strafing.
-  const gx = cw / 2 + gh * 0.12 - mx0 + bx + P.swayX * ch + P.recoil * gh * 0.03;
-  const gy = ch * 0.5 + gh * 0.18 - my0 + by + P.swayY * ch + P.recoil * gh * 0.07;
-  hctx.drawImage(gun.base, gx, gy);
+  const rc = P.recoil * P.recoil;
+  const gx = cw / 2 + gh * 0.05 - mx0 + bx + P.swayX * ch + rc * gh * 0.06;
+  const gy = ch * 0.5 + gh * 0.12 - my0 + by + P.swayY * ch + rc * gh * 0.05;
+  const rot = -rc * (P.weapon ? 0.22 : 0.34); // kick: the muzzle flips up around the grip
+  const toScreen = ([x, y]) => {
+    const dx = x - pvx, dy = y - pvy, c = Math.cos(rot), s2 = Math.sin(rot);
+    return [gx + pvx + dx * c - dy * s2, gy + pvy + dx * s2 + dy * c];
+  };
+  hctx.save();
+  hctx.translate(gx + pvx, gy + pvy); hctx.rotate(rot); hctx.translate(-pvx, -pvy);
+  hctx.drawImage(gun.base, 0, 0);
   // light the gun with the room
   const [r, g, b] = lightAt(P.x, P.y);
   const lum = Math.min(1.2, (r + g + b) / 3);
   hctx.globalCompositeOperation = 'source-atop';
   hctx.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(0.75, 0.95 - lum))})`;
-  hctx.fillRect(gx, gy, gw, gh);
+  hctx.fillRect(0, 0, gw, gh);
   const mx = Math.max(r, g, b, 0.01);
   hctx.fillStyle = `rgba(${Math.round((r / mx) * 255)},${Math.round((g / mx) * 255)},${Math.round((b / mx) * 255)},0.16)`;
-  hctx.fillRect(gx, gy, gw, gh);
-  if (P.flash > 0) {
-    hctx.fillStyle = P.weapon ? 'rgba(255,170,80,.35)' : 'rgba(120,240,255,.3)';
-    hctx.fillRect(gx, gy, gw, gh);
-  }
+  hctx.fillRect(0, 0, gw, gh);
+  if (P.flash > 0) { hctx.fillStyle = 'rgba(255,170,80,.35)'; hctx.fillRect(0, 0, gw, gh); }
   hctx.globalCompositeOperation = 'lighter';
-  hctx.drawImage(gun.glow, gx, gy);
+  hctx.drawImage(gun.glow, 0, 0);
+  hctx.restore();
+  hctx.globalCompositeOperation = 'lighter';
   if (P.flash > 0) {
-    const size = ch * (P.weapon ? 0.2 : 0.11) * (0.8 + Math.random() * 0.4);
-    for (const [tx, ty] of gun.tips) {
-      const fx2 = gx + tx, fy2 = gy + ty;
+    const size = ch * (P.weapon ? 0.2 : 0.17) * (0.8 + Math.random() * 0.4);
+    for (const tip of gun.tips) {
+      const [fx2, fy2] = toScreen(tip);
       const rg = hctx.createRadialGradient(fx2, fy2, 1, fx2, fy2, size);
       rg.addColorStop(0, 'rgba(255,255,240,1)');
-      rg.addColorStop(0.25, P.weapon ? 'rgba(255,190,90,.9)' : 'rgba(140,245,255,.9)');
+      rg.addColorStop(0.25, 'rgba(255,190,90,.9)');
       rg.addColorStop(1, 'rgba(255,120,0,0)');
       hctx.fillStyle = rg;
       hctx.fillRect(fx2 - size, fy2 - size, size * 2, size * 2);
       hctx.save(); hctx.translate(fx2, fy2); hctx.rotate(P.flashRot);
-      hctx.fillStyle = P.weapon ? 'rgba(255,210,140,.8)' : 'rgba(190,250,255,.8)';
+      hctx.fillStyle = 'rgba(255,215,150,.8)';
       for (let i = 0; i < 5; i++) {
         hctx.rotate((Math.PI * 2) / 5);
         hctx.beginPath(); hctx.moveTo(-size * 0.06, 0); hctx.lineTo(0, -size * 0.95); hctx.lineTo(size * 0.06, 0); hctx.fill();
@@ -688,11 +695,11 @@ function drawHands(now) {
     }
   }
   if (P.tracer > 0) {
-    const [tx0, ty0] = gun.tips[0], a = P.tracer / 0.07;
-    const lg = hctx.createLinearGradient(gx + tx0, gy + ty0, cw / 2, ch / 2);
-    lg.addColorStop(0, `rgba(160,250,255,${0.9 * a})`); lg.addColorStop(1, 'rgba(160,250,255,0)');
-    hctx.strokeStyle = lg; hctx.lineWidth = Math.max(2, ch * 0.006); hctx.lineCap = 'round';
-    hctx.beginPath(); hctx.moveTo(gx + tx0, gy + ty0); hctx.lineTo(cw / 2, ch / 2); hctx.stroke();
+    const [tx0, ty0] = toScreen(gun.tips[0]), a = P.tracer / 0.07;
+    const lg = hctx.createLinearGradient(tx0, ty0, cw / 2, ch / 2);
+    lg.addColorStop(0, `rgba(255,225,160,${0.9 * a})`); lg.addColorStop(1, 'rgba(255,225,160,0)');
+    hctx.strokeStyle = lg; hctx.lineWidth = Math.max(2, ch * 0.005); hctx.lineCap = 'round';
+    hctx.beginPath(); hctx.moveTo(tx0, ty0); hctx.lineTo(cw / 2, ch / 2); hctx.stroke();
   }
   hctx.globalCompositeOperation = 'source-over';
   if (P.hitMark > 0) {
@@ -823,7 +830,7 @@ function hitscan(ang, slope, dmg) {
   }
   const d = best ? bestAlong - 0.2 : reach - 0.06;
   const hx = P.x + dx * d, hy = P.y + dy * d, hz = Math.max(0.02, Math.min(0.98, 0.5 + slope * d));
-  sparks(hx, hy, hz, best ? 4 : 5, P.weapon ? FX_ART.ember : FX_ART.cyan);
+  sparks(hx, hy, hz, best ? 5 : 6, FX_ART.ember);
   if (!best && Math.random() < 0.5) smoke(hx, hy, hz, 0.16);
   P.tracerTo = [hx, hy, hz];
   if (best) {
@@ -832,7 +839,7 @@ function hitscan(ang, slope, dmg) {
   }
 }
 function fire() {
-  if (P.weapon === 1 && P.shells <= 0) { P.weapon = 0; say('Out of shells. Bolt gun ready.'); return; }
+  if (P.weapon === 1 && P.shells <= 0) { P.weapon = 0; say('Out of shells. Hand cannon ready.'); return; }
   const slope = viewLook();
   P.hitKill = false;
   if (P.weapon === 1) {
@@ -840,9 +847,9 @@ function fire() {
     for (let i = 0; i < 7; i++) hitscan(P.a + (Math.random() - 0.5) * 0.15, slope + (Math.random() - 0.5) * 0.1, 9);
     P.kick += 0.05;
   } else {
-    P.cd = 0.26; sfx.bolt();
-    hitscan(P.a, slope, 14);
-    P.kick += 0.014; P.tracer = 0.07;
+    P.cd = 0.42; sfx.bolt(); shake = Math.max(shake, 0.18);
+    hitscan(P.a, slope, 24);
+    P.kick += 0.03; P.tracer = 0.07;
   }
   P.flash = 0.07; P.recoil = 1; P.flashRot = Math.random() * 6; noiseRadius = 12;
 }
@@ -1007,7 +1014,7 @@ function updateHud() {
   $('hp').textContent = String(P.hp);
   $('hpbar').style.width = `${P.hp}%`;
   $('hpbox').classList.toggle('low', P.hp <= 30);
-  $('wname').textContent = P.weapon ? 'Scatter cannon' : 'Bolt gun';
+  $('wname').textContent = P.weapon ? 'Scatter cannon' : 'Hand cannon';
   $('ammo').textContent = P.weapon ? String(P.shells) : '∞';
   $('key').hidden = !P.key;
   $('lvl').textContent = `${level + 1} · ${LEVELS[level].name}`;
@@ -1059,9 +1066,9 @@ function update(dt) {
   P.swayX += (Math.max(-0.06, Math.min(0.06, -yawRate * 0.012 - strafeV * 0.006)) - P.swayX) * ks;
   P.swayY += (Math.max(-0.05, Math.min(0.05, pitchRate * 0.03)) - P.swayY) * ks;
 
-  P.cd -= dt; P.flash -= dt; P.tracer -= dt; P.hitMark -= dt; P.recoil = Math.max(0, P.recoil - dt * 6);
+  P.cd -= dt; P.flash -= dt; P.tracer -= dt; P.hitMark -= dt; P.recoil = Math.max(0, P.recoil - dt * 5);
   if (fireHeld && P.cd <= 0) fire();
-  if (P.flash > 0) addLight(P.x + cx * 0.5, P.y + sy * 0.5, P.weapon ? 6 : 4.5, P.weapon ? [1, 0.7, 0.35] : [0.5, 0.95, 1], P.weapon ? 1.6 : 1.1);
+  if (P.flash > 0) addLight(P.x + cx * 0.5, P.y + sy * 0.5, P.weapon ? 6 : 5.5, [1, 0.7, 0.35], P.weapon ? 1.6 : 1.4);
   updateWorld(dt);
   if (mode !== 'play') return;
   updateEnemies(dt);

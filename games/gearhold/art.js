@@ -438,107 +438,166 @@ export const FX_ART = {
 };
 
 // ---------- first-person weapons ----------
-// Guns are drawn upright in a local frame (muzzle up at y = -96, base at y = 0), then tilted so they
-// point from the lower right toward the crosshair. A part-human, part-robot hand grips each one.
-const METAL = [[0, '#15171a'], [0.2, '#4b525b'], [0.42, '#c3ccd5'], [0.56, '#7d8690'], [0.82, '#2a2e33'], [1, '#0f1012']];
+// Weapons are drawn in profile in a local frame (barrel pointing to -x, bore on y = AX), then tilted so
+// they come in from the lower right and point at the crosshair. Only a little of the hand shows:
+// robot fingers round the grip (one on the trigger) and the edge of a part-human hand.
+const AX = -4;
+const STEEL = [[0, '#e4e9ef'], [0.16, '#a3acb6'], [0.45, '#5d6670'], [0.78, '#2b3037'], [1, '#101215']];
+const DARK = [[0, '#8a939d'], [0.25, '#4b525b'], [0.7, '#1f2328'], [1, '#0c0d10']];
 const SKIN = [[0, '#efc0a2'], [0.45, '#c78466'], [1, '#7a4530']];
-function trap(g, x, y0, hw0, y1, hw1) {
-  g.beginPath(); g.moveTo(x - hw0, y0); g.lineTo(x + hw0, y0); g.lineTo(x + hw1, y1); g.lineTo(x - hw1, y1); g.closePath();
-}
+const ROBO = [[0, '#7a8898'], [0.45, '#3c4654'], [1, '#161b22']];
 function capsule(g, x0, y0, x1, y1, w, color) {
   g.lineCap = 'round'; g.strokeStyle = color; g.lineWidth = w;
   g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
 }
-const HAND_PATH = (g) => {
-  g.beginPath(); g.moveTo(-12, -14);
-  g.bezierCurveTo(-2, -24, 20, -20, 28, -6);
-  g.bezierCurveTo(33, 6, 24, 17, 10, 17);
-  g.bezierCurveTo(-4, 17, -14, 9, -14, -2);
-  g.closePath();
-};
-// Where the grafted steel plate meets the skin, top to bottom.
-const GRAFT = [[6, -26], [2, -14], [8, -6], [1, 2], [5, 10], [-1, 22]];
-const STEEL = [[0, '#7a8898'], [0.45, '#3c4654'], [1, '#161b22']];
-// Finger joints, so the glow pass can light them.
-function fingerJoints() {
-  const out = [];
-  for (let i = 0; i < 4; i++) {
-    let x = -11 + i * 1.4, y = -11 + i * 7.2;
-    const dx = -0.94, dy = 0.34 + i * 0.05;
-    for (const len of [6.5, 5.5, 4.5]) { out.push([x, y, i]); x += dx * len; y += dy * len; }
-    out.push([x, y, i]);
-  }
-  return out;
-}
-function cyberHand(g) {
-  // sleeve and cuff
-  g.fillStyle = lin(g, 10, 10, 50, 70, [[0, '#41463b'], [1, '#111310']]);
-  g.beginPath(); g.moveTo(6, 22); g.lineTo(34, 8); g.lineTo(74, 70); g.lineTo(20, 96); g.closePath(); g.fill();
-  g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 0.8;
-  g.beginPath(); g.moveTo(22, 16); g.lineTo(46, 84); g.stroke();
-  g.fillStyle = '#22251e';
-  g.beginPath(); g.moveTo(3, 19); g.lineTo(34, 5); g.lineTo(38, 12); g.lineTo(8, 27); g.closePath(); g.fill();
-  // robotic wrist with pistons
-  g.fillStyle = lin(g, 0, 0, 32, 0, STEEL);
-  g.beginPath(); g.moveTo(-1, 9); g.lineTo(26, -3); g.lineTo(33, 7); g.lineTo(5, 20); g.closePath(); g.fill();
-  capsule(g, 4, 5, 12, 18, 2.4, '#b3bcc6'); capsule(g, 16, 0, 24, 13, 2.4, '#b3bcc6');
-  capsule(g, 4, 5, 8, 11, 2.8, '#1b2027'); capsule(g, 16, 0, 20, 6, 2.8, '#1b2027');
-  // robotic fingers wrapped round the front of the grip (drawn under the hand)
-  const joints = fingerJoints();
-  for (let i = 0; i < 4; i++) {
-    const js = joints.filter((j) => j[2] === i);
-    for (let k = 0; k < 3; k++) {
-      const [x0, y0] = js[k], [x1, y1] = js[k + 1], w = 6.4 - k * 0.8;
-      capsule(g, x0, y0, x1, y1, w + 1.4, '#0c0f13');
-      capsule(g, x0, y0, x1, y1, w, k % 2 ? '#4a5563' : '#5b6878');
-      capsule(g, x0 - 0.3, y0 - 1.2, x1 - 0.3, y1 - 1.2, 1.1, 'rgba(220,235,255,.45)');
-    }
-    for (const [x, y] of js) { g.fillStyle = '#12161b'; g.beginPath(); g.arc(x, y, 1.9, 0, 7); g.fill(); }
-  }
-  // back of the hand: human skin with knuckles and tendons
-  HAND_PATH(g);
-  g.fillStyle = lin(g, -10, -18, 28, 16, SKIN); g.fill();
-  g.strokeStyle = 'rgba(255,228,205,.3)'; g.lineWidth = 0.7;
-  for (const [x0, y0, x1, y1] of [[10, -14, 16, 8], [15, -15, 22, 4], [20, -12, 25, 1]]) {
-    g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2 + 1.5, (y0 + y1) / 2, x1, y1); g.stroke();
-  }
-  g.strokeStyle = 'rgba(90,40,25,.5)'; g.lineWidth = 0.6;
-  g.beginPath(); g.moveTo(12, 9); g.lineTo(20, 5); g.stroke();
-  // steel plate grafted over the knuckle side, with a jagged edge
-  g.save(); HAND_PATH(g); g.clip();
-  g.fillStyle = lin(g, -16, -20, 8, 20, STEEL);
-  g.beginPath(); g.moveTo(-18, -28);
-  for (const [x, y] of GRAFT) g.lineTo(x, y);
-  g.lineTo(-18, 22); g.closePath(); g.fill();
-  g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 0.7;
-  g.beginPath(); g.moveTo(-14, -7); g.lineTo(3, -9); g.stroke();
-  g.beginPath(); g.moveTo(-14, 6); g.lineTo(1, 5); g.stroke();
-  g.strokeStyle = 'rgba(255,255,255,.18)';
-  g.beginPath(); g.moveTo(-14, -6); g.lineTo(3, -8); g.stroke();
-  for (const [x, y] of [[-5, -15], [1, -17], [-8, -1], [-4, 12]]) rivet(g, x, y, 1);
-  for (let i = 0; i < 4; i++) { g.fillStyle = '#20262e'; g.beginPath(); g.ellipse(-11 + i * 1.4, -11 + i * 7.2, 3.4, 2.6, 0.3, 0, 7); g.fill(); }
-  g.restore();
-  // human thumb along the side of the gun
-  capsule(g, -8, -13, -18, -35, 8.4, '#5e3524');
-  g.save(); g.lineCap = 'round'; g.lineWidth = 7.2; g.strokeStyle = lin(g, -19, 0, -6, 0, SKIN);
-  g.beginPath(); g.moveTo(-8, -13); g.lineTo(-18, -35); g.stroke(); g.restore();
-  g.strokeStyle = 'rgba(120,60,40,.45)'; g.lineWidth = 0.6;
-  g.beginPath(); g.moveTo(-13.5, -22); g.lineTo(-10, -23.5); g.stroke();
-  g.fillStyle = 'rgba(255,222,208,.85)'; g.beginPath(); g.ellipse(-17.4, -33, 2.1, 2.9, -0.42, 0, 7); g.fill();
-}
-function cyberHandGlow(g) {
-  g.save(); HAND_PATH(g); g.clip();
-  g.strokeStyle = '#6ff2ff'; g.lineWidth = 1.1; g.lineJoin = 'round';
-  g.beginPath(); GRAFT.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
-  g.restore();
-  g.fillStyle = '#ffa040';
-  for (const [x, y] of fingerJoints()) { g.beginPath(); g.arc(x, y, 0.9, 0, 7); g.fill(); }
+function poly(g, pts) { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath(); }
+// A tapered barrel band from the frame (x0, full size) to the muzzle (x1, `t` of full size).
+function band(g, x0, x1, yTop, yBot, t) {
+  poly(g, [[x0, yTop], [x1, AX + (yTop - AX) * t], [x1, AX + (yBot - AX) * t], [x0, yBot]]);
 }
 
-// Returns a base canvas (lit by the room), a glow canvas (always bright) and muzzle points,
+function grip(g) {
+  g.fillStyle = lin(g, 6, 0, 40, 0, [[0, '#0c0d0f'], [0.45, '#2b2d31'], [1, '#09090b']]);
+  g.beginPath(); g.moveTo(6, 9); g.lineTo(27, 7); g.quadraticCurveTo(35, 30, 40, 66); g.lineTo(14, 70); g.quadraticCurveTo(9, 40, 6, 9); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.05)';
+  for (let y = 16; y < 64; y += 3) for (let x = 12 + (y % 2); x < 32; x += 3) g.fillRect(x + (y - 16) * 0.12, y, 0.9, 0.9);
+}
+function triggerAndGuard(g) {
+  g.strokeStyle = lin(g, 0, 10, 0, 28, DARK); g.lineWidth = 2.6; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(-9, 11); g.quadraticCurveTo(-10, 28, 5, 27); g.lineTo(11, 22); g.stroke();
+  g.fillStyle = lin(g, -2, 0, 5, 0, DARK);
+  g.beginPath(); g.moveTo(-1, 11); g.quadraticCurveTo(-4, 18, 0, 23); g.lineTo(2.4, 22); g.quadraticCurveTo(0.5, 17, 3, 11); g.fill();
+}
+// The part of the hand that shows: knuckle edge (skin + grafted steel) and robot fingers.
+function fingerSegs() {
+  const fingers = [];
+  // trigger finger reaches into the guard; the rest wrap the front of the grip
+  fingers.push([[25, 19], [15, 18.5], [7, 18.5], [1.5, 19.5]]);
+  for (let i = 0; i < 3; i++) { const y = 31 + i * 9.5; fingers.push([[30, y], [21, y - 0.5], [13.5, y + 0.5], [8.5, y + 3.5]]); }
+  return fingers;
+}
+function handEdge(g) {
+  g.beginPath(); g.moveTo(25, 13);
+  g.bezierCurveTo(34, 4, 50, 6, 57, 20);
+  g.bezierCurveTo(62, 34, 64, 60, 64, 96);
+  g.lineTo(26, 96); g.bezierCurveTo(23, 60, 21, 36, 25, 13); g.closePath();
+}
+function hand(g) {
+  for (const f of fingerSegs()) {
+    for (let k = 0; k < 3; k++) {
+      const [x0, y0] = f[k], [x1, y1] = f[k + 1], w = 7 - k * 0.9;
+      capsule(g, x0, y0, x1, y1, w + 1.4, '#0a0c10');
+      g.save(); g.lineCap = 'round'; g.lineWidth = w; g.strokeStyle = lin(g, 0, y0 - w / 2, 0, y0 + w / 2, ROBO);
+      g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); g.restore();
+    }
+    for (const [x, y] of f.slice(1, 3)) { g.fillStyle = '#0f1318'; g.beginPath(); g.arc(x, y, 2, 0, 7); g.fill(); }
+  }
+  // edge of the hand: human skin, steel grafted over the knuckles
+  handEdge(g); g.fillStyle = lin(g, 26, 8, 62, 50, SKIN); g.fill();
+  g.save(); handEdge(g); g.clip();
+  g.fillStyle = rad(g, 52, 20, 2, 30, [[0, 'rgba(255,225,200,.35)'], [1, 'rgba(255,225,200,0)']]); g.fillRect(20, 0, 50, 60);
+  g.fillStyle = lin(g, 40, 0, 64, 0, [[0, 'rgba(60,25,15,0)'], [1, 'rgba(60,25,15,.45)']]); g.fillRect(20, 0, 50, 100);
+  g.fillStyle = lin(g, 0, 10, 0, 70, ROBO);
+  poly(g, [[20, 6], [36, 6], [33, 20], [38, 32], [32, 44], [36, 56], [30, 70], [20, 70]]); g.fill();
+  for (const [x, y] of [[29, 16], [29, 33], [29, 50]]) rivet(g, x, y, 1.1);
+  g.strokeStyle = 'rgba(255,228,205,.3)'; g.lineWidth = 0.8;
+  for (const y of [24, 40]) { g.beginPath(); g.moveTo(40, y); g.quadraticCurveTo(48, y + 6, 54, y + 18); g.stroke(); }
+  g.restore();
+  // sleeve cuff at the very edge
+  g.fillStyle = lin(g, 50, 40, 70, 80, [[0, '#3d4237'], [1, '#121410']]);
+  poly(g, [[52, 46], [70, 30], [70, 100], [44, 100]]); g.fill();
+}
+function handGlow(g) {
+  g.save(); handEdge(g); g.clip();
+  g.strokeStyle = '#6ff2ff'; g.lineWidth = 1.1; g.lineJoin = 'round';
+  g.beginPath(); [[36, 6], [33, 20], [38, 32], [32, 44], [36, 56], [30, 70]].forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+  g.restore();
+  g.fillStyle = '#ffa040';
+  for (const f of fingerSegs()) for (const [x, y] of f.slice(1, 3)) { g.beginPath(); g.arc(x, y, 0.9, 0, 7); g.fill(); }
+}
+
+function revolver(g) {
+  grip(g);
+  triggerAndGuard(g);
+  const T = 0.78;
+  // barrel with full-length underlug
+  band(g, -22, -104, AX - 9, AX + 11, T); g.fillStyle = lin(g, 0, AX - 9, 0, AX + 11, STEEL); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 0.7;
+  g.beginPath(); g.moveTo(-22, AX + 2.5); g.lineTo(-104, AX + 2.5 * T); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.25)';
+  g.beginPath(); g.moveTo(-22, AX + 3.3); g.lineTo(-104, AX + 3.3 * T); g.stroke();
+  // vent rib on top
+  band(g, -22, -104, AX - 12.5, AX - 9, T); g.fillStyle = lin(g, 0, AX - 13, 0, AX - 9, [[0, '#f2f5f8'], [1, '#6f7882']]); g.fill();
+  g.fillStyle = 'rgba(10,12,14,.75)';
+  for (let x = -30; x > -96; x -= 7) { const t = 1 - (-x - 22) / 82 * (1 - T); g.fillRect(x - 3, AX - 11.6 * t, 4, 1.6 * t); }
+  // compensator ports near the muzzle
+  g.fillStyle = '#07080a';
+  for (const x of [-99, -94, -89]) { g.save(); g.translate(x, AX - 5.2); g.rotate(-0.35); g.fillRect(-1.3, -2.4, 2.6, 4.8); g.restore(); }
+  // front sight, muzzle crown
+  g.fillStyle = '#1b1e22'; poly(g, [[-102, AX - 9.6], [-97, AX - 9.6], [-98, AX - 13], [-101.5, AX - 13]]); g.fill();
+  g.fillStyle = lin(g, -106, 0, -102, 0, [[0, '#3a3f45'], [1, '#9aa3ad']]);
+  g.beginPath(); g.ellipse(-104, AX + 0.8 * T, 1.8, 9.8 * T, 0, 0, 7); g.fill();
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.font = 'bold 3.6px monospace'; g.fillText('HX-50  .50 MAG', -78, AX + 7.5);
+  // frame
+  poly(g, [[-25, -14], [12, -14], [22, -10], [25, 5], [14, 12], [-11, 12], [-25, 8]]);
+  g.fillStyle = lin(g, 0, -14, 0, 12, STEEL); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 0.6;
+  g.beginPath(); g.moveTo(12, -14); g.quadraticCurveTo(16, 0, 12, 11); g.stroke();
+  // fluted cylinder
+  g.fillStyle = lin(g, 0, -14, 0, 14, [[0, '#cfd6de'], [0.2, '#8c959f'], [0.55, '#4a525c'], [1, '#15181c']]);
+  g.beginPath(); g.roundRect(-21, -13.5, 29, 27, 3.5); g.fill();
+  for (const y of [-7.5, 0.5, 8.5]) {
+    g.fillStyle = lin(g, 0, y - 2.2, 0, y + 2.2, [[0, '#0d0f12'], [0.6, '#3a414a'], [1, '#9aa3ad']]);
+    g.beginPath(); g.roundRect(-17, y - 2.2, 21, 4.4, 2.2); g.fill();
+  }
+  g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(-21, -13, 2.2, 26); g.fillRect(5.8, -13, 2.2, 26);
+  g.fillStyle = '#050607'; g.fillRect(-23, -12, 1.2, 24);
+  // top strap, rear sight, hammer, latch, screws
+  g.fillStyle = '#16181c'; g.fillRect(8, -17.4, 8, 3.6); g.fillStyle = '#050607'; g.fillRect(11, -17.4, 2, 2);
+  g.fillStyle = lin(g, 16, 0, 29, 0, DARK);
+  poly(g, [[15, -12], [20.5, -20.5], [27.5, -23.5], [29, -19.5], [22.5, -8.5]]); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 0.4;
+  for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(21 + i * 1.6, -21.5 + i * 0.3); g.lineTo(23 + i * 1.6, -19 + i * 0.3); g.stroke(); }
+  g.fillStyle = lin(g, 0, -5, 0, -1, DARK); g.fillRect(10, -5, 7, 3.4);
+  rivet(g, -14, 8.5, 1.1); rivet(g, 18, 3, 1.1); rivet(g, 17, -7, 0.9);
+  hand(g);
+}
+function revolverGlow(g) {
+  g.fillStyle = '#4dff9a'; g.beginPath(); g.arc(-99.5, AX - 11.6, 1, 0, 7); g.fill();
+  handGlow(g);
+}
+
+function scatterGun(g) {
+  grip(g);
+  triggerAndGuard(g);
+  const T = 0.8;
+  for (const [y0, y1] of [[AX - 12, AX - 1], [AX, AX + 11]]) {
+    band(g, -24, -98, y0, y1, T); g.fillStyle = lin(g, 0, y0, 0, y1, STEEL); g.fill();
+    g.fillStyle = '#06070a'; g.beginPath(); g.ellipse(-98, AX + ((y0 + y1) / 2 - AX) * T, 1.6, ((y1 - y0) / 2) * T * 0.8, 0, 0, 7); g.fill();
+  }
+  band(g, -24, -98, AX - 1.5, AX + 0.5, T); g.fillStyle = '#1a1d21'; g.fill();
+  g.fillStyle = 'rgba(0,0,0,.45)';
+  for (const x of [-46, -70]) g.fillRect(x, AX - 12.5, 2.4, 24);
+  poly(g, [[-28, -16], [14, -16], [24, -10], [26, 6], [14, 12], [-12, 12], [-28, 10]]);
+  g.fillStyle = lin(g, 0, -16, 0, 12, STEEL); g.fill();
+  g.save(); poly(g, [[-28, -16], [14, -16], [24, -10], [26, 6], [14, 12], [-12, 12], [-28, 10]]); g.clip();
+  g.fillStyle = '#16171a'; g.fillRect(-28, -3, 56, 5);
+  g.fillStyle = '#ff8a2a'; for (let x = -30; x < 30; x += 5) { poly(g, [[x, 2], [x + 2.5, 2], [x + 5, -3], [x + 2.5, -3]]); g.fill(); }
+  g.restore();
+  g.fillStyle = lin(g, -20, -14, -20, -6, DARK); g.beginPath(); g.arc(-18, -9, 4, 0, 7); g.fill();
+  rivet(g, -18, -9, 1.2); rivet(g, 18, 4, 1.1);
+  hand(g);
+}
+function scatterGlow(g) {
+  g.fillStyle = '#ffa030';
+  for (let i = 0; i < 4; i++) g.fillRect(-8 + i * 5, -12.5, 3, 1.6);
+  handGlow(g);
+}
+
+// Returns a base canvas (lit by the room), a glow canvas (always bright), muzzle points and a recoil pivot,
 // all sized for a gun `h` device pixels tall.
 export function makeGuns(h) {
-  const sc = h / 100, CW = 132, CH = 116, ANG = -0.62, OX = 74, OY = 88;
+  const CW = 150, CH = 116, ANG = 0.42, OX = 110, OY = 60, sc = h / CH;
   const toCanvas = ([x, y]) => [(OX + x * Math.cos(ANG) - y * Math.sin(ANG)) * sc, (OY + x * Math.sin(ANG) + y * Math.cos(ANG)) * sc];
   const make = (draw, glow, tips) => {
     const base = canvas(Math.ceil(CW * sc), Math.ceil(CH * sc)), gl = canvas(base.width, base.height);
@@ -547,56 +606,10 @@ export function makeGuns(h) {
       g.scale(sc, sc); g.translate(OX, OY); g.rotate(ANG);
       fn(g);
     }
-    return { base, glow: gl, tips: tips.map(toCanvas) };
+    return { base, glow: gl, tips: tips.map(toCanvas), pivot: toCanvas([20, 22]) };
   };
-
-  const bolt = make((g) => {
-    g.fillStyle = lin(g, 4, 0, 24, 0, [[0, '#0d0e10'], [0.5, '#2c3036'], [1, '#0d0e10']]);
-    g.beginPath(); g.moveTo(4, -4); g.lineTo(18, -6); g.lineTo(24, 26); g.lineTo(8, 30); g.closePath(); g.fill();
-    trap(g, 0, -46, 14, 6, 21); g.fillStyle = lin(g, -21, 0, 21, 0, METAL); g.fill();
-    trap(g, 0, -46, 3, 6, 5); g.fillStyle = 'rgba(255,255,255,.1)'; g.fill();
-    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillRect(-16, -30, 32, 0.8); g.fillRect(-18, -12, 36, 0.8);
-    for (let y = -40; y < -18; y += 4) g.fillRect(9, y, 6, 1.6);
-    g.fillStyle = '#16181b'; g.fillRect(-21.5, -37, 7, 31); bevel(g, -21.5, -37, 7, 31, 0.15, 0.5, 0.6);
-    trap(g, 0, -96, 5.5, -44, 9); g.fillStyle = lin(g, -9, 0, 9, 0, METAL); g.fill();
-    for (const y of [-88, -79, -70, -61, -52]) {
-      const hw = 5.5 + ((y + 96) / 52) * 3.5 + 2.6;
-      g.fillStyle = lin(g, -hw, 0, hw, 0, [[0, '#3a1b07'], [0.35, '#c27a3a'], [0.5, '#ffd09a'], [0.7, '#a35c25'], [1, '#2a1205']]);
-      g.beginPath(); g.ellipse(0, y, hw, 2.6, 0, 0, 7); g.fill();
-      g.fillStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.ellipse(0, y + 1.6, hw, 1, 0, 0, Math.PI); g.fill();
-    }
-    g.fillStyle = '#060708'; g.beginPath(); g.ellipse(0, -96, 5.5, 2, 0, 0, 7); g.fill();
-    g.fillStyle = '#1a1c20'; g.fillRect(-2.5, -50, 5, 5);
-    cyberHand(g);
-  }, (g) => {
-    g.fillStyle = lin(g, 0, -34, 0, -8, [[0, '#d8fdff'], [1, '#2fd8ff']]); g.fillRect(-19.6, -34, 3.2, 26);
-    g.strokeStyle = '#7ff4ff'; g.lineWidth = 0.8; g.beginPath(); g.ellipse(0, -96, 4.2, 1.4, 0, 0, 7); g.stroke();
-    g.fillStyle = '#ff5a3a'; g.fillRect(-1, -48.5, 2, 1.4);
-    cyberHandGlow(g);
-  }, [[0, -96]]);
-
-  const scatter = make((g) => {
-    g.fillStyle = lin(g, 4, 0, 24, 0, [[0, '#0d0e10'], [0.5, '#2c3036'], [1, '#0d0e10']]);
-    g.beginPath(); g.moveTo(4, -4); g.lineTo(20, -6); g.lineTo(26, 26); g.lineTo(8, 30); g.closePath(); g.fill();
-    for (const x of [-8.5, 8.5]) {
-      trap(g, x, -92, 5.6, -40, 8.4); g.fillStyle = lin(g, x - 8.4, 0, x + 8.4, 0, METAL); g.fill();
-      g.fillStyle = '#050607'; g.beginPath(); g.ellipse(x, -92, 5.6, 2.1, 0, 0, 7); g.fill();
-      g.strokeStyle = '#9aa2ab'; g.lineWidth = 0.7; g.beginPath(); g.ellipse(x, -92, 6.1, 2.4, 0, 0, 7); g.stroke();
-      g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(x - 6.5, -70, 13, 1.2);
-    }
-    trap(g, 0, -46, 19, 6, 27); g.fillStyle = lin(g, -27, 0, 27, 0, METAL); g.fill();
-    hazardBand(g, -18, -42, 36, 5);
-    g.fillStyle = 'rgba(0,0,0,.45)';
-    for (let i = 0; i < 5; i++) g.fillRect(-15 + i * 7, -30, 3, 14);
-    g.fillStyle = '#1a1c20'; g.fillRect(-4, -50, 8, 6);
-    cyberHand(g);
-  }, (g) => {
-    g.fillStyle = '#ffa030';
-    for (let i = 0; i < 4; i++) g.fillRect(-13 + i * 7, -35, 4, 1.6);
-    g.fillStyle = 'rgba(255,140,40,.9)';
-    for (const x of [-8.5, 8.5]) { g.beginPath(); g.ellipse(x, -92, 2.4, 0.8, 0, 0, 7); g.fill(); }
-    cyberHandGlow(g);
-  }, [[-8.5, -92], [8.5, -92]]);
-
-  return [bolt, scatter];
+  return [
+    make(revolver, revolverGlow, [[-106, AX + 0.8 * 0.78]]),
+    make(scatterGun, scatterGlow, [[-100, AX - 6.5 * 0.8], [-100, AX + 5.5 * 0.8]]),
+  ];
 }
