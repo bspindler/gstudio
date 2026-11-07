@@ -77,7 +77,7 @@ button:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
 .mis .new{font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--void);background:var(--cyan);border-radius:4px;padding:0 5px;margin-right:6px}
 .paused{background:rgba(7,3,15,.7);pointer-events:none}
 
-.banner{position:absolute;left:0;right:0;top:24%;text-align:center;pointer-events:none;animation:ban 2.4s ease-out forwards}
+.banner{position:absolute;left:0;right:0;top:84px;text-align:center;pointer-events:none;animation:ban 2.4s ease-out forwards}
 .banner .k{font-size:12px;font-weight:700;letter-spacing:.3em;color:var(--dim)}
 .banner .n{font-family:var(--display);font-size:clamp(26px,8.5vw,40px);line-height:1.1;color:var(--volt);text-shadow:0 0 8px var(--volt),0 0 26px rgba(255,228,92,.55)}
 .banner .h{margin:6px auto 0;max-width:300px;font-size:13px;font-weight:600;color:var(--text);background:rgba(7,3,15,.6);border-radius:8px;padding:4px 10px;display:inline-block}
@@ -162,6 +162,7 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;background:var(--text);color:var(--void);font-weight:700;font-size:14px;border-radius:8px;padding:9px 14px;box-shadow:0 0 20px rgba(34,240,255,.5);max-width:calc(100% - 40px);text-align:center}
 
+@media (max-height:640px){.ready{padding-top:84px;gap:6px}.ready .mis{padding:4px 8px;font-size:12px}.ready .mis:nth-of-type(n+3){display:none}.mlist h4{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -210,7 +211,7 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
-import { createCourse, pruneCourse } from './lib/course.js';
+import { createCourse, extendCourse, pruneCourse } from './lib/course.js';
 import { createRunner, step } from './lib/sim.js';
 import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
@@ -316,7 +317,7 @@ function paintCanvas(cv, t) {
   const s = +cv.dataset.size, d = Math.min(2, window.devicePixelRatio || 1);
   if (cv.width !== s * d) { cv.width = s * d; cv.height = s * d; cv.style.width = s + 'px'; cv.style.height = s + 'px'; }
   const x = cv.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0); x.clearRect(0, 0, s, s);
-  drawSkinThumb(x, SK[cv.dataset.skin], s / 2, s / 2, s * 0.42, t || 1.3, cv.dataset.locked === '1');
+  drawSkinThumb(x, SK[cv.dataset.skin], s / 2, s / 2, s * 0.46, t || 1.3, cv.dataset.locked === '1');
 }
 function paintThumbs(root, t) { root.querySelectorAll('canvas[data-skin],canvas[data-trail]').forEach((cv) => paintCanvas(cv, t)); }
 const thumb = (id, size, locked, extra) => `<canvas data-skin="${id}" data-size="${size}" data-locked="${locked ? 1 : 0}" ${extra || ''}></canvas>`;
@@ -361,7 +362,11 @@ function resize() {
 new ResizeObserver(resize).observe(stage);
 
 let G, pressed = false;
-function makeCourse(mode) { return createCourse(mode === 'daily' ? dailySeed(today()) : (Math.random() * 4294967296) >>> 0); }
+function makeCourse(mode) {
+  const c = createCourse(mode === 'daily' ? dailySeed(today()) : (Math.random() * 4294967296) >>> 0);
+  extendCourse(c, 90);
+  return c;
+}
 function reset() {
   G = { state: 'ready', mode: S.mode, course: makeCourse(S.mode), runner: createRunner(), stats: newRunStats(S.mode), simT: 0, acc: 0,
     t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
@@ -370,8 +375,10 @@ function reset() {
   renderReady(); hud();
 }
 function startRun() {
+  // Run the course shown behind the ready screen, unless the mode or the UTC day changed since.
+  if (G.mode !== S.mode || G.day !== today()) G.course = makeCourse(S.mode);
   S.runs++; G.run = S.runs; G.mode = S.mode; G.day = today();
-  G.course = makeCourse(G.mode); G.runner = createRunner(); G.stats = newRunStats(G.mode);
+  G.runner = createRunner(); G.stats = newRunStats(G.mode);
   G.ghost = G.mode === 'daily' ? (GH.daily && GH.daily.day === G.day ? GH.daily.g : null) : GH.endless;
   G.rec = createGhostRecorder(); G.simT = 0; G.acc = 0;
   G.state = 'run'; $('ready').hidden = true; $('pauseBtn').hidden = false;
@@ -760,7 +767,7 @@ document.addEventListener('click', async (e) => {
     case 'close': closeModal(); break;
     case 'mode': if (G.state !== 'ready') break; S.mode = b.dataset.mode === 'daily' ? 'daily' : 'endless'; save(); audio.click(); reset(); break;
     case 'pause': pause(); break;
-    case 'settings': showSettings(); break;
+    case 'settings': pause(); showSettings(); break;
     case 'set': {
       const k = b.dataset.key; S.settings[k] = !S.settings[k]; save(); b.setAttribute('aria-checked', String(S.settings[k]));
       if (k === 'sound') audio.setSound(S.settings.sound);
