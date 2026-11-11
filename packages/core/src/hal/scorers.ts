@@ -26,7 +26,7 @@ const tidepool: Scorer = {
 
 const hyperline: Scorer = {
   game: 'hyperline',
-  defaults: { seeds: 20, until: 1900 },
+  defaults: { seeds: 100, until: 1900 },
   validate(r) {
     for (const k of ['seeds', 'until']) if (!Number.isInteger(r[k]) || (r[k] as number) < 1) return `--${k} must be a positive integer`;
     return null;

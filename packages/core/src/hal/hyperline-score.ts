@@ -7,8 +7,19 @@ import type { Measures, ScoreReport } from './types.js';
 
 export type SectorStats = { sector: number; reached: number; died: number; deathRate: number; causes: Record<string, number> };
 
-/** Brian-reviewed thresholds; changing them changes what "good" means. */
-export const HYPERLINE_BANDS = { early: { upTo: 1, minSurvive: 0.8 }, minSurvive: 0.4, spikeJump: 0.3 };
+/**
+ * Brian-reviewed thresholds; changing them changes what "good" means. Every band is two-sided where
+ * it can move, so a change that makes the game easier or emptier cannot raise the score.
+ * - early: sectors 0..upTo need survival >= minSurvive (no upper bound: the opening may be gentle).
+ * - later sectors need survival in [minSurvive, maxSurvive]; above maxSurvive is too easy.
+ * - spikeJump: a death-rate rise between consecutive sectors that counts as a spike, judged only
+ *   when both sectors were reached by >= minSample runs (fewer is seed luck, not a spike).
+ * - reach: median casual distance / until scores 100 inside [lo, hi], falling linearly to 0 at 0 and 1.
+ */
+export const HYPERLINE_BANDS = {
+  early: { upTo: 1, minSurvive: 0.8 }, minSurvive: 0.4, maxSurvive: 0.97, spikeJump: 0.3, minSample: 8,
+  reach: { lo: 0.35, hi: 0.65 },
+};
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -25,6 +36,39 @@ function sectorStats(sector: number, runs: CasualRun[]): SectorStats {
   return { sector, reached, died: deaths.length, deathRate: reached ? deaths.length / reached : 0, causes };
 }
 
+/** 0..100 for a median-distance fraction of until: 100 inside the reach band, linear to 0 at 0 and at 1. */
+export function reachScore(frac: number): number {
+  const { lo, hi } = HYPERLINE_BANDS.reach;
+  const f = Math.min(1, Math.max(0, frac));
+  if (f < lo) return (100 * f) / lo;
+  if (f > hi) return (100 * (1 - f)) / (1 - hi);
+  return 100;
+}
+
+/** The three measures from per-sector stats and the median distance as a fraction of until. */
+export function sectorMeasures(levels: SectorStats[], reachFrac: number): Measures {
+  const { early, minSurvive, maxSurvive, spikeJump, minSample } = HYPERLINE_BANDS;
+  const inBandOk = (l: SectorStats): boolean => {
+    if (l.reached === 0) return false;
+    const survive = 1 - l.deathRate;
+    return l.sector <= early.upTo ? survive >= early.minSurvive : survive >= minSurvive && survive <= maxSurvive;
+  };
+  const inBand = levels.filter(inBandOk).length;
+  // Spikes are judged only between consecutive sectors each reached by >= minSample runs (reached is
+  // monotonic in real runs, so these form a prefix). Unreached or thin sectors count against inBand alone.
+  let spikes = 0, pairs = 0;
+  for (let i = 1; i < levels.length; i++) {
+    if (levels[i - 1]!.reached < minSample || levels[i]!.reached < minSample) continue;
+    pairs++;
+    if (levels[i]!.deathRate - levels[i - 1]!.deathRate > spikeJump) spikes++;
+  }
+  return {
+    inBand: round2(levels.length ? (100 * inBand) / levels.length : 100),
+    noSpikes: round2(pairs ? 100 * (1 - spikes / pairs) : 100),
+    reach: round2(reachScore(reachFrac)),
+  };
+}
+
 export function scoreHyperline(range: { seeds: number; until: number }): ScoreReport<SectorStats> {
   const { seeds, until } = range;
   for (const [k, v] of [['seeds', seeds], ['until', until]] as const) {
@@ -33,22 +77,7 @@ export function scoreHyperline(range: { seeds: number; until: number }): ScoreRe
   const runs = Array.from({ length: seeds }, (_, i) => casualRun(i + 1, until));
   const levels: SectorStats[] = [];
   for (let s = 0; s <= sectorAt(until - 1); s++) levels.push(sectorStats(s, runs));
-  const { early, minSurvive, spikeJump } = HYPERLINE_BANDS;
-
-  const inBand = levels.filter((l) => l.reached > 0 && 1 - l.deathRate >= (l.sector <= early.upTo ? early.minSurvive : minSurvive)).length;
-  // Spikes are judged only between consecutive sectors some run reached (reached is monotonic, so
-  // sector i reached implies i - 1 was). Unreached sectors count against inBand alone.
-  let spikes = 0, pairs = 0;
-  for (let i = 1; i < levels.length && levels[i]!.reached > 0; i++) {
-    pairs++;
-    if (levels[i]!.deathRate - levels[i - 1]!.deathRate > spikeJump) spikes++;
-  }
-
-  const measures: Measures = {
-    inBand: round2((100 * inBand) / levels.length),
-    noSpikes: round2(pairs ? 100 * (1 - spikes / pairs) : 100),
-    reach: round2((100 * median(runs.map((r) => r.dist))) / until),
-  };
+  const measures = sectorMeasures(levels, median(runs.map((r) => r.dist)) / until);
 
   const hardFailures: string[] = [];
   for (let seed = 1; seed <= seeds; seed++) {

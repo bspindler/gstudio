@@ -21,7 +21,7 @@ describe('hal scorers', () => {
   });
   it('registers all three games', () => {
     expect(Object.keys(SCORERS).sort()).toEqual(['gearhold', 'hyperline', 'tidepool-pals']);
-    expect(scorerFor('hyperline').defaults).toEqual({ seeds: 20, until: 1900 });
+    expect(scorerFor('hyperline').defaults).toEqual({ seeds: 100, until: 1900 });
     expect(scorerFor('gearhold').defaults).toEqual({});
   });
   it('validates hyperline ranges', () => {
