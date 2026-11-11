@@ -1,0 +1,186 @@
+// Hal release edits: version bump in three places, CHANGELOG entry, commit trailers. Pure string in, string out.
+
+export type ChangeKind = 'fix' | 'tuning' | 'polish' | 'feature';
+export type BumpKind = 'patch' | 'minor';
+
+export function bumpKind(kind: ChangeKind): BumpKind {
+  return kind === 'feature' ? 'minor' : 'patch';
+}
+
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)$/;
+function parseSemver(v: string): [number, number, number] {
+  const m = SEMVER.exec(v);
+  if (!m) throw new Error(`release: not a MAJOR.MINOR.PATCH version: ${JSON.stringify(v)}`);
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+function bump(v: string, by: BumpKind): string {
+  const [a, b, c] = parseSemver(v);
+  return by === 'minor' ? `${a}.${b + 1}.0` : `${a}.${b}.${c + 1}`;
+}
+
+export interface PlanVersionInput {
+  /** The game's version now (game.yaml). */
+  current: string;
+  /** Date of the newest CHANGELOG heading, or null if there is none. */
+  topEntryDate: string | null;
+  /** Tonight's date, from nightOf(). */
+  night: string;
+  kind: ChangeKind;
+  /** Bump level already used tonight. Only read when topEntryDate === night; null there means unknown and is treated as 'patch'. */
+  alreadyBumpedTonight: BumpKind | null;
+}
+
+/** Same night shares one version, except a feature after patch-only changes upgrades to the next minor. */
+export function planVersion(i: PlanVersionInput): string {
+  parseSemver(i.current);
+  if (i.topEntryDate === i.night) {
+    if (bumpKind(i.kind) === 'minor' && i.alreadyBumpedTonight !== 'minor') return bump(i.current, 'minor');
+    return i.current;
+  }
+  return bump(i.current, bumpKind(i.kind));
+}
+
+export interface ReleaseFiles {
+  yaml: string;
+  html: string;
+  changelog: string;
+}
+export interface ReleaseInput {
+  slug: string;
+  version: string;
+  night: string;
+  entry: { kind: ChangeKind; text: string };
+}
+
+const oneLine = (s: string) => s.replace(/\s*[\r\n]+\s*/g, ' ').trim();
+const HEADING = /^## (\d+\.\d+\.\d+) \((\d{4}-\d{2}-\d{2})\)[ \t]*$/m;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The newest CHANGELOG heading, or null. */
+export function topEntry(changelog: string): { version: string; date: string } | null {
+  const m = HEADING.exec(changelog);
+  return m ? { version: m[1]!, date: m[2]! } : null;
+}
+
+/** Edits game.yaml, index.html and CHANGELOG.md. Throws if any file lacks the expected shape. */
+export function applyRelease(files: ReleaseFiles, r: ReleaseInput): ReleaseFiles {
+  parseSemver(r.version);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(r.night)) throw new Error(`release: bad night ${JSON.stringify(r.night)}`);
+  const text = oneLine(r.entry.text);
+  if (!text) throw new Error('release: empty changelog entry');
+
+  const yamlRe = /^version:[ \t]*\S+[ \t]*$/m;
+  if (!yamlRe.test(files.yaml)) throw new Error('release: game.yaml has no version: line');
+  const yaml = files.yaml.replace(yamlRe, () => `version: ${r.version}`);
+
+  const htmlRe = new RegExp(`(createStudio\\(\\{[^}]*game: '${escapeRe(r.slug)}', version: ')[^']+(')`);
+  if (!htmlRe.test(files.html)) throw new Error(`release: index.html has no createStudio({ game: '${r.slug}', version: '...' })`);
+  const html = files.html.replace(htmlRe, (_m, a: string, b: string) => `${a}${r.version}${b}`);
+
+  const top = HEADING.exec(files.changelog);
+  if (!top) throw new Error('release: CHANGELOG.md has no "## x.y.z (date)" heading');
+  const bullet = `- ${text}`;
+  const idx = top.index;
+  const rest = files.changelog.slice(idx + top[0].length);
+  const nextRel = rest.search(/^## /m);
+  const sectionEnd = nextRel === -1 ? files.changelog.length : idx + top[0].length + nextRel;
+  let changelog: string;
+  if (top[2] === r.night) {
+    // Tonight already has an entry: add a bullet, and rename the heading if the version was upgraded.
+    const [ca, cb, cc] = parseSemver(top[1]!);
+    const [na, nb, nc] = parseSemver(r.version);
+    if (na * 1e12 + nb * 1e6 + nc < ca * 1e12 + cb * 1e6 + cc) throw new Error(`release: version ${r.version} is older than tonight's ${top[1]}`);
+    const head = `## ${r.version} (${r.night})`;
+    const section = files.changelog.slice(idx + top[0].length, sectionEnd).replace(/\s+$/, '');
+    const tail = files.changelog.slice(sectionEnd);
+    changelog = `${files.changelog.slice(0, idx)}${head}${section}\n${bullet}\n${tail ? `\n${tail}` : ''}`;
+  } else {
+    const [ca, cb, cc] = parseSemver(top[1]!);
+    const [na, nb, nc] = parseSemver(r.version);
+    if (na * 1e12 + nb * 1e6 + nc <= ca * 1e12 + cb * 1e6 + cc) throw new Error(`release: version ${r.version} is not newer than ${top[1]}`);
+    changelog = `${files.changelog.slice(0, idx)}## ${r.version} (${r.night})\n${bullet}\n\n${files.changelog.slice(idx)}`;
+  }
+  return { yaml, html, changelog };
+}
+
+export interface UndoInput {
+  slug: string;
+  /** Version in game.yaml now. */
+  current: string;
+  night: string;
+  /** Title of the change being undone. */
+  title: string;
+  /** Its pass id, e.g. 'HAL-012'. */
+  pass: string;
+  reason: string;
+}
+
+/**
+ * Adds `Undone: <title> (<pass>): <reason>` under a new patch version (or tonight's entry, if the CHANGELOG
+ * already has one for this night, sharing its version). Versions never go backwards.
+ */
+export function undoEntry(files: ReleaseFiles, u: UndoInput): ReleaseFiles {
+  const top = topEntry(files.changelog);
+  const version = top && top.date === u.night ? u.current : bump(u.current, 'patch');
+  const text = `Undone: ${oneLine(u.title)} (${oneLine(u.pass)}): ${oneLine(u.reason)}`;
+  return applyRelease(files, { slug: u.slug, version, night: u.night, entry: { kind: 'fix', text } });
+}
+
+export interface HalTrailers {
+  pass: string;
+  game: string;
+  kind: ChangeKind;
+  why: string;
+  scoreBefore: number;
+  scoreAfter: number;
+  version: string;
+  run: string;
+  /** Undo commits only: the pass being undone. */
+  undo?: string;
+  reason?: string;
+}
+
+const KEYS: Array<[keyof HalTrailers, string]> = [
+  ['pass', 'Hal-Pass'], ['game', 'Hal-Game'], ['kind', 'Hal-Kind'], ['why', 'Hal-Why'],
+  ['scoreBefore', 'Hal-Score-Before'], ['scoreAfter', 'Hal-Score-After'], ['version', 'Hal-Version'], ['run', 'Hal-Run'],
+  ['undo', 'Hal-Undo'], ['reason', 'Hal-Reason'],
+];
+
+/** One `Key: value` line per field (optional fields omitted when undefined). Newlines in values become spaces. */
+export function formatTrailers(t: HalTrailers): string {
+  const lines: string[] = [];
+  for (const [f, key] of KEYS) {
+    const v = t[f];
+    if (v === undefined) continue;
+    lines.push(`${key}: ${oneLine(String(v))}`);
+  }
+  return lines.join('\n');
+}
+
+/** Reads Hal trailers from a commit message. Returns null unless all required keys are present and valid. */
+export function parseTrailers(message: string): HalTrailers | null {
+  const map = new Map<string, string>();
+  for (const line of message.split(/\r?\n/)) {
+    const m = /^(Hal-[A-Za-z-]+):[ \t]*(.*?)[ \t]*$/.exec(line);
+    if (m) map.set(m[1]!, m[2]!);
+  }
+  const get = (k: string) => map.get(k);
+  const kind = get('Hal-Kind');
+  const before = Number(get('Hal-Score-Before'));
+  const after = Number(get('Hal-Score-After'));
+  const need = ['Hal-Pass', 'Hal-Game', 'Hal-Why', 'Hal-Version', 'Hal-Run'].map(get);
+  if (need.some((v) => !v) || !['fix', 'tuning', 'polish', 'feature'].includes(kind ?? '')) return null;
+  if (!get('Hal-Score-Before') || !get('Hal-Score-After') || !Number.isFinite(before) || !Number.isFinite(after)) return null;
+  const out: HalTrailers = {
+    pass: get('Hal-Pass')!, game: get('Hal-Game')!, kind: kind as ChangeKind, why: get('Hal-Why')!,
+    scoreBefore: before, scoreAfter: after, version: get('Hal-Version')!, run: get('Hal-Run')!,
+  };
+  if (map.has('Hal-Undo')) out.undo = get('Hal-Undo')!;
+  if (map.has('Hal-Reason')) out.reason = get('Hal-Reason')!;
+  return out;
+}
+
+/** A run that starts before 6 a.m. belongs to the previous day's night. tzOffsetMinutes is minutes EAST of UTC (e.g. -300 for US Central standard). */
+export function nightOf(date: Date, tzOffsetMinutes: number): string {
+  return new Date(date.getTime() + tzOffsetMinutes * 60_000 - 6 * 3_600_000).toISOString().slice(0, 10);
+}
