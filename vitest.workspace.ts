@@ -1,1 +1,1 @@
-export default ['packages/*', 'adapters/*', 'services/*'];
+export default ['packages/*', 'adapters/*', 'services/*', 'scripts/hal'];
