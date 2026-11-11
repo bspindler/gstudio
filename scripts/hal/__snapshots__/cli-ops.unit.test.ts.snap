@@ -23,7 +23,7 @@ exports[`plists > nightly: 01:00 default, caffeinate, npm run hal -- run --night
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/opt/node &amp; co/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>/opt/node &amp; co/bin:/Users/a&lt;b&gt;/.local/share/claude/bin:/Users/a&lt;b&gt;/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>StartCalendarInterval</key>
   <dict>
@@ -63,7 +63,7 @@ exports[`plists > server: KeepAlive, serve --lan --quiet (snapshot) 1`] = `
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>/opt/node &amp; co/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>/opt/node &amp; co/bin:/Users/a&lt;b&gt;/.local/share/claude/bin:/Users/a&lt;b&gt;/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

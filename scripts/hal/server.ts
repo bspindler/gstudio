@@ -6,9 +6,9 @@ import { timingSafeEqual } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { DAILY_CAP_USD, apiSpent } from '@studio/core/hal';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import { createStore } from './store.js';
 
@@ -46,8 +46,8 @@ const defaultAlive = (pid: number) => {
 export function realSpawnRun(repo: string): SpawnRun {
   return ({ args, logPath }) => {
     const tsx = createRequire(join(repo, 'package.json')).resolve('tsx/package.json').replace(/package\.json$/, 'dist/cli.mjs');
-    mkdirSync(join(logPath, '..'), { recursive: true });
-    const fd = openSync(logPath, 'a');
+    mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 });
+    const fd = openSync(logPath, 'a', 0o600);
     try {
       const child = spawn(process.execPath, [tsx, 'scripts/hal.ts', ...args], { cwd: repo, detached: true, stdio: ['ignore', fd, fd] });
       child.on('error', () => {});
@@ -75,6 +75,13 @@ function latestReport(halDir: string): { runId: string; endedAt: string; text: s
   } catch { return null; }
 }
 
+/** One place for the response headers. same-origin, not no-referrer: with no-referrer browsers send "Origin: null" on same-origin form POSTs (Fetch spec), which the Origin check would reject, breaking Run now and Stop. */
+const secure = (c: Context) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'same-origin');
+  c.header('Content-Security-Policy', CSP);
+};
+
 const notFound = () => new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain' } });
 
 export function createServerApp(d: ServerDeps) {
@@ -87,20 +94,18 @@ export function createServerApp(d: ServerDeps) {
   app.use('*', async (c, next) => {
     const url = new URL(c.req.url);
     const q = url.searchParams.get('t') ?? undefined;
-    const viaQuery = tokenOk(q, d.token);
+    // ?t= is for the bookmark GET only; POSTs authenticate with the cookie.
+    const viaQuery = c.req.method === 'GET' && tokenOk(q, d.token);
     if (!viaQuery && !tokenOk(getCookie(c, COOKIE), d.token)) return notFound();
     if (c.req.method === 'POST' && c.req.header('origin') !== url.origin) return c.text('Forbidden', 403);
     if (viaQuery && c.req.method === 'GET') {
       setCookie(c, COOKIE, d.token, { httpOnly: true, sameSite: 'Strict', path: '/', maxAge: 60 * 60 * 24 * 365 });
       url.searchParams.delete('t');
-      c.header('Cache-Control', 'no-store');
-      c.header('Referrer-Policy', 'no-referrer');
+      secure(c);
       return c.redirect(url.pathname + url.search, 303);
     }
     await next();
-    c.header('Cache-Control', 'no-store');
-    c.header('Referrer-Policy', 'no-referrer');
-    c.header('Content-Security-Policy', CSP);
+    secure(c);
   });
 
   app.get('/', async (c) => {

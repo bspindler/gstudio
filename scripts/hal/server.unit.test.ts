@@ -44,6 +44,9 @@ describe('token gate', () => {
     expect(c).toMatch(/SameSite=Strict/i);
     expect(c).toMatch(/Path=\//);
     expect(c).not.toMatch(/Secure/i);
+    expect(r.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(r.headers.get('referrer-policy')).toBe('same-origin');
+    expect(r.headers.get('cache-control')).toBe('no-store');
   });
   it('the cookie alone is enough for GET /', async () => {
     const r = await mk().request(`${H}/`, { headers: { cookie: `hal_token=${TOKEN}` } });
@@ -62,7 +65,8 @@ describe('GET /', () => {
     expect(html).not.toContain(TOKEN);
     expect(html).not.toMatch(/<script|https?:\/\/(?!10\.0\.0\.5)/);
     expect(r.headers.get('cache-control')).toBe('no-store');
-    expect(r.headers.get('referrer-policy')).toBe('no-referrer');
+    // same-origin, not no-referrer: no-referrer makes browsers send "Origin: null" on same-origin form POSTs, which we reject, so Run now/Stop would always 403.
+    expect(r.headers.get('referrer-policy')).toBe('same-origin');
     expect(r.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; form-action 'self'");
   });
   it('shows the phase when locked by a live pid, idle when the pid is dead', async () => {
@@ -98,10 +102,18 @@ describe('POST', () => {
     expect(spawned[0]!.args).toEqual(['run', '--billing', 'subscription', '--game', 'gearhold', '--report-only']);
     expect(spawned[0]!.logPath).toBe(join(halDir, 'logs', 'run-2026-11-11T09-00-00-000Z.log'));
   });
-  it('/run with no scope runs everything; the token also works via ?t=', async () => {
-    const r = await mk().request(`${H}/run?t=${TOKEN}`, { method: 'POST', body: '', headers: { origin: H, 'content-type': 'application/x-www-form-urlencoded' } });
+  it('/run with no scope runs everything', async () => {
+    const r = await post(mk(), '/run');
     expect(r.status).toBe(303);
     expect(spawned[0]!.args).toEqual(['run', '--billing', 'subscription']);
+  });
+  it('?t= does not authenticate a POST; only the cookie does', async () => {
+    const r = await mk().request(`${H}/run?t=${TOKEN}`, { method: 'POST', body: '', headers: { origin: H } });
+    expect(r.status).toBe(404);
+    expect(spawned).toEqual([]);
+  });
+  it('rejects Origin: null', async () => {
+    expect((await post(mk(), '/run', '', { origin: 'null' })).status).toBe(403);
   });
   it('/run rejects an unknown game without spawning', async () => {
     expect((await post(mk(), '/run', 'game=../../etc;rm')).status).toBe(400);

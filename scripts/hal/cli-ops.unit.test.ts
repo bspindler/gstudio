@@ -17,7 +17,7 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks());
 const ifaces = () => ({ lo0: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }], en0: [{ family: 'IPv4', internal: false, address: '192.168.1.23' }] }) as never;
 const deps = (o: Partial<OpsDeps> = {}): OpsDeps => ({
-  halDir: join(repo, '.data/hal'), games: ['tidepool-pals'], repo, execPath: '/opt/node & co/bin/node', home,
+  halDir: join(repo, '.data/hal'), games: ['tidepool-pals'], repo, execPath: '/opt/node & co/bin/node', home, which: () => '/Users/zed/.local/share/claude/bin/claude',
   launchctl: (a) => { calls.push(a); }, interfaces: ifaces, isTTY: true, ...o,
 });
 
@@ -37,6 +37,13 @@ describe('setup', () => {
     expect(await readFile(join(repo, '.hal.env'), 'utf8')).toBe(before);
     expect(out.join('\n')).not.toContain('sk-secret');
   });
+  it('replaces an empty HAL_TOKEN= line instead of duplicating it, leaving other lines alone', async () => {
+    await writeFile(join(repo, '.hal.env'), 'A=1\nHAL_TOKEN=\n\nANTHROPIC_API_KEY=sk-secret\n');
+    await runOpsCommand('setup', [], deps());
+    const t = await readFile(join(repo, '.hal.env'), 'utf8');
+    expect(t).toMatch(/^A=1\nHAL_TOKEN=[A-Za-z0-9_-]{43}\n\nANTHROPIC_API_KEY=sk-secret\n$/);
+    expect(t.match(/HAL_TOKEN/g)).toHaveLength(1);
+  });
   it('appends the token to an existing file lacking one, preserving the other lines', async () => {
     await writeFile(join(repo, '.hal.env'), 'ANTHROPIC_API_KEY=sk-secret');
     await runOpsCommand('setup', [], deps());
@@ -47,7 +54,7 @@ describe('setup', () => {
 });
 
 describe('plists', () => {
-  const o = { execPath: '/opt/node & co/bin/node', repo: '/Users/a<b>/repo', halDir: '/Users/a<b>/repo/.data/hal' };
+  const o = { execPath: '/opt/node & co/bin/node', repo: '/Users/a<b>/repo', halDir: '/Users/a<b>/repo/.data/hal', home: '/Users/a<b>', claudeDir: '/Users/a<b>/.local/share/claude/bin' };
   it('nightly: 01:00 default, caffeinate, npm run hal -- run --nightly, escaped (snapshot)', () => {
     const x = nightlyPlist(o);
     expect(x).toMatchSnapshot();
@@ -64,6 +71,15 @@ describe('plists', () => {
     expect(x).toMatchSnapshot();
     expect(x).toContain('<key>KeepAlive</key>\n  <true/>');
     expect(x).toContain('<string>--quiet</string>');
+  });
+});
+
+describe('launchd PATH', () => {
+  it('has node dir, claude dir, user/homebrew bins, system dirs, no duplicates', () => {
+    const x = nightlyPlist({ execPath: '/opt/homebrew/bin/node', repo: '/r', halDir: '/r/.data/hal', home: '/Users/q', claudeDir: '/Users/q/.local/bin' });
+    expect(x).toContain('<string>/opt/homebrew/bin:/Users/q/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>');
+    const y = serverPlist({ execPath: '/n/bin/node', repo: '/r', halDir: '/r/.data/hal', home: '/Users/q', claudeDir: '/c/bin' });
+    expect(y).toContain('<string>/n/bin:/c/bin:/Users/q/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>');
   });
 });
 
@@ -87,6 +103,24 @@ describe('install / uninstall', () => {
     await runOpsCommand('uninstall', [], deps());
     expect(existsSync(n)).toBe(false);
     expect(calls.filter((c) => c[0] === 'unload')).toHaveLength(2);
+  });
+  it('install pre-creates the launchd log files 0600 in a 0700 dir; dry-run creates none', async () => {
+    await runOpsCommand('install', [], deps());
+    const logs = join(repo, '.data/hal/logs');
+    expect((await stat(join(logs, 'nightly.log'))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(logs, 'server.log'))).mode & 0o777).toBe(0o600);
+    expect((await stat(logs)).mode & 0o777).toBe(0o700);
+  });
+  it('install fails clearly without claude; dry-run warns and still prints', async () => {
+    await expect(runOpsCommand('install', [], deps({ which: () => null }))).rejects.toThrow('claude not found');
+    expect(calls).toEqual([]);
+    expect(existsSync(agents())).toBe(false);
+    expect(await runOpsCommand('install', ['--dry-run'], deps({ which: () => null }))).toBe(0);
+    expect(out.join('\n')).toContain('WARNING: claude not found');
+  });
+  it('install puts the claude dir in the PATH', async () => {
+    await runOpsCommand('install', [], deps());
+    expect(await readFile(join(agents(), 'com.gstudio.hal.server.plist'), 'utf8')).toContain('/Users/zed/.local/share/claude/bin');
   });
   it('rejects a bad --at', async () => {
     await expect(runOpsCommand('install', ['--at', '25:00'], deps())).rejects.toThrow('HH:MM');

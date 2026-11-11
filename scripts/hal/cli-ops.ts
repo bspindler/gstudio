@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir, networkInterfaces } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadHalEnv, parseHalEnv } from './env.js';
@@ -22,6 +22,8 @@ export type OpsDeps = {
   home?: string;
   agentsDir?: string;
   launchctl?: Launchctl;
+  /** Finds a binary on PATH; returns its absolute path or null. */
+  which?: (bin: string) => string | null;
   /** Interface table, as os.networkInterfaces(). */
   interfaces?: () => ReturnType<typeof networkInterfaces>;
   isTTY?: boolean;
@@ -46,9 +48,14 @@ function setup(d: OpsDeps): number {
   let token = parseHalEnv(text).HAL_TOKEN;
   if (!token) {
     token = randomBytes(32).toString('base64url');
-    const sep = text === '' || text.endsWith('\n') ? '' : '\n';
-    // mode 0600 applies when the file is created; an existing file keeps its permissions. Appends only: other lines (the API key) are never read out or rewritten.
-    writeFileSync(file, `${sep}HAL_TOKEN=${token}\n`, { mode: 0o600, flag: 'a' });
+    // mode 0600 applies when the file is created; an existing file keeps its permissions. Only an empty HAL_TOKEN= line is replaced; every other line stays byte-for-byte.
+    const empty = /^([ \t]*(?:export[ \t]+)?HAL_TOKEN[ \t]*=)[ \t]*(?:(?:""|'')[ \t]*)?$/m;
+    if (empty.test(text)) {
+      writeFileSync(file, text.replace(empty, `$1${token}`));
+    } else {
+      const sep = text === '' || text.endsWith('\n') ? '' : '\n';
+      writeFileSync(file, `${sep}HAL_TOKEN=${token}\n`, { mode: 0o600, flag: 'a' });
+    }
     console.log('HAL_TOKEN created in .hal.env');
   } else {
     console.log('HAL_TOKEN already set in .hal.env (unchanged)');
@@ -81,19 +88,29 @@ async function defaultListen(o: { fetch: (r: Request) => Response | Promise<Resp
   await new Promise<never>(() => {}); // keep the process alive
 }
 
+const realWhich = (bin: string): string | null => {
+  try { return execFileSync('/usr/bin/which', [bin], { encoding: 'utf8' }).trim() || null; } catch { return null; }
+};
+
 const realLaunchctl: Launchctl = (a) => { execFileSync('launchctl', a, { stdio: 'ignore' }); };
 
 function installCmd(cmd: 'install' | 'uninstall', rest: string[], d: OpsDeps): number {
   const { values } = parseArgs({ args: rest, options: { 'dry-run': { type: 'boolean' }, at: { type: 'string' } } });
+  const home = d.home ?? homedir();
+  const claude = (d.which ?? realWhich)('claude');
   const opts = {
+    claudeDir: claude ? dirname(claude) : undefined,
+    home,
     execPath: d.execPath ?? process.execPath,
     repo: d.repo ?? defaultRepo(),
     halDir: d.halDir,
     at: values.at ? parseAt(values.at) : undefined,
-    agentsDir: d.agentsDir ?? join(d.home ?? homedir(), 'Library', 'LaunchAgents'),
+    agentsDir: d.agentsDir ?? join(home, 'Library', 'LaunchAgents'),
     launchctl: d.launchctl ?? realLaunchctl,
   };
+  if (cmd === 'install' && !claude && !values['dry-run']) throw new Error('claude not found on PATH; install Claude Code (or fix PATH) so the nightly run can start it, then re-run install');
   if (cmd === 'install' && values['dry-run']) {
+    if (!claude) console.log('WARNING: claude not found on PATH; install would fail until it is available');
     for (const p of dryRun(opts)) console.log(p);
     return 0;
   }
