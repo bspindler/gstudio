@@ -42,6 +42,30 @@ describe('gearhold ?hal hook', () => {
     expect(errors.slice(before)).toEqual([]);
   });
 
+  it('&live: the rAF loop runs update (state().time advances) and step() throws', async () => {
+    const before = errors.length;
+    const page = await open('?hal=1&live');
+    await page.evaluate(() => (window as any).__hal.start(0));
+    const t0 = await page.evaluate(() => (window as any).__hal.state().time);
+    await page.waitForFunction((t0) => (window as any).__hal.state().time > t0 + 0.2, t0);
+    expect(await page.evaluate(() => (window as any).__hal.state().mode)).toBe('play');
+    const msg = await page.evaluate(() => { try { (window as any).__hal.step(1 / 60, {}); return ''; } catch (e) { return String(e); } });
+    expect(msg).toMatch(/live mode/);
+    // pauses stay suppressed: a blur and a visibility change leave the game running
+    await page.evaluate(() => { window.dispatchEvent(new Event('blur')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(await page.evaluate(() => (window as any).__hal.state().mode)).toBe('play');
+    await page.close();
+    expect(errors.slice(before)).toEqual([]);
+  });
+
+  it('without &live, the rAF loop does not advance time', async () => {
+    const page = await open('?hal=1');
+    await page.evaluate(() => (window as any).__hal.start(0));
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__hal.state().time)).toBe(0);
+    await page.close();
+  });
+
   it('start + 60 idle steps advances time by about 1 s', async () => {
     const page = await open('?hal');
     const s = await page.evaluate((idle) => {
