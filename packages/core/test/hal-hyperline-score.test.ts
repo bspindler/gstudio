@@ -60,6 +60,19 @@ describe('scoreHyperline', () => {
     expect(r.hardFailures).toEqual([]);
   }, 60_000);
 
+  it('noSpikes only judges consecutive sectors that some run reached', () => {
+    reset();
+    const r = scoreHyperline({ seeds: 8, until: 1900 });
+    const reached = r.levels.filter((l) => l.reached > 0);
+    expect(reached.map((l) => l.sector)).toEqual(reached.map((_, i) => i));
+    let spikes = 0;
+    for (let i = 1; i < reached.length; i++) if (reached[i]!.deathRate - reached[i - 1]!.deathRate > HYPERLINE_BANDS.spikeJump) spikes++;
+    const pairs = reached.length - 1;
+    expect(r.measures.noSpikes).toBe(pairs ? Math.round(100 * (1 - spikes / pairs) * 100) / 100 : 100);
+    // A course this short reaches only sector 0: no pairs, so no spikes.
+    expect(scoreHyperline({ seeds: 2, until: 100 }).measures.noSpikes).toBe(100);
+  }, 60_000);
+
   it('an unclearable seed is a hard failure, not a lower score', () => {
     reset();
     const clean = scoreHyperline({ seeds: 4, until: 1900 });

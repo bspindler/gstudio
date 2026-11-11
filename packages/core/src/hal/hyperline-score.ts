@@ -36,12 +36,17 @@ export function scoreHyperline(range: { seeds: number; until: number }): ScoreRe
   const { early, minSurvive, spikeJump } = HYPERLINE_BANDS;
 
   const inBand = levels.filter((l) => l.reached > 0 && 1 - l.deathRate >= (l.sector <= early.upTo ? early.minSurvive : minSurvive)).length;
-  let spikes = 0;
-  for (let i = 1; i < levels.length; i++) if (levels[i]!.deathRate - levels[i - 1]!.deathRate > spikeJump) spikes++;
+  // Spikes are judged only between consecutive sectors some run reached (reached is monotonic, so
+  // sector i reached implies i - 1 was). Unreached sectors count against inBand alone.
+  let spikes = 0, pairs = 0;
+  for (let i = 1; i < levels.length && levels[i]!.reached > 0; i++) {
+    pairs++;
+    if (levels[i]!.deathRate - levels[i - 1]!.deathRate > spikeJump) spikes++;
+  }
 
   const measures: Measures = {
     inBand: round2((100 * inBand) / levels.length),
-    noSpikes: round2(levels.length > 1 ? 100 * (1 - spikes / (levels.length - 1)) : 100),
+    noSpikes: round2(pairs ? 100 * (1 - spikes / pairs) : 100),
     reach: round2((100 * median(runs.map((r) => r.dist))) / until),
   };
 

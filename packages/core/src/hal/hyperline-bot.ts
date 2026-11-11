@@ -47,26 +47,45 @@ export function clearable(c: Course, until: number, budget: number = SEARCH_BUDG
   return false;
 }
 
-/** The casual player: looks `look` seconds ahead and, with probability `slip`, reacts too late. */
-// Pinned by measurement (see the 1b task-2 report): look 0.35 dies in sector 0 at every slip, so
-// look is 0.2; slip is the smallest of {0.05, 0.1, 0.15, 0.2, 0.3} whose median death sector over
-// seeds 1..40 is in 2..6.
+/**
+ * The casual player: looks `look` seconds ahead and, with probability `slip`, reacts too late.
+ * Pinned by measurement (1b task-2 report): of look 0.2..0.6, only 0.2 gets past sector 0; slip is
+ * the smallest of {0.05, 0.1, 0.15, 0.2, 0.3} whose median death sector over seeds 1..40 is in 2..6.
+ */
 export const HYPERLINE_CASUAL = { slip: 0.05, look: 0.2 };
 
 export type CasualRun = { dist: number; sector: number; cause: string; jumps: number };
 
 /**
- * Below the track with normal gravity, nothing can hold the runner again (the sim only supports
- * from prevY >= -0.12), so the fall is already certain even though 'fall' registers ~0.3 s later.
+ * Lookahead-only death test. Below the track with normal gravity nothing can hold the runner again
+ * (the sim only supports from prevY >= -0.12 and jumping needs the ground), so the fall is already
+ * certain, though 'fall' registers ~0.3 s later at VOID_Y. Without this a short lookahead never
+ * sees a pit coming. The real run still ends only on the sim's own `dead`.
  */
 const doomed = (r: Runner): boolean => r.dead !== '' || (!r.flip && r.y < -0.12);
 
-/** True if the runner is doomed within `frames` steps, jumping (or not) on the first one. */
-function diesWithin(r: Runner, c: Course, jump: boolean, frames: number): boolean {
+const MAX_AIR_FRAMES = 600; // 5 s: longer than any jump, pad launch or flip transfer
+
+/**
+ * Frames survived on a branch, or Infinity if the runner is still alive at its end. "Wait" runs
+ * `frames` steps; "jump now" runs through its whole arc until it lands (as clearable's advance
+ * does), then `frames` more. Both use doomed(), which only the lookahead sees.
+ */
+function survives(r: Runner, c: Course, jump: boolean, frames: number): number {
   const s = { ...r };
-  step(s, c, jump);
-  for (let i = 1; i < frames && !doomed(s); i++) step(s, c, false);
-  return doomed(s);
+  let n = 0;
+  const tick = (j: boolean): boolean => { step(s, c, j); n++; return doomed(s); };
+  if (tick(jump)) return n;
+  if (jump) while (!s.grounded) if (tick(false) || n >= MAX_AIR_FRAMES) return doomed(s) ? n : Infinity;
+  for (let i = jump ? 0 : 1; i < frames; i++) if (tick(false)) return n;
+  return Infinity;
+}
+
+/** Jump if waiting dies and jumping survives; if both die, the branch that survives longer; else wait. */
+function decide(r: Runner, c: Course, frames: number): boolean {
+  const wait = survives(r, c, false, frames);
+  if (wait === Infinity) return false;
+  return survives(r, c, true, frames) > wait;
 }
 
 /**
@@ -83,9 +102,7 @@ export function casualRun(seed: number, until: number, casual: { slip: number; l
   while (!r.dead && r.x < until) {
     const landed = r.grounded && !wasGrounded;
     let jump = false;
-    // Jump if waiting dies and jumping doesn't; if both die, jump; otherwise wait. That is:
-    // jump exactly when waiting dies, so the jump-now lookahead never changes the choice.
-    if (r.grounded && (landed || r.steps % 8 === 0) && rng() >= casual.slip) jump = diesWithin(r, c, false, frames);
+    if (r.grounded && (landed || r.steps % 8 === 0) && rng() >= casual.slip) jump = decide(r, c, frames);
     wasGrounded = r.grounded;
     if (step(r, c, jump).some((e) => e.t === 'jump')) jumps++;
   }
