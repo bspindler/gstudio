@@ -1,6 +1,6 @@
 // Hal's git helpers. Everything goes through an injectable runner so tests (and later helpers) can share one seam.
 import { execFile, execFileSync } from 'node:child_process';
-import { lstat, mkdtemp, readFile, readlink, rm, symlink } from 'node:fs/promises';
+import { lstat, mkdtemp, readFile, readlink, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
@@ -72,21 +72,31 @@ function levelCounts(read: (file: string) => string | null): Record<string, numb
 // ---- test counts ---------------------------------------------------------
 
 /** Counts tests with `npx vitest list --json` in `dir` (the repo's default workspace). Slow, so collectDiff takes it as a dependency. */
-export async function vitestCount(dir: string): Promise<number> {
+export async function vitestCount(dir: string): Promise<{ total: number; byFile: Record<string, number> }> {
   const { stdout } = await exec('npx', ['vitest', 'list', '--json'], { cwd: dir, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, CI: '1' } });
   const start = stdout.indexOf('[');
   const parsed: unknown = JSON.parse(stdout.slice(start));
   if (!Array.isArray(parsed)) throw new Error('vitest list --json did not return an array');
-  return parsed.length;
+  const byFile: Record<string, number> = {};
+  const prefix = (await realpath(dir)) + sep; // temp dirs are often symlinked (macOS /var -> /private/var) and vitest reports real paths
+  for (const t of parsed as { file?: string }[]) {
+    const file = (t.file ?? '').startsWith(prefix) ? t.file!.slice(prefix.length) : (t.file ?? '');
+    byFile[file.split(sep).join('/')] = (byFile[file.split(sep).join('/')] ?? 0) + 1;
+  }
+  return { total: parsed.length, byFile };
 }
 
 /** Default test counter: the candidate worktree as it is, and the base exported with `git archive` into a temp dir that borrows the worktree's node_modules. */
-export async function vitestCounts(worktree: string, base: string): Promise<{ before: number; after: number }> {
+export async function vitestCounts(worktree: string, base: string): Promise<TestCounts> {
   const tmp = await mkdtemp(join(tmpdir(), 'hal-base-'));
   try {
-    execFileSync('sh', ['-c', 'git archive "$1" | tar -x -C "$2"', 'sh', base, tmp], { cwd: worktree, stdio: 'pipe' });
+    // No shell pipe: a failing `git archive` throws instead of leaving an empty tree to count as zero tests.
+    const tar = execFileSync('git', ['archive', '--format=tar', base], { cwd: worktree, maxBuffer: 1024 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+    execFileSync('tar', ['-x', '-C', tmp], { input: tar, stdio: ['pipe', 'pipe', 'pipe'] });
     await symlink(join(worktree, 'node_modules'), join(tmp, 'node_modules'), 'dir');
-    return { before: await vitestCount(tmp), after: await vitestCount(worktree) };
+    const before = await vitestCount(tmp);
+    const after = await vitestCount(worktree);
+    return { before: before.total, after: after.total, beforeByFile: before.byFile, afterByFile: after.byFile };
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -94,10 +104,15 @@ export async function vitestCounts(worktree: string, base: string): Promise<{ be
 
 // ---- diff collection -----------------------------------------------------
 
+export type TestCounts = { before: number; after: number; beforeByFile?: Record<string, number>; afterByFile?: Record<string, number> };
 export type CollectDeps = {
   git?: GitRunner;
-  countTests?: (worktree: string, base: string) => Promise<{ before: number; after: number }>;
+  countTests?: (worktree: string, base: string) => Promise<TestCounts>;
 };
+
+/** Source and text formats are always decoded and scanned, whatever git (or a .gitattributes `-diff`, or a stray NUL byte) says about them. */
+const TEXT_EXT = new Set(['js', 'mjs', 'cjs', 'ts', 'html', 'htm', 'css', 'json', 'svg', 'md', 'txt', 'yaml', 'yml']);
+const extOf = (p: string) => (p.includes('.') ? p.slice(p.lastIndexOf('.') + 1).toLowerCase() : '');
 
 const STATUS: Record<string, FileChange['status']> = { A: 'A', M: 'M', D: 'D', R: 'R', C: 'A', T: 'M' };
 const looksBinary = (buf: Buffer) => buf.subarray(0, 8000).includes(0);
@@ -132,7 +147,8 @@ const lines = (s: string) => s.split('\0').filter(Boolean);
 /**
  * Everything the tripwires need about the candidate in `worktree` relative to `base`: changed files (tracked edits, renames,
  * deletes, and new untracked files) with before/after text, binary and symlink flags, level counts and test counts.
- * Symlinks are never followed: `after` holds the link target.
+ * Symlinks are never followed: `after` holds the link target. Fails closed: any unreadable path, or a failing `git show` for a
+ * non-added file, throws; the caller must treat a throw as a discard.
  */
 export async function collectDiff(worktree: string, base: string, deps: CollectDeps = {}): Promise<Diff> {
   const git = deps.git ?? runGit;
@@ -151,25 +167,23 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
   const files: FileChange[] = [];
   for (const r of rows) {
     const abs = resolve(root, r.path);
-    const inside = abs === root || abs.startsWith(root + sep);
+    if (!(abs === root || abs.startsWith(root + sep))) throw new Error(`collectDiff: path escapes the worktree: ${r.path}`);
+    const isText = TEXT_EXT.has(extOf(r.path));
     let after: string | null = null;
     let symlinked = false;
-    let binary = binaryPaths.has(r.path);
-    if (r.status !== 'D' && inside) {
-      try {
-        const st = await lstat(abs);
-        if (st.isSymbolicLink()) { symlinked = true; after = await readlink(abs); }
-        else if (st.isFile()) {
-          const buf = await readFile(abs);
-          if (looksBinary(buf)) binary = true;
-          after = binary ? null : buf.toString('utf8');
-        }
-      } catch { /* vanished or unreadable: after stays null */ }
+    let binary = !isText && binaryPaths.has(r.path);
+    // Fail closed: a path that is present and not deleted must be readable, or the whole collection throws (callers treat a throw as a discard).
+    if (r.status !== 'D') {
+      const st = await lstat(abs);
+      if (st.isSymbolicLink()) { symlinked = true; after = await readlink(abs); }
+      else if (st.isFile()) {
+        const buf = await readFile(abs);
+        if (!isText && looksBinary(buf)) binary = true;
+        after = binary ? null : buf.toString('utf8');
+      } else throw new Error(`collectDiff: not a regular file or symlink: ${r.path}`);
     }
     let before: string | null = null;
-    if (r.status !== 'A' && !binary) {
-      try { before = await git(['show', `${base}:${r.oldPath ?? r.path}`], root); } catch { before = null; }
-    }
+    if (r.status !== 'A' && !binary) before = await git(['show', `${base}:${r.oldPath ?? r.path}`], root);
     files.push({ path: r.path, status: r.status, before, after, binary, ...(r.oldPath !== undefined ? { oldPath: r.oldPath } : {}), ...(symlinked ? { symlink: true } : {}) });
   }
 
@@ -181,7 +195,10 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
   const beforeTexts = new Map<string, string | null>();
   for (const s of LEVEL_SOURCES) beforeTexts.set(s.file, await baseText(s.file));
   const afterText = async (file: string) => {
-    try { const abs = resolve(root, file); const st = await lstat(abs); return st.isFile() ? await readFile(abs, 'utf8') : null; } catch { return null; }
+    const abs = resolve(root, file);
+    try { await lstat(abs); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null; throw e; }
+    const st = await lstat(abs);
+    return st.isFile() ? await readFile(abs, 'utf8') : null;
   };
   const afterTexts = new Map<string, string | null>();
   for (const s of LEVEL_SOURCES) afterTexts.set(s.file, await afterText(s.file));
@@ -191,6 +208,7 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
     files,
     testCountBefore: tests.before,
     testCountAfter: tests.after,
+    ...(tests.beforeByFile && tests.afterByFile ? { testCountsByFile: { before: tests.beforeByFile, after: tests.afterByFile } } : {}),
     levelCounts: { before: levelCounts((f) => beforeTexts.get(f) ?? null), after: levelCounts((f) => afterTexts.get(f) ?? null) },
     repoFiles,
   };

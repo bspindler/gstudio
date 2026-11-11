@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, type Diff, type FileChange,
+  isProtectedPath, addedLines, secret, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -169,9 +169,10 @@ describe('dark-pattern', () => {
     expect(darkPattern(diff([A('games/g/index.html', `<p>${t}</p>\n`)]))).toHaveLength(1);
   });
   it('flags a timer within a few lines of an offer/sale/deal word', () => {
-    expect(darkPattern(diff([A('games/g/a.js', 'const sale = on;\nsetInterval(tick, 1000);\n')]))).toEqual([{ rule: 'dark-pattern', path: 'games/g/a.js', detail: 'timer near offer/sale/deal wording' }]);
-    // The word may be existing text near a newly added timer.
-    expect(darkPattern(diff([M('games/g/a.js', 'showOffer();\nx();\n', 'showOffer();\nsetTimeout(x, 5);\nx();\n')]))).toHaveLength(1);
+    expect(darkPattern(diff([A('games/g/a.js', 'el.textContent = "Weekend sale!";\nsetInterval(tick, 1000);\n')]))).toEqual([{ rule: 'dark-pattern', path: 'games/g/a.js', detail: 'timer near offer/sale/deal wording' }]);
+    // The word may be existing visible text near a newly added timer.
+    expect(darkPattern(diff([M('games/g/a.js', 'show(`Special offer`);\nx();\n', 'show(`Special offer`);\nsetTimeout(x, 5);\nx();\n')]))).toHaveLength(1);
+    expect(darkPattern(diff([A('games/g/index.html', '<p>Great deal today</p>\n<script>setTimeout(x, 5)</script>\n')]))).toHaveLength(1);
   });
   it('near-miss: a timer far from any offer word, ordinary text, and an existing timer', () => {
     const filler = Array.from({ length: 10 }, (_, i) => `line${i}();`).join('\n');
@@ -215,7 +216,7 @@ describe('asset-source', () => {
   });
   it('near-miss: name boundaries (xa.png does not vouch for a.png), modified or deleted assets, and non-assets', () => {
     expect(assetSource(diff([BIN('games/g/img/a.png'), src('| xa.png | CC0 |')]))).toHaveLength(1);
-    expect(assetSource(diff([{ ...BIN('games/g/img/a.png'), status: 'M' }, D('games/g/img/b.png', '')]))).toEqual([]);
+    expect(assetSource(diff([D('games/g/img/b.png', '')]))).toEqual([]);
     expect(assetSource(diff([A('games/g/a.js', 'x'), A('games/g/a.html', 'x')]))).toEqual([]);
   });
 });
@@ -256,5 +257,181 @@ describe('outside-scope', () => {
   });
   it('a symlink content is never scanned for added lines', () => {
     expect(addedLines({ ...A('games/g/link', 'https://x.com'), symlink: true })).toEqual([]);
+  });
+});
+
+describe('fix round 1: binary blinding (critical 1) and R7 config protection', () => {
+  it.each(['.gitattributes', 'games/g/.gitattributes', 'vitest.workspace.ts', 'vitest.config.ts', 'packages/core/vitest.config.mts', 'scripts/hal/vitest.config.ts', 'tsconfig.base.json', 'scripts/tsconfig.json', 'packages/core/tsconfig.build.json'])('protects %s', (p) => {
+    expect(isProtectedPath(p)).toBe(true);
+  });
+  it('near-miss: similarly named files are not config', () => {
+    for (const p of ['games/g/tsconfig.md', 'games/g/vitest-notes.ts', 'games/g/gitattributes.js']) expect(isProtectedPath(p)).toBe(false);
+  });
+  it('refuses a binary file of an unknown or missing type under games/ outright', () => {
+    expect(assetSource(diff([BIN('games/g/blob.dat')]))).toEqual([{ rule: 'asset-source', path: 'games/g/blob.dat', detail: 'binary file of an unknown type under games/' }]);
+    expect(assetSource(diff([BIN('games/g/Makefile')]))).toHaveLength(1);
+    expect(assetSource(diff([BIN('tools/blob.dat')]))[0]!.detail).toContain('SOURCES.md'); // outside games/: the ordinary sourcing check
+  });
+  it('a modified binary asset must be listed in SOURCES.md in the same diff', () => {
+    const png: FileChange = { ...BIN('games/g/img/a.png'), status: 'M' };
+    expect(assetSource(diff([png]))).toHaveLength(1);
+    expect(assetSource(diff([png, M('games/g/img/SOURCES.md', '', '| a.png | CC0 |\n')]))).toEqual([]);
+  });
+  it('hal-hook: null content for the present file never passes (null === null)', () => {
+    const P = 'games/gearhold/index.html';
+    expect(halHook(diff([{ path: P, status: 'M', before: null, after: null, binary: true }]))).toHaveLength(1);
+    expect(halHook(diff([{ path: P, status: 'M', before: '// ---- hal hook\n// ---- end hal hook ----', after: null, binary: true }]))).toHaveLength(1);
+  });
+});
+
+describe('fix round 1: hal hook tampering from outside the block (important 2)', () => {
+  const P = 'games/gearhold/index.html';
+  const hook = '// ---- hal hook (test only)\nwindow.__hal = {};\n// ---- end hal hook ----';
+  const real = (n: number) => readFileSync(new URL('../../../games/gearhold/index.html', import.meta.url), 'utf8').split('\n').slice(0, n).join('\n');
+  const wrap = (mid: string) => `${mid}\n${hook}\n`;
+  it('rejects a duplicated block or a second end marker', () => {
+    expect(halHook(diff([M(P, wrap('a'), wrap('a') + hook + '\n')])).length).toBeGreaterThan(0);
+    expect(halHook(diff([M(P, wrap('a'), wrap('a') + '// ---- end hal hook ----\n')])).length).toBeGreaterThan(0);
+  });
+  it.each(['window.__hal.step = noop;', 'hal.shots = 0;', 'hal.hits += 5;', 'hal.dmg++;', '--hal.unseen;', 'const hal = {};', 'const HAL = true;', 'if (HAL) go();'])('rejects an added line outside the block: %s', (line) => {
+    const v = halHook(diff([M(P, wrap('a'), wrap('a\n' + line))]));
+    expect(v.map((x) => x.rule)).toEqual(['hal-hook']);
+    expect(v[0]!.detail).toContain('added line');
+  });
+  it('rejects a removed counter line, and added __hal in another gearhold file', () => {
+    expect(halHook(diff([M(P, wrap('hal.shots++;\nb'), wrap('b'))])).some((x) => x.detail.startsWith('removed'))).toBe(true);
+    expect(halHook(diff([A('games/gearhold/extra.js', 'window.__hal = 1;\n')]))).toHaveLength(1);
+  });
+  it('near-miss: unrelated gearhold edits, words like halt/shal, hal in prose, and the real file unchanged', () => {
+    expect(halHook(diff([M(P, wrap('a'), wrap('a\nlet halo = 1; const shalt = 2; hal_ok(); // hal'))]))).toEqual([]);
+    expect(halHook(diff([M('games/gearhold/models.js', 'a', 'a\nconst hall = 2;\nhall.x = 3;')]))).toEqual([]);
+    expect(halHook(diff([M(P, wrap('x'), wrap('y'))]))).toEqual([]);
+    const text = readFileSync(new URL('../../../games/gearhold/index.html', import.meta.url), 'utf8');
+    expect(halHook(diff([M(P, text, text)]))).toEqual([]);
+    expect(real(5).length).toBeGreaterThan(0);
+  });
+  it('the real file really contains the patterns this guards (so the rule is testing reality)', () => {
+    const text = readFileSync(new URL('../../../games/gearhold/index.html', import.meta.url), 'utf8');
+    const edited = text.replace('hal.shots++;', 'hal.shots += 2;');
+    expect(halHook(diff([M(P, text, edited)])).length).toBeGreaterThan(0);
+  });
+});
+
+describe('fix round 1: random-reward evidence and wording (important 3, 4, 5)', () => {
+  const R = (...f: FileChange[]) => randomReward(diff(f));
+  it('a comment with odds does not count; code is flagged', () => {
+    expect(R(A('games/g/a.js', 'const x = Math.random(); // odds shown elsewhere\nopenChest();\n'))).toHaveLength(1);
+    expect(R(A('games/g/a.js', '/* odds: 5% */\nconst x = Math.random();\nopenChest();\n'))).toHaveLength(1);
+    expect(R(A('games/g/index.html', '<!-- odds -->\n<script>const x = rng(); openChest();</script>\n'))).toHaveLength(1);
+  });
+  it('accepts the SDK odds calls, oddsLine(), and odds inside a string, template or html text', () => {
+    for (const ok of ['studio.odds.roll(T)', 'studio.odds.format(T)', 'oddsLine()', 'label = "Drop odds: 5%"', "t = 'odds'", 'm = `Odds ${n}`', '<p>Odds: 5%</p>']) {
+      expect(R(A('games/g/a.js', `const x = Math.random(); openChest();\n${ok}\n`)), ok).toEqual([]);
+    }
+  });
+  it('odds in another file does not vouch for randomness in this one', () => {
+    expect(R(A('games/g/a.js', 'const x = Math.random();\n'), A('games/g/b.js', 'openChest(); label = "odds 5%";\n'))).toEqual([{ rule: 'random-reward', path: 'games/g/a.js', detail: expect.any(String) }]);
+  });
+  it('Gearhold-style rand( and seeded( count as randomness; "random" in prose does not', () => {
+    expect(R(A('games/g/a.js', 'const v = rand(1, 3);\nopenChest();\n'))).toHaveLength(1);
+    expect(R(A('games/g/a.js', 'const v = seeded(7);\ngiveLoot();\n'))).toHaveLength(1);
+    expect(R(A('games/g/a.js', 'label = "a random hat";\nopenChest();\n'))).toEqual([]);
+    expect(R(A('games/g/a.js', 'const operand = 3; brand(x);\nopenChest();\n'))).toEqual([]);
+  });
+  it('near-miss: ordinary "pull" copy (tide pulls, trigger pulls) beside rng() is not a reward', () => {
+    expect(R(M('games/tidepool-pals/levels.js', '', 'const k = rng();\nintro: "The arrow shows where the next tide pulls."\n'))).toEqual([]);
+    expect(R(M('games/gearhold/index.html', '', 'const a = rand(1, 2); // hits = trigger pulls that landed\nhits++; pulls++;\n'))).toEqual([]);
+  });
+  it('gacha-style pulls still count', () => {
+    expect(R(A('games/g/a.js', 'const x = rng();\nlabel = "Pull a prize"; // pulls a card\nmsg = "pulls the chest"\n'))).toHaveLength(1);
+    expect(R(A('games/g/a.js', 'const x = rng();\nlabel = "gacha"\n'))).toHaveLength(1);
+  });
+});
+
+describe('fix round 1: dark-pattern timer near-misses (important 6)', () => {
+  const D1 = (code: string) => darkPattern(diff([A('games/g/a.js', code)]));
+  it.each([
+    'dealDamage(e, 2);\nsetTimeout(x, 5);',
+    'label = "The shell deals 2 damage";\nsetTimeout(x, 5);',
+    'label = "Deals damage to foes";\nsetInterval(x, 5);',
+    'offerShell(pal);\nsetTimeout(x, 5);',
+    'studio.purchase.offer({});\nsetTimeout(x, 5);',
+    "document.querySelector('.offer').hidden = true;\nsetTimeout(x, 5);",
+    '<div class="offer hero"></div><script>setTimeout(x,5)</script>',
+    '.offer{display:flex}\n.offer .art{width:56px}\nsetTimeout(x, 5);',
+    'const ideal = 1; // a great deal\nsetTimeout(x, 5);',
+    'label = "dealt damage";\nsetTimeout(x, 5);',
+  ])('no hit: %s', (code) => {
+    expect(D1(code)).toEqual([]);
+  });
+  it('still hits sale, offer and deal wording shown to the player', () => {
+    for (const t of ['"Big sale"', '"Today only deal"', "'A special offer'", '`Offer ends`']) expect(D1(`label = ${t};\nsetTimeout(x, 5);`), t).toHaveLength(1);
+  });
+});
+
+describe('fix round 1: tests-removed per file (important 7)', () => {
+  const by = (before: Record<string, number>, after: Record<string, number>) => diff([], { testCountsByFile: { before, after } });
+  it('flags a base test file with fewer tests, or not collected at all', () => {
+    expect(testsRemoved(by({ 'a.test.ts': 5 }, { 'a.test.ts': 4 }))).toEqual([{ rule: 'tests-removed', path: 'a.test.ts', detail: '5 tests before, 4 after' }]);
+    expect(testsRemoved(by({ 'a.test.ts': 5 }, {}))[0]!.detail).toContain('no longer collected');
+  });
+  it('near-miss: same or more tests, new files, a rename, a deleted file reported once, an empty file', () => {
+    expect(testsRemoved(by({ 'a.test.ts': 5 }, { 'a.test.ts': 6, 'b.test.ts': 1 }))).toEqual([]);
+    expect(testsRemoved(by({ 'a.test.ts': 0 }, {}))).toEqual([]);
+    const ren = diff([{ path: 'b.test.ts', oldPath: 'a.test.ts', status: 'R', before: 'x', after: 'x', binary: false }], { testCountsByFile: { before: { 'a.test.ts': 2 }, after: { 'b.test.ts': 2 } } });
+    expect(testsRemoved(ren)).toEqual([]);
+    const del = diff([D('a.test.ts', 'x')], { testCountsByFile: { before: { 'a.test.ts': 2 }, after: {} } });
+    expect(testsRemoved(del)).toHaveLength(1);
+  });
+});
+
+describe('fix round 1: minor items', () => {
+  it('existing hosts are matched as hosts, not substrings', () => {
+    expect(network(diff([M('games/g/a.js', 'u = "https://notevil.example.com/"\n', 'u = "https://notevil.example.com/"\nv = "https://evil.example.com/"\n')]))).toHaveLength(1);
+    expect(network(diff([M('games/g/a.js', '// see evil.example.com in the docs\n', '// see evil.example.com in the docs\nv = "https://evil.example.com/"\n')]))).toHaveLength(1);
+    expect(network(diff([M('games/g/a.js', 'u = "https://EXAMPLE.com/a"\n', 'u = "https://example.com/a"\nv = "https://example.com/b"\n')]))).toEqual([]);
+  });
+  it('flags a changed AUTHORED definition in Tidepool levels.js', () => {
+    const f = (line: string) => M('games/tidepool-pals/levels.js', 'const RAW = [1];\nexport const AUTHORED = RAW.map((d) => d);\n', `const RAW = [1];\n${line}\n`);
+    expect(levelRemoved(diff([f('export const AUTHORED = RAW.slice(0, 5).map((d) => d);')]))).toEqual([{ rule: 'level-removed', path: 'games/tidepool-pals/levels.js', detail: 'the line defining AUTHORED changed' }]);
+    expect(levelRemoved(diff([f('export const AUTHORED = RAW.filter(Boolean);')]))).toHaveLength(1);
+    expect(levelRemoved(diff([f('export const AUTHORED = RAW.map((d) => d);')]))).toEqual([]);
+    expect(levelRemoved(diff([M('games/tidepool-pals/levels.js', 'AUTHORED = a;', 'AUTHORED = a;\nlet z;')]))).toEqual([]);
+  });
+  it('flags large embedded font/image data: URIs, not small ones', () => {
+    const big = 'A'.repeat(300);
+    expect(assetSource(diff([A('games/g/a.css', `@font-face{src:url(data:font/woff2;base64,${big})}\n`)]))).toHaveLength(1);
+    expect(assetSource(diff([A('games/g/a.js', `img.src = "data:image/png;base64,${big}";\n`)]))).toHaveLength(1);
+    expect(assetSource(diff([A('games/g/a.js', 'img.src = "data:image/png;base64,AAAA";\n')]))).toEqual([]);
+    expect(assetSource(diff([A('games/g/a.js', `x = "data:text/plain;base64,${big}";\n`)]))).toEqual([]);
+  });
+  it('flags copied library headers under the dependency rule, not ordinary comments', () => {
+    for (const h of ['/*! lib v1 */', '/** @license MIT */', '// Copyright 2020 Someone', '(c) 2019 X']) expect(dependency(diff([A('games/g/a.js', `${h}\n`)])), h).toHaveLength(1);
+    expect(dependency(diff([A('games/g/a.js', '// the license is irrelevant here\nlet copy = 1; /* note */\n')]))).toEqual([]);
+    expect(dependency(diff([A('docs/a.js', '/*! lib */\n')]))).toEqual([]);
+  });
+});
+
+describe('fix round 2 (R8): secret', () => {
+  const key = 'sk-ant-' + 'api03-abcDEF123_xyz'; // split so this file is not itself a hit
+  it('flags an API-key shape in any added line, in any file, without echoing it', () => {
+    const v = checkTripwires(diff([A('docs/notes.md', `key: ${key}\n`)]));
+    expect(v).toEqual([{ rule: 'secret', path: 'docs/notes.md', detail: 'secret value added' }]);
+    expect(JSON.stringify(v)).not.toContain('abcDEF');
+    expect(secret(diff([A('games/g/a.js', `const k = "${key}";\n`)]))).toHaveLength(1);
+  });
+  it('flags a caller-supplied literal secret (argument or Diff field), without echoing it', () => {
+    const val = 'hunter2-very-secret-value';
+    const files = [M('games/g/a.js', 'a\n', `a\nconst t = "${val}";\n`)];
+    for (const v of [checkTripwires(diff(files), [val]), checkTripwires(diff(files, { secrets: [val] }))]) {
+      expect(v).toEqual([{ rule: 'secret', path: 'games/g/a.js', detail: 'secret value added' }]);
+      expect(JSON.stringify(v)).not.toContain('hunter2');
+    }
+  });
+  it('near-miss: "sk-ant" in prose, short suffix, existing lines, no secrets given, tiny secret values', () => {
+    expect(secret(diff([A('docs/a.md', 'Keys start with sk-ant and live in .hal.env.\nsk-ant-\nsk-ant-abc\n')]))).toEqual([]);
+    expect(secret(diff([M('a.js', `k = "${key}"\n`, `k = "${key}"\nlet z;\n`)]))).toEqual([]);
+    expect(secret(diff([A('a.js', 'anything\n')], { secrets: ['abc', ''] }))).toEqual([]);
+    expect(secret(diff([D('a.js', key)]))).toEqual([]);
   });
 });

