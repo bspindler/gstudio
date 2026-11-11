@@ -53,14 +53,14 @@ export type BotMemory = {
   seen: Record<number, { t: number; delay: number }>; // enemy index -> first-seen time and its seeded reaction delay
   offset: Record<number, { yaw: number; pitch: number; until: number }>; // per-target aim offsets
   ignore: Record<number, number>;          // enemy index -> ignored until this sim time
-  engage: { i: number; hp: number; since: number } | null;
+  engage: Record<number, { hp: number; since: number }>; // per enemy index: last hp and when it last dropped
   scatter: boolean;                        // has been seen holding the scatter cannon
   ref: { x: number; y: number; t: number } | null; // stuck detector reference
   strafeUntil: number; strafeDir: -1 | 1;  // unstick strafe
   dodgeDir: -1 | 1; dodgeFlip: number;     // combat strafe, flips every 1-2 s
 };
 export const createMemory = (): BotMemory => ({
-  seen: {}, offset: {}, ignore: {}, engage: null, scatter: false, ref: null,
+  seen: {}, offset: {}, ignore: {}, engage: {}, scatter: false, ref: null,
   strafeUntil: -1, strafeDir: 1, dodgeDir: 1, dodgeFlip: -1,
 });
 
@@ -102,7 +102,8 @@ type Pt = { x: number; y: number };
 function goalFor(state: GearholdState, map: string[], mem: BotMemory): Pt | null {
   const { p, items } = state;
   const from: Cell = [Math.floor(p.x), Math.floor(p.y)];
-  const nav = map.map((r) => r.replace(/o/g, '#')); // props block movement
+  // Props block movement only while a live prop entity stands in the cell.
+  const nav = map.map((r, y) => [...r].map((c, x) => (c === 'o' && state.enemies.some((e) => e.prop && !e.dead && Math.floor(e.x) === x && Math.floor(e.y) === y) ? '#' : c === 'o' ? '.' : c)).join(''));
   const step = (r: Cell[] | null, final: Pt): Pt | null => {
     if (!r) return null;
     return r.length > 1 ? { x: r[1]![0] + 0.5, y: r[1]![1] + 0.5 } : final;
@@ -155,7 +156,7 @@ export function decide(state: GearholdState, map: string[], mem: BotMemory, rng:
     const d = Math.hypot(e.x - p.x, e.y - p.y);
     if (!target || d < target.d) target = { i, d, bearing: Math.atan2(e.y - p.y, e.x - p.x) };
   });
-  for (const k of Object.keys(mem.seen)) if (!visible.has(Number(k))) { delete mem.seen[Number(k)]; delete mem.offset[Number(k)]; }
+  for (const k of Object.keys(mem.seen)) if (!visible.has(Number(k))) { delete mem.seen[Number(k)]; delete mem.offset[Number(k)]; delete mem.engage[Number(k)]; }
 
   const goal = goalFor(state, map, mem);
   const goalDiff = goal ? wrap(Math.atan2(goal.y - p.y, goal.x - p.x) - p.a) : 0;
@@ -175,30 +176,32 @@ export function decide(state: GearholdState, map: string[], mem: BotMemory, rng:
     const wantPitch = (ap.h - EYE) / Math.max(tg.d, 0.1) + off.pitch - p.look;
     out.turn = sub(wantYaw);
     out.pitch = sub(wantPitch);
-    // Believed aim after this decision's SUBSTEPS applications, measured against the steering target (no offset).
-    const resYaw = Math.abs(wrap(tg.bearing + off.yaw - (p.a + out.turn * SUBSTEPS)));
-    const resPitch = Math.abs(wantPitch - out.pitch * SUBSTEPS);
+    // The game fires on the first ready substep, so gate on the residual after ONE substep's turn and pitch.
+    // It is measured against the steering target (bearing plus offset): the bot believes its own noisy aim.
+    const resYaw = Math.abs(wantYaw - out.turn);
+    const resPitch = Math.abs(wantPitch - out.pitch);
     const gate = Math.atan2(GATE_RADIUS, Math.max(tg.d, 0.1));
     out.fire = time - mem.seen[tg.i]!.t >= mem.seen[tg.i]!.delay - EPS && resYaw < gate && resPitch < gate;
 
     // Engagement stall: no damage in 4 s means ignore the target for 3 s.
-    if (!mem.engage || mem.engage.i !== tg.i || e.hp < mem.engage.hp) mem.engage = { i: tg.i, hp: e.hp, since: time };
-    else if (time - mem.engage.since >= STALL_SECS) {
+    // Keyed per enemy so alternating targets cannot dodge it.
+    const eng = mem.engage[tg.i];
+    if (!eng || e.hp < eng.hp) mem.engage[tg.i] = { hp: e.hp, since: time };
+    else if (time - eng.since >= STALL_SECS) {
       mem.ignore[tg.i] = time + IGNORE_SECS;
-      mem.engage = null;
+      delete mem.engage[tg.i];
     }
 
-    // Keep moving: advance along the route when far, else strafe (seeded direction, flips every 1-2 s).
-    if (tg.d > FAR) out.fwd = goal && Math.abs(goalDiff) < 0.7 ? 1 : 0;
-    else {
-      if (time >= mem.dodgeFlip) {
-        mem.dodgeDir = mem.dodgeFlip < 0 ? (rng() < 0.5 ? -1 : 1) : (mem.dodgeDir === 1 ? -1 : 1);
-        mem.dodgeFlip = time + 1 + rng();
-      }
-      out.str = mem.dodgeDir;
+    // Plant and shoot: no movement on a firing decision. Otherwise keep moving: advance along the route when far
+    // and on-axis, else strafe (seeded direction, flips every 1-2 s).
+    if (time >= mem.dodgeFlip) {
+      mem.dodgeDir = mem.dodgeFlip < 0 ? (rng() < 0.5 ? -1 : 1) : (mem.dodgeDir === 1 ? -1 : 1);
+      mem.dodgeFlip = time + 1 + rng();
     }
+    if (out.fire) { /* planted */ }
+    else if (tg.d > FAR && goal && Math.abs(goalDiff) < 0.7) out.fwd = 1;
+    else out.str = mem.dodgeDir;
   } else {
-    mem.engage = null;
     const wantWeapon: 0 | 1 = p.weapon === 1 && p.shells > 0 ? 1 : 0;
     if (p.weapon !== wantWeapon && !(p.weapon === 1 && p.shells <= 0)) out.weapon = wantWeapon;
     if (goal) {
@@ -209,6 +212,7 @@ export function decide(state: GearholdState, map: string[], mem: BotMemory, rng:
   }
 
   // Stuck detector (runs during engagement too): 0.3 tiles in 2 s, else strafe randomly for 0.5 s.
+  if (out.fire) mem.ref = null; // planted and shooting is not being stuck
   if (time < mem.strafeUntil) { out.str = mem.strafeDir; out.fwd = 0; return out; }
   if (!mem.ref || Math.hypot(p.x - mem.ref.x, p.y - mem.ref.y) >= STUCK_DIST) mem.ref = { x: p.x, y: p.y, t: time };
   else if (time - mem.ref.t >= STUCK_SECS - EPS) {

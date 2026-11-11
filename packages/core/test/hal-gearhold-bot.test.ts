@@ -288,7 +288,7 @@ describe('decide: engagement', () => {
       const rng = mulberry32(seed);
       const dirs: number[] = [];
       for (let t = 0; t < 6; t += 1 / DECIDE_HZ)
-        dirs.push(decide(st({ time: t, p: { x: 1.5 + (t % 0.2) * 5 }, enemies: [enemy(4.5, 1.5, { hp: 100 - t * 10 })] }), ROOM, mem, rng).str);
+        dirs.push(decide(st({ time: t, p: { a: 0.8, x: 1.5 + (t % 0.2) * 5 }, enemies: [enemy(4.5, 1.5, { hp: 100 - t * 10 })] }), ROOM, mem, rng).str);
       return dirs;
     };
     const a = run(1), b = run(1);
@@ -315,19 +315,86 @@ describe('decide: engagement', () => {
     expect(mem.seen[0]).toBeUndefined();
   });
 
-  it('weapon switching has hysteresis between 4 and 5 tiles', () => {
+  it('weapon switching has hysteresis: 3.9 scatter, 4.5 stays, 5.1 back', () => {
     const mem = createMemory();
     const rng = mulberry32(3);
-    decide(st({ time: 0, p: { weapon: 1, shells: 5 } }), ROOM, mem, rng);
-    // already on scatter at 4.5 tiles: stay. on hand cannon at 4.5: stay.
-    expect(decide(st({ time: 0.1, p: { weapon: 1, shells: 5 }, enemies: [enemy(6, 1.5)] }), ROOM, mem, rng).weapon).toBeUndefined();
-    expect(decide(st({ time: 0.2, p: { weapon: 0, shells: 5 }, enemies: [enemy(6, 1.5)] }), ROOM, mem, rng).weapon).toBeUndefined();
+    const w = (weapon: number, x: number, t: number) =>
+      decide(st({ time: t, p: { weapon, shells: 5 }, enemies: [enemy(1.5 + x, 1.5)] }), ROOM, mem, rng).weapon;
+    decide(st({ time: 0, p: { weapon: 1, shells: 5 } }), ROOM, mem, rng); // owns it
+    expect(w(0, 3.9, 0.1)).toBe(1);
+    expect(w(1, 4.5, 0.2)).toBeUndefined();
+    expect(w(0, 4.5, 0.3)).toBeUndefined();
+    expect(w(1, 5.1, 0.4)).toBe(0);
+  });
+
+  it('plants (no strafe, no advance) on a firing decision', () => {
+    const mem = createMemory();
+    const rng = mulberry32(2);
+    let fired = 0;
+    for (let t = 0; t < 2; t += 1 / DECIDE_HZ) {
+      const out = decide(st({ time: t, enemies: [enemy(4.5, 1.5)] }), ROOM, mem, rng);
+      if (out.fire) { fired++; expect(out.str).toBe(0); expect(out.fwd).toBe(0); }
+    }
+    expect(fired).toBeGreaterThan(0);
+  });
+
+  it('strafes when the target is far and the route is off-axis', () => {
+    const map = ['##########', '#S.......#', '#........#', '#.......X#', '##########'];
+    // facing north-ish: route heads east/south, target far to the west... use a far target on the +x axis, route off-axis
+    const out = decide(st({ p: { a: 2.2 }, enemies: [enemy(8.5, 1.5)] }), map, createMemory(), mulberry32(1));
+    expect(out.str).not.toBe(0);
+  });
+
+  it('a dead prop no longer blocks routing', () => {
+    const map = ['##########', '#S.o....X#', '##########', '##########', '##########'];
+    const prop = (dead: boolean) => ({ kind: 'o', x: 3.5, y: 1.5, hp: 18, awake: false, dead, prop: true });
+    const alive = decide(st({ p: { x: 2.5, y: 1.5 }, enemies: [prop(false)] }), map, createMemory(), mulberry32(1));
+    const dead = decide(st({ p: { x: 2.5, y: 1.5 }, enemies: [prop(true)] }), map, createMemory(), mulberry32(1));
+    expect(alive.fwd).toBe(0); // no route
+    expect(dead.fwd).toBe(1);
+  });
+
+  it('give-up timer is per enemy: alternating nearest target does not reset it', () => {
+    const mem = createMemory();
+    const rng = mulberry32(2);
+    for (let t = 0, k = 0; t <= 4.2; t += 1 / DECIDE_HZ, k++) {
+      const a = enemy(k % 2 ? 3.5 : 4.5, 1.5), b = enemy(k % 2 ? 4.5 : 3.5, 2.5);
+      decide(st({ time: t, p: { x: 1.5 + (t % 0.2) * 5 }, enemies: [a, b] }), ROOM, mem, rng);
+    }
+    expect(Object.keys(mem.ignore).length).toBeGreaterThan(0);
+  });
+
+  it('shot at a drone at 3 tiles with no aim error hits; a second enemy 0.45 rad off is not fired at until aligned', () => {
+    const mem = createMemory();
+    const rng = mulberry32(9);
+    // Both seen long ago: first the drone straight ahead, then it dies and another sits 0.45 rad off.
+    const big = Array.from({ length: 9 }, (_, y) => (y === 0 || y === 8 ? '#'.repeat(20) : `#${'.'.repeat(18)}#`));
+    const a = 0, look = 0;
+    const first = enemy(1.5 + 3, 4.5, { y: 4.5 });
+    const s1 = st({ time: 0, p: { x: 1.5, y: 4.5, a, look }, enemies: [first] });
+    decide(s1, big, mem, rng);
+    // advance past reaction; replace by an enemy 0.45 rad off at 3 tiles
+    const e2 = enemy(1.5 + 3 * Math.cos(0.45), 4.5 + 3 * Math.sin(0.45));
+    let ang = 0, pitch = look, firstFire = -1;
+    for (let i = 1; i < 30; i++) {
+      const t = i / DECIDE_HZ;
+      const out = decide(st({ time: t, p: { x: 1.5, y: 4.5, a: ang, look: pitch }, enemies: [first, e2].slice(1) }), big, mem, rng);
+      if (out.fire) {
+        // The game fires after ONE substep of turn: that residual must be inside the gate (0.3 / 3).
+        const after = ang + out.turn;
+        expect(Math.abs(0.45 - after)).toBeLessThan(Math.atan2(0.3, 3) + 0.05);
+        if (firstFire < 0) firstFire = i;
+      }
+      ang += out.turn * SUBSTEPS; pitch += out.pitch * SUBSTEPS;
+    }
+    expect(firstFire).toBeGreaterThan(1); // not on the first decision, while still 0.45 rad off
   });
 
   it('routes around props', () => {
     const map = ['##########', '#S.o....X#', '#........#', '##########', '##########'];
     // prop right ahead in row 1; route should dip south: first waypoint is (2,1) then around
-    const out = decide(st({ p: { x: 2.5, y: 1.5 } }), map, createMemory(), mulberry32(1));
+    const prop = { kind: 'o', x: 3.5, y: 1.5, hp: 18, awake: false, dead: false, prop: true };
+    const out = decide(st({ p: { x: 2.5, y: 1.5 }, enemies: [prop] }), map, createMemory(), mulberry32(1));
     expect(out.turn).toBeGreaterThan(0.05); // turns toward +y, not straight through the prop
   });
 });
