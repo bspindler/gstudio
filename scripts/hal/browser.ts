@@ -11,6 +11,7 @@ const GAMES = join(repo, 'games'), SDK = join(repo, 'packages', 'sdk');
 const TYPES: Record<string, string> = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain', '.md': 'text/markdown',
 };
 
 /** Ports of the static servers serveGames() has open in this process; newHalContext allows only these on loopback. */

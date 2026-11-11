@@ -38,7 +38,7 @@ The loop plays each game, notices what could be better, writes a ticket, builds 
    - add a call to any new network host, service, API, analytics, ads or tracking;
    - create accounts, use keys, or add anything that can bill or has usage fees;
    - touch purchase code, prices, IAP or anything money-shaped;
-   - add art, sound, music or fonts that aren't generated in code by Hal or verifiably free with no attribution required (CC0 / public domain), with the source recorded next to the asset.
+   - add art, sound, music or fonts that aren't generated in code by Hal or verifiably free with no attribution required (CC0 / public domain), with the source recorded next to the asset. **Fonts may also be SIL Open Font License 1.1** (Brian's decision, 2026-11-11), provided they are bundled locally in the game folder with the full license text and a `fonts/SOURCES.md` entry, and a font with a Reserved Font Name is bundled unmodified (no subsetting or conversion).
    Games today have no build step and no dependencies; that stays the default.
 2. **Dark patterns.** An engagement-optimizing loop drifts toward fake timers, fake scarcity, nagging after "no", and paid luck. These are hard rule 4 and are rejected automatically, never weighed against a score.
 3. **Generic drift.** Fifty "improvements" that each look fine but sand off each game's personality. The director's note must keep each game's identity in view, and Brian's 👎 is the brake.
@@ -107,7 +107,7 @@ Run on every candidate change, before it can be merged:
 - no new or changed purchase, price, IAP or payment-shaped code;
 - no new random reward without visible odds; nothing purchasable containing randomness;
 - no edits to protected files (listed in Constraints);
-- new assets have a recorded source and are Hal-generated or CC0/public domain;
+- new assets have a recorded source and are Hal-generated or CC0/public domain, or are fonts under SIL OFL 1.1 bundled with their license file (unmodified if the font has a Reserved Font Name);
 - no dark-pattern shapes (countdown pressure, fake scarcity, repeated prompts after decline) that static checks can catch.
 
 ### 4. The morning report
