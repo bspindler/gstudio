@@ -3,9 +3,9 @@
 // Output: <outDir>/<game>/<n>.png (1-based) and <outDir>/<game>/errors.json. Local builds only (127.0.0.1).
 //   A browser that can't launch throws "browser unavailable: ...".
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Browser, Page } from 'playwright';
-import { closeAll, isBlockedNoise, launchBrowser, newHalContext, repo, serveGames, type HalContext, type StaticServer } from './browser.js';
+import { closeAll, launchBrowser, newHalContext, repo, serveGames, type HalContext, type StaticServer } from './browser.js';
 
 export const DEFAULT_SCREENS_DIR = join(repo, '.data', 'hal', 'screens');
 export type ScreensResult = { game: string; shots: string[]; errors: string[]; reached: boolean; notes: string[]; blockedRequests: string[] };
@@ -104,6 +104,10 @@ const FLOWS: Record<string, FlowFn> = {
 
 /** Runs every game's flow in a fresh phone-size page; returns the shots and console errors per game. */
 export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: string } = {}): Promise<ScreensResult[]> {
+  // The per-game folders under outDir are deleted first, so never aim this at the repo root or the games' own sources.
+  const inGames = relative(join(repo, 'games'), resolve(outDir));
+  if (resolve(outDir) === resolve(repo) || (inGames !== '..' && !inGames.startsWith('..' + sep) && !isAbsolute(inGames)))
+    throw new Error(`screens: refusing --out ${outDir}: it is the repo root or inside games/`);
   let server: StaticServer | undefined, browser: Browser | undefined;
   try {
     server = await serveGames();
@@ -117,9 +121,7 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: st
       let hal: HalContext | undefined;
       try {
         hal = await newHalContext(browser, { contextOptions: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true } });
-        const { blockedRequests } = hal;
         const page = await hal.context.newPage();
-        page.on('console', (m) => { if (m.type() === 'error' && !isBlockedNoise(m, blockedRequests)) errors.push(m.text()); });
         page.on('pageerror', (e) => errors.push(`pageerror: ${String(e)}`));
         page.on('crash', () => errors.push('page crashed'));
         const shoot: Shoot = async () => {
@@ -138,6 +140,7 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: st
         errors.push(`flow: setup failed (${String((e as Error)?.message ?? e).split('\n')[0]})`);
       } finally {
         await hal?.context.close().catch(() => {});
+        if (hal) errors.push(...hal.consoleErrors); // console.error minus blocked-request noise
         await writeFile(join(dir, 'errors.json'), JSON.stringify(errors, null, 2) + '\n');
       }
       results.push({ game, shots, errors, reached: flow.reached, notes: flow.notes, blockedRequests: hal?.blockedRequests ?? [] });

@@ -7,17 +7,17 @@ import {
   compareScores, emptyLedger, ledgerMarkdown, parseBaseline, parseLedger, rangeMismatch, recordPass, scorerFor, stagnated,
   type Baseline, type Ledger, type LevelStats, type Range, type ScoreReport, type Scorer,
 } from '@studio/core/hal';
+// Type-only imports are erased, so the CLI still never loads Playwright.
+import type { ControlCheck } from './controls.js';
+import type { ScreensResult } from './screens.js';
 
-export type ScreensRun = { game: string; shots: string[]; errors: string[]; reached: boolean; notes: string[]; blockedRequests: string[] };
-/** Mirrors scripts/hal/controls.ts ControlCheck (kept here so the CLI never imports Playwright). */
-export type ControlCheckRow = { game: string; check: string; ok: boolean; detail: string; skipped?: string };
 export type CliDeps = {
   scorers: Record<string, Scorer>;
   halDir: string;
   /** Loaded lazily so score/check never import Playwright. */
-  runScreens?: (o: { outDir?: string }) => Promise<ScreensRun[]>;
+  runScreens?: (o: { outDir?: string }) => Promise<ScreensResult[]>;
   /** Loaded lazily too: the real-input controls check (scripts/hal/controls.ts). */
-  runControlsCheck?: () => Promise<ControlCheckRow[]>;
+  runControlsCheck?: () => Promise<ControlCheck[]>;
 };
 
 class Exit extends Error {
@@ -94,7 +94,7 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
     if (results.length === 0) return fail('screens produced no results');
     let bad = false;
     for (const r of results) {
-      const ok = r.reached && r.errors.length === 0;
+      const ok = r.reached && r.errors.length === 0 && r.blockedRequests.length === 0;
       if (!ok) bad = true;
       console.log(`${r.game}: ${r.reached ? 'reached gameplay' : 'DID NOT REACH GAMEPLAY'}, ${r.shots.length} shots, ${r.errors.length} errors, ${r.blockedRequests.length} blocked requests`);
       for (const e of r.errors) console.log(`  error: ${e}`);
@@ -157,10 +157,12 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
       const r = await scorer.score(range);
       if (values.json) console.log(JSON.stringify(r, null, 2));
       else printReport(r);
-      return 0;
+      return r.hardFailures.length ? fail(`score has ${r.hardFailures.length} hard failure(s)`) : 0;
     }
     case 'baseline': {
       const r = await scorer.score(range);
+      if (r.hardFailures.length) fail(`baseline not written: ${r.hardFailures.length} hard failure(s): ${r.hardFailures.join('; ')}`);
+      if (![r.fitness, ...Object.values(r.measures)].every(Number.isFinite)) fail('baseline not written: score has a non-finite fitness or measure');
       write(baselinePath, { range, report: r });
       console.log(`baseline written: ${baselinePath} (fitness ${r.fitness.toFixed(1)})`);
       return 0;

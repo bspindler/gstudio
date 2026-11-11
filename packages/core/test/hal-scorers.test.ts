@@ -44,6 +44,7 @@ describe('hal scorers', () => {
       expect(s.validate({ levels: 3, seeds: 50, seedBase: 0 })).toBeNull();
       expect(s.validate({ levels: 0, seeds: 50, seedBase: 0 })).toBe('--levels must be a positive integer');
       expect(s.validate({ levels: 3, seeds: 1.5, seedBase: 0 })).toBe('--seeds must be a positive integer');
+      expect(s.validate({ levels: 99, seeds: 1, seedBase: 0 })).toMatch(/^--levels must be at most 3/);
     });
     it('awaits the runner with levels 0..n-1 and scores its records', async () => {
       const calls: unknown[] = [];

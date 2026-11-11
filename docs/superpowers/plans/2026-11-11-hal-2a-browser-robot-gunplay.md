@@ -6,7 +6,7 @@
 
 **Architecture:**
 - **Game hook.** Gearhold's combat lives in `games/gearhold/index.html` and is tied to the page. Rather than rewrite it, the page gets a small test hook, active only when the URL has `?hal`. The hook exposes a state snapshot and a `step(dt, input)` that runs the game's own `update(dt)` with injected controls, so the robot drives time instead of `requestAnimationFrame`.
-- **Determinism.** It comes from seeding `Math.random` before the page loads, with Playwright's `addInitScript` and `mulberry32`. There is no game-logic change for that.
+- **Determinism.** It comes from the URL: the page loads with `?hal=<seed>` and the hook seeds `Math.random` in-page with `mulberry32`. Without `?hal` nothing changes.
 - **Bot policy.** A pure TypeScript function in `packages/core/src/hal/`, tested without a browser: given a state snapshot and the level map, it returns the next input.
 - **Browser runner.** A thin Playwright runner in `scripts/hal/` connects page and policy.
 - **Scores.** The result is a `ScoreReport` registered as a second Gearhold scorer, `gearhold-play`, so the gate, ledger and CLI work unchanged.
@@ -40,7 +40,7 @@
 games/gearhold/index.html               ?hal hook: window.__hal = { state(), step(dt, input), start(level) } (Task 1)
 packages/core/src/hal/gearhold-bot.ts   pure policy: decide(state, map, memory, rng) → input               (Task 2)
 packages/core/src/hal/gearhold-play-score.ts  measures from many PlayRecords → ScoreReport               (Task 2)
-scripts/hal/browser.ts                  Playwright launch, static server for games/, seeded init script  (Task 3)
+scripts/hal/browser.ts                  Playwright launch, static server for games/, outbound-blocking context (Task 3)
 scripts/hal/gearhold-play.ts            runs the policy against the page, returns PlayRecords             (Task 3)
 scripts/hal/screens.ts                  phone-size screenshots + console errors for all three games      (Task 4)
 scripts/hal/controls.ts                 real keyboard + touch checks, all three games                     (Task 6)
@@ -90,7 +90,7 @@ In hal mode the rAF loop stops calling `update` (it may still render if asked). 
 
 - `scripts/hal/browser.ts` launches Chromium headless with WebGL. It tries the default GPU, then `--use-angle=swiftshader`, and if that fails exits 1 with `browser unavailable: <reason>`.
 - It serves `games/` from a local static server on an ephemeral port bound to 127.0.0.1.
-- It injects `Math.random = mulberry32(seed)` via `addInitScript`.
+- It loads the page with `?hal=<seed>`; the in-page hook seeds `Math.random = mulberry32(seed)`.
 - `runGearholdPlay({ levels, seeds })` gives one fresh page per (level, seed): `__hal.start(level)`, then loop `decide` → `step(1/60, input)` × 4 until `result` is set or 240 s of sim time passes.
 - Determinism test (`HAL_BROWSER=1`): the same level and seed twice gives identical PlayRecords.
 - Calibration: the robot must be human-like. (a) The median hit ratio across levels lands in the feel band [0.35, 0.8], and every level's median hit ratio is at most 0.8. (b) Level 1's (index 1) win rate responds to `AIM_ERR` (not saturated). Tune only `REACT`/`AIM_ERR`, never the bands, and report the per-level table (win rate, median win time, hit ratio, unseen share, loss causes). The first level (index 0) winning 1.0 is fine. Default `seeds` is 50: report the fitness spread over three disjoint 50-seed blocks.

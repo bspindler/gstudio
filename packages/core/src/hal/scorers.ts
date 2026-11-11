@@ -1,7 +1,8 @@
 // Registry of per-game scorers the Hal CLI drives. Add a game by registering its scorer here.
 import type { Range } from './baseline.js';
 import { scoreGearhold } from './gearhold-score.js';
-import { scoreGearholdPlay, type PlayRecord } from './gearhold-play-score.js';
+import { LEVELS } from '../../../../games/gearhold/levels.js';
+import { GEARHOLD_PLAY_DEFAULTS, scoreGearholdPlay, type PlayRecord } from './gearhold-play-score.js';
 import { scoreHyperline } from './hyperline-score.js';
 import { scoreTidepool } from './tidepool-score.js';
 import type { ScoreReport } from './types.js';
@@ -55,9 +56,10 @@ export type GearholdPlayRunner = (o: { levels: number[]; seeds: number; seedBase
 export function gearholdPlayScorer(run: GearholdPlayRunner): Scorer {
   return {
     game: 'gearhold-play',
-    defaults: { levels: 3, seeds: 50, seedBase: 0 },
+    defaults: { ...GEARHOLD_PLAY_DEFAULTS },
     validate(r) {
       for (const k of ['levels', 'seeds']) if (!Number.isInteger(r[k]) || (r[k] as number) < 1) return `--${k} must be a positive integer`;
+      if ((r.levels as number) > LEVELS.length) return `--levels must be at most ${LEVELS.length} (Gearhold has ${LEVELS.length} levels)`;
       if (!Number.isInteger(r.seedBase) || (r.seedBase as number) < 0) return '--seed-base must be a non-negative integer';
       return null;
     },

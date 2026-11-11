@@ -2,15 +2,14 @@
 // The decide -> step loop runs in the page (gearhold-play-page.ts, bundled with esbuild), in batches.
 // Seeds: the page's Math.random comes from ?hal=<seed>; the policy rng is mulberry32(policySeed(seed, level)).
 // Hard failures (page errors, a level that won't start, NaN state) go to `errors`, never into `records`.
-// A browser that can't launch throws "browser unavailable: ..."; the CLI below exits 1 on it.
-//   npx tsx scripts/hal/gearhold-play.ts [--levels 0,1,2] [--seeds 50] [--seedBase 0] [--json]
+// A browser that can't launch throws "browser unavailable: ..."; the CLI exits 1 on it.
+// Run it with `npm run hal -- score --game gearhold-play [--levels N] [--seeds N] [--seed-base N]`.
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import type { Browser } from 'playwright';
 import { LEVELS } from '../../games/gearhold/levels.js';
 import type { PlayRecord } from '../../packages/core/src/hal/gearhold-play-score.js';
-import { scoreGearholdPlay } from '../../packages/core/src/hal/gearhold-play-score.js';
+import { GEARHOLD_PLAY_DEFAULTS } from '../../packages/core/src/hal/gearhold-play-score.js';
 import { closeAll, launchBrowser, newHalContext, repo, serveGames, type StaticServer } from './browser.js';
 import type { PageOutcome } from './gearhold-play-page.js';
 
@@ -28,7 +27,7 @@ export type GearholdPlayResult = { records: PlayRecord[]; errors: string[] };
 /** Sim-time cap per run (seconds); hitting it ends the run as 'timeout' with a cause. */
 export const SIM_CAP = 240;
 /** Default seeds per level: 50 keeps the fitness spread over disjoint seed blocks under the gate's 0.5 (task 3 report). */
-export const DEFAULT_SEEDS = 50;
+export const DEFAULT_SEEDS = GEARHOLD_PLAY_DEFAULTS.seeds;
 const BATCH = 900; // decisions per page.evaluate (60 s of sim time)
 /** Wall-clock bound per batch; a normal batch takes well under 1 s. */
 export const BATCH_TIMEOUT_MS = 30_000;
@@ -63,7 +62,7 @@ async function playOne(browser: Browser, origin: string, code: string, level: nu
   const tag = `level ${level} seed ${seed}`;
   const map = LEVELS[level]?.map as string[] | undefined;
   if (!map) return `${tag}: no such level`;
-  const { context, blockedRequests } = await newHalContext(browser);
+  const { context, blockedRequests, consoleErrors } = await newHalContext(browser);
   const pageErrors: string[] = [];
   try {
     if (o.initScript) await context.addInitScript({ content: o.initScript });
@@ -71,6 +70,7 @@ async function playOne(browser: Browser, origin: string, code: string, level: nu
     page.on('pageerror', (e) => pageErrors.push(String(e)));
     page.on('crash', () => pageErrors.push('page crashed'));
     const failed = (): string => (pageErrors.length ? `${tag}: page error: ${pageErrors[0]}`
+      : consoleErrors.length ? `${tag}: console error: ${consoleErrors[0]}`
       : blockedRequests.length ? `${tag}: outbound request blocked: ${blockedRequests[0]}` : '');
     await page.goto(`${origin}/gearhold/index.html?hal=${seed}`);
     if ((await page.evaluate(() => (globalThis as any).document.getElementById('tag')?.textContent)) === 'needs WebGL 2')
@@ -129,52 +129,4 @@ export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase 
     await closeAll(browser, server);
   }
   return { records, errors };
-}
-
-/** Calibration table: per level win rate, median win time, hit ratio, unseen share and loss causes. */
-export function playTable(records: PlayRecord[]): string {
-  const rep = scoreGearholdPlay(records);
-  const lines = ['| level | n | win rate | median win s | hit ratio | unseen share | losses |', '|---|---|---|---|---|---|---|'];
-  for (const l of rep.levels) {
-    const losses = records.filter((r) => r.level === l.level && r.result !== 'win');
-    const kinds = new Map<string, number>();
-    for (const r of losses) {
-      const k = r.result === 'timeout' ? `timeout (${r.cause.split(':')[0]})` : `dead (${/enemy (\w+)/.exec(r.cause)?.[1] ?? 'no enemy near'})`;
-      kinds.set(k, (kinds.get(k) ?? 0) + 1);
-    }
-    lines.push(`| ${l.level} | ${l.n} | ${l.winRate} | ${l.medianWinTime === null ? '-' : l.medianWinTime.toFixed(1)} | ${l.hitRatio} | ${l.unseenShare} | ${[...kinds].map(([k, n]) => `${n}x ${k}`).join(', ') || '-'} |`);
-  }
-  return `${lines.join('\n')}\n\nmeasures ${JSON.stringify(rep.measures)} fitness ${rep.fitness}`;
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const arg = (k: string, d: string): string => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] ?? '' : d; };
-  const int = (s: string, min: number): number | null => (/^\d+$/.test(s) && Number(s) >= min ? Number(s) : null);
-  const levels = arg('levels', '0,1,2').split(',').map((x) => int(x.trim(), 0));
-  const seeds = int(arg('seeds', String(DEFAULT_SEEDS)), 1), seedBase = int(arg('seedBase', '0'), 0);
-  if (levels.some((l) => l === null) || seeds === null || seedBase === null) {
-    console.error('usage: --levels <non-negative integers, comma separated> --seeds <positive integer> --seedBase <non-negative integer>');
-    process.exit(1);
-  }
-  const t0 = performance.now();
-  try {
-    const { records, errors } = await runGearholdPlay({ levels: levels as number[], seeds, seedBase });
-    const secs = (performance.now() - t0) / 1000;
-    if (errors.length) {
-      // A run with hard failures has no score: print only the failures.
-      for (const e of errors) console.error(`hard failure: ${e}`);
-      console.error(`${errors.length} hard failure(s), ${records.length} runs completed; no score`);
-      process.exit(1);
-    }
-    if (process.argv.includes('--json')) console.log(JSON.stringify({ records, errors, secs }, null, 1));
-    else {
-      for (const r of records) console.log(`L${r.level} s${r.seed} ${r.result} ${r.time.toFixed(1)}s hp ${r.hpLeft} kills ${r.kills}/${r.foes} hits ${r.hits}/${r.shotsFired} dmg ${r.damageTaken} (${r.damageUnseen} unseen) | ${r.cause}`);
-      if (records.length) console.log(`\n${playTable(records)}`);
-      console.log(`\n${records.length} runs in ${secs.toFixed(1)} s wall`);
-    }
-    process.exit(0);
-  } catch (e) {
-    console.error(String((e as Error)?.message ?? e));
-    process.exit(1);
-  }
 }

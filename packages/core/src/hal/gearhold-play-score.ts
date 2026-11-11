@@ -1,6 +1,9 @@
 // Scores Gearhold gunplay from robot play records (browser runs). Two-sided so a softer, emptier or more generous game never scores higher.
 import type { ScoreReport } from './types.js';
 
+/** The one place the default play range is set; scorers and the direct runner both read it. */
+export const GEARHOLD_PLAY_DEFAULTS = { levels: 3, seeds: 50, seedBase: 0 } as const;
+
 export type PlayRecord = {
   level: number; /* 0-based, the game's own index */ seed: number; result: 'win' | 'dead' | 'timeout'; time: number; hpLeft: number;
   kills: number; foes: number; shotsFired: number; hits: number; damageTaken: number; damageUnseen: number; cause: string;
@@ -28,7 +31,7 @@ function median(xs: number[]): number {
   const m = s.length >> 1;
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
-// Clamped: scatter pellets could make hits exceed shotsFired.
+// Defensive clamp: the hook counts one hit per trigger pull, so hits should not exceed shotsFired.
 const ratio = (r: PlayRecord): number => (r.shotsFired > 0 ? Math.max(0, Math.min(1, r.hits / r.shotsFired)) : 0);
 
 /** 100 inside [lo, hi], linear down to 0 at 0 and at 1. */

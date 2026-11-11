@@ -2,7 +2,7 @@
 // Local builds only (hard rule 2): the server binds 127.0.0.1 on an ephemeral port and serves this checkout.
 import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { extname, join, normalize, sep } from 'node:path';
+import { extname, isAbsolute, join, posix, relative, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type ConsoleMessage } from 'playwright';
 
@@ -25,9 +25,11 @@ export function serveGames(): Promise<StaticServer> {
   const server = createServer(async (req, res) => {
     try {
       let path: string;
-      try { path = normalize(decodeURIComponent((req.url ?? '/').split('?')[0]!)); } catch { res.writeHead(400).end(); return; }
-      const file = path.startsWith('/sdk/') ? join(repo, 'packages', path) : join(GAMES, path);
-      if (!file.startsWith(GAMES + sep) && !file.startsWith(SDK + sep)) { res.writeHead(403).end(); return; }
+      // URL paths are always '/'-separated, so normalize them as posix; only the joined file path is OS-specific.
+      try { path = posix.normalize(decodeURIComponent((req.url ?? '/').split('?')[0]!)); } catch { res.writeHead(400).end(); return; }
+      const file = path.startsWith('/sdk/') ? join(repo, 'packages', ...path.split('/')) : join(GAMES, ...path.split('/'));
+      const inside = (root: string): boolean => { const r = relative(root, file); return r !== '..' && !r.startsWith(`..${sep}`) && !isAbsolute(r); };
+      if (!inside(GAMES) && !inside(SDK)) { res.writeHead(403).end(); return; }
       let body: Buffer;
       try { body = await readFile(file); } catch { res.writeHead(404).end(); return; }
       res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' }).end(body);

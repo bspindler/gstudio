@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gearholdPlayScorer, SCORERS, type PlayRecord, type Scorer } from '@studio/core/hal';
-import { main, type ControlCheckRow, type ScreensRun } from './cli.js';
+import { main } from './cli.js';
+import type { ControlCheck } from './controls.js';
+import type { ScreensResult as ScreensRun } from './screens.js';
 
 const rec = (level: number, seed: number): PlayRecord => ({ level, seed, result: 'win', time: 60, hpLeft: 50, kills: 3, foes: 3, shotsFired: 10, hits: 5, damageTaken: 10, damageUnseen: 1, cause: '' });
 let out: string[], err: string[], halDir: string;
@@ -58,9 +60,14 @@ describe('hal CLI with an async scorer', () => {
 describe('hal screens', () => {
   const shot = (o: Partial<ScreensRun>): ScreensRun => ({ game: 'g', shots: ['1.png'], errors: [], reached: true, notes: [], blockedRequests: [], ...o });
   it('prints a per-game summary and exits 0 when all reached cleanly', async () => {
-    const code = await main(['screens'], deps(good, async () => [shot({ blockedRequests: ['https://fonts.googleapis.com/x'] })]));
-    expect(code).toBe(0);
+    expect(await main(['screens'], deps(good, async () => [shot({})]))).toBe(0);
+    expect(out.join('\n')).toContain('g: reached gameplay, 1 shots, 0 errors, 0 blocked requests');
+  });
+  it('exits 1 when any game made a blocked outbound request, and lists it', async () => {
+    const code = await main(['screens'], deps(good, async () => [shot({ blockedRequests: ['https://example.com/x'] })]));
+    expect(code).toBe(1);
     expect(out.join('\n')).toContain('g: reached gameplay, 1 shots, 0 errors, 1 blocked requests');
+    expect(out.join('\n')).toContain('blocked: https://example.com/x');
   });
   it('exits 1 when a game did not reach gameplay or had page errors', async () => {
     expect(await main(['screens'], deps(good, async () => [shot({ reached: false })]))).toBe(1);
@@ -69,8 +76,8 @@ describe('hal screens', () => {
 });
 
 describe('hal controls', () => {
-  const row = (o: Partial<ControlCheckRow>): ControlCheckRow => ({ game: 'gearhold', check: 'key KeyW moves fwd', ok: true, detail: 'along 1.3', ...o });
-  const d = (rows: ControlCheckRow[] | (() => Promise<ControlCheckRow[]>)) =>
+  const row = (o: Partial<ControlCheck>): ControlCheck => ({ game: 'gearhold', check: 'key KeyW moves fwd', ok: true, detail: 'along 1.3', ...o });
+  const d = (rows: ControlCheck[] | (() => Promise<ControlCheck[]>)) =>
     ({ scorers: SCORERS, halDir, runControlsCheck: typeof rows === 'function' ? rows : async () => rows });
 
   it('prints one line per check (ok / FAIL / skipped: reason) and exits 0 when nothing non-skipped failed', async () => {
@@ -154,6 +161,20 @@ describe('hal CLI gate semantics', () => {
     expect(await main(['check', '--game', 'fake', '--n', '2', '--change', 'x'], d())).toBe(2);
     expect(out.join('\n')).toMatch(/DISCARD.*baseline was scored with/);
     expect((await rd('baseline', 'fake.json')).report.fitness).toBe(50);
+  });
+  it('baseline refuses a report with hard failures and score exits 1 (still printing it)', async () => {
+    const hf: Scorer = { ...fake, score: () => ({ game: 'fake', levels: [], measures: { a: 50 }, fitness: 50, hardFailures: ['seed 3 unclearable'] }) };
+    const dd = { scorers: { ...SCORERS, fake: hf }, halDir };
+    expect(await main(['baseline', '--game', 'fake'], dd)).toBe(1);
+    expect(err.join('\n')).toMatch(/baseline not written.*unclearable/);
+    await expect(readFile(file('baseline', 'fake.json'))).rejects.toThrow();
+    expect(await main(['score', '--game', 'fake'], dd)).toBe(1);
+    expect(out.join('\n')).toContain('hard failures: seed 3 unclearable');
+  });
+  it('baseline refuses a non-finite fitness', async () => {
+    fit = NaN;
+    expect(await main(['baseline', '--game', 'fake'], d())).toBe(1);
+    await expect(readFile(file('baseline', 'fake.json'))).rejects.toThrow();
   });
   it('missing --change: exit 1, nothing written', async () => {
     expect(await main(['check', '--game', 'fake'], d())).toBe(1);

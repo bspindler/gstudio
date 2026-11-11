@@ -82,7 +82,7 @@ class Run {
   }
 }
 
-/** Starts Gearhold level 1 with a real click or tap on the overlay's first level button. */
+/** Starts Gearhold level index 0 (shown as level 1 in the UI) with a real click or tap on the overlay's first level button. */
 async function startGearhold(page: Page, touch: boolean): Promise<St> {
   const btn = page.locator('#levels button').first();
   await btn.waitFor({ state: 'visible', timeout: 15_000 });
