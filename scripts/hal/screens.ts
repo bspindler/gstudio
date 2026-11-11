@@ -4,11 +4,11 @@
 //   A browser that can't launch throws "browser unavailable: ...".
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Browser, BrowserContext, Page } from 'playwright';
-import { closeAll, launchBrowser, repo, serveGames, type StaticServer } from './browser.js';
+import type { Browser, Page } from 'playwright';
+import { closeAll, isBlockedNoise, launchBrowser, newHalContext, repo, serveGames, type HalContext, type StaticServer } from './browser.js';
 
 export const DEFAULT_SCREENS_DIR = join(repo, '.data', 'hal', 'screens');
-export type ScreensResult = { game: string; shots: string[]; errors: string[]; reached: boolean; notes: string[] };
+export type ScreensResult = { game: string; shots: string[]; errors: string[]; reached: boolean; notes: string[]; blockedRequests: string[] };
 
 type Shoot = () => Promise<void>;
 type Flow = { reached: boolean; notes: string[] };
@@ -114,11 +114,12 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: st
       await rm(dir, { recursive: true, force: true });
       await mkdir(dir, { recursive: true });
       const shots: string[] = [], errors: string[] = [], flow: Flow = { reached: false, notes: [] };
-      let ctx: BrowserContext | undefined;
+      let hal: HalContext | undefined;
       try {
-        ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
-        const page = await ctx.newPage();
-        page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+        hal = await newHalContext(browser, { contextOptions: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true } });
+        const { blockedRequests } = hal;
+        const page = await hal.context.newPage();
+        page.on('console', (m) => { if (m.type() === 'error' && !isBlockedNoise(m, blockedRequests)) errors.push(m.text()); });
         page.on('pageerror', (e) => errors.push(`pageerror: ${String(e)}`));
         page.on('crash', () => errors.push('page crashed'));
         const shoot: Shoot = async () => {
@@ -136,10 +137,10 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: st
       } catch (e) {
         errors.push(`flow: setup failed (${String((e as Error)?.message ?? e).split('\n')[0]})`);
       } finally {
-        await ctx?.close().catch(() => {});
+        await hal?.context.close().catch(() => {});
         await writeFile(join(dir, 'errors.json'), JSON.stringify(errors, null, 2) + '\n');
       }
-      results.push({ game, shots, errors, reached: flow.reached, notes: flow.notes });
+      results.push({ game, shots, errors, reached: flow.reached, notes: flow.notes, blockedRequests: hal?.blockedRequests ?? [] });
     }
     return results;
   } finally {

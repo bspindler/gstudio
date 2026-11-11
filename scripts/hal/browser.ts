@@ -4,7 +4,7 @@ import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { chromium, type Browser, type BrowserContext, type ConsoleMessage } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type ConsoleMessage } from 'playwright';
 
 export const repo = join(import.meta.dirname, '..', '..');
 const GAMES = join(repo, 'games'), SDK = join(repo, 'packages', 'sdk');
@@ -118,7 +118,7 @@ function hostPort(url: string): string {
  * data:/blob: URLs never touch the network and are not routed. Console errors caused by the aborts are left
  * out of `consoleErrors`. Close it with `context.close()`.
  */
-export async function newHalContext(browser: Browser, opts: { allowHosts?: string[] } = {}): Promise<HalContext> {
+export async function newHalContext(browser: Browser, opts: { allowHosts?: string[]; contextOptions?: BrowserContextOptions } = {}): Promise<HalContext> {
   const extra = new Set(opts.allowHosts ?? []);
   const allowed = (url: string): boolean => {
     const hp = hostPort(url);
@@ -127,7 +127,7 @@ export async function newHalContext(browser: Browser, opts: { allowHosts?: strin
     const i = hp.lastIndexOf(':');
     return LOOPBACK.includes(hp.slice(0, i)) && HAL_SERVER_PORTS.has(Number(hp.slice(i + 1)));
   };
-  const context = await browser.newContext();
+  const context = await browser.newContext(opts.contextOptions);
   const blockedRequests: string[] = [], consoleErrors: string[] = [];
   await context.route('**/*', (route) => {
     const url = route.request().url();
