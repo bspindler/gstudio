@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { createCourse, extendCourse, INTRO, PATTERNS, type Course, type Obj } from '../../../games/hyperline/lib/course.js';
+import { createCourse, extendCourse, INTRO, PATTERNS, type Obj } from '../../../games/hyperline/lib/course.js';
 import { dailySeed, mulberry32 } from '../../../games/hyperline/lib/rng.js';
-import { createRunner, step, type Runner } from '../../../games/hyperline/lib/sim.js';
 import { AIR, BAR_H, BAR_Y, GRAV, JV, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt, STEP } from '../../../games/hyperline/lib/world.js';
+import { clearable } from '../src/hal/hyperline-bot.js';
 
 const course = (seed: number, until: number) => { const c = createCourse(seed); extendCourse(c, until); return c; };
 const plain = (objs: Obj[]) => objs.map((o) => ({ ...o }));
@@ -116,43 +116,9 @@ describe('hyperline patterns are clearable by construction', () => {
   });
 });
 
-// A search bot. From every grounded frame it may jump or wait. Holding (jumping on the landing
-// frame) is allowed; otherwise it decides only every 8th frame (15 Hz), so a course that needs a
-// frame-perfect tap fails. If the bot reaches the target distance, a human can too.
-function solvable(c: Course, until: number): boolean {
-  const seen = new Set<string>();
-  const clone = (r: Runner): Runner => ({ ...r });
-  const advance = (r: Runner, jump: boolean): Runner | null => {
-    step(r, c, jump);
-    while (!r.dead && !r.grounded && r.x < until) step(r, c, false);
-    if (r.dead) return null;
-    r.landed = true;
-    return r;
-  };
-  const stack: Runner[] = [createRunner()];
-  while (stack.length) {
-    const r = stack.pop()!;
-    if (r.x >= until) return true;
-    const key = `${r.steps}|${r.y.toFixed(2)}|${r.flip}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (r.landed || r.steps % 8 === 0) {
-      const j = advance({ ...clone(r), landed: false }, true);
-      if (j) stack.push(j);
-    }
-    const w = { ...clone(r), landed: false };
-    step(w, c, false);
-    if (!w.dead) {
-      if (!w.grounded) { const a = advance(w, false); if (a) stack.push(a); }
-      else stack.push(w);
-    }
-  }
-  return false;
-}
-
 describe('hyperline courses are clearable end to end', () => {
   it.each([7, 42, 1337, 2024, dailySeed('2026-11-07'), dailySeed('2026-12-25')])('seed %i is clearable to 1900m', (seed) => {
-    expect(solvable(createCourse(seed), 1900)).toBe(true);
+    expect(clearable(createCourse(seed), 1900)).toBe(true);
   }, 120_000);
 
   it('the bot is not trivially optimistic: it fails an impossible pit', () => {
@@ -160,7 +126,7 @@ describe('hyperline courses are clearable end to end', () => {
     c.objs.length = 0;
     c.nextX = 1e9;
     c.objs.push({ t: 'pit', x: 8, w: 14 });
-    expect(solvable(c, 40)).toBe(false);
+    expect(clearable(c, 40)).toBe(false);
     expect(STEP).toBeCloseTo(1 / 120);
   });
 
@@ -169,6 +135,6 @@ describe('hyperline courses are clearable end to end', () => {
     c.objs.length = 0;
     c.nextX = 1e9;
     c.objs.push({ t: 'spike', x: 8, y: 0 }, { t: 'spike', x: 8.8, y: 0 }, { t: 'bar', x: 9.6, w: 6, y: BAR_Y });
-    expect(solvable(c, 30)).toBe(false);
+    expect(clearable(c, 30)).toBe(false);
   });
 });
