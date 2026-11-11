@@ -1,7 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { levelDef, validateLevel, withoutTides } from '../../../games/tidepool-pals/levels.js';
 import { TIDEPOOL_BANDS, scoreTidepool } from '../src/hal/tidepool-score.js';
+
+const inject = vi.hoisted(() => ({ bad: false }));
+vi.mock('../../../games/tidepool-pals/levels.js', async (orig) => {
+  const real = await orig<typeof import('../../../games/tidepool-pals/levels.js')>();
+  return {
+    ...real,
+    validateLevel: (def: Parameters<typeof real.validateLevel>[0]) =>
+      inject.bad && def.n === 3 ? ['bad layout'] : real.validateLevel(def),
+  };
+});
 
 describe('scoreTidepool', () => {
   it('pins the bands', () => {
@@ -45,5 +55,28 @@ describe('scoreTidepool', () => {
     const t = Date.now();
     scoreTidepool({ from: 1, to: 10, seeds: 5 });
     expect(Date.now() - t).toBeLessThan(5000);
+  });
+
+  it('injected invalid level is reported exactly once and never changes the score', () => {
+    inject.bad = false;
+    const clean = scoreTidepool({ from: 1, to: 6, seeds: 3 });
+    inject.bad = true;
+    try {
+      const r = scoreTidepool({ from: 1, to: 6, seeds: 3 });
+      expect(r.hardFailures).toEqual(['level 3: bad layout']);
+      expect(r.levels.find((l) => l.n === 3)!.errors).toEqual(['bad layout']);
+      expect(r.measures).toEqual(clean.measures);
+      expect(r.fitness).toBe(clean.fitness);
+    } finally {
+      inject.bad = false;
+    }
+  });
+
+  it('rejects an empty level range', () => {
+    expect(() => scoreTidepool({ from: 5, to: 4, seeds: 3 })).toThrow(Error);
+  });
+
+  it('rejects fewer than one seed', () => {
+    expect(() => scoreTidepool({ from: 1, to: 3, seeds: 0 })).toThrow(Error);
   });
 });
