@@ -82,6 +82,8 @@ describe('gearhold ?hal hook', () => {
     expect(s.enemies.length).toBeGreaterThan(0);
     expect(s.result).toBe('');
     expect(s.shotsFired).toBe(0);
+    expect(Array.isArray(s.doors)).toBe(true);
+    for (const d of s.doors) expect(d.open).toBeGreaterThanOrEqual(0);
     await page.close();
     expect(errors).toEqual([]);
     expect(sent).toEqual([]);

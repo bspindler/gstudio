@@ -1097,6 +1097,7 @@ if (HAL) {
     p: { x: P.x, y: P.y, a: P.a, look: P.look, hp: P.hp, shells: P.shells, key: P.key, weapon: P.weapon },
     enemies: enemies.map((e) => ({ kind: e.kind, x: e.x, y: e.y, hp: e.hp, awake: e.awake, dead: e.dead, prop: !!e.prop })),
     items: items.map((it) => ({ kind: it.kind, x: it.x, y: it.y })),
+    doors: grid.flatMap((c, i) => (isDoor(c) ? [{ x: i % mw, y: Math.floor(i / mw), open: doorOpen[i] }] : [])), // cell coords; open 0..1, passable at >= 0.95
     kills, foes, shotsFired: hal.shots, hits: hal.hits, damageTaken: hal.dmg, damageUnseen: hal.unseen,
     result: mode === 'won' ? 'win' : mode === 'dead' ? 'dead' : '',
   });
