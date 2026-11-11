@@ -2,6 +2,8 @@
 // It controls billing (API key vs subscription), the per-call spend cap, tool permissions and result parsing.
 // It never records spend: the caller does (see @studio/core/hal), using `costUsd`.
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { childEnv } from './env.js';
 
 export type ClaudeRole = 'planner' | 'implementer' | 'director';
@@ -16,6 +18,11 @@ export type ClaudeCall = {
   disallowedTools: string[];
   timeoutMs: number;
   appendSystemPromptFile?: string;
+  /**
+   * Extra absolute paths the implementer's sandboxed Bash may not read. The caller passes `<repo>/.hal.env`
+   * here: the cwd is a worktree, so the repo's .hal.env cannot be derived from it. `<cwd>/.hal.env` is always denied.
+   */
+  denyReadPaths?: string[];
 };
 export type ClaudeResult = {
   ok: boolean;
@@ -108,6 +115,43 @@ function lastJsonObject(out: string): Record<string, unknown> | null {
   return null;
 }
 
+/** Env vars sandboxed commands never see (`credentials.envVars` deny unsets them inside the sandbox only). */
+export const SANDBOX_DENIED_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'HAL_TOKEN'];
+
+/**
+ * `--settings` JSON that runs the implementer's Bash inside Claude Code's sandbox (macOS Seatbelt / Linux bubblewrap).
+ * Every key was verified in the claude 2.1.322 bundle's settings schema:
+ *   sandbox.enabled                     run Bash inside the sandbox
+ *   sandbox.failIfUnavailable           exit at startup if the sandbox cannot start (fail closed, never unsandboxed)
+ *   sandbox.allowUnsandboxedCommands    false: the Bash `dangerouslyDisableSandbox` parameter is ignored; from a
+ *                                       --settings file it also makes project settings' excludedCommands,
+ *                                       allowedDomains, allowWrite etc. be ignored
+ *   sandbox.autoAllowBashIfSandboxed    false: sandboxing does not pre-approve Bash; only --allowedTools rules run
+ *   sandbox.excludedCommands            [] nothing runs outside the sandbox
+ *   sandbox.network.allowedDomains      [] no outbound host
+ *   sandbox.network.strictAllowlist     true: hosts not allowed are denied deterministically, never prompted
+ *   sandbox.network.allowLocalBinding   true (macOS): tests may listen on 127.0.0.1 (loopback only)
+ *   sandbox.filesystem.denyRead         .hal.env paths
+ *   sandbox.filesystem.allowWrite       cwd (the worktree) and the temp dir
+ *   sandbox.credentials.envVars         [{name, mode:'deny'}]: unset in sandboxed commands
+ * `--setting-sources project` does not drop --settings (flag settings are a separate source).
+ */
+export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyReadPaths'>): object {
+  const denyRead = [...new Set([join(call.cwd, '.hal.env'), ...(call.denyReadPaths ?? [])])];
+  return {
+    sandbox: {
+      enabled: true,
+      failIfUnavailable: true,
+      allowUnsandboxedCommands: false,
+      autoAllowBashIfSandboxed: false,
+      excludedCommands: [],
+      network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
+      filesystem: { denyRead, allowWrite: [call.cwd, tmpdir()] },
+      credentials: { envVars: SANDBOX_DENIED_ENV.map((name) => ({ name, mode: 'deny' })) },
+    },
+  };
+}
+
 export function buildArgs(call: ClaudeCall): string[] {
   const denied = [...new Set([...ALWAYS_DISALLOWED, ...call.disallowedTools])];
   const args = [
@@ -118,7 +162,11 @@ export function buildArgs(call: ClaudeCall): string[] {
     '--tools', roleTools(call.role), // "" disables every tool (director)
     '--setting-sources', 'project',
   ];
-  if (call.role === 'implementer') args.push('--permission-mode', 'acceptEdits'); // planner/director: default mode
+  if (call.role === 'implementer') {
+    args.push('--permission-mode', 'acceptEdits'); // planner/director: default mode
+    // The implementer's Bash runs code Claude wrote (tests); sandbox it in both billing modes.
+    args.push('--settings', JSON.stringify(implementerSandboxSettings(call)));
+  }
   // --allowedTools/--disallowedTools are variadic: one comma-joined value each, and the prompt is sent on stdin.
   if (call.allowedTools.length > 0) args.push('--allowedTools', call.allowedTools.join(','));
   args.push('--disallowedTools', denied.join(','));
@@ -137,6 +185,7 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
   }
   // Throws `no API key in .hal.env` (no key value) before anything is spawned.
   const env = childEnv(deps.env, call.billing, deps.apiKey);
+  delete env.HAL_TOKEN; // the dashboard token is never a child's business (childEnv returns a fresh copy)
   const key = call.billing === 'api' ? deps.apiKey : undefined;
   const child = deps.spawn('claude', buildArgs(call), { cwd: call.cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   live.add(child);

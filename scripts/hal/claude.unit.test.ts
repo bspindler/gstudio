@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALWAYS_DISALLOWED, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
+import { tmpdir } from 'node:os';
+import { ALWAYS_DISALLOWED, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
 
 const KEY = 'sk-ant-test-FAKE123';
 
@@ -218,6 +219,48 @@ describe('runClaude', () => {
         });
       }
     }
+    for (const role of ['planner', 'implementer', 'director'] as const) {
+      for (const billing of ['api', 'subscription'] as const) {
+        it(`sandbox settings only for the implementer (${role} + ${billing}); HAL_TOKEN never reaches the child`, async () => {
+          const f = ok();
+          const env = { ...baseEnv, HAL_TOKEN: 'dash-token' };
+          await runClaude({ ...base, role, billing, allowedTools: roleAllowedTools(role), denyReadPaths: ['/main/.hal.env'] }, deps(f.spawn, { env }));
+          const { args, opts } = f.calls[0]!;
+          expect(opts.env.HAL_TOKEN).toBeUndefined();
+          expect(env.HAL_TOKEN).toBe('dash-token'); // caller's env untouched
+          if (role !== 'implementer') return expect(args).not.toContain('--settings');
+          expect(args.filter((a) => a === '--settings')).toHaveLength(1);
+          expect(JSON.parse(arg(args, '--settings')!)).toEqual(implementerSandboxSettings({ cwd: '/repo', denyReadPaths: ['/main/.hal.env'] }));
+          expect(arg(args, '--setting-sources')).toBe('project'); // flag settings still apply alongside it
+        });
+      }
+    }
+    it('implementer sandbox settings: enforced, fail-closed, no network, .hal.env unreadable, writes in cwd + tmp only', () => {
+      expect(implementerSandboxSettings({ cwd: '/wt', denyReadPaths: ['/main/.hal.env', '/wt/.hal.env'] })).toEqual({
+        sandbox: {
+          enabled: true,
+          failIfUnavailable: true,
+          allowUnsandboxedCommands: false,
+          autoAllowBashIfSandboxed: false,
+          excludedCommands: [],
+          network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
+          filesystem: { denyRead: ['/wt/.hal.env', '/main/.hal.env'], allowWrite: ['/wt', tmpdir()] },
+          credentials: { envVars: [
+            { name: 'ANTHROPIC_API_KEY', mode: 'deny' }, { name: 'ANTHROPIC_AUTH_TOKEN', mode: 'deny' }, { name: 'HAL_TOKEN', mode: 'deny' },
+          ] },
+        },
+      });
+      expect(SANDBOX_DENIED_ENV).toEqual(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'HAL_TOKEN']);
+    });
+    it('without denyReadPaths the cwd .hal.env is still denied', () => {
+      const s = implementerSandboxSettings({ cwd: '/wt' }) as { sandbox: { filesystem: { denyRead: string[] } } };
+      expect(s.sandbox.filesystem.denyRead).toEqual(['/wt/.hal.env']);
+    });
+    it('the api key never appears in the sandbox settings argv', async () => {
+      const f = ok();
+      await runClaude({ ...base, billing: 'api' }, deps(f.spawn));
+      expect(arg(f.calls[0]!.args, '--settings')).not.toContain(KEY);
+    });
     it('.hal.env is denied for Read/Edit/Write/Grep in all path forms', () => {
       for (const t of ['Read', 'Edit', 'Write', 'Grep']) {
         for (const form of ['.hal.env', './.hal.env', '**/.hal.env']) expect(ALWAYS_DISALLOWED).toContain(`${t}(${form})`);
