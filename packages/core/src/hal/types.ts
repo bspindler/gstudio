@@ -12,7 +12,8 @@ export type LevelStats = { n: number; winRate: number; avgMovesLeftFrac: number;
 /** Each measure is 0..100, higher is better. */
 export type Measures = Record<string, number>;
 
-export type ScoreReport = {
-  game: string; levels: LevelStats[]; measures: Measures; fitness: number;
+/** One scored run of a game. `L` is that game's per-item stats (levels, sectors, maps). */
+export type ScoreReport<L = LevelStats> = {
+  game: string; levels: L[]; measures: Measures; fitness: number;
   hardFailures: string[]; // non-empty means the gate must discard
 };
