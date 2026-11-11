@@ -161,7 +161,7 @@ import { buildGuns, gunTriangles } from './gun3d.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false }; // plain counters, read only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.1.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.2.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');

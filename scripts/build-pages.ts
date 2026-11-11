@@ -16,7 +16,7 @@ for (const g of games) {
   const dest = join(out, g.slug);
   mkdirSync(dest, { recursive: true });
   for (const name of readdirSync(src)) {
-    if (name !== 'index.html') cpSync(join(src, name), join(dest, name), { recursive: true });
+    if (name !== 'index.html' && name !== 'CHANGELOG.md') cpSync(join(src, name), join(dest, name), { recursive: true });
   }
   writeFileSync(join(dest, 'index.html'), pagesGameHtml(readFileSync(join(src, 'index.html'), 'utf8')));
 }

@@ -15,10 +15,7 @@ describe('hyperline: determinism and fairness', () => {
     expect(html).toMatch(/const today = \(\) => utcDay\(Date\.now\(\)\)/);
   });
 
-  it('is version 0.3.0 in game.yaml and createStudio', () => {
-    expect(read('game.yaml')).toMatch(/^version: 0\.3\.0$/m);
-    expect(html).toMatch(/createStudio\(\{[^}]*version: '0\.3\.0'/);
-  });
+  // Version consistency (game.yaml, createStudio, CHANGELOG.md) is checked for every game in game-versions.test.ts.
 });
 
 describe('hyperline: no paid path to a random reward', () => {
