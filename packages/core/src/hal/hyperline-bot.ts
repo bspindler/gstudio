@@ -3,10 +3,55 @@
 import { createCourse, type Course } from '../../../../games/hyperline/lib/course.js';
 import { mulberry32 } from '../../../../games/hyperline/lib/rng.js';
 import { createRunner, step, type Runner } from '../../../../games/hyperline/lib/sim.js';
-import { sectorAt, STEP } from '../../../../games/hyperline/lib/world.js';
+import { sectorAt, speedAt } from '../../../../games/hyperline/lib/world.js';
 
 /** Max states explored per clearable() call. */
 export const SEARCH_BUDGET = 2_000_000;
+
+type Found = { ok: boolean | 'unknown'; far: number };
+
+/** One step through the air: from a jump (or a wait that left the ground) to the landing frame. */
+function advance(r: Runner, c: Course, until: number, jump: boolean): Runner | null {
+  step(r, c, jump);
+  while (!r.dead && !r.grounded && r.x < until) step(r, c, false);
+  if (r.dead) return null;
+  r.landed = true;
+  return r;
+}
+
+/** The next states from a grounded runner: jumping (only on the 15 Hz grid or a landing), then waiting. */
+function children(r: Runner, c: Course, until: number): { jump: Runner | null; wait: Runner | null } {
+  let jump: Runner | null = null;
+  if (r.landed || r.steps % 8 === 0) jump = advance({ ...r, landed: false }, c, until, true);
+  let wait: Runner | null = { ...r, landed: false };
+  step(wait, c, false);
+  if (wait.dead) wait = null;
+  else if (!wait.grounded) wait = advance(wait, c, until, false);
+  return { jump, wait };
+}
+
+/**
+ * Depth-first search from `starts` for any state at x >= until. `far` is the furthest x any live
+ * state reached. 'unknown' when more than `budget` distinct states were explored.
+ */
+function search(starts: Runner[], c: Course, until: number, budget: number): Found {
+  const seen = new Set<string>();
+  const stack = [...starts];
+  let explored = 0, far = -Infinity;
+  while (stack.length) {
+    const r = stack.pop()!;
+    far = Math.max(far, r.x);
+    if (r.x >= until) return { ok: true, far };
+    const key = `${r.steps}|${r.y.toFixed(2)}|${r.flip}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (++explored > budget) return { ok: 'unknown', far };
+    const { jump, wait } = children(r, c, until);
+    if (jump) stack.push(jump);
+    if (wait) stack.push(wait);
+  }
+  return { ok: false, far };
+}
 
 /**
  * A search bot. From every grounded frame it may jump or wait. Holding (jumping on the landing
@@ -15,96 +60,75 @@ export const SEARCH_BUDGET = 2_000_000;
  * Returns 'unknown' when it explores more than `budget` states without an answer.
  */
 export function clearable(c: Course, until: number, budget: number = SEARCH_BUDGET): boolean | 'unknown' {
-  const seen = new Set<string>();
-  const clone = (r: Runner): Runner => ({ ...r });
-  const advance = (r: Runner, jump: boolean): Runner | null => {
-    step(r, c, jump);
-    while (!r.dead && !r.grounded && r.x < until) step(r, c, false);
-    if (r.dead) return null;
-    r.landed = true;
-    return r;
-  };
-  const stack: Runner[] = [createRunner()];
-  let explored = 0;
-  while (stack.length) {
-    const r = stack.pop()!;
-    if (r.x >= until) return true;
-    const key = `${r.steps}|${r.y.toFixed(2)}|${r.flip}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (++explored > budget) return 'unknown';
-    if (r.landed || r.steps % 8 === 0) {
-      const j = advance({ ...clone(r), landed: false }, true);
-      if (j) stack.push(j);
-    }
-    const w = { ...clone(r), landed: false };
-    step(w, c, false);
-    if (!w.dead) {
-      if (!w.grounded) { const a = advance(w, false); if (a) stack.push(a); }
-      else stack.push(w);
-    }
-  }
-  return false;
+  return search([createRunner()], c, until, budget).ok;
 }
 
 /**
- * The casual player: looks `look` seconds ahead and, with probability `slip`, reacts too late.
- * Pinned by measurement (1b task-2 report): of look 0.2..0.6, only 0.2 gets past sector 0; slip is
- * the smallest of {0.05, 0.1, 0.15, 0.2, 0.3} whose median death sector over seeds 1..40 is in 2..6.
+ * The casual player: a planner that sees `horizon` seconds of track ahead (converted to distance
+ * with speedAt at the decision point) and, with probability `slip`, skips a decision (reacts late).
+ * Pinned by measurement (1b task-2 report, horizon x slip table): horizon 1 s; slip is the smallest
+ * of {0.05, 0.1, 0.15, 0.2, 0.3} whose seeds 1..40 have a median death sector in 2..6 and >= 10%
+ * of runs reaching sector 5.
  */
-export const HYPERLINE_CASUAL = { slip: 0.05, look: 0.2 };
+export const HYPERLINE_CASUAL = { slip: 0.05, horizon: 1 };
+
+/** States the planner may explore per branch per decision; past it the branch counts as safe. */
+export const PLAN_BUDGET = 4000;
 
 export type CasualRun = { dist: number; sector: number; cause: string; jumps: number };
 
 /**
- * Lookahead-only death test. Below the track with normal gravity nothing can hold the runner again
- * (the sim only supports from prevY >= -0.12 and jumping needs the ground), so the fall is already
- * certain, though 'fall' registers ~0.3 s later at VOID_Y. Without this a short lookahead never
- * sees a pit coming. The real run still ends only on the sim's own `dead`.
+ * Waiting through the next decision: the runner steps with no input until it has passed one frame
+ * where it could have decided (grounded, on a landing or the 15 Hz grid), then (if airborne) to its
+ * landing. A casual plan must survive one missed decision, since any decision may slip.
  */
-const doomed = (r: Runner): boolean => r.dead !== '' || (!r.flip && r.y < -0.12);
-
-const MAX_AIR_FRAMES = 600; // 5 s: longer than any jump, pad launch or flip transfer
-
-/**
- * Frames survived on a branch, or Infinity if the runner is still alive at its end. "Wait" runs
- * `frames` steps; "jump now" runs through its whole arc until it lands (as clearable's advance
- * does), then `frames` more. Both use doomed(), which only the lookahead sees.
- */
-function survives(r: Runner, c: Course, jump: boolean, frames: number): number {
-  const s = { ...r };
-  let n = 0;
-  const tick = (j: boolean): boolean => { step(s, c, j); n++; return doomed(s); };
-  if (tick(jump)) return n;
-  if (jump) while (!s.grounded) if (tick(false) || n >= MAX_AIR_FRAMES) return doomed(s) ? n : Infinity;
-  for (let i = jump ? 0 : 1; i < frames; i++) if (tick(false)) return n;
-  return Infinity;
-}
-
-/** Jump if waiting dies and jumping survives; if both die, the branch that survives longer; else wait. */
-function decide(r: Runner, c: Course, frames: number): boolean {
-  const wait = survives(r, c, false, frames);
-  if (wait === Infinity) return false;
-  return survives(r, c, true, frames) > wait;
+function waitOutNextDecision(r: Runner, c: Course, goal: number): Runner | null {
+  const w: Runner = { ...r, landed: false };
+  for (let skipped = false; ;) {
+    const air = !w.grounded;
+    step(w, c, false);
+    if (w.dead) return null;
+    if (skipped || w.x >= goal) break;
+    skipped = w.grounded && (air || w.steps % 8 === 0);
+  }
+  if (!w.grounded) return advance(w, c, goal, false);
+  return w;
 }
 
 /**
- * One seeded casual run of createCourse(seed) to `until`. The lookahead shares the course objects:
+ * Wait if waiting (through the next decision) has any surviving continuation to x + H; otherwise
+ * jump if jumping now does; if neither, take the branch that got further. H is `horizon` seconds
+ * converted to distance with speedAt at the decision point. Both use the search bot's grid and
+ * memo, bounded by PLAN_BUDGET; a branch whose search runs out of budget counts as surviving.
+ */
+function decide(r: Runner, c: Course, horizon: number): boolean {
+  const goal = r.x + speedAt(r.x) * horizon;
+  const wait = waitOutNextDecision(r, c, goal);
+  const w = wait ? search([wait], c, goal, PLAN_BUDGET) : { ok: false, far: r.x };
+  if (w.ok !== false) return false;
+  const jump = advance({ ...r, landed: false }, c, goal, true);
+  if (!jump) return false;
+  const j = search([jump], c, goal, PLAN_BUDGET);
+  return j.ok !== false || j.far > w.far;
+}
+
+/**
+ * One seeded casual run of createCourse(seed) to `until`. Planning shares the course objects:
  * stepping sets per-object flags (done, mc, got, miss) but those only drive events, never a death,
  * so sharing cannot change the outcome.
  */
-export function casualRun(seed: number, until: number, casual: { slip: number; look: number } = HYPERLINE_CASUAL): CasualRun {
+export function casualRun(seed: number, until: number, casual: { slip: number; horizon: number } = HYPERLINE_CASUAL): CasualRun {
   const c = createCourse(seed);
   const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-  const frames = Math.round(casual.look / STEP);
   const r = createRunner();
-  let jumps = 0, wasGrounded = true;
+  let jumps = 0;
   while (!r.dead && r.x < until) {
-    const landed = r.grounded && !wasGrounded;
     let jump = false;
-    if (r.grounded && (landed || r.steps % 8 === 0) && rng() >= casual.slip) jump = decide(r, c, frames);
-    wasGrounded = r.grounded;
+    if (r.grounded && (r.landed || r.steps % 8 === 0) && rng() >= casual.slip) jump = decide(r, c, casual.horizon);
+    r.landed = false;
+    const wasGrounded = r.grounded;
     if (step(r, c, jump).some((e) => e.t === 'jump')) jumps++;
+    if (r.grounded && !wasGrounded) r.landed = true;
   }
   // Crossing `until` counts as finishing, even if that same step also hit something.
   if (r.x >= until) return { dist: until, sector: sectorAt(Math.max(0, until - 1)), cause: '', jumps };

@@ -21,8 +21,8 @@ describe('clearable', () => {
 });
 
 describe('casualRun', () => {
-  it('reacts 0.2 s ahead', () => {
-    expect(HYPERLINE_CASUAL).toEqual({ slip: 0.05, look: 0.2 });
+  it('plans 1 s ahead and slips 5% of decisions', () => {
+    expect(HYPERLINE_CASUAL).toEqual({ slip: 0.05, horizon: 1 });
     expect(HYPERLINE_CASUAL.slip).toBeGreaterThan(0);
     expect(HYPERLINE_CASUAL.slip).toBeLessThan(1);
   });
@@ -44,6 +44,14 @@ describe('casualRun', () => {
       }
     }
   });
+
+  it('over seeds 1..40 the median death sector is 2..6 and at least 10% reach sector 5', () => {
+    const sectors = seeds(40).map((s) => casualRun(s, 1900).sector).sort((a, b) => a - b);
+    const median = (sectors[19]! + sectors[20]!) / 2;
+    expect(median).toBeGreaterThanOrEqual(2);
+    expect(median).toBeLessThanOrEqual(6);
+    expect(sectors.filter((s) => s >= 5).length).toBeGreaterThanOrEqual(4);
+  }, 60_000);
 
   it('a short target is reached with no cause', () => {
     const r = casualRun(1, 20);
