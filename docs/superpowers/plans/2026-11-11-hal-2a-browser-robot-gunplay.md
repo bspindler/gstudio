@@ -43,6 +43,7 @@ packages/core/src/hal/gearhold-play-score.ts  measures from many PlayRecords →
 scripts/hal/browser.ts                  Playwright launch, static server for games/, seeded init script  (Task 3)
 scripts/hal/gearhold-play.ts            runs the policy against the page, returns PlayRecords             (Task 3)
 scripts/hal/screens.ts                  phone-size screenshots + console errors for all three games      (Task 4)
+scripts/hal/controls.ts                 real keyboard + touch checks, all three games                     (Task 6)
 packages/core/src/hal/scorers.ts        + 'gearhold-play' (async score)                                   (Task 5)
 scripts/hal.ts                          awaits async scorers; `screens` command                           (Task 5)
 ```
@@ -103,6 +104,21 @@ In hal mode the rAF loop stops calling `update` (it may still render if asked). 
 - `SCORERS['gearhold-play']` with defaults `{ levels: 3, seeds: 10 }`; `Scorer.score` may return a Promise, and the CLI awaits it.
 - By hand: `npm run hal -- baseline --game gearhold-play` then `check --game gearhold-play --change no-op` gives DISCARD exit 2, and the same seed twice gives the same fitness.
 - Report each level's win rate, median time, hit ratio and unseen-damage share. That's the first real read on Gearhold's gunplay.
+
+### Task 6: Real controls check (keyboard and touch)
+
+The robot in Task 3 sets input state directly. This task proves the real input paths still work, using real browser events and no injected state. Brian asked for it on 2026-11-11.
+- **Live mode.** Add `?hal=<seed>&live` to the hook. The normal rAF loop runs `update` with real input, pauses stay suppressed, `state()` is available, and `step()` throws. Without `&live`, hal mode is unchanged.
+- **`runControlsCheck()` in `scripts/hal/controls.ts`.** It returns `{ game, check, ok, detail, skipped? }[]` and covers:
+  - **Gearhold keyboard (desktop 1280×800).** Real `page.keyboard` presses for W/S/A/D, the arrow keys, the fire key and the weapon-swap key, each held about 0.3 s. Check through `state()`: W moves along the facing (cos a, sin a), S backs off, A/D strafe, arrows turn, and fire raises `shotsFired`. Mouse look needs pointer lock. Try it, and report `skipped: 'pointer lock unavailable headless'` rather than fail if the browser refuses.
+  - **Gearhold touch (390×844, `hasTouch`, `isMobile`).** Real touch/pointer events:
+    - a drag on the left half moves the player (stick)
+    - a drag on the right half changes `p.a` and `p.look` (look)
+    - a tap on `#fire` (or whatever the fire button's id is) raises `shotsFired`
+    - a tap on `#swap` toggles the weapon once scatter is owned, or shows the "No second weapon yet." message otherwise
+    - the stick and knob appear while dragging and hide on release
+  - **Tidepool and Hyperline (390×844, touch).** Do their primary input with real taps, swipes and keys: a Tidepool tile swap, a Hyperline tap or jump, and Hyperline's keyboard key on desktop. Check that the canvas pixels change between before and after screenshots, with no page errors. They have no hook, so this is a smoke check only.
+- **Browser tests** live in `scripts/hal/controls.test.ts` (`HAL_BROWSER=1`). Task 5 wires `npm run hal -- controls`, which exits 1 if any non-skipped check fails. The nightly loop treats a failure as a tripwire: the change is discarded.
 
 ## Lessons carried over from plan 1b's review
 
