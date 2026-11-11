@@ -26,17 +26,22 @@ describe('playLevel', () => {
     }
   });
 
-  it('a loss uses every move', () => {
+  it('a loss on levels 1-20 uses every move', () => {
+    // playLevel can also end a loss early (shuffle cap, or no tappable move); those paths are covered by
+    // the shuffle-cap test. On these levels and seeds every loss runs out of moves (28 of 100 plays at time of writing).
+    let losses = 0;
     for (let n = 1; n <= 20; n++) {
       for (const s of seeds(5)) {
         const r = playLevel(levelDef(n), s);
         if (!r.won) {
+          losses++;
           expect(r.stars).toBe(0);
-          // Either every move was spent, or the shuffle cap (50) ended the play.
-          expect(r.movesLeft === 0 || r.shuffles >= 50).toBe(true);
+          expect(r.movesLeft).toBe(0);
+          expect(r.movesUsed).toBe(levelDef(n).moves);
         }
       }
     }
+    expect(losses).toBeGreaterThan(0);
   });
 
   it('applies the tide on level 3', () => {
@@ -53,5 +58,15 @@ describe('playLevel', () => {
       n: 9999, moves: 10, colors: 5, goals: [{ t: 'collect', c: 0, n: 999 }], layout,
     };
     expect(playLevel(def, 1).won).toBe(false);
+  });
+
+  it('stops at the shuffle cap when no shuffle ever creates a move', { timeout: 2000 }, () => {
+    // All sand: no free pal exists, so hasMoves stays false and shuffle can neither recolour nor spawn a bomb.
+    const layout = Array.from({ length: 4 }, () => 'ssss');
+    const def: LevelDef = { n: 9998, moves: 200, colors: 5, goals: [{ t: 'collect', c: 0, n: 999 }], layout };
+    const r = playLevel(def, 1);
+    expect(r.shuffles).toBe(50);
+    expect(r.won).toBe(false);
+    expect(r.movesUsed).toBe(0);
   });
 });

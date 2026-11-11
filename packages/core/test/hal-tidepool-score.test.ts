@@ -78,5 +78,10 @@ describe('scoreTidepool', () => {
 
   it('rejects fewer than one seed', () => {
     expect(() => scoreTidepool({ from: 1, to: 3, seeds: 0 })).toThrow(Error);
+    expect(() => scoreTidepool({ from: NaN, to: 3, seeds: 1 })).toThrow(Error);
+    expect(() => scoreTidepool({ from: 0, to: 3, seeds: 1 })).toThrow(Error);
+    expect(() => scoreTidepool({ from: 1, to: 3, seeds: 2.5 })).toThrow(Error);
+    expect(() => scoreTidepool({ from: 1, to: 3, seeds: Infinity })).toThrow(Error);
+    expect(() => scoreTidepool({ from: 1, to: Infinity, seeds: 1 })).toThrow(Error);
   });
 });

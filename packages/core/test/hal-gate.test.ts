@@ -46,6 +46,43 @@ describe('compareScores', () => {
     expect(() => compareScores(report(70, { a: 1 }, [], 20), report(72, { a: 1 }, [], 25))).not.toThrow();
     expect(compareScores(report(70, { a: 1 }, [], 20), report(72, { a: 1 }, [], 25)).keep).toBe(true);
   });
+  it('discards a prototype-key target instead of keeping it', () => {
+    for (const key of ['constructor', 'toString', '__proto__']) {
+      const r = compareScores(report(70, { inBand: 50 }), report(70, { inBand: 50 }), key);
+      expect(r.keep).toBe(false);
+      expect(r.reasons.join(' ')).toContain(key);
+    }
+  });
+  it('discards a NaN fitness', () => {
+    const r = compareScores(report(70), report(NaN));
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toContain('fitness');
+  });
+  it('discards a NaN baseline fitness', () => {
+    expect(compareScores(report(NaN), report(80)).keep).toBe(false);
+  });
+  it('discards a NaN measure in the after report', () => {
+    const r = compareScores(report(70, { inBand: 50, noWalls: 90 }), report(75, { inBand: 55, noWalls: NaN }), 'inBand');
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toContain('noWalls');
+  });
+  it('discards a NaN or infinite target value', () => {
+    expect(compareScores(report(70, { inBand: 50 }), report(70, { inBand: NaN }), 'inBand').keep).toBe(false);
+    expect(compareScores(report(70, { inBand: 50 }), report(70, { inBand: Infinity }), 'inBand').keep).toBe(false);
+    expect(compareScores(report(70, { inBand: NaN }), report(70, { inBand: 60 }), 'inBand').keep).toBe(false);
+  });
+  it('discards a measure present before but missing after', () => {
+    const r = compareScores(report(70, { inBand: 50, noWalls: 90 }), report(75, { inBand: 55 }), 'inBand');
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toContain('noWalls');
+  });
+  it('discards when the target measure is missing from either report', () => {
+    const missingAfter = compareScores(report(70, { inBand: 50 }), report(75, {}), 'inBand');
+    expect(missingAfter.keep).toBe(false);
+    const missingBefore = compareScores(report(70, {}), report(75, { inBand: 55 }), 'inBand');
+    expect(missingBefore.keep).toBe(false);
+    expect(missingBefore.reasons.join(' ')).toContain('inBand');
+  });
   it('exposes the gate constants', () => {
     expect(GATE).toEqual({ minGain: 0.5, tolerance: 1.0 });
   });

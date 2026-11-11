@@ -24,8 +24,11 @@ function statsFor(n: number, seeds: number): LevelStats {
 }
 
 export function scoreTidepool(opts: { from: number; to: number; seeds: number }): ScoreReport {
-  if (opts.from > opts.to) throw new Error(`scoreTidepool: empty level range ${opts.from}..${opts.to}`);
-  if (!(opts.seeds >= 1)) throw new Error(`scoreTidepool: seeds must be >= 1, got ${opts.seeds}`);
+  const { from, to, seeds } = opts;
+  if (![from, to, seeds].every(Number.isInteger)) throw new Error(`scoreTidepool: from, to and seeds must be integers, got ${from}, ${to}, ${seeds}`);
+  if (from < 1) throw new Error(`scoreTidepool: from must be >= 1, got ${from}`);
+  if (from > to) throw new Error(`scoreTidepool: empty level range ${from}..${to}`);
+  if (seeds < 1) throw new Error(`scoreTidepool: seeds must be >= 1, got ${seeds}`);
   const levels: LevelStats[] = [];
   for (let n = opts.from; n <= opts.to; n++) levels.push(statsFor(n, opts.seeds));
   const { early, minWin, wallDrop } = TIDEPOOL_BANDS;

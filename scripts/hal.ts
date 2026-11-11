@@ -49,8 +49,8 @@ if (range.from > range.to) fail('--from must not exceed --to');
 
 function printReport(r: ScoreReport) {
   console.log('level  win %  moves left %  difficulty');
-  r.levels.forEach((l, i) =>
-    console.log(`${String(range.from + i).padStart(5)}  ${(l.winRate * 100).toFixed(0).padStart(5)}  ${(l.avgMovesLeftFrac * 100).toFixed(0).padStart(12)}  ${l.difficulty.toFixed(1).padStart(10)}`));
+  r.levels.forEach((l) =>
+    console.log(`${String(l.n).padStart(5)}  ${(l.winRate * 100).toFixed(0).padStart(5)}  ${(l.avgMovesLeftFrac * 100).toFixed(0).padStart(12)}  ${l.difficulty.toFixed(1).padStart(10)}`));
   for (const [k, v] of Object.entries(r.measures)) console.log(`${k}: ${v.toFixed(1)}`);
   console.log(`fitness: ${r.fitness.toFixed(1)}`);
   if (r.hardFailures.length) console.log(`hard failures: ${r.hardFailures.join('; ')}`);
@@ -82,6 +82,9 @@ switch (command) {
     if (!values.change) fail('check needs --change "<what changed>"');
     const ledger = loadLedger(); // fail before scoring or writing anything
     const after = scoreTidepool(range);
+    if (![after.fitness, ...Object.values(after.measures)].every(Number.isFinite)) {
+      fail('score has a non-finite fitness or measure; nothing recorded');
+    }
     let base: Baseline | null = null;
     if (existsSync(baselinePath)) {
       try {
