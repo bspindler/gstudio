@@ -27,11 +27,15 @@ export function parseScoreReport(json: string): ScoreReport<unknown> {
   return checkReport(parseJson(json));
 }
 
-export function parseBaseline(json: string, game: string): Baseline {
+/** `keys` are the game's range keys (its scorer's defaults); the stored range must have exactly those. */
+export function parseBaseline(json: string, game: string, keys: string[]): Baseline {
   const b = parseJson(json);
   if (!isObj(b) || !isObj(b.range)) return bad('missing range');
-  const entries = Object.entries(b.range);
-  if (!entries.length || !entries.every(([, v]) => num(v))) bad('range must map names to finite numbers');
+  const have = Object.keys(b.range).sort();
+  const want = [...keys].sort();
+  if (have.length !== want.length || !have.every((k, i) => k === want[i]) || !Object.values(b.range).every(num)) {
+    bad(`range needs numeric ${keys.join(', ')}`);
+  }
   const report = checkReport(b.report);
   if (report.game !== game) bad(`report is for ${report.game}, not ${game}`);
   return { range: b.range as Range, report };
@@ -44,7 +48,7 @@ export function rangeMismatch(base: Range, now: Range): string | null {
   const bk = Object.keys(base).sort();
   const nk = Object.keys(now).sort();
   if (bk.length === nk.length && bk.every((k, i) => k === nk[i] && base[k] === now[k])) return null;
-  if (['from', 'to', 'seeds'].every((k) => bk.includes(k) && bk.length === 3 && nk.length === 3 && nk.includes(k))) {
+  if (bk.join() === 'from,seeds,to') {
     return `baseline was scored on levels ${base.from}–${base.to} × ${base.seeds} seeds; this run is ${now.from}–${now.to} × ${now.seeds}`;
   }
   return `baseline was scored with ${fmt(base)}; this run is ${fmt(now)}`;

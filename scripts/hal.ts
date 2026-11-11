@@ -105,7 +105,7 @@ switch (command) {
     let base: Baseline | null = null;
     if (existsSync(baselinePath)) {
       try {
-        base = parseBaseline(readFileSync(baselinePath, 'utf8'), GAME);
+        base = parseBaseline(readFileSync(baselinePath, 'utf8'), GAME, Object.keys(scorer.defaults));
       } catch (e) {
         fail((e as Error).message);
       }
@@ -114,7 +114,7 @@ switch (command) {
     const mismatch = base ? rangeMismatch(base.range, range) : null;
     const res = mismatch ? { keep: false, gain: 0, reasons: [mismatch] } : compareScores(before, after, target);
     const next = recordPass(ledger, {
-      ts: new Date().toISOString(), game: GAME, change: change, target: target,
+      ts: new Date().toISOString(), game: GAME, change, target,
       fitness: after.fitness, baseline: before ? before.fitness : null, measures: after.measures,
       kept: res.keep, reasons: res.reasons, costUsd: 0,
     });
