@@ -12,3 +12,4 @@ export * from './gate.js';
 export * from './ledger.js';
 export * from './baseline.js';
 export * from './scorers.js';
+export * from './tripwires.js';
