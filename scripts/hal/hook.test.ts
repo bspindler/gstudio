@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { createServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
@@ -49,7 +50,9 @@ afterAll(async () => { await browser?.close(); server?.close(); });
 
 describe('gearhold ?hal hook', () => {
   it('is absent without ?hal and the rAF loop runs', async () => {
+    const before = errors.length;
     const page = await browser.newPage();
+    page.on('pageerror', (e) => errors.push(String(e)));
     await page.addInitScript(() => {
       (window as any).__frames = 0;
       const raf = window.requestAnimationFrame.bind(window);
@@ -59,7 +62,7 @@ describe('gearhold ?hal hook', () => {
     expect(await page.evaluate(() => (window as any).__hal)).toBeUndefined();
     await page.waitForFunction(() => (window as any).__frames > 10);
     await page.close();
-    expect(errors).toEqual([]);
+    expect(errors.slice(before)).toEqual([]);
   });
 
   it('start + 60 idle steps advances time by about 1 s', async () => {
@@ -81,11 +84,47 @@ describe('gearhold ?hal hook', () => {
     expect(s.shotsFired).toBe(0);
     await page.close();
     expect(errors).toEqual([]);
-    expect(sent).toEqual([]); // no studio ingest or other outside requests
+    expect(sent).toEqual([]);
   });
 
-  it('forward + fire increments shotsFired', async () => {
+  it('sends nothing to any network: no fetch or beacon calls over ~5 s of play and pagehide', async () => {
+    const page = await browser.newPage();
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.addInitScript(() => {
+      const calls: string[] = [];
+      (window as any).__calls = calls;
+      window.fetch = ((u: any) => { calls.push(String(u)); return Promise.reject(new Error('stubbed')); }) as any;
+      navigator.sendBeacon = ((u: any) => { calls.push(String(u)); return true; }) as any;
+    });
+    await page.goto(`${origin}/gearhold/index.html?hal`);
+    const calls = await page.evaluate(() => {
+      const h = (window as any).__hal as Hal;
+      h.start(0);
+      for (let i = 0; i < 300; i++) h.step(1 / 60, { fwd: 1, str: 0, turn: 0.01, pitch: 0, fire: i % 20 === 0 });
+      window.dispatchEvent(new Event('pagehide'));
+      document.dispatchEvent(new Event('visibilitychange'));
+      return (window as any).__calls as string[];
+    });
+    await page.close();
+    expect(calls).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  it('forward moves along the facing, turn changes the angle, fire counts shots', async () => {
     const page = await open('?hal');
+    const r = await page.evaluate(() => {
+      const h = (window as any).__hal as Hal;
+      h.start(0);
+      const a0 = h.state();
+      const t = h.step(1 / 60, { fwd: 0, str: 0, turn: 0.25, pitch: 0, fire: false });
+      let st = t;
+      for (let i = 0; i < 30; i++) st = h.step(1 / 60, { fwd: 1, str: 0, turn: 0, pitch: 0, fire: false });
+      return { a0, turned: t, moved: st };
+    });
+    expect(r.turned.p.a - r.a0.p.a).toBeCloseTo(0.25, 6);
+    const dx = r.moved.p.x - r.turned.p.x, dy = r.moved.p.y - r.turned.p.y;
+    expect(Math.hypot(dx, dy)).toBeGreaterThan(0.3);
+    expect((dx * Math.cos(r.turned.p.a) + dy * Math.sin(r.turned.p.a)) / Math.hypot(dx, dy)).toBeGreaterThan(0.9);
     const s = await page.evaluate(() => {
       const h = (window as any).__hal as Hal;
       h.start(0);
@@ -94,6 +133,30 @@ describe('gearhold ?hal hook', () => {
       return st;
     });
     expect(s.shotsFired).toBeGreaterThan(0);
+    expect(s.hits).toBeLessThanOrEqual(s.shotsFired);
+    await page.close();
+  });
+
+  it('is deterministic per seed, even when render() is called, and step throws when not running', async () => {
+    const run = async (query: string, renderToo: boolean) => {
+      const page = await open(query);
+      const st = await page.evaluate((renderToo) => {
+        const h = (window as any).__hal as Hal;
+        h.start(0);
+        let st = h.state();
+        for (let i = 0; i < 240; i++) {
+          st = h.step(1 / 60, { fwd: 1, str: 0, turn: i % 50 === 0 ? 0.4 : 0, pitch: 0, fire: true });
+          if (renderToo && i % 7 === 0) h.render();
+        }
+        return JSON.stringify(st);
+      }, renderToo);
+      await page.close();
+      return st;
+    };
+    expect(await run('?hal=0', true)).toBe(await run('?hal=0', false));
+    const page = await open('?hal');
+    const msg = await page.evaluate(() => { try { (window as any).__hal.step(1 / 60, {}); return ''; } catch (e) { return String(e); } });
+    expect(msg).toMatch(/game not running/);
     await page.close();
   });
 

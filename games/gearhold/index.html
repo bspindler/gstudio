@@ -159,7 +159,7 @@ import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildSc
 import { buildGuns, gunTriangles } from './gun3d.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
-const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0 }; // plain counters, read only by the hook
+const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false }; // plain counters, read only by the hook
 
 const studio = createStudio({ game: 'gearhold', version: '0.1.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
@@ -664,7 +664,7 @@ function damageEnemy(e, n) {
 }
 function hurt(n, unseen) {
   if (mode !== 'play' || n <= 0) return;
-  hal.dmg += n; if (unseen) hal.unseen += n;
+  { const eff = Math.min(n, P.hp); hal.dmg += eff; if (unseen) hal.unseen += eff; } // effective damage (capped at hp left)
   P.hp = Math.max(0, P.hp - n);
   hurtFx = Math.min(1, hurtFx + n / 22);
   shake = Math.max(shake, Math.min(0.6, n / 30));
@@ -702,14 +702,14 @@ function hitscan(ang, slope, dmg) {
     if (!best && Math.random() < 0.5) smoke(ix, iy, iz, 0.16);
   }
   if (best) {
-    damageEnemy(best, dmg); hal.hits++;
+    damageEnemy(best, dmg); if (!best.prop) hal.hit = true;
     P.hitMark = 0.2; P.hitKill = P.hitKill || !!best.dead;
   }
 }
 function fire() {
   if (P.weapon === 1 && P.shells <= 0) { P.weapon = 0; say('Out of shells. Hand cannon ready.'); return; }
   const slope = viewLook();
-  P.hitKill = false; hal.shots++;
+  P.hitKill = false; hal.shots++; hal.hit = false; // hits = trigger pulls that landed on at least one enemy (not props), so hits <= shots
   if (P.weapon === 1) {
     P.shells -= 1; P.cd = 0.8; sfx.scatter(); shake = Math.max(shake, 0.25);
     for (let i = 0; i < 7; i++) hitscan(P.a + (Math.random() - 0.5) * 0.15, slope + (Math.random() - 0.5) * 0.1, 9);
@@ -719,6 +719,7 @@ function fire() {
     hitscan(P.a, slope, 24);
     P.kick += 0.03; P.tracer = 0.07;
   }
+  if (hal.hit) hal.hits++;
   P.flash = 0.07; P.recoil = 1; P.flashRot = Math.random() * 6; noiseRadius = 12;
 }
 function enemyShot(e, ang, dmg, sees) {
@@ -834,10 +835,10 @@ addEventListener('keydown', (e) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'Space') fireHeld = false; });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; fireHeld = false; if (mode === 'play') pause(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'play') pause(); });
+addEventListener('blur', () => { if (HAL) return; for (const k in keys) keys[k] = false; fireHeld = false; if (mode === 'play') pause(); });
+document.addEventListener('visibilitychange', () => { if (!HAL && document.hidden && mode === 'play') pause(); });
 addEventListener('mousemove', (e) => { if (document.pointerLockElement === view) { mouseDX += e.movementX; mouseDY += e.movementY; } });
-document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && mode === 'play' && !coarse) pause(); });
+document.addEventListener('pointerlockchange', () => { if (!HAL && !document.pointerLockElement && mode === 'play' && !coarse) pause(); });
 function lockPointer() {
   if (coarse || document.pointerLockElement) return;
   try { const r = view.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch { /* not allowed here; keyboard still works */ }
@@ -1084,9 +1085,12 @@ function title() {
 // replaced with a seeded generator (?hal=<seed>, default 1) and reseeded on every start(), so a run is
 // repeatable. Nothing here touches the network: the SDK was created in no-ingest mode above.
 if (HAL) {
-  const seedArg = Number(new URLSearchParams(location.search).get('hal')) || 1;
+  const seedRaw = new URLSearchParams(location.search).get('hal');
+  const seedArg = seedRaw !== null && seedRaw !== '' && Number.isInteger(Number(seedRaw)) ? Number(seedRaw) : 1; // any integer incl. 0; 1 when absent/empty
   const seeded = (a) => () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  Math.random = seeded(seedArg);
+  let rng = seeded(seedArg);
+  const nativeRandom = Math.random; // render() must not consume the seeded stream
+  Math.random = rng;
   const num = (v) => (Number.isFinite(v) ? v : 0);
   const state = () => ({
     mode, level, time: levelTime,
@@ -1098,7 +1102,7 @@ if (HAL) {
   });
   window.__hal = {
     start(i) {
-      Math.random = seeded(seedArg);
+      Math.random = rng = seeded(seedArg);
       hal.shots = hal.hits = hal.dmg = hal.unseen = 0;
       for (const k in keys) keys[k] = false;
       fireHeld = false; mouseDX = mouseDY = 0;
@@ -1111,20 +1115,23 @@ if (HAL) {
     },
     state,
     step(dt, input) {
-      if (mode !== 'play') return state();
+      if (mode === 'won' || mode === 'dead') return state();
+      if (mode !== 'play') throw new Error(`hal: game not running (mode=${mode})`);
+      dt = Math.min(0.05, dt);
       const inp = input || {};
       keys.KeyW = inp.fwd > 0; keys.KeyS = inp.fwd < 0;
       keys.KeyD = inp.str > 0; keys.KeyA = inp.str < 0;
       fireHeld = !!inp.fire;
+      // weapon 1 only while owned and loaded, so a policy that keeps sending 1 falls back to weapon 0 when dry
       if (inp.weapon === 0) P.weapon = 0;
-      else if (inp.weapon === 1 && P.scatter) P.weapon = 1;
+      else if (inp.weapon === 1 && P.scatter && P.shells > 0) P.weapon = 1;
       P.a += num(inp.turn);
       P.look = Math.max(-LOOK_MAX, Math.min(LOOK_MAX, P.look + num(inp.pitch)));
       update(dt);
       updateFx(dt);
       return state();
     },
-    render() { render(performance.now()); },
+    render() { Math.random = nativeRandom; try { render(performance.now()); } finally { Math.random = rng; } },
   };
 }
 // ---- end hal hook ----
