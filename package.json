@@ -22,7 +22,8 @@
     "hal": "tsx scripts/hal.ts",
     "new-game": "tsx scripts/new-game.ts",
     "build:pages": "tsx scripts/build-pages.ts",
-    "demo:1b": "tsx scripts/demo-1b.ts"
+    "demo:1b": "tsx scripts/demo-1b.ts",
+    "ci:local": "tsx scripts/ci-local.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
