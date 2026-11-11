@@ -158,7 +158,10 @@ import { createRenderer, M4 } from './render3d.js';
 import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildScenery, buildArmillary } from './models.js';
 import { buildGuns, gunTriangles } from './gun3d.js';
 
-const studio = createStudio({ game: 'gearhold', version: '0.1.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
+const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0 }; // plain counters, read only by the hook
+
+const studio = createStudio({ game: 'gearhold', version: '0.1.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -659,8 +662,9 @@ function damageEnemy(e, n) {
     if (dp < 2.6) hurt(Math.round(48 * (1 - dp / 2.6)));
   }
 }
-function hurt(n) {
+function hurt(n, unseen) {
   if (mode !== 'play' || n <= 0) return;
+  hal.dmg += n; if (unseen) hal.unseen += n;
   P.hp = Math.max(0, P.hp - n);
   hurtFx = Math.min(1, hurtFx + n / 22);
   shake = Math.max(shake, Math.min(0.6, n / 30));
@@ -698,14 +702,14 @@ function hitscan(ang, slope, dmg) {
     if (!best && Math.random() < 0.5) smoke(ix, iy, iz, 0.16);
   }
   if (best) {
-    damageEnemy(best, dmg);
+    damageEnemy(best, dmg); hal.hits++;
     P.hitMark = 0.2; P.hitKill = P.hitKill || !!best.dead;
   }
 }
 function fire() {
   if (P.weapon === 1 && P.shells <= 0) { P.weapon = 0; say('Out of shells. Hand cannon ready.'); return; }
   const slope = viewLook();
-  P.hitKill = false;
+  P.hitKill = false; hal.shots++;
   if (P.weapon === 1) {
     P.shells -= 1; P.cd = 0.8; sfx.scatter(); shake = Math.max(shake, 0.25);
     for (let i = 0; i < 7; i++) hitscan(P.a + (Math.random() - 0.5) * 0.15, slope + (Math.random() - 0.5) * 0.1, 9);
@@ -717,9 +721,9 @@ function fire() {
   }
   P.flash = 0.07; P.recoil = 1; P.flashRot = Math.random() * 6; noiseRadius = 12;
 }
-function enemyShot(e, ang, dmg) {
+function enemyShot(e, ang, dmg, sees) {
   const sp = 6;
-  shots.push({ x: e.x + Math.cos(ang) * 0.4, y: e.y + Math.sin(ang) * 0.4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, dmg, life: 4 });
+  shots.push({ x: e.x + Math.cos(ang) * 0.4, y: e.y + Math.sin(ang) * 0.4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, dmg, life: 4, unseen: !sees });
   sfx.orb();
 }
 
@@ -752,16 +756,16 @@ function updateEnemies(dt) {
       if (e.strafeT <= 0) { e.strafe = -e.strafe; e.strafeT = 1.2 + Math.random() * 1.8; }
       const want = d > 5.5 ? 1 : d < 3 ? -1 : 0;
       mx = ux * want - uy * e.strafe * 0.7; my = uy * want + ux * e.strafe * 0.7;
-      if (sees && e.cd <= 0 && d < 15) { enemyShot(e, Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.08, 8); e.cd = 1.6 + Math.random(); e.atk = 0.25; }
+      if (sees && e.cd <= 0 && d < 15) { enemyShot(e, Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.08, 8, sees); e.cd = 1.6 + Math.random(); e.atk = 0.25; }
     } else if (e.kind === 'c') {
       if (d > 0.85) { mx = ux; my = uy; }
-      else if (e.cd <= 0) { hurt(10); sfx.bite(); e.cd = 0.8; e.atk = 0.25; }
+      else if (e.cd <= 0) { hurt(10, !sees); sfx.bite(); e.cd = 0.8; e.atk = 0.25; }
     } else {
       if (d > 1.15) { mx = ux; my = uy; }
-      if (d < 1.3 && e.cd <= 0) { hurt(22); e.cd = 1.3; e.atk = 0.3; }
+      if (d < 1.3 && e.cd <= 0) { hurt(22, !sees); e.cd = 1.3; e.atk = 0.3; }
       else if (sees && e.cd <= 0 && d < 16) {
         const base = Math.atan2(dy, dx);
-        for (const off of [-0.18, 0, 0.18]) enemyShot(e, base + off, 12);
+        for (const off of [-0.18, 0, 0.18]) enemyShot(e, base + off, 12, sees);
         e.cd = 2.0; e.atk = 0.3;
       }
     }
@@ -777,7 +781,7 @@ function updateShots(dt) {
     const s = shots[i];
     s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
     addLight(s.x, s.y, 2.8, [1, 0.55, 0.2], 1);
-    if ((s.x - P.x) ** 2 + (s.y - P.y) ** 2 < 0.35 * 0.35) { hurt(s.dmg); shots.splice(i, 1); continue; }
+    if ((s.x - P.x) ** 2 + (s.y - P.y) ** 2 < 0.35 * 0.35) { hurt(s.dmg, s.unseen); shots.splice(i, 1); continue; }
     if (s.life <= 0 || solid(Math.floor(s.x), Math.floor(s.y))) {
       sparks(s.x - s.vx * 0.02, s.y - s.vy * 0.02, 0.55, 6);
       shots.splice(i, 1);
@@ -956,6 +960,7 @@ function update(dt) {
 const worldEl = $('world');
 let last = 0, shaking = false;
 function loop(now) {
+  if (HAL) { last = now; requestAnimationFrame(loop); return; } // test hook drives update(); see the hal hook block
   const dtMs = now - last, dt = Math.min(0.05, dtMs / 1000 || 0);
   last = now;
   if (mode === 'play') update(dt);
@@ -1072,6 +1077,57 @@ function title() {
   for (let i = 0; i < unlocked; i++) buttons.push([`${i + 1} · ${LEVELS[i].name}`, () => startLevel(i), true]);
   showOverlay('GEARHOLD', 'the clockwork citadel', 'Gearhold floats above a sea of clouds, kept turning by its caretaker machines. They have gone rogue and sealed the halls. You are the last repair unit online: scrap them and reach the exit arches.', '', buttons);
 }
+
+// ---- hal hook (test only; inert without ?hal) ----
+// A headless robot drives the game through window.__hal. step() runs the game's own update(dt) with the
+// controls given instead of the keyboard; the rAF loop above does nothing in this mode. Math.random is
+// replaced with a seeded generator (?hal=<seed>, default 1) and reseeded on every start(), so a run is
+// repeatable. Nothing here touches the network: the SDK was created in no-ingest mode above.
+if (HAL) {
+  const seedArg = Number(new URLSearchParams(location.search).get('hal')) || 1;
+  const seeded = (a) => () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  Math.random = seeded(seedArg);
+  const num = (v) => (Number.isFinite(v) ? v : 0);
+  const state = () => ({
+    mode, level, time: levelTime,
+    p: { x: P.x, y: P.y, a: P.a, look: P.look, hp: P.hp, shells: P.shells, key: P.key, weapon: P.weapon },
+    enemies: enemies.map((e) => ({ kind: e.kind, x: e.x, y: e.y, hp: e.hp, awake: e.awake, dead: e.dead, prop: !!e.prop })),
+    items: items.map((it) => ({ kind: it.kind, x: it.x, y: it.y })),
+    kills, foes, shotsFired: hal.shots, hits: hal.hits, damageTaken: hal.dmg, damageUnseen: hal.unseen,
+    result: mode === 'won' ? 'win' : mode === 'dead' ? 'dead' : '',
+  });
+  window.__hal = {
+    start(i) {
+      Math.random = seeded(seedArg);
+      hal.shots = hal.hits = hal.dmg = hal.unseen = 0;
+      for (const k in keys) keys[k] = false;
+      fireHeld = false; mouseDX = mouseDY = 0;
+      loadLevel(i);
+      mode = 'play';
+      overlay.hidden = true;
+      $('hud').hidden = false;
+      hudKey = '';
+      updateHud();
+    },
+    state,
+    step(dt, input) {
+      if (mode !== 'play') return state();
+      const inp = input || {};
+      keys.KeyW = inp.fwd > 0; keys.KeyS = inp.fwd < 0;
+      keys.KeyD = inp.str > 0; keys.KeyA = inp.str < 0;
+      fireHeld = !!inp.fire;
+      if (inp.weapon === 0) P.weapon = 0;
+      else if (inp.weapon === 1 && P.scatter) P.weapon = 1;
+      P.a += num(inp.turn);
+      P.look = Math.max(-LOOK_MAX, Math.min(LOOK_MAX, P.look + num(inp.pitch)));
+      update(dt);
+      updateFx(dt);
+      return state();
+    },
+    render() { render(performance.now()); },
+  };
+}
+// ---- end hal hook ----
 
 title();
 requestAnimationFrame(loop);
