@@ -21,7 +21,7 @@ export type GearholdState = {
 /** Seconds between first seeing an enemy and the first shot at it (plus a seeded 0..0.15 s jitter). */
 export const REACT = 0.25;
 /** Standard deviation of the aim offset (radians yaw; slope units for pitch). Resampled every AIM_RESAMPLE s. */
-export const AIM_ERR = 0.04;
+export const AIM_ERR = 0.08;
 /** Decisions per second; the runner steps SUBSTEPS x 1/60 s per decision. */
 export const DECIDE_HZ = 15;
 /** The runner applies each decision's input for this many 1/60 s steps; `turn` and `pitch` are PER SUBSTEP. */

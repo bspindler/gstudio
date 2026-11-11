@@ -3,7 +3,7 @@
 // Seeds: the page's Math.random comes from ?hal=<seed>; the policy rng is mulberry32(policySeed(seed, level)).
 // Hard failures (page errors, a level that won't start, NaN state) go to `errors`, never into `records`.
 // A browser that can't launch throws "browser unavailable: ..."; the CLI below exits 1 on it.
-//   npx tsx scripts/hal/gearhold-play.ts [--levels 0,1,2] [--seeds 10] [--seedBase 0] [--json]
+//   npx tsx scripts/hal/gearhold-play.ts [--levels 0,1,2] [--seeds 50] [--seedBase 0] [--json]
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
@@ -15,7 +15,7 @@ import { closeAll, launchBrowser, repo, serveGames, type StaticServer } from './
 import type { PageOutcome } from './gearhold-play-page.js';
 
 export type GearholdPlayOptions = {
-  levels: number[]; seeds: number; seedBase?: number;
+  levels: number[]; seeds?: number; seedBase?: number;
   /** Sim-time cap per run in seconds (default SIM_CAP, 240). Tests lower it to exercise 'timeout'. */
   simCap?: number;
 };
@@ -23,6 +23,8 @@ export type GearholdPlayResult = { records: PlayRecord[]; errors: string[] };
 
 /** Sim-time cap per run (seconds); hitting it ends the run as 'timeout' with a cause. */
 export const SIM_CAP = 240;
+/** Default seeds per level: 50 keeps the fitness spread over disjoint seed blocks under the gate's 0.5 (task 3 report). */
+export const DEFAULT_SEEDS = 50;
 const BATCH = 900; // decisions per page.evaluate (60 s of sim time)
 
 /** Policy rng seed for a run: separate from the page seed, distinct per (seed, level). */
@@ -73,7 +75,7 @@ async function playOne(browser: Browser, origin: string, code: string, level: nu
 }
 
 /** Plays levels x seeds (seeds seedBase .. seedBase+seeds-1). Reuses one browser and one static server. */
-export async function runGearholdPlay({ levels, seeds, seedBase = 0, simCap = SIM_CAP }: GearholdPlayOptions): Promise<GearholdPlayResult> {
+export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase = 0, simCap = SIM_CAP }: GearholdPlayOptions): Promise<GearholdPlayResult> {
   const code = await policyBundle();
   let server: StaticServer | undefined, browser: Browser | undefined;
   const records: PlayRecord[] = [], errors: string[] = [];
@@ -110,7 +112,7 @@ export function playTable(records: PlayRecord[]): string {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const arg = (k: string, d: string): string => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] ?? d : d; };
   const levels = arg('levels', '0,1,2').split(',').map(Number);
-  const seeds = Number(arg('seeds', '10')), seedBase = Number(arg('seedBase', '0'));
+  const seeds = Number(arg('seeds', String(DEFAULT_SEEDS))), seedBase = Number(arg('seedBase', '0'));
   const t0 = performance.now();
   try {
     const { records, errors } = await runGearholdPlay({ levels, seeds, seedBase });

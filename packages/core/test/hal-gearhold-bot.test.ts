@@ -33,7 +33,7 @@ const enemy = (x: number, y: number, over = {}) => ({ kind: 'd', x, y, hp: 30, a
 
 describe('constants', () => {
   it('pins the brief values', () => {
-    expect([REACT, AIM_ERR, DECIDE_HZ, SUBSTEPS, MAX_TURN]).toEqual([0.25, 0.04, 15, 4, 8]);
+    expect([REACT, AIM_ERR, DECIDE_HZ, SUBSTEPS, MAX_TURN]).toEqual([0.25, 0.08, 15, 4, 8]);
   });
   it('gaussian is seeded and roughly standard', () => {
     const a = mulberry32(1), b = mulberry32(1);
