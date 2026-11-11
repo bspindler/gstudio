@@ -2,7 +2,7 @@
 import type { ScoreReport } from './types.js';
 
 export type PlayRecord = {
-  level: number; seed: number; result: 'win' | 'dead' | 'timeout'; time: number; hpLeft: number;
+  level: number; /* 0-based, the game's own index */ seed: number; result: 'win' | 'dead' | 'timeout'; time: number; hpLeft: number;
   kills: number; foes: number; shotsFired: number; hits: number; damageTaken: number; damageUnseen: number; cause: string;
 };
 
@@ -13,7 +13,7 @@ export type LevelPlayStats = {
   unseenShare: number;          // damageUnseen / max(1, damageTaken)
 };
 
-/** Brian-reviewed bands; changing them changes what "good" means. Win rate: level 1 vs later levels. */
+/** Brian-reviewed bands; changing them changes what "good" means. Win rate: first level (index 0) vs later levels. */
 export const GEARHOLD_PLAY_BANDS = {
   firstWin: [0.8, 1.0] as [number, number],
   laterWin: [0.5, 0.9] as [number, number],
@@ -28,7 +28,8 @@ function median(xs: number[]): number {
   const m = s.length >> 1;
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
-const ratio = (r: PlayRecord): number => (r.shotsFired > 0 ? r.hits / r.shotsFired : 0);
+// Clamped: scatter pellets could make hits exceed shotsFired.
+const ratio = (r: PlayRecord): number => (r.shotsFired > 0 ? Math.max(0, Math.min(1, r.hits / r.shotsFired)) : 0);
 
 /** 100 inside [lo, hi], linear down to 0 at 0 and at 1. */
 function feelScore(r: number): number {
@@ -41,10 +42,16 @@ export function scoreGearholdPlay(records: PlayRecord[]): ScoreReport<LevelPlayS
   if (records.length === 0) throw new Error('scoreGearholdPlay: no play records');
   const B = GEARHOLD_PLAY_BANDS;
   const hardFailures: string[] = [];
-  records.forEach((r, i) => {
+  const all = records;
+  records = all.filter((r, i) => {
+    let bad = false;
     for (const k of ['level', 'seed', 'time', 'hpLeft', 'kills', 'foes', 'shotsFired', 'hits', 'damageTaken', 'damageUnseen'] as const)
-      if (!Number.isFinite(r[k])) hardFailures.push(`record ${i} (level ${r.level}, seed ${r.seed}): ${k} is not finite`);
-  });
+      if (!Number.isFinite(r[k])) { hardFailures.push(`record ${i} (level ${r.level}, seed ${r.seed}): ${k} is not finite`); bad = true; }
+    if (!['win', 'dead', 'timeout'].includes(r.result)) { hardFailures.push(`record ${i} (level ${r.level}, seed ${r.seed}): invalid result "${String(r.result)}"`); bad = true; }
+    return !bad;
+  }); // invalid records are excluded from the measures and reported as hard failures
+  if (records.length === 0)
+    return { game: 'gearhold-play', levels: [], measures: { winnable: 0, fairDamage: 0, pace: 0, feel: 0 }, fitness: 0, hardFailures };
 
   const byLevel = new Map<number, PlayRecord[]>();
   for (const r of records) byLevel.set(r.level, [...(byLevel.get(r.level) ?? []), r]);
@@ -62,9 +69,10 @@ export function scoreGearholdPlay(records: PlayRecord[]): ScoreReport<LevelPlayS
   });
 
   const pct = (num: number, den: number): number => round2((100 * num) / den);
-  const winnable = pct(levels.filter((l) => inBand(l.winRate, l.level === 1 ? B.firstWin : B.laterWin)).length, levels.length);
+  const winnable = pct(levels.filter((l) => inBand(l.winRate, l.level === 0 ? B.firstWin : B.laterWin)).length, levels.length);
   const taken = records.reduce((s, r) => s + r.damageTaken, 0);
   const unseen = records.reduce((s, r) => s + r.damageUnseen, 0);
+  // fairDamage is one-sided by definition (less unseen damage always raises it); the other measures offset that.
   const fairDamage = round2(Math.max(0, Math.min(100, 100 * (1 - unseen / Math.max(1, taken)))));
   const pace = pct(levels.filter((l) => l.medianWinTime !== null && inBand(l.medianWinTime, B.winSeconds)).length, levels.length);
   const feel = round2(feelScore(median(records.map(ratio))));

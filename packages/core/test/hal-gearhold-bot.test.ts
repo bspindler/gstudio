@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  AIM_ERR, DECIDE_HZ, REACT, createMemory, decide, gaussian, mulberry32,
+  AIM_ERR, DECIDE_HZ, MAX_TURN, REACT, SUBSTEPS, createMemory, decide, gaussian, mulberry32,
   type GearholdState,
 } from '../src/hal/gearhold-bot.js';
 
@@ -33,7 +33,7 @@ const enemy = (x: number, y: number, over = {}) => ({ kind: 'd', x, y, hp: 30, a
 
 describe('constants', () => {
   it('pins the brief values', () => {
-    expect([REACT, AIM_ERR, DECIDE_HZ]).toEqual([0.25, 0.04, 15]);
+    expect([REACT, AIM_ERR, DECIDE_HZ, SUBSTEPS, MAX_TURN]).toEqual([0.25, 0.04, 15, 4, 8]);
   });
   it('gaussian is seeded and roughly standard', () => {
     const a = mulberry32(1), b = mulberry32(1);
@@ -52,14 +52,15 @@ describe('decide: combat', () => {
   it('turns toward a visible enemy', () => {
     const s = st({ enemies: [enemy(1.5, 3.5)] }); // due south (+y), player faces +x
     const out = decide(s, ROOM, createMemory(), mulberry32(1));
-    expect(out.turn).toBeGreaterThan(0.2);
+    expect(out.turn).toBeGreaterThan(0.05);
+    expect(out.turn).toBeLessThanOrEqual(MAX_TURN / 60 + 1e-9);
     expect(out.fire).toBe(false);
   });
 
   it('ignores an enemy behind a wall', () => {
     const s = st({ enemies: [enemy(1.5, 3.5, { awake: true })] }); // directly south, wall at (1,2)
     const out = decide(s, WALLED, createMemory(), mulberry32(1));
-    // no combat turn (that would be about +0.3 toward south): the player keeps walking the route east
+    // no combat turn (a combat turn would be about +0.13 toward south): the player keeps walking the route east
     expect(out.fire).toBe(false);
     expect(Math.abs(out.turn)).toBeLessThan(0.05);
     expect(out.fwd).toBe(1);
@@ -75,7 +76,7 @@ describe('decide: combat', () => {
       if (out.fire && firstFire < 0) firstFire = t;
     }
     expect(firstFire).toBeGreaterThanOrEqual(REACT - 1e-9);
-    expect(firstFire).toBeLessThan(REACT + 0.5);
+    expect(firstFire).toBeLessThan(REACT + 0.15 + 0.2);
   });
 
   it('does not fire when misaligned even after the delay', () => {
@@ -138,7 +139,7 @@ describe('decide: routing', () => {
     const items = [{ kind: 'h', x: 1.5, y: 3.5 }];
     const low = decide(st({ p: { hp: 30 }, items }), map, createMemory(), mulberry32(1));
     const high = decide(st({ p: { hp: 90 }, items }), map, createMemory(), mulberry32(1));
-    expect(low.turn).toBeGreaterThan(0.25); // toward south
+    expect(low.turn).toBeGreaterThan(0.05); // toward south
     expect(Math.abs(high.turn)).toBeLessThan(0.05); // toward the exit, east
   });
   it('detours for shells only when the scatter cannon is owned and empty', () => {
@@ -153,7 +154,7 @@ describe('decide: routing', () => {
     const mem = createMemory();
     decide(st({ time: 0, p: { weapon: 1, shells: 2 } }), map, mem, mulberry32(1));
     const empty = decide(st({ time: 0.1, p: { weapon: 0, shells: 0 }, items }), map, mem, mulberry32(1));
-    expect(empty.turn).toBeGreaterThan(0.25);
+    expect(empty.turn).toBeGreaterThan(0.05);
     const none = decide(st({ p: { shells: 0 }, items }), map, createMemory(), mulberry32(1));
     expect(Math.abs(none.turn)).toBeLessThan(0.05);
   });
@@ -194,5 +195,139 @@ describe('decide: unstick and determinism', () => {
       return outs;
     };
     expect(run()).toEqual(run());
+  });
+});
+
+const sim = (a: number) => ({ a });
+const wrapA = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+describe('decide: kinematics (the runner applies turn and pitch SUBSTEPS times)', () => {
+  it('yaw aim converges and stays inside the fire gate', () => {
+    const mem = createMemory();
+    const rng = mulberry32(11);
+    const e = enemy(5.5, 4.5); // bearing atan2(3, 4)
+    const bearing = Math.atan2(3, 4);
+    const k = sim(0);
+    let look = 0;
+    const fires: boolean[] = [];
+    for (let i = 0; i < 30; i++) {
+      const s = st({ time: i / DECIDE_HZ, p: { a: k.a, look }, enemies: [e] });
+      s.enemies = [e];
+      const out = decide(s, [
+        '#########', '#.......#', '#.......#', '#.......#', '#.......#', '#.......#', '#########',
+      ].map((r) => r.padEnd(10, '.').slice(0, 10)), mem, rng);
+      k.a += out.turn * SUBSTEPS; look += out.pitch * SUBSTEPS;
+      if (i >= 15) fires.push(out.fire);
+      if (i >= 15) expect(Math.abs(wrapA(k.a - bearing))).toBeLessThan(0.2);
+    }
+    expect(fires.every(Boolean)).toBe(true);
+  });
+
+  it('pitch converges so the ray passes through a crawler hit sphere at distance 3', () => {
+    const mem = createMemory();
+    const rng = mulberry32(5);
+    const e = enemy(4.5, 1.5, { kind: 'c' });
+    let a = 0, look = 0;
+    for (let i = 0; i < 30; i++) {
+      const out = decide(st({ time: i / DECIDE_HZ, p: { a, look }, enemies: [e] }), ROOM, mem, rng);
+      a += out.turn * SUBSTEPS; look += out.pitch * SUBSTEPS;
+    }
+    const d = 3, slope = look;
+    const rayHeight = 0.6 + slope * d; // game: height at the target's range
+    expect(Math.abs(rayHeight - 0.17)).toBeLessThan(0.26 - 0.03);
+    expect(look).toBeLessThan(-0.05);
+  });
+});
+
+describe('decide: doors', () => {
+  const DOOR = ['##########', '#S..D....#', '##########', '##########', '##########'];
+  const eastEnemy = enemy(7.5, 1.5);
+  const seesFor = (doors: GearholdState['doors'] | undefined, key = false) => {
+    const mem = createMemory();
+    const s = st({ time: 0, p: { key }, enemies: [eastEnemy], ...(doors ? { doors } : {}) });
+    const out = decide(s, DOOR, mem, mulberry32(1));
+    return Object.keys(mem.seen).length > 0 && out.turn !== undefined;
+  };
+  it('a closed D blocks sight; an open D does not; absent doors count as closed', () => {
+    expect(seesFor([{ x: 4, y: 1, open: 0 }])).toBe(false);
+    expect(seesFor([{ x: 4, y: 1, open: 0.94 }])).toBe(false);
+    expect(seesFor([{ x: 4, y: 1, open: 0.95 }])).toBe(true);
+    expect(seesFor(undefined)).toBe(false);
+  });
+  it('K blocks sight until open, with or without the key', () => {
+    const K = ['##########', '#S..K....#', '##########', '##########', '##########'];
+    const look = (open: number, key: boolean) => {
+      const mem = createMemory();
+      decide(st({ p: { key }, enemies: [eastEnemy], doors: [{ x: 4, y: 1, open }] }), K, mem, mulberry32(1));
+      return Object.keys(mem.seen).length > 0;
+    };
+    expect(look(0, false)).toBe(false);
+    expect(look(0, true)).toBe(false); // keyed but not yet slid open
+    expect(look(1, true)).toBe(true);
+  });
+});
+
+describe('decide: engagement', () => {
+  it('keeps separate reaction timers per enemy', () => {
+    const mem = createMemory();
+    const rng = mulberry32(2);
+    const a = enemy(6.5, 1.5), b = enemy(6.5, 3.5);
+    decide(st({ time: 0, enemies: [a, { ...b, dead: true }] }), ROOM, mem, rng);
+    decide(st({ time: 1, enemies: [a, { ...b, dead: true }] }), ROOM, mem, rng);
+    decide(st({ time: 1.1, enemies: [a, b] }), ROOM, mem, rng);
+    expect(mem.seen[0]!.t).toBe(0);
+    expect(mem.seen[1]!.t).toBe(1.1);
+    expect(mem.seen[0]!.delay).not.toBe(mem.seen[1]!.delay);
+    expect(mem.seen[0]!.delay).toBeGreaterThanOrEqual(REACT);
+    expect(mem.seen[0]!.delay).toBeLessThanOrEqual(REACT + 0.15);
+  });
+
+  it('strafes while fighting at range under 6, advances beyond 6, with a seeded direction that flips', () => {
+    const run = (seed: number) => {
+      const mem = createMemory();
+      const rng = mulberry32(seed);
+      const dirs: number[] = [];
+      for (let t = 0; t < 6; t += 1 / DECIDE_HZ)
+        dirs.push(decide(st({ time: t, p: { x: 1.5 + (t % 0.2) * 5 }, enemies: [enemy(4.5, 1.5, { hp: 100 - t * 10 })] }), ROOM, mem, rng).str);
+      return dirs;
+    };
+    const a = run(1), b = run(1);
+    expect(a).toEqual(b);
+    expect(new Set(a)).toEqual(new Set([-1, 1])); // flips within 6 s
+    expect(a.every((x) => x !== 0)).toBe(true);
+    const exitRoom = ['##########', '#S.......X', '#........#', '##########', '##########'];
+    const far = decide(st({ enemies: [enemy(8.5, 2.5)] }), exitRoom, createMemory(), mulberry32(1));
+    expect(far.fwd).toBe(1);
+    expect(far.str).toBe(0);
+    // different seeds eventually pick different first directions
+    const firsts = new Set([1, 2, 3, 4, 5, 6, 7, 8].map((sd) => run(sd)[0]));
+    expect(firsts.size).toBe(2);
+  });
+
+  it('ignores a target that takes no damage for 4 s, for 3 s', () => {
+    const mem = createMemory();
+    const rng = mulberry32(2);
+    const e = enemy(4.5, 1.5);
+    for (let t = 0; t <= 4.01; t += 1 / DECIDE_HZ) decide(st({ time: t, p: { x: 1.5 + (t % 0.2) * 5 }, enemies: [e] }), ROOM, mem, rng);
+    expect(mem.ignore[0]).toBeGreaterThan(4);
+    const out = decide(st({ time: 5, enemies: [e] }), ROOM, mem, rng);
+    expect(out.fire).toBe(false);
+    expect(mem.seen[0]).toBeUndefined();
+  });
+
+  it('weapon switching has hysteresis between 4 and 5 tiles', () => {
+    const mem = createMemory();
+    const rng = mulberry32(3);
+    decide(st({ time: 0, p: { weapon: 1, shells: 5 } }), ROOM, mem, rng);
+    // already on scatter at 4.5 tiles: stay. on hand cannon at 4.5: stay.
+    expect(decide(st({ time: 0.1, p: { weapon: 1, shells: 5 }, enemies: [enemy(6, 1.5)] }), ROOM, mem, rng).weapon).toBeUndefined();
+    expect(decide(st({ time: 0.2, p: { weapon: 0, shells: 5 }, enemies: [enemy(6, 1.5)] }), ROOM, mem, rng).weapon).toBeUndefined();
+  });
+
+  it('routes around props', () => {
+    const map = ['##########', '#S.o....X#', '#........#', '##########', '##########'];
+    // prop right ahead in row 1; route should dip south: first waypoint is (2,1) then around
+    const out = decide(st({ p: { x: 2.5, y: 1.5 } }), map, createMemory(), mulberry32(1));
+    expect(out.turn).toBeGreaterThan(0.05); // turns toward +y, not straight through the prop
   });
 });
