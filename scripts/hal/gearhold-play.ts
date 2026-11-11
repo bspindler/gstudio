@@ -11,13 +11,17 @@ import type { Browser } from 'playwright';
 import { LEVELS } from '../../games/gearhold/levels.js';
 import type { PlayRecord } from '../../packages/core/src/hal/gearhold-play-score.js';
 import { scoreGearholdPlay } from '../../packages/core/src/hal/gearhold-play-score.js';
-import { closeAll, launchBrowser, repo, serveGames, type StaticServer } from './browser.js';
+import { closeAll, launchBrowser, newHalContext, repo, serveGames, type StaticServer } from './browser.js';
 import type { PageOutcome } from './gearhold-play-page.js';
 
 export type GearholdPlayOptions = {
   levels: number[]; seeds?: number; seedBase?: number;
   /** Sim-time cap per run in seconds (default SIM_CAP, 240). Tests lower it to exercise 'timeout'. */
   simCap?: number;
+  /** Wall-clock bound per page.evaluate batch in ms (default BATCH_TIMEOUT_MS); exceeding it is a 'hang' error. */
+  batchTimeoutMs?: number;
+  /** Test hook: script added to every run's context before the page loads (to inject faults). */
+  initScript?: string;
 };
 export type GearholdPlayResult = { records: PlayRecord[]; errors: string[] };
 
@@ -26,6 +30,8 @@ export const SIM_CAP = 240;
 /** Default seeds per level: 50 keeps the fitness spread over disjoint seed blocks under the gate's 0.5 (task 3 report). */
 export const DEFAULT_SEEDS = 50;
 const BATCH = 900; // decisions per page.evaluate (60 s of sim time)
+/** Wall-clock bound per batch; a normal batch takes well under 1 s. */
+export const BATCH_TIMEOUT_MS = 30_000;
 
 /** Policy rng seed for a run: separate from the page seed, distinct per (seed, level). */
 export function policySeed(seed: number, level: number): number {
@@ -42,25 +48,48 @@ export function policyBundle(): Promise<string> {
   return bundle;
 }
 
-async function playOne(browser: Browser, origin: string, code: string, level: number, seed: number, cap: number): Promise<PlayRecord | string> {
+/** Rejects with HANG after `ms` of wall time. */
+const HANG = 'hang';
+function bounded<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([p, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(HANG)), ms); })])
+    .finally(() => clearTimeout(timer));
+}
+
+type RunOpts = { cap: number; batchTimeoutMs: number; initScript?: string };
+
+async function playOne(browser: Browser, origin: string, code: string, level: number, seed: number, o: RunOpts): Promise<PlayRecord | string> {
   const tag = `level ${level} seed ${seed}`;
   const map = LEVELS[level]?.map as string[] | undefined;
   if (!map) return `${tag}: no such level`;
-  const page = await browser.newPage();
+  const { context, blockedRequests } = await newHalContext(browser);
   const pageErrors: string[] = [];
-  page.on('pageerror', (e) => pageErrors.push(String(e)));
-  page.on('crash', () => pageErrors.push('page crashed'));
   try {
+    if (o.initScript) await context.addInitScript({ content: o.initScript });
+    const page = await context.newPage();
+    page.on('pageerror', (e) => pageErrors.push(String(e)));
+    page.on('crash', () => pageErrors.push('page crashed'));
+    const failed = (): string => (pageErrors.length ? `${tag}: page error: ${pageErrors[0]}`
+      : blockedRequests.length ? `${tag}: outbound request blocked: ${blockedRequests[0]}` : '');
     await page.goto(`${origin}/gearhold/index.html?hal=${seed}`);
     if ((await page.evaluate(() => (globalThis as any).document.getElementById('tag')?.textContent)) === 'needs WebGL 2')
       return `${tag}: page reports no WebGL 2`;
     await page.addScriptTag({ content: code });
-    await page.evaluate(([l, m, p, c]) => (globalThis as any).__halPlay.begin(l, m, p, c), [level, map, policySeed(seed, level), cap] as const);
+    if (failed()) return failed();
+    await page.evaluate(([l, m, p, c]) => (globalThis as any).__halPlay.begin(l, m, p, c), [level, map, policySeed(seed, level), o.cap] as const);
     let out: PageOutcome;
     do {
-      out = await page.evaluate((n) => (globalThis as any).__halPlay.batch(n), BATCH);
-      if (pageErrors.length) return `${tag}: page error: ${pageErrors[0]}`;
+      try {
+        out = await bounded(page.evaluate((n) => (globalThis as any).__halPlay.batch(n), BATCH), o.batchTimeoutMs);
+      } catch (e) {
+        if ((e as Error)?.message !== HANG) throw e;
+        return `${tag}: hang: a ${BATCH}-decision batch took over ${o.batchTimeoutMs / 1000} s wall`;
+      }
+      if (failed()) return failed();
     } while (!out.done);
+    // Let queued page tasks run (an async error thrown during the last batch) before trusting the outcome.
+    await bounded(page.evaluate(() => new Promise((r) => setTimeout(r, 0))), o.batchTimeoutMs).catch(() => {});
+    if (failed()) return failed();
     if (!out.ok) return `${tag}: ${out.error}`;
     const s = out.state;
     return {
@@ -70,12 +99,14 @@ async function playOne(browser: Browser, origin: string, code: string, level: nu
   } catch (e) {
     return `${tag}: ${String((e as Error)?.message ?? e).split('\n')[0]}`;
   } finally {
-    await page.close().catch(() => {});
+    await context.close().catch(() => {}); // also ends a page stuck in an endless evaluate
   }
 }
 
 /** Plays levels x seeds (seeds seedBase .. seedBase+seeds-1). Reuses one browser and one static server. */
-export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase = 0, simCap = SIM_CAP }: GearholdPlayOptions): Promise<GearholdPlayResult> {
+export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase = 0, simCap = SIM_CAP, batchTimeoutMs = BATCH_TIMEOUT_MS, initScript }: GearholdPlayOptions): Promise<GearholdPlayResult> {
+  if (!Number.isInteger(seeds) || seeds < 1 || !Number.isInteger(seedBase) || seedBase < 0)
+    throw new Error(`runGearholdPlay: seeds must be a positive integer and seedBase a non-negative integer (got ${seeds}, ${seedBase})`);
   const code = await policyBundle();
   let server: StaticServer | undefined, browser: Browser | undefined;
   const records: PlayRecord[] = [], errors: string[] = [];
@@ -84,7 +115,7 @@ export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase 
     server = await serveGames();
     for (const level of levels)
       for (let seed = seedBase; seed < seedBase + seeds; seed++) {
-        const r = await playOne(browser, server.origin, code, level, seed, simCap);
+        const r = await playOne(browser, server.origin, code, level, seed, { cap: simCap, batchTimeoutMs, initScript });
         if (typeof r === 'string') errors.push(r); else records.push(r);
       }
   } finally {
@@ -110,21 +141,31 @@ export function playTable(records: PlayRecord[]): string {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const arg = (k: string, d: string): string => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] ?? d : d; };
-  const levels = arg('levels', '0,1,2').split(',').map(Number);
-  const seeds = Number(arg('seeds', String(DEFAULT_SEEDS))), seedBase = Number(arg('seedBase', '0'));
+  const arg = (k: string, d: string): string => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] ?? '' : d; };
+  const int = (s: string, min: number): number | null => (/^\d+$/.test(s) && Number(s) >= min ? Number(s) : null);
+  const levels = arg('levels', '0,1,2').split(',').map((x) => int(x.trim(), 0));
+  const seeds = int(arg('seeds', String(DEFAULT_SEEDS)), 1), seedBase = int(arg('seedBase', '0'), 0);
+  if (levels.some((l) => l === null) || seeds === null || seedBase === null) {
+    console.error('usage: --levels <non-negative integers, comma separated> --seeds <positive integer> --seedBase <non-negative integer>');
+    process.exit(1);
+  }
   const t0 = performance.now();
   try {
-    const { records, errors } = await runGearholdPlay({ levels, seeds, seedBase });
+    const { records, errors } = await runGearholdPlay({ levels: levels as number[], seeds, seedBase });
     const secs = (performance.now() - t0) / 1000;
+    if (errors.length) {
+      // A run with hard failures has no score: print only the failures.
+      for (const e of errors) console.error(`hard failure: ${e}`);
+      console.error(`${errors.length} hard failure(s), ${records.length} runs completed; no score`);
+      process.exit(1);
+    }
     if (process.argv.includes('--json')) console.log(JSON.stringify({ records, errors, secs }, null, 1));
     else {
       for (const r of records) console.log(`L${r.level} s${r.seed} ${r.result} ${r.time.toFixed(1)}s hp ${r.hpLeft} kills ${r.kills}/${r.foes} hits ${r.hits}/${r.shotsFired} dmg ${r.damageTaken} (${r.damageUnseen} unseen) | ${r.cause}`);
       if (records.length) console.log(`\n${playTable(records)}`);
       console.log(`\n${records.length} runs in ${secs.toFixed(1)} s wall`);
     }
-    for (const e of errors) console.error(`hard failure: ${e}`);
-    process.exit(errors.length ? 1 : 0);
+    process.exit(0);
   } catch (e) {
     console.error(String((e as Error)?.message ?? e));
     process.exit(1);

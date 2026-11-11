@@ -2,7 +2,7 @@
 import type { Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LEVELS } from '../../games/gearhold/levels.js';
-import { closeAll, launchBrowser, serveGames, type StaticServer } from './browser.js';
+import { closeAll, launchBrowser, newHalContext, serveGames, type StaticServer } from './browser.js';
 import { policyBundle, policySeed, runGearholdPlay } from './gearhold-play.js';
 
 describe('runGearholdPlay', () => {
@@ -12,6 +12,9 @@ describe('runGearholdPlay', () => {
     expect(a.errors).toEqual([]);
     expect(a.records).toHaveLength(4);
     expect(b).toEqual(a);
+    // Different seeds must give different runs (the page seed and policy seed both reach the run).
+    const [s3, s4] = a.records.filter((r) => r.level === 2);
+    expect({ ...s3, seed: 0 }).not.toEqual({ ...s4, seed: 0 });
     for (const r of a.records) {
       expect(['win', 'dead', 'timeout']).toContain(r.result);
       expect(r.cause).not.toBe('');
@@ -33,8 +36,72 @@ describe('runGearholdPlay', () => {
     expect(errors).toEqual(['level 99 seed 0: no such level']);
   });
 
+  // Fault injection: wrap __hal.step as soon as the hook installs it.
+  const wrapStep = (body: string): string => `
+    Object.defineProperty(window, '__hal', { configurable: true, set(v) {
+      const step = v.step; let n = 0;
+      v.step = (dt, i) => { n++; ${body}; return step(dt, i); };
+      Object.defineProperty(window, '__hal', { value: v, writable: true, configurable: true });
+    } });`;
+
+  it('a page error is a hard failure, not a record', async () => {
+    const { records, errors } = await runGearholdPlay({
+      levels: [0], seeds: 1, initScript: wrapStep("if (n === 50) setTimeout(() => { throw new Error('injected boom'); })"),
+    });
+    expect(records).toEqual([]);
+    expect(errors).toEqual([expect.stringMatching(/^level 0 seed 0: page error: .*injected boom/)]);
+  });
+
+  it('step() throwing is a hard failure, not a record', async () => {
+    const { records, errors } = await runGearholdPlay({
+      levels: [0], seeds: 1, initScript: wrapStep("if (n === 50) throw new Error('injected step failure')"),
+    });
+    expect(records).toEqual([]);
+    expect(errors).toEqual([expect.stringMatching(/^level 0 seed 0: .*injected step failure/)]);
+  });
+
+  it('a batch that never returns is a hang, bounded by wall time', async () => {
+    const t0 = performance.now();
+    const { records, errors } = await runGearholdPlay({
+      levels: [0], seeds: 1, batchTimeoutMs: 2000, initScript: wrapStep('if (n === 50) for (;;) {}'),
+    });
+    expect(records).toEqual([]);
+    expect(errors).toEqual([expect.stringMatching(/^level 0 seed 0: hang: /)]);
+    expect(performance.now() - t0).toBeLessThan(20_000);
+  });
+
+  it('rejects seeds that are not positive integers', async () => {
+    await expect(runGearholdPlay({ levels: [0], seeds: 0 })).rejects.toThrow(/positive integer/);
+  });
+
   it('policy seeds differ per seed and per level', () => {
     expect(new Set([policySeed(0, 0), policySeed(1, 0), policySeed(0, 1), policySeed(1, 1)]).size).toBe(4);
+  });
+});
+
+describe('newHalContext', () => {
+  let server: StaticServer, browser: Browser;
+  beforeAll(async () => { server = await serveGames(); browser = await launchBrowser(); });
+  afterAll(() => closeAll(browser, server));
+
+  it('blocks and records non-local requests; nothing leaves the machine; local pages load', async () => {
+    const { context, blockedRequests, consoleErrors } = await newHalContext(browser);
+    const page = await context.newPage();
+    const external: string[] = [];
+    page.on('response', (r) => { if (!r.url().startsWith(server.origin)) external.push(r.url()); });
+    page.on('requestfinished', (r) => { if (!r.url().startsWith(server.origin)) external.push(r.url()); });
+    await page.goto(`${server.origin}/gearhold/index.html?hal=1`);
+    const fetched = await page.evaluate(() => fetch('https://example.com/').then(() => 'ok', (e) => `rejected: ${e}`));
+    await page.evaluate(() => new Promise<void>((r) => {
+      const img = (globalThis as any).document.createElement('img');
+      img.onerror = () => r(); img.onload = () => r();
+      img.src = 'https://example.com/pixel.png';
+    }));
+    await context.close();
+    expect(fetched).toMatch(/^rejected/);
+    expect(blockedRequests).toEqual(['https://example.com/', 'https://example.com/pixel.png']);
+    expect(external).toEqual([]);
+    expect(consoleErrors.filter((m) => /ERR_BLOCKED|ERR_FAILED/.test(m))).toEqual([]);
   });
 });
 
