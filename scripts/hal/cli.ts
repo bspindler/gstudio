@@ -1,4 +1,4 @@
-// The Hal CLI proper: score, baseline, check, status, screens. scripts/hal.ts wires the real scorers and directories;
+// The Hal CLI proper: score, baseline, check, status, screens, controls. scripts/hal.ts wires the real scorers and directories;
 // tests call main() with fakes. Output goes through console; main() returns the exit code instead of exiting.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -9,11 +9,15 @@ import {
 } from '@studio/core/hal';
 
 export type ScreensRun = { game: string; shots: string[]; errors: string[]; reached: boolean; notes: string[]; blockedRequests: string[] };
+/** Mirrors scripts/hal/controls.ts ControlCheck (kept here so the CLI never imports Playwright). */
+export type ControlCheckRow = { game: string; check: string; ok: boolean; detail: string; skipped?: string };
 export type CliDeps = {
   scorers: Record<string, Scorer>;
   halDir: string;
   /** Loaded lazily so score/check never import Playwright. */
   runScreens?: (o: { outDir?: string }) => Promise<ScreensRun[]>;
+  /** Loaded lazily too: the real-input controls check (scripts/hal/controls.ts). */
+  runControlsCheck?: () => Promise<ControlCheckRow[]>;
 };
 
 class Exit extends Error {
@@ -54,7 +58,7 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
   }
 }
 
-async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Promise<number> {
+async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck }: CliDeps): Promise<number> {
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
   // Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
@@ -100,7 +104,21 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
     return bad ? 1 : 0;
   }
 
-  // controls: wired after Task 6 merges (scripts/hal/controls.ts). Intentionally absent here.
+  if (command === 'controls') {
+    if (!runControlsCheck) return fail('controls is not available here');
+    for (const k of Object.keys(values)) if (values[k] !== undefined) fail(`--${k} does not apply to controls`);
+    const checks = await runControlsCheck();
+    if (checks.length === 0) return fail('controls produced no checks');
+    let failed = 0, skipped = 0;
+    for (const c of checks) {
+      const status = c.skipped ? `skipped: ${c.skipped}` : c.ok ? 'ok' : 'FAIL';
+      if (c.skipped) skipped++;
+      else if (!c.ok) failed++;
+      console.log(`${status.startsWith('skipped') ? status : status.padEnd(4)}  ${c.game}: ${c.check}${c.detail ? ` (${c.detail})` : ''}`);
+    }
+    console.log(`controls: ${checks.length - failed - skipped} ok, ${failed} failed, ${skipped} skipped`);
+    return failed ? 1 : 0;
+  }
 
   let scorer: Scorer;
   try {
@@ -176,6 +194,6 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
       return res.keep ? 0 : 2;
     }
     default:
-      return fail('usage: npm run hal -- <score|baseline|check|status|screens> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
+      return fail('usage: npm run hal -- <score|baseline|check|status|screens|controls> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
   }
 }

@@ -1,4 +1,4 @@
-// npm run hal: score the game, keep a baseline, gate a change, show the ledger, take screenshots. Writes only under .data/hal/.
+// npm run hal: score the game, keep a baseline, gate a change, show the ledger, take screenshots, check real controls. Writes only under .data/hal/.
 // The logic lives in scripts/hal/cli.ts; this wires the real scorers. Core never imports Playwright, so the browser-backed
 // gearhold-play scorer is built here from core's gearholdPlayScorer and a lazily loaded runner.
 import { join } from 'node:path';
@@ -16,5 +16,6 @@ const code = await main(process.argv.slice(2), {
   scorers,
   halDir: join(repo, '.data', 'hal'),
   runScreens: async (o) => (await import('./hal/screens.js')).runScreens(o),
+  runControlsCheck: async () => (await import('./hal/controls.js')).runControlsCheck(),
 });
 process.exit(code);

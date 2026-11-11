@@ -961,7 +961,7 @@ function update(dt) {
 const worldEl = $('world');
 let last = 0, shaking = false;
 function loop(now) {
-  if (HAL) { last = now; requestAnimationFrame(loop); return; } // test hook drives update(); see the hal hook block
+  if (HAL && !hal.live) { last = now; requestAnimationFrame(loop); return; } // test hook drives update(); see the hal hook block
   const dtMs = now - last, dt = Math.min(0.05, dtMs / 1000 || 0);
   last = now;
   if (mode === 'play') update(dt);
@@ -1084,7 +1084,10 @@ function title() {
 // controls given instead of the keyboard; the rAF loop above does nothing in this mode. Math.random is
 // replaced with a seeded generator (?hal=<seed>, default 1) and reseeded on every start(), so a run is
 // repeatable. Nothing here touches the network: the SDK was created in no-ingest mode above.
+// ?hal=<seed>&live is the real-input mode for the controls check: the rAF loop above runs update() with the
+// real keyboard, mouse and touch, pauses stay suppressed, state() works, and step() throws.
 if (HAL) {
+  hal.live = new URLSearchParams(location.search).has('live');
   const seedRaw = new URLSearchParams(location.search).get('hal');
   const seedArg = seedRaw !== null && seedRaw !== '' && Number.isInteger(Number(seedRaw)) ? Number(seedRaw) : 1; // any integer incl. 0; 1 when absent/empty
   const seeded = (a) => () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -1115,7 +1118,15 @@ if (HAL) {
       updateHud();
     },
     state,
+    // Precondition, not input: own the scatter cannon (as its pickup does, minus the auto-switch) so the real
+    // swap inputs (Digit1 / Digit2, tapping SWAP) can be checked from a level start. Hal mode only.
+    grant(item, shells = 8) {
+      if (item !== 'scatter') throw new Error(`hal: cannot grant ${item}`);
+      P.scatter = true; P.shells = Math.max(0, Math.min(50, Math.floor(num(shells))));
+      hudKey = ''; updateHud();
+    },
     step(dt, input) {
+      if (hal.live) throw new Error('hal: step() is unavailable in live mode (the rAF loop runs update with real input)');
       if (mode === 'won' || mode === 'dead') return state();
       if (mode !== 'play') throw new Error(`hal: game not running (mode=${mode})`);
       dt = Math.min(0.05, dt);

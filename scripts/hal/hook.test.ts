@@ -42,6 +42,53 @@ describe('gearhold ?hal hook', () => {
     expect(errors.slice(before)).toEqual([]);
   });
 
+  it('&live: the rAF loop runs update (state().time advances) and step() throws', async () => {
+    const before = errors.length;
+    const page = await open('?hal=1&live');
+    await page.evaluate(() => (window as any).__hal.start(0));
+    const t0 = await page.evaluate(() => (window as any).__hal.state().time);
+    await page.waitForFunction((t0) => (window as any).__hal.state().time > t0 + 0.2, t0);
+    expect(await page.evaluate(() => (window as any).__hal.state().mode)).toBe('play');
+    const msg = await page.evaluate(() => { try { (window as any).__hal.step(1 / 60, {}); return ''; } catch (e) { return String(e); } });
+    expect(msg).toMatch(/live mode/);
+    // pauses stay suppressed: a blur and a visibility change leave the game running
+    await page.evaluate(() => { window.dispatchEvent(new Event('blur')); document.dispatchEvent(new Event('visibilitychange')); });
+    expect(await page.evaluate(() => (window as any).__hal.state().mode)).toBe('play');
+    await page.close();
+    expect(errors.slice(before)).toEqual([]);
+  });
+
+  it('grant("scatter") owns the scatter cannon with shells and rejects other items', async () => {
+    const before = errors.length;
+    const page = await open('?hal=1');
+    const r = await page.evaluate(() => {
+      const h = (window as any).__hal;
+      h.start(0);
+      const before = h.state().p;
+      h.grant('scatter', 5);
+      const after = h.state().p;
+      let msg = '';
+      try { h.grant('key'); } catch (e) { msg = String(e); }
+      const st = h.step(1 / 60, { fwd: 0, str: 0, turn: 0, pitch: 0, fire: false, weapon: 1 });
+      return { before, after, msg, weapon: st.p.weapon };
+    });
+    expect(r.before).toMatchObject({ shells: 0, weapon: 0 });
+    expect(r.after).toMatchObject({ shells: 5, weapon: 0 });
+    expect(r.weapon).toBe(1);
+    expect(r.msg).toMatch(/cannot grant key/);
+    await page.evaluate(() => (window as any).__hal.render()); // the HUD and the scatter gun model render cleanly
+    await page.close();
+    expect(errors.slice(before)).toEqual([]);
+  });
+
+  it('without &live, the rAF loop does not advance time', async () => {
+    const page = await open('?hal=1');
+    await page.evaluate(() => (window as any).__hal.start(0));
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as any).__hal.state().time)).toBe(0);
+    await page.close();
+  });
+
   it('start + 60 idle steps advances time by about 1 s', async () => {
     const page = await open('?hal');
     const s = await page.evaluate((idle) => {
