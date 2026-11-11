@@ -46,7 +46,7 @@ const gearhold: Scorer = {
 export const SCORERS: Record<string, Scorer> = { 'tidepool-pals': tidepool, hyperline, gearhold };
 
 /** Plays `levels` levels (0-based, 0..levels-1) x `seeds` seeds in a browser; injected so core never imports Playwright. */
-export type GearholdPlayRunner = (o: { levels: number[]; seeds: number }) => Promise<{ records: PlayRecord[]; errors: string[] }>;
+export type GearholdPlayRunner = (o: { levels: number[]; seeds: number; seedBase: number }) => Promise<{ records: PlayRecord[]; errors: string[] }>;
 
 /**
  * The browser-backed Gearhold scorer. Runner errors (page errors, hang, "browser unavailable:", blocked outbound
@@ -55,14 +55,17 @@ export type GearholdPlayRunner = (o: { levels: number[]; seeds: number }) => Pro
 export function gearholdPlayScorer(run: GearholdPlayRunner): Scorer {
   return {
     game: 'gearhold-play',
-    defaults: { levels: 3, seeds: 50 },
+    defaults: { levels: 3, seeds: 50, seedBase: 0 },
     validate(r) {
       for (const k of ['levels', 'seeds']) if (!Number.isInteger(r[k]) || (r[k] as number) < 1) return `--${k} must be a positive integer`;
+      if (!Number.isInteger(r.seedBase) || (r.seedBase as number) < 0) return '--seed-base must be a non-negative integer';
       return null;
     },
     async score(r) {
-      const { records, errors } = await run({ levels: Array.from({ length: r.levels as number }, (_, i) => i), seeds: r.seeds as number });
+      const { records, errors } = await run({ levels: Array.from({ length: r.levels as number }, (_, i) => i), seeds: r.seeds as number, seedBase: r.seedBase as number });
       if (errors.length) throw new Error(`gearhold-play hard failure (${errors.length}): ${errors.join('; ')}`);
+      const want = (r.levels as number) * (r.seeds as number);
+      if (records.length !== want) throw new Error(`gearhold-play: runner returned ${records.length} records, expected ${want}; no score`);
       return scoreGearholdPlay(records);
     },
   };

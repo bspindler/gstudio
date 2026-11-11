@@ -9,7 +9,8 @@ describe('runScreens', () => {
     const outDir = await mkdtemp(join(tmpdir(), 'hal-screens-'));
     const results = await runScreens({ outDir });
     expect(results.map((r) => r.game).sort()).toEqual(['gearhold', 'hyperline', 'tidepool-pals']);
-    expect(results.find((r) => r.game === 'tidepool-pals')!.blockedRequests.some((u) => u.includes('fonts.googleapis.com'))).toBe(true);
+    // Fonts are bundled in each game folder, so no game should try to reach another host.
+    for (const r of results) expect(r.blockedRequests, `${r.game} outbound requests`).toEqual([]);
     for (const r of results) {
       expect(r.errors.filter((e) => /ERR_FAILED|ERR_BLOCKED/.test(e)), `${r.game} blocked-request noise`).toEqual([]);
       expect(r.shots.length, r.game).toBeGreaterThanOrEqual(2);

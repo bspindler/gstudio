@@ -40,22 +40,34 @@ describe('hal scorers', () => {
     it('is not in the core registry (core cannot import Playwright) and has 3 levels x 50 seeds', () => {
       expect(Object.keys(SCORERS)).not.toContain('gearhold-play');
       const s = gearholdPlayScorer(async () => ({ records: [], errors: [] }));
-      expect(s.defaults).toEqual({ levels: 3, seeds: 50 });
-      expect(s.validate({ levels: 3, seeds: 50 })).toBeNull();
-      expect(s.validate({ levels: 0, seeds: 50 })).toBe('--levels must be a positive integer');
-      expect(s.validate({ levels: 3, seeds: 1.5 })).toBe('--seeds must be a positive integer');
+      expect(s.defaults).toEqual({ levels: 3, seeds: 50, seedBase: 0 });
+      expect(s.validate({ levels: 3, seeds: 50, seedBase: 0 })).toBeNull();
+      expect(s.validate({ levels: 0, seeds: 50, seedBase: 0 })).toBe('--levels must be a positive integer');
+      expect(s.validate({ levels: 3, seeds: 1.5, seedBase: 0 })).toBe('--seeds must be a positive integer');
     });
     it('awaits the runner with levels 0..n-1 and scores its records', async () => {
       const calls: unknown[] = [];
       const s = gearholdPlayScorer(async (o) => { calls.push(o); return { records: o.levels.flatMap((l) => [rec(l, 0), rec(l, 1)]), errors: [] }; });
-      const r = await s.score({ levels: 2, seeds: 2 });
-      expect(calls).toEqual([{ levels: [0, 1], seeds: 2 }]);
+      const r = await s.score({ levels: 2, seeds: 2, seedBase: 0 });
+      expect(calls).toEqual([{ levels: [0, 1], seeds: 2, seedBase: 0 }]);
       expect(r.game).toBe('gearhold-play');
       expect(Number.isFinite(r.fitness)).toBe(true);
     });
+    it('validates --seed-base and passes it to the runner', async () => {
+      const calls: unknown[] = [];
+      const s = gearholdPlayScorer(async (o) => { calls.push(o); return { records: [rec(0, o.seedBase)], errors: [] }; });
+      expect(s.validate({ levels: 1, seeds: 1, seedBase: -1 })).toBe('--seed-base must be a non-negative integer');
+      expect(s.validate({ levels: 1, seeds: 1, seedBase: 1.5 })).toBe('--seed-base must be a non-negative integer');
+      await s.score({ levels: 1, seeds: 1, seedBase: 50 });
+      expect(calls).toEqual([{ levels: [0], seeds: 1, seedBase: 50 }]);
+    });
+    it('rejects a partial record set (levels x seeds expected)', async () => {
+      const s = gearholdPlayScorer(async () => ({ records: [rec(0, 0)], errors: [] }));
+      await expect(s.score({ levels: 1, seeds: 2, seedBase: 0 })).rejects.toThrow(/returned 1 records, expected 2/);
+    });
     it('rejects on runner errors instead of returning a score', async () => {
       const s = gearholdPlayScorer(async () => ({ records: [rec(0, 0)], errors: ['level 0 seed 1: hang: a batch took too long'] }));
-      await expect(s.score({ levels: 1, seeds: 2 })).rejects.toThrow(/hard failure \(1\): level 0 seed 1: hang/);
+      await expect(s.score({ levels: 1, seeds: 2, seedBase: 0 })).rejects.toThrow(/hard failure \(1\): level 0 seed 1: hang/);
     });
     it('scorerFor accepts an extended registry', () => {
       const s = gearholdPlayScorer(async () => ({ records: [], errors: [] }));

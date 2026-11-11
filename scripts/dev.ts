@@ -33,6 +33,8 @@ site.use('/sdk/*', serveStatic({ root: `${root}/packages`, rewriteRequestPath: (
 const shelf = JSON.stringify(games.map(({ slug, title, genre, version, targetSegment }) =>
   ({ slug, title, genre, version, targetSegment }))).replace(/</g, '\\u003c');
 site.get('/', (c) => c.html(readFileSync(join(repo, 'scripts/site/index.html'), 'utf8').replace('/*__GAMES__*/[]', shelf)));
+// The shelf page's bundled fonts (SIL OFL, see scripts/site/fonts/SOURCES.md). '_site' can't clash with a game slug.
+site.use('/_site/fonts/*', serveStatic({ root: `${root}/scripts`, rewriteRequestPath: (p) => p.replace(/^\/_site/, '/site') }));
 site.use('/*', serveStatic({ root: `${root}/games` }));
 serve({ fetch: site.fetch, port: 5174, hostname: bind });
 
