@@ -58,13 +58,15 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
   // Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
+  // Flag names are kebab-case (seedBase -> --seed-base).
+  const flag = (k: string) => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
   const numericKeys = [...new Set(Object.values(scorers).flatMap((s) => Object.keys(s.defaults)))];
   let values: Record<string, string | boolean | undefined>;
   try {
     ({ values } = parseArgs({
       args: rest,
       options: {
-        ...Object.fromEntries(numericKeys.map((k) => [k, { type: 'string' as const }])),
+        ...Object.fromEntries(numericKeys.map((k) => [flag(k), { type: 'string' as const }])),
         game: { type: 'string' }, json: { type: 'boolean' }, change: { type: 'string' }, target: { type: 'string' }, out: { type: 'string' },
       },
     }));
@@ -81,19 +83,11 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
     }
   }
 
-  if (command === 'status') {
-    const ledger = loadLedger();
-    console.log(ledgerMarkdown(ledger, 10));
-    console.log(`Tidepool stagnated: ${stagnated(ledger, 'tidepool-pals') ? 'yes' : 'no'}`);
-    const others = new Set([...ledger.passes.map((p) => p.game), ...Object.keys(ledger.streak)]);
-    others.delete('tidepool-pals');
-    for (const g of [...others].sort()) console.log(`${g} stagnated: ${stagnated(ledger, g) ? 'yes' : 'no'}`);
-    return 0;
-  }
-
   if (command === 'screens') {
     if (!runScreens) return fail('screens is not available here');
+    for (const k of Object.keys(values)) if (values[k] !== undefined && k !== 'out') fail(`--${k} does not apply to screens`);
     const results = await runScreens({ outDir: values.out as string | undefined });
+    if (results.length === 0) return fail('screens produced no results');
     let bad = false;
     for (const r of results) {
       const ok = r.reached && r.errors.length === 0;
@@ -108,23 +102,21 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
 
   // controls: wired after Task 6 merges (scripts/hal/controls.ts). Intentionally absent here.
 
-  if (!['score', 'baseline', 'check'].includes(command ?? '')) {
-    return fail('usage: npm run hal -- <score|baseline|check|status|screens> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
-  }
   let scorer: Scorer;
   try {
     scorer = scorerFor((values.game as string | undefined) ?? 'tidepool-pals', scorers);
   } catch (e) {
     return fail((e as Error).message);
   }
+  if (values.out !== undefined) fail('--out applies only to screens');
   const GAME = scorer.game;
   const baselinePath = join(halDir, 'baseline', `${GAME}.json`);
   const range: Range = {};
   for (const k of numericKeys) {
-    if (values[k] !== undefined && !(k in scorer.defaults)) fail(`--${k} does not apply to ${GAME}`);
+    if (values[flag(k)] !== undefined && !(k in scorer.defaults)) fail(`--${flag(k)} does not apply to ${GAME}`);
   }
   for (const [k, d] of Object.entries(scorer.defaults)) {
-    const v = values[k] as string | undefined;
+    const v = values[flag(k)] as string | undefined;
     range[k] = v === undefined ? d : Number(v);
   }
   const rangeError = scorer.validate(range);
@@ -133,6 +125,15 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
   const target = values.target as string | undefined;
 
   switch (command) {
+    case 'status': {
+      const ledger = loadLedger();
+      console.log(ledgerMarkdown(ledger, 10));
+      console.log(`Tidepool stagnated: ${stagnated(ledger, 'tidepool-pals') ? 'yes' : 'no'}`);
+      const others = new Set([...ledger.passes.map((p) => p.game), ...Object.keys(ledger.streak)]);
+      others.delete('tidepool-pals');
+      for (const g of [...others].sort()) console.log(`${g} stagnated: ${stagnated(ledger, g) ? 'yes' : 'no'}`);
+      return 0;
+    }
     case 'score': {
       // A scorer that throws (browser unavailable, page errors, hang) is a hard failure: exit 1, nothing compared.
       const r = await scorer.score(range);
@@ -146,7 +147,7 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
       console.log(`baseline written: ${baselinePath} (fitness ${r.fitness.toFixed(1)})`);
       return 0;
     }
-    default: { // check
+    case 'check': {
       if (!change) fail('check needs --change "<what changed>"');
       const ledger = loadLedger(); // fail before scoring or writing anything
       const after = await scorer.score(range);
@@ -174,5 +175,7 @@ async function run(argv: string[], { scorers, halDir, runScreens }: CliDeps): Pr
       console.log(`${res.keep ? 'KEEP' : 'DISCARD'} (gain ${res.gain.toFixed(2)}): ${res.reasons.join('; ')}`);
       return res.keep ? 0 : 2;
     }
+    default:
+      return fail('usage: npm run hal -- <score|baseline|check|status|screens> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
   }
 }
