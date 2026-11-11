@@ -7,7 +7,6 @@ import type { AddressInfo } from 'node:net';
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type ConsoleMessage } from 'playwright';
 
 export const repo = join(import.meta.dirname, '..', '..');
-const GAMES = join(repo, 'games'), SDK = join(repo, 'packages', 'sdk');
 const TYPES: Record<string, string> = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json',
@@ -19,15 +18,19 @@ const HAL_SERVER_PORTS = new Set<number>();
 
 export type StaticServer = { server: Server; origin: string; close(): Promise<void> };
 
-/** Serves games/ at / and the SDK at /sdk/ (as `npm run dev` does) on 127.0.0.1 with a random port. */
-export function serveGames(): Promise<StaticServer> {
+/**
+ * Serves <root>/games/ at / and <root>/packages/sdk/ at /sdk/ (as `npm run dev` does) on 127.0.0.1 with a random port.
+ * `root` defaults to this checkout; Hal passes a worktree to see that tree's games.
+ */
+export function serveGames(root: string = repo): Promise<StaticServer> {
+  const GAMES = join(root, 'games'), SDK = join(root, 'packages', 'sdk');
   // Never throws: a bad escape is 400, anything unreadable (missing, a directory, outside the roots) 404/403.
   const server = createServer(async (req, res) => {
     try {
       let path: string;
       // URL paths are always '/'-separated, so normalize them as posix; only the joined file path is OS-specific.
       try { path = posix.normalize(decodeURIComponent((req.url ?? '/').split('?')[0]!)); } catch { res.writeHead(400).end(); return; }
-      const file = path.startsWith('/sdk/') ? join(repo, 'packages', ...path.split('/')) : join(GAMES, ...path.split('/'));
+      const file = path.startsWith('/sdk/') ? join(root, 'packages', ...path.split('/')) : join(GAMES, ...path.split('/'));
       const inside = (root: string): boolean => { const r = relative(root, file); return r !== '..' && !r.startsWith(`..${sep}`) && !isAbsolute(r); };
       if (!inside(GAMES) && !inside(SDK)) { res.writeHead(403).end(); return; }
       let body: Buffer;

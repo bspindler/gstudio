@@ -1,10 +1,10 @@
 // Hal's git helpers. Everything goes through an injectable runner so tests (and later helpers) can share one seam.
 import { execFile, execFileSync } from 'node:child_process';
-import { lstat, mkdtemp, readFile, readlink, realpath, rm, symlink } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
-import type { Diff, FileChange } from '@studio/core/hal';
+import { parseTrailers, type Diff, type FileChange } from '@studio/core/hal';
 
 const exec = promisify(execFile);
 
@@ -215,4 +215,206 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
     levelCounts: { before: levelCounts((f) => beforeTexts.get(f) ?? null), after: levelCounts((f) => afterTexts.get(f) ?? null) },
     repoFiles,
   };
+}
+
+// ---- worktrees and merges ------------------------------------------------
+//
+// Layout: Hal works only under <repo>/.data/hal/wt/ (gitignored). `main/` is Hal's own worktree of main, `<pass>/` a
+// candidate on branch `hal/<pass>`. Brian's checkout (the repo root, or any other worktree) is never written to.
+//
+// Hal's main worktree is always DETACHED at main's commit: git refuses to check out one branch in two worktrees, and
+// Brian's checkout may well be on main. So refs/heads/main moves in exactly one way: `update-ref` with a compare-and-swap
+// on the old value, after a squash commit whose tree has been verified to be the checked candidate tree. A crash at any
+// point before that leaves main where it was; ensureMainWorktree resets the leftovers on the next run.
+
+export type GitDeps = { git?: GitRunner };
+
+const PASS_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+function checkPass(passId: string): void {
+  if (!PASS_RE.test(passId) || passId.includes('..') || passId === 'main' || passId.endsWith('.lock')) throw new Error(`bad pass id: ${JSON.stringify(passId)}`);
+}
+export const worktreesDir = (repo: string) => join(resolve(repo), '.data', 'hal', 'wt');
+export const mainWorktreeDir = (repo: string) => join(worktreesDir(repo), 'main');
+export const candidateDir = (repo: string, passId: string) => { checkPass(passId); return join(worktreesDir(repo), passId); };
+export const candidateBranch = (passId: string) => { checkPass(passId); return `hal/${passId}`; };
+
+const MAIN = 'refs/heads/main';
+const rev = async (git: GitRunner, ref: string, cwd: string) => (await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], cwd)).trim();
+const ok = async (p: Promise<unknown>) => { try { await p; return true; } catch { return false; } };
+const errText = (e: unknown) => String((e as Error)?.message ?? e).trim();
+
+/** Worktree paths (real paths) with each one's checked-out branch, from `git worktree list --porcelain`. */
+async function worktreeList(git: GitRunner, repo: string): Promise<{ path: string; branch: string | null }[]> {
+  const out = await git(['worktree', 'list', '--porcelain'], repo);
+  return out.split(/\n\n+/).filter((b) => b.trim()).map((b) => {
+    const path = /^worktree (.*)$/m.exec(b)?.[1] ?? '';
+    const branch = /^branch (.*)$/m.exec(b)?.[1] ?? null;
+    return { path, branch };
+  });
+}
+const realOr = async (p: string) => { try { return await realpath(p); } catch { return resolve(p); } };
+
+/**
+ * Gives a worktree its own node_modules: symlinks to each entry of <repo>/node_modules, except that workspace packages
+ * (`@studio/*`, linked by npm to ../../packages/...) point into the worktree, so its tests and scorers load the worktree's
+ * code, not the checkout's. node_modules is gitignored, so this never shows in a diff. No-op without <repo>/node_modules.
+ */
+export async function linkNodeModules(dir: string, repo: string): Promise<void> {
+  const src = join(resolve(repo), 'node_modules');
+  let names: string[];
+  try { names = await readdir(src); } catch { return; }
+  const dst = join(dir, 'node_modules');
+  await rm(dst, { recursive: true, force: true }); // unlinks symlinks, never follows them
+  await mkdir(dst, { recursive: true });
+  for (const name of names) {
+    if (name.startsWith('.') && name !== '.bin') continue; // caches (.vite, .package-lock.json) stay per tree
+    if (name === '@studio') {
+      await mkdir(join(dst, name));
+      for (const pkg of await readdir(join(src, name))) {
+        const link = join(src, name, pkg);
+        const st = await lstat(link);
+        const target = st.isSymbolicLink() ? resolve(dirname(link), await readlink(link)) : link;
+        const rel = relative(resolve(repo), target);
+        const inRepo = rel !== '' && !rel.startsWith('..') && !rel.startsWith(sep) && !rel.startsWith('node_modules');
+        await symlink(inRepo ? join(dir, rel) : target, join(dst, name, pkg), 'dir');
+      }
+      continue;
+    }
+    await symlink(join(src, name), join(dst, name));
+  }
+}
+
+export type MainWorktree = {
+  dir: string;
+  /** main's commit, which the worktree now has checked out (detached). */
+  head: string;
+  /** Whether `git fetch origin main` worked. A failed fetch is not an error. */
+  fetched: boolean;
+  /** Whether main was fast-forwarded to origin/main. */
+  fastForwarded: boolean;
+  /** Other worktrees (e.g. Brian's checkout) that have main checked out. Their files are never touched, but their HEAD moves with main. */
+  mainCheckedOutAt: string[];
+};
+
+/**
+ * Creates (or repairs) Hal's worktree of main at <repo>/.data/hal/wt/main, detached at main, with every leftover
+ * (staged, modified, untracked) discarded. Fast-forwards main from origin/main first when a fetch works; never rewinds
+ * or forks main. Brian's checkout is never written to.
+ */
+export async function ensureMainWorktree(repo: string, deps: GitDeps = {}): Promise<MainWorktree> {
+  const git = deps.git ?? runGit;
+  const root = resolve(repo);
+  const dir = mainWorktreeDir(root);
+  await git(['worktree', 'prune'], root);
+
+  let fetched = false, fastForwarded = false;
+  if (await ok(git(['remote', 'get-url', 'origin'], root))) {
+    fetched = await ok(git(['fetch', '--quiet', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main'], root));
+    if (fetched) {
+      const local = await rev(git, MAIN, root);
+      const remote = await rev(git, 'refs/remotes/origin/main', root);
+      if (local !== remote && (await ok(git(['merge-base', '--is-ancestor', local, remote], root)))) {
+        await git(['update-ref', '-m', 'hal: fast-forward main from origin/main', MAIN, remote, local], root);
+        fastForwarded = true;
+      }
+    }
+  }
+
+  const real = await realOr(dir);
+  const list = await worktreeList(git, root);
+  if (!list.some((w) => w.path === real || w.path === dir)) {
+    await rm(dir, { recursive: true, force: true }); // a stray directory that is not a registered worktree
+    await mkdir(dirname(dir), { recursive: true });
+    await git(['worktree', 'add', '--detach', '--force', dir, MAIN], root);
+  }
+  await git(['reset', '--hard', '--quiet'], dir);
+  await git(['clean', '-fdq'], dir);
+  await git(['checkout', '--detach', '--force', '--quiet', MAIN], dir);
+  const head = await rev(git, 'HEAD', dir);
+  const main = await rev(git, MAIN, root);
+  if (head !== main) throw new Error(`main worktree is at ${head}, not main (${main})`);
+  await linkNodeModules(dir, root);
+  const mainCheckedOutAt = (await worktreeList(git, root)).filter((w) => w.branch === MAIN).map((w) => w.path);
+  return { dir, head, fetched, fastForwarded, mainCheckedOutAt };
+}
+
+export type CandidateWorktree = { dir: string; branch: string; base: string };
+
+/** Creates branch hal/<pass> at main's commit, checked out at <repo>/.data/hal/wt/<pass>. Clears a stale one of the same pass first. */
+export async function newCandidateWorktree(repo: string, passId: string, deps: GitDeps = {}): Promise<CandidateWorktree> {
+  const git = deps.git ?? runGit;
+  const root = resolve(repo);
+  const dir = candidateDir(root, passId);
+  const branch = candidateBranch(passId);
+  await removeWorktree(root, passId, deps);
+  const base = await rev(git, MAIN, root);
+  await mkdir(dirname(dir), { recursive: true });
+  await git(['worktree', 'add', '--quiet', '-b', branch, dir, base], root);
+  await linkNodeModules(dir, root);
+  return { dir, branch, base };
+}
+
+/** Removes the candidate worktree and deletes its branch. Never throws: it runs in `finally`. */
+export async function removeWorktree(repo: string, passId: string, deps: GitDeps = {}): Promise<void> {
+  const git = deps.git ?? runGit;
+  const root = resolve(repo);
+  let dir: string, branch: string;
+  try { dir = candidateDir(root, passId); branch = candidateBranch(passId); } catch { return; }
+  await ok(git(['worktree', 'remove', '--force', '--force', dir], root));
+  await ok(rm(dir, { recursive: true, force: true }));
+  await ok(git(['worktree', 'prune'], root));
+  await ok(git(['branch', '-D', '--quiet', branch], root));
+}
+
+export type SquashResult = { ok: true; commit: string } | { ok: false; error: string };
+
+/**
+ * Squash-merges hal/<pass> into main as one commit with `message`, in Hal's main worktree (ensureMainWorktree first).
+ * main only moves if the new commit's parent is the recorded pre-merge HEAD and its tree is exactly the candidate's tree,
+ * and then only by a compare-and-swap `update-ref`. On any failure the main worktree is reset to the recorded pre-merge
+ * HEAD (not ORIG_HEAD) and cleaned, and `{ ok: false }` is returned; main itself is never left moved or half-merged.
+ */
+export async function squashMerge(repo: string, passId: string, message: string, deps: GitDeps = {}): Promise<SquashResult> {
+  const git = deps.git ?? runGit;
+  const root = resolve(repo);
+  const dir = mainWorktreeDir(root);
+  let pre: string;
+  try {
+    const branch = candidateBranch(passId);
+    pre = await rev(git, 'HEAD', dir);
+    const main = await rev(git, MAIN, root);
+    if (pre !== main) return { ok: false, error: `main worktree is at ${pre}, not main (${main}); run ensureMainWorktree first` };
+    if ((await git(['status', '--porcelain', '--untracked-files=all'], dir)).trim() !== '') return { ok: false, error: 'main worktree is not clean' };
+    const candTree = (await git(['rev-parse', `refs/heads/${branch}^{tree}`], root)).trim();
+    try {
+      await git(['merge', '--squash', '--quiet', `refs/heads/${branch}`], dir);
+      await git(['commit', '--quiet', '--cleanup=whitespace', '-m', message], dir);
+      const commit = await rev(git, 'HEAD', dir);
+      if ((await rev(git, 'HEAD^', dir)) !== pre) throw new Error('squash commit does not sit on the pre-merge HEAD');
+      const tree = (await git(['rev-parse', 'HEAD^{tree}'], dir)).trim();
+      if (tree !== candTree) throw new Error(`merged tree ${tree} is not the checked candidate tree ${candTree} (main moved since the candidate branched)`);
+      await git(['update-ref', '-m', `hal: squash ${passId}`, MAIN, commit, pre], root);
+      return { ok: true, commit };
+    } catch (e) {
+      const error = errText(e);
+      await ok(git(['reset', '--hard', '--quiet', pre], dir));
+      await ok(git(['clean', '-fdq'], dir));
+      return { ok: false, error };
+    }
+  } catch (e) {
+    return { ok: false, error: errText(e) };
+  }
+}
+
+/** The commit on main that merged `passId` (by its Hal-Pass trailer; undo commits are skipped), or null. Task 7 does the undo. */
+export async function revertPass(repo: string, passId: string, deps: GitDeps = {}): Promise<string | null> {
+  const git = deps.git ?? runGit;
+  const out = await git(['log', '--format=%H%x00%B%x1e', MAIN], resolve(repo));
+  for (const rec of out.split('\x1e')) {
+    const i = rec.indexOf('\0');
+    if (i < 0) continue;
+    const t = parseTrailers(rec.slice(i + 1));
+    if (t && t.pass === passId && t.undo === undefined) return rec.slice(0, i).trim();
+  }
+  return null;
 }

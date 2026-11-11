@@ -37,4 +37,18 @@ describe('static server', () => {
       expect(server.origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     } finally { await server.close(); }
   });
+
+  it('serves another tree (a worktree) when given its root', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const root = mkdtempSync(join(tmpdir(), 'hal-serve-'));
+    mkdirSync(join(root, 'games', 'only-here'), { recursive: true });
+    writeFileSync(join(root, 'games', 'only-here', 'index.html'), 'hi');
+    const server = await serveGames(root);
+    try {
+      expect(await get(server.origin, '/only-here/index.html')).toBe(200);
+      expect(await get(server.origin, '/gearhold/index.html')).toBe(404); // not this checkout's games
+    } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
+  });
 });
