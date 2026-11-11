@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./contract": "./src/registry/contract.ts"
+    "./contract": "./src/registry/contract.ts",
+    "./hal": "./src/hal/index.ts"
   },
   "dependencies": {
     "yaml": "^2.5.0",
