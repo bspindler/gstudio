@@ -12,11 +12,17 @@ describe('runControlsCheck', () => {
     expect(new Set(checks.map((c) => c.game.split(' ')[0]))).toEqual(new Set(['gearhold', 'tidepool-pals', 'hyperline']));
     // the core real-input paths must actually run, not be skipped
     for (const c of ['key KeyW moves fwd', 'key Space fires', 'touch stick (left half drag) moves forward',
-      'touch look (right half drag) changes a and look', 'touch tap #fire fires', 'touch events reach the game as pointerType touch']) {
+      'touch look (right half drag) changes a and look', 'touch tap #fire fires', 'touch events reach the game as pointerType touch',
+      'keys Digit2 / Digit1 swap weapon (scatter granted)', 'touch tap #swap toggles weapon (scatter granted)']) {
       expect(find(checks, 'gearhold', c), c).toMatchObject({ ok: true });
       expect(find(checks, 'gearhold', c)!.skipped, c).toBeUndefined();
     }
     for (const c of checks.filter((c) => c.skipped)) expect(c.ok).toBe(true);
+    // the only allowed skip is mouse look, and only for the headless pointer-lock refusal
+    expect(checks.filter((c) => c.skipped).map((c) => `${c.check}: ${c.skipped}`)).toEqual(
+      checks.some((c) => c.check === 'mouse look' && c.skipped) ? ['mouse look: pointer lock unavailable headless'] : []);
+    // every context runs in newHalContext (no outbound requests); each game reports what it blocked
+    for (const c of checks.filter((c) => c.check === 'no page errors')) expect(c.detail).toMatch(/blocked requests/);
   }, 180_000);
 
   it('fails the W check when the keydown listener is removed', async () => {

@@ -1118,6 +1118,13 @@ if (HAL) {
       updateHud();
     },
     state,
+    // Precondition, not input: own the scatter cannon (as its pickup does, minus the auto-switch) so the real
+    // swap inputs (Digit1 / Digit2, tapping SWAP) can be checked from a level start. Hal mode only.
+    grant(item, shells = 8) {
+      if (item !== 'scatter') throw new Error(`hal: cannot grant ${item}`);
+      P.scatter = true; P.shells = Math.max(0, Math.min(50, Math.floor(num(shells))));
+      hudKey = ''; updateHud();
+    },
     step(dt, input) {
       if (hal.live) throw new Error('hal: step() is unavailable in live mode (the rAF loop runs update with real input)');
       if (mode === 'won' || mode === 'dead') return state();

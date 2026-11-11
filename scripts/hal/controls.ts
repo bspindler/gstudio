@@ -6,7 +6,7 @@
 // pointerType 'touch' (page.mouse would send pointerType 'mouse' even in a touch context).
 // Tidepool and Hyperline have no hook: one real primary action each, with a screenshot diff and a DOM check.
 import type { Browser, BrowserContextOptions, CDPSession, Locator, Page } from 'playwright';
-import { closeAll, launchBrowser, serveGames, type StaticServer } from './browser.js';
+import { closeAll, launchBrowser, newHalContext, serveGames, type StaticServer } from './browser.js';
 
 export type ControlCheck = { game: string; check: string; ok: boolean; detail: string; skipped?: string };
 export type ControlsOptions = {
@@ -18,6 +18,7 @@ const DESKTOP: BrowserContextOptions = { viewport: { width: 1280, height: 800 } 
 const PHONE: BrowserContextOptions = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 };
 const HOLD_S = 0.3, SETTLE_S = 0.3; // game (sim) seconds, so a slow or loaded machine still gets the full hold
 
+type Errors = { pageErrors: string[]; consoleErrors: string[]; blocked: string[] };
 type P = { x: number; y: number; a: number; look: number; weapon: number };
 type St = { mode: string; time: number; p: P; shotsFired: number };
 
@@ -50,24 +51,30 @@ class Run {
   add(game: string, check: string, ok: boolean, detail: string) { this.checks.push({ game, check, ok, detail }); }
   skip(game: string, check: string, skipped: string, detail = '') { this.checks.push({ game, check, ok: true, detail, skipped }); }
 
-  /** Opens a page in a fresh context; errors collects page errors and console errors. */
-  async open(ctxOpts: BrowserContextOptions, path: string) {
-    const context = await this.browser.newContext(ctxOpts);
+  /**
+   * Opens a page in a fresh newHalContext: no outbound requests (non-loopback and other local ports are refused
+   * and listed in blocked). errors holds page errors; consoleErrors (live) holds console.error minus the
+   * load failures of blocked requests.
+   */
+  async open(contextOptions: BrowserContextOptions, path: string) {
+    const { context, blockedRequests: blocked, consoleErrors } = await newHalContext(this.browser, { contextOptions });
     if (this.opts.initScript) await context.addInitScript(this.opts.initScript);
     const page = await context.newPage();
-    const errors: string[] = [];
-    page.on('pageerror', (e) => errors.push(String(e)));
-    page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
+    const pageErrors: string[] = [];
+    page.on('pageerror', (e) => pageErrors.push(String(e)));
     await page.goto(`${this.origin}${path}`);
-    return { context, page, errors };
+    return { context, page, errors: { pageErrors, consoleErrors, blocked } };
   }
 
   /** Runs one game's block; a throw becomes a failed check, so one broken game never hides the others. */
   async guard(game: string, label: string, fn: () => Promise<void>) {
     try { await fn(); } catch (e) { this.add(game, label, false, `threw: ${String((e as Error)?.message ?? e).split('\n')[0]}`); }
   }
-  noErrors(game: string, errors: string[]) {
-    this.add(game, 'no page errors', errors.length === 0, errors.length ? errors.slice(0, 3).join(' | ') : 'none');
+  /** One check per game and context: no page errors and no console errors; the detail lists blocked requests. */
+  noErrors(game: string, e: Errors) {
+    const all = [...e.pageErrors, ...e.consoleErrors.map((m) => `console: ${m}`)];
+    const blocked = e.blocked.length ? `; blocked requests (${e.blocked.length}): ${[...new Set(e.blocked)].join(', ')}` : '; blocked requests: none';
+    this.add(game, 'no page errors', all.length === 0, (all.length ? all.slice(0, 3).join(' | ') : 'none') + blocked);
   }
 }
 
@@ -112,8 +119,16 @@ async function gearholdKeyboard(run: Run) {
       const { a, b } = await hold('Space');
       run.add(G, 'key Space fires', b.shotsFired > a.shotsFired, `shotsFired ${a.shotsFired} -> ${b.shotsFired}`);
     }
-    run.skip(G, 'keys Digit1 / Digit2 swap weapon', 'scatter cannon not owned at level start',
-      'Digit2 only switches once the scatter pickup is collected, which sits deep in every level; the touch SWAP message check covers the unowned path');
+    {
+      // Precondition only: own the scatter cannon (its pickup is deep in every level). The key presses stay real.
+      await page.evaluate(() => (window as any).__hal.grant('scatter', 8));
+      const w0 = (await state(page)).p.weapon;
+      await page.keyboard.press('Digit2'); await sim(page, 0.05);
+      const w2 = (await state(page)).p.weapon;
+      await page.keyboard.press('Digit1'); await sim(page, 0.05);
+      const w1 = (await state(page)).p.weapon;
+      run.add(G, 'keys Digit2 / Digit1 swap weapon (scatter granted)', w0 === 0 && w2 === 1 && w1 === 0, `weapon ${w0} -Digit2-> ${w2} -Digit1-> ${w1}`);
+    }
 
     // Mouse look needs pointer lock on #view; the level button click already asked for it.
     let locked = await page.evaluate(() => document.pointerLockElement?.id ?? '');
@@ -210,8 +225,16 @@ async function gearholdTouch(run: Run) {
       run.add(G, 'touch tap #swap without scatter says so', msg === 'No second weapon yet.' && b.p.weapon === a.p.weapon,
         `msg=${JSON.stringify(msg)} weapon ${a.p.weapon} -> ${b.p.weapon}`);
     }
-    run.skip(G, 'touch tap #swap toggles weapon with scatter owned', 'scatter cannon not owned at level start',
-      'toggling needs the scatter pickup, which sits deep in every level; owning it would mean injected state');
+    // with the scatter cannon (granted as a precondition; the taps stay real): each SWAP tap toggles
+    {
+      await page.evaluate(() => (window as any).__hal.grant('scatter', 8));
+      const [x, y] = await center(page, '#swap'), w0 = (await state(page)).p.weapon;
+      await touchDrag(cdp, [[x, y]], () => wait(80)); await sim(page, 0.05);
+      const w1 = (await state(page)).p.weapon;
+      await touchDrag(cdp, [[x, y]], () => wait(80)); await sim(page, 0.05);
+      const w2 = (await state(page)).p.weapon;
+      run.add(G, 'touch tap #swap toggles weapon (scatter granted)', w0 === 0 && w1 === 1 && w2 === 0, `weapon ${w0} -tap-> ${w1} -tap-> ${w2}`);
+    }
     const types = await page.evaluate(() => (window as any).__ptypes as string[]);
     run.add(G, 'touch events reach the game as pointerType touch', types.length > 0 && types.every((t) => t === 'touch'),
       `stage pointerdown types: ${[...new Set(types)].join(',') || 'none'} (${types.length})`);
