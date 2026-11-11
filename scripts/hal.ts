@@ -4,15 +4,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import {
-  compareScores, emptyLedger, ledgerMarkdown, parseBaseline, parseLedger, rangeMismatch, recordPass, scoreTidepool, stagnated,
-  type Baseline, type Ledger, type ScoreRange, type ScoreReport,
+  compareScores, emptyLedger, ledgerMarkdown, parseBaseline, parseLedger, rangeMismatch, recordPass, scorerFor, SCORERS, stagnated,
+  type Baseline, type Ledger, type LevelStats, type Range, type ScoreReport, type Scorer,
 } from '@studio/core/hal';
 
 // Same root local-env.ts uses; not imported from there so this CLI doesn't load the SQLite adapter.
 const repo = fileURLToPath(new URL('../', import.meta.url));
-const GAME = 'tidepool-pals';
 const halDir = join(repo, '.data', 'hal');
-const baselinePath = join(halDir, 'baseline', `${GAME}.json`);
 const ledgerPath = join(halDir, 'ledger.json');
 
 const write = (path: string, data: unknown) => {
@@ -27,30 +25,49 @@ function fail(msg: string): never {
 }
 
 const [command, ...rest] = process.argv.slice(2);
-let values: { from?: string; to?: string; seeds?: string; json?: boolean; change?: string; target?: string };
+// Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
+const numericKeys = [...new Set(Object.values(SCORERS).flatMap((s) => Object.keys(s.defaults)))];
+let values: Record<string, string | boolean | undefined>;
 try {
   ({ values } = parseArgs({
     args: rest,
     options: {
-      from: { type: 'string' }, to: { type: 'string' }, seeds: { type: 'string' }, json: { type: 'boolean' },
-      change: { type: 'string' }, target: { type: 'string' },
+      ...Object.fromEntries(numericKeys.map((k) => [k, { type: 'string' as const }])),
+      game: { type: 'string' }, json: { type: 'boolean' }, change: { type: 'string' }, target: { type: 'string' },
     },
   }));
 } catch (e) {
   fail((e as Error).message);
 }
-const int = (v: string | undefined, d: number, name: string) => {
-  const n = v === undefined ? d : Number(v);
-  if (!Number.isInteger(n) || n < 1) fail(`--${name} must be a positive integer`);
-  return n;
-};
-const range: ScoreRange = { from: int(values.from, 1, 'from'), to: int(values.to, 30, 'to'), seeds: int(values.seeds, 20, 'seeds') };
-if (range.from > range.to) fail('--from must not exceed --to');
+let scorer: Scorer;
+try {
+  scorer = scorerFor((values.game as string | undefined) ?? 'tidepool-pals');
+} catch (e) {
+  fail((e as Error).message);
+}
+const GAME = scorer.game;
+const baselinePath = join(halDir, 'baseline', `${GAME}.json`);
+const range: Range = {};
+for (const k of numericKeys) {
+  if (values[k] !== undefined && !(k in scorer.defaults)) fail(`--${k} does not apply to ${GAME}`);
+}
+for (const [k, d] of Object.entries(scorer.defaults)) {
+  const v = values[k] as string | undefined;
+  range[k] = v === undefined ? d : Number(v);
+}
+const rangeError = scorer.validate(range);
+if (rangeError) fail(rangeError);
+const change = values.change as string | undefined;
+const target = values.target as string | undefined;
 
-function printReport(r: ScoreReport) {
-  console.log('level  win %  moves left %  difficulty');
-  r.levels.forEach((l) =>
-    console.log(`${String(l.n).padStart(5)}  ${(l.winRate * 100).toFixed(0).padStart(5)}  ${(l.avgMovesLeftFrac * 100).toFixed(0).padStart(12)}  ${l.difficulty.toFixed(1).padStart(10)}`));
+function printReport(r: ScoreReport<unknown>) {
+  if (r.game === 'tidepool-pals') {
+    console.log('level  win %  moves left %  difficulty');
+    (r.levels as LevelStats[]).forEach((l) =>
+      console.log(`${String(l.n).padStart(5)}  ${(l.winRate * 100).toFixed(0).padStart(5)}  ${(l.avgMovesLeftFrac * 100).toFixed(0).padStart(12)}  ${l.difficulty.toFixed(1).padStart(10)}`));
+  } else {
+    r.levels.forEach((l) => console.log(JSON.stringify(l)));
+  }
   for (const [k, v] of Object.entries(r.measures)) console.log(`${k}: ${v.toFixed(1)}`);
   console.log(`fitness: ${r.fitness.toFixed(1)}`);
   if (r.hardFailures.length) console.log(`hard failures: ${r.hardFailures.join('; ')}`);
@@ -67,37 +84,37 @@ function loadLedger(): Ledger {
 
 switch (command) {
   case 'score': {
-    const r = scoreTidepool(range);
+    const r = scorer.score(range);
     if (values.json) console.log(JSON.stringify(r, null, 2));
     else printReport(r);
     break;
   }
   case 'baseline': {
-    const r = scoreTidepool(range);
+    const r = scorer.score(range);
     write(baselinePath, { range, report: r });
     console.log(`baseline written: ${baselinePath} (fitness ${r.fitness.toFixed(1)})`);
     break;
   }
   case 'check': {
-    if (!values.change) fail('check needs --change "<what changed>"');
+    if (!change) fail('check needs --change "<what changed>"');
     const ledger = loadLedger(); // fail before scoring or writing anything
-    const after = scoreTidepool(range);
+    const after = scorer.score(range);
     if (![after.fitness, ...Object.values(after.measures)].every(Number.isFinite)) {
       fail('score has a non-finite fitness or measure; nothing recorded');
     }
     let base: Baseline | null = null;
     if (existsSync(baselinePath)) {
       try {
-        base = parseBaseline(readFileSync(baselinePath, 'utf8'));
+        base = parseBaseline(readFileSync(baselinePath, 'utf8'), GAME);
       } catch (e) {
         fail((e as Error).message);
       }
     }
     const before = base?.report ?? null;
     const mismatch = base ? rangeMismatch(base.range, range) : null;
-    const res = mismatch ? { keep: false, gain: 0, reasons: [mismatch] } : compareScores(before, after, values.target);
+    const res = mismatch ? { keep: false, gain: 0, reasons: [mismatch] } : compareScores(before, after, target);
     const next = recordPass(ledger, {
-      ts: new Date().toISOString(), game: GAME, change: values.change, target: values.target,
+      ts: new Date().toISOString(), game: GAME, change: change, target: target,
       fitness: after.fitness, baseline: before ? before.fitness : null, measures: after.measures,
       kept: res.keep, reasons: res.reasons, costUsd: 0,
     });
@@ -109,9 +126,12 @@ switch (command) {
   case 'status': {
     const ledger = loadLedger();
     console.log(ledgerMarkdown(ledger, 10));
-    console.log(`Tidepool stagnated: ${stagnated(ledger, GAME) ? 'yes' : 'no'}`);
+    console.log(`Tidepool stagnated: ${stagnated(ledger, 'tidepool-pals') ? 'yes' : 'no'}`);
+    const others = new Set([...ledger.passes.map((p) => p.game), ...Object.keys(ledger.streak)]);
+    others.delete('tidepool-pals');
+    for (const g of [...others].sort()) console.log(`${g} stagnated: ${stagnated(ledger, g) ? 'yes' : 'no'}`);
     break;
   }
   default:
-    fail('usage: npm run hal -- <score|baseline|check|status> [--from N] [--to N] [--seeds N] [--json] [--change "..."] [--target <measure>]');
+    fail('usage: npm run hal -- <score|baseline|check|status> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>]');
 }

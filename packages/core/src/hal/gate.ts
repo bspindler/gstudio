@@ -6,7 +6,7 @@ export const GATE = { minGain: 0.5, tolerance: 1.0 } as const; // score points
 
 export type GateResult = { keep: boolean; gain: number; reasons: string[] };
 
-export function compareScores(before: ScoreReport | null, after: ScoreReport, target?: string): GateResult {
+export function compareScores(before: ScoreReport<unknown> | null, after: ScoreReport<unknown>, target?: string): GateResult {
   if (!before) return { keep: false, gain: 0, reasons: ['no baseline to compare against'] };
 
   const reasons: string[] = after.hardFailures.map((f) => `hard failure: ${f}`);
