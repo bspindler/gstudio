@@ -58,17 +58,21 @@ export function isProtectedPath(raw: string): boolean {
 // ---- added lines ---------------------------------------------------------
 
 /** Lines present in `after` more times than in `before` (a multiset difference), so a line that merely moved is not "added". */
-export function addedLines(f: FileChange): string[] {
+export function addedLineIndexes(f: FileChange): number[] {
   if (f.binary || f.after === null || f.symlink) return [];
   const budget = new Map<string, number>();
   for (const l of (f.before ?? '').split('\n')) budget.set(l, (budget.get(l) ?? 0) + 1);
-  const out: string[] = [];
-  for (const l of f.after.split('\n')) {
+  const out: number[] = [];
+  f.after.split('\n').forEach((l, i) => {
     const n = budget.get(l) ?? 0;
     if (n > 0) budget.set(l, n - 1);
-    else out.push(l);
-  }
+    else out.push(i);
+  });
   return out;
+}
+export function addedLines(f: FileChange): string[] {
+  const lines = (f.after ?? '').split('\n');
+  return addedLineIndexes(f).map((i) => lines[i]!);
 }
 
 const inGames = (f: FileChange) => norm(f.path).startsWith('games/');
@@ -118,7 +122,7 @@ const HAL_TAMPER = [
 /** The statements in `src` that touch the hook, counters or flag, whitespace-normalised. */
 function halFragments(src: string | null): string[] {
   if (src === null) return [];
-  return stripComments(src).split(/[;{}\n]/).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && HAL_TAMPER.some((r) => r.test(x)));
+  return stripComments(src).split(/[;{}]/).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && HAL_TAMPER.some((r) => r.test(x)));
 }
 
 export const halHook: Rule = (diff) => {
@@ -278,7 +282,7 @@ const REWARD_RE = /reward|loot|chest|crate|prize|gacha|\bpulls?\s+(?:a|an|for|th
 // Evidence of shown odds: the SDK (studio.odds.roll / studio.odds.format), Tidepool's oddsLine(), or the word inside a string or visible text. A comment does not count.
 const ODDS_WORD_RE = /\bodds\b/i;
 const ODDS_CALL_RE = /\bodds\.(?:roll|format)\s*\(|\boddsLine\s*\(/;
-/** Whole string literals in (comment-free) code. A quote with no partner on its line (an apostrophe in prose) is skipped. `${...}` parts are dropped so `${odds}` is not the word. */
+/** Whole string literals in (comment-free) code, except object keys and `["index"]` uses. A quote with no partner on its line (an apostrophe in prose) is skipped. `${...}` parts are dropped so `${odds}` is not the word. */
 export function stringLiterals(code: string): string[] {
   const out: string[] = [];
   let i = 0;
@@ -287,25 +291,62 @@ export function stringLiterals(code: string): string[] {
     if (c !== '"' && c !== "'" && c !== '`') { i++; continue; }
     let j = i + 1;
     while (j < code.length && code[j] !== c && (c === '`' || code[j] !== '\n')) j += code[j] === '\\' ? 2 : 1;
-    if (j < code.length && code[j] === c) { out.push(code.slice(i + 1, j).replace(/\$\{[^}]*\}/g, ' ')); i = j + 1; }
-    else i++;
+    if (j < code.length && code[j] === c) {
+      const before = code.slice(0, i).trimEnd().slice(-1);
+      const after = code.slice(j + 1).trimStart()[0];
+      const isKey = after === ':' && (before === '{' || before === ',' || before === '');
+      const isIndex = before === '[' && after === ']';
+      if (!isKey && !isIndex) out.push(code.slice(i + 1, j).replace(/\$\{[^}]*\}/g, ' '));
+      i = j + 1;
+    } else i++;
   }
   return out;
 }
-/** Text between tags in an HTML file, outside <script> and <style> bodies (an unclosed one runs to the end). */
-function htmlTextNodes(code: string): string[] {
-  const markup = code.replace(/<(script|style)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, '<$1></$1>');
-  return [...markup.matchAll(/>([^<>]+)</g)].map((m) => m[1]!);
+const blank = (t: string) => t.replace(/[^\n]/g, ' ');
+/** Splits an HTML file into its markup (script and style bodies blanked) and its script bodies (everything else blanked); newlines stay, so line numbers line up. */
+function splitHtml(src: string): { markup: string; js: string } {
+  let markup = '';
+  let js = '';
+  let pos = 0;
+  const open = /<(script|style)\b[^>]*>/gi;
+  for (let m = open.exec(src); m; m = open.exec(src)) {
+    const bodyStart = m.index + m[0].length;
+    const close = src.toLowerCase().indexOf(`</${m[1]!.toLowerCase()}`, bodyStart);
+    const bodyEnd = close < 0 ? src.length : close;
+    const head = src.slice(pos, bodyStart);
+    markup += head; js += blank(head);
+    const body = src.slice(bodyStart, bodyEnd);
+    markup += blank(body); js += m[1]!.toLowerCase() === 'script' ? body : blank(body);
+    pos = bodyEnd;
+    open.lastIndex = bodyEnd;
+  }
+  const tail = src.slice(pos);
+  return { markup: markup + tail, js: js + blank(tail) };
 }
 // Evidence of shown odds: the SDK (studio.odds.roll / studio.odds.format), Tidepool's oddsLine(), or the word inside a whole string literal
-// or visible HTML text. A comment or a variable named `odds` does not count.
-export const hasOddsEvidence = (code: string, isHtml = false): boolean =>
-  ODDS_CALL_RE.test(code) || stringLiterals(code).some((t) => ODDS_WORD_RE.test(t)) || (isHtml && htmlTextNodes(code).some((t) => ODDS_WORD_RE.test(t)));
+// of added script code, or in added visible HTML text (outside script/style, found from the whole file, so code added inside an existing
+// script block counts as code). A comment, an attribute value, an object key or a variable named `odds` does not count.
+export function oddsEvidence(f: FileChange): boolean {
+  const lines = (f.after ?? '').split('\n');
+  const idx = new Set(addedLineIndexes(f));
+  const addedOf = (text: string) => text.split('\n').filter((_, i) => idx.has(i));
+  const isHtml = /\.html?$/i.test(f.path);
+  const jsText = isHtml ? splitHtml(lines.join('\n')).js : lines.join('\n');
+  const jsCode = stripComments(addedOf(jsText).join('\n'));
+  if (ODDS_CALL_RE.test(jsCode) || stringLiterals(jsCode).some((t) => ODDS_WORD_RE.test(t))) return true;
+  if (!isHtml) return false;
+  const raw = splitHtml(lines.join('\n')).markup.replace(/<!--[\s\S]*?(?:-->|$)/g, (c) => c.replace(/[^\n]/g, ' '));
+  for (const m of raw.matchAll(/>([^<>]+)</g)) {
+    const startLine = raw.slice(0, m.index! + 1).split('\n').length - 1;
+    if (m[1]!.split('\n').some((t, k) => idx.has(startLine + k) && ODDS_WORD_RE.test(t))) return true;
+  }
+  return false;
+}
 
 export const randomReward: Rule = (diff) => {
   const added = codeIn(diff, inGames).map((f) => ({ f, code: stripComments(addedLines(f).join('\n')) }));
   if (!added.some((a) => REWARD_RE.test(a.code))) return [];
-  return added.filter((a) => RANDOM_RE.test(a.code) && !hasOddsEvidence(a.code, /\.html?$/i.test(a.f.path))).map((a) => hit('random-reward', a.f.path, 'adds randomness and reward wording without odds shown in this file'));
+  return added.filter((a) => RANDOM_RE.test(a.code) && !oddsEvidence(a.f)).map((a) => hit('random-reward', a.f.path, 'adds randomness and reward wording without odds shown in this file'));
 };
 
 const DARK_RE = /only \d+ left|limited time|hurry|expires in|last chance|don't miss|are you sure you want to (leave|quit)/i;

@@ -483,3 +483,36 @@ describe('fix round 2', () => {
     expect(darkPattern(diff([A('games/g/a.js', 'label = "Deal 5 damage, 3 deals left";\nsetTimeout(x, 5);\n')]))).toHaveLength(1);
   });
 });
+
+describe('fix round 3', () => {
+  const R = (...f: FileChange[]) => randomReward(diff(f));
+  const page = (script: string, extra = '') => `<!doctype html>\n<body>\n${extra}<script>\nconst a = 1;\n${script}\nconst z = 2;\n</script>\n</body>\n`;
+  const addIn = (script: string, extra = '') => M('games/g/index.html', page('', ''), page(script, extra));
+  it('code added inside an existing script block is code: a variable named odds does not vouch', () => {
+    expect(R(addIn('if (n > 0 && odds < 1 && rng() < odds) openChest();'))).toHaveLength(1);
+    expect(R(addIn('const cfg = {"odds": 0.1}; if (rng() < cfg.odds) openChest();'))).toHaveLength(1);
+    expect(R(addIn("const cfg = {'odds': 0.1}; if (rng() < cfg['odds']) openChest();"))).toHaveLength(1);
+    expect(R(addIn('const o = cfg["odds"]; if (rng() < o) openChest();'))).toHaveLength(1);
+    expect(R(addIn('if (rng() < p) openChest();', '<div class="odds"></div>\n'))).toHaveLength(1);
+    expect(R(addIn('if (rng() < p) openChest();', '<div id="x" title="odds" data-odds="1"></div>\n'))).toHaveLength(1);
+  });
+  it('real visible odds still pass: string in the script, a text node outside it, a ternary string', () => {
+    expect(R(addIn("if (rng() < p) openChest(); note = 'Odds 10%';"))).toEqual([]);
+    expect(R(addIn('if (rng() < p) openChest();', '<p>Odds: 1 in 10</p>\n'))).toEqual([]);
+    expect(R(addIn("if (rng() < p) openChest(); t = ok ? 'Odds 10%' : 'none';"))).toEqual([]);
+    expect(R(A('games/g/a.js', 'if (rng() < p) openChest(); t = "Odds: 1 in 10";\n'))).toEqual([]);
+  });
+  it('odds text inside a style block or an html comment is not evidence', () => {
+    expect(R(addIn('if (rng() < p) openChest();', '<style>\n.odds { color: red }\n</style>\n'))).toHaveLength(1);
+    expect(R(addIn('if (rng() < p) openChest();', '<!-- <p>Odds 1</p> -->\n'))).toHaveLength(1);
+  });
+
+  it('a hal counter changed with a continuation line still trips (real line 667)', () => {
+    const P = 'games/gearhold/index.html';
+    const real = readFileSync(new URL('../../../games/gearhold/index.html', import.meta.url), 'utf8');
+    const edited = real.replace('hal.dmg += eff;', 'hal.dmg += eff\n    * 0;');
+    expect(edited).not.toBe(real);
+    expect(halHook(diff([M(P, real, edited)])).length).toBeGreaterThan(0);
+    expect(halHook(diff([M(P, real, real.replace('hal.dmg += eff;', 'hal.dmg\n  += eff;'))]))).toEqual([]); // same statement, only whitespace differs
+  });
+});
