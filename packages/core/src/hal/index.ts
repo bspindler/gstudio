@@ -4,3 +4,4 @@ export * from './tidepool-bot.js';
 export * from './tidepool-score.js';
 export * from './gate.js';
 export * from './ledger.js';
+export * from './baseline.js';

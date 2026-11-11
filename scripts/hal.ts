@@ -1,11 +1,11 @@
 // npm run hal: score the game, keep a baseline, gate a change, show the ledger. Writes only under .data/hal/.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import {
-  compareScores, emptyLedger, ledgerMarkdown, parseLedger, recordPass, scoreTidepool, stagnated,
-  type Ledger, type ScoreReport,
+  compareScores, emptyLedger, ledgerMarkdown, parseBaseline, parseLedger, rangeMismatch, recordPass, scoreTidepool, stagnated,
+  type Baseline, type Ledger, type ScoreRange, type ScoreReport,
 } from '@studio/core/hal';
 
 // Same root local-env.ts uses; not imported from there so this CLI doesn't load the SQLite adapter.
@@ -17,7 +17,8 @@ const ledgerPath = join(halDir, 'ledger.json');
 
 const write = (path: string, data: unknown) => {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
+  writeFileSync(`${path}.tmp`, JSON.stringify(data, null, 2) + '\n');
+  renameSync(`${path}.tmp`, path);
 };
 
 function fail(msg: string): never {
@@ -43,7 +44,7 @@ const int = (v: string | undefined, d: number, name: string) => {
   if (!Number.isInteger(n) || n < 1) fail(`--${name} must be a positive integer`);
   return n;
 };
-const range = { from: int(values.from, 1, 'from'), to: int(values.to, 30, 'to'), seeds: int(values.seeds, 20, 'seeds') };
+const range: ScoreRange = { from: int(values.from, 1, 'from'), to: int(values.to, 30, 'to'), seeds: int(values.seeds, 20, 'seeds') };
 if (range.from > range.to) fail('--from must not exceed --to');
 
 function printReport(r: ScoreReport) {
@@ -73,7 +74,7 @@ switch (command) {
   }
   case 'baseline': {
     const r = scoreTidepool(range);
-    write(baselinePath, r);
+    write(baselinePath, { range, report: r });
     console.log(`baseline written: ${baselinePath} (fitness ${r.fitness.toFixed(1)})`);
     break;
   }
@@ -81,15 +82,24 @@ switch (command) {
     if (!values.change) fail('check needs --change "<what changed>"');
     const ledger = loadLedger(); // fail before scoring or writing anything
     const after = scoreTidepool(range);
-    const before: ScoreReport | null = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : null;
-    const res = compareScores(before, after, values.target);
+    let base: Baseline | null = null;
+    if (existsSync(baselinePath)) {
+      try {
+        base = parseBaseline(readFileSync(baselinePath, 'utf8'));
+      } catch (e) {
+        fail((e as Error).message);
+      }
+    }
+    const before = base?.report ?? null;
+    const mismatch = base ? rangeMismatch(base.range, range) : null;
+    const res = mismatch ? { keep: false, gain: 0, reasons: [mismatch] } : compareScores(before, after, values.target);
     const next = recordPass(ledger, {
       ts: new Date().toISOString(), game: GAME, change: values.change, target: values.target,
       fitness: after.fitness, baseline: before ? before.fitness : null, measures: after.measures,
       kept: res.keep, reasons: res.reasons, costUsd: 0,
     });
     write(ledgerPath, next);
-    if (res.keep) write(baselinePath, after);
+    if (res.keep) write(baselinePath, { range, report: after });
     console.log(`${res.keep ? 'KEEP' : 'DISCARD'} (gain ${res.gain.toFixed(2)}): ${res.reasons.join('; ')}`);
     process.exit(res.keep ? 0 : 2);
   }
