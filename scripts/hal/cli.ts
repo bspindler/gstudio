@@ -8,6 +8,7 @@ import {
   type Baseline, type Ledger, type LevelStats, type Range, type ScoreReport, type Scorer,
 } from '@studio/core/hal';
 // Type-only imports are erased, so the CLI still never loads Playwright.
+import { isOpsCommand, runOpsCommand } from './cli-ops.js';
 import { isStoreCommand, runStoreCommand } from './cli-store.js';
 import type { ControlCheck } from './controls.js';
 import type { ScreensResult } from './screens.js';
@@ -65,6 +66,7 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
   if (isStoreCommand(command)) return runStoreCommand(command, rest, { halDir, now, games: Object.keys(scorers) });
+  if (isOpsCommand(command)) return runOpsCommand(command, rest, { halDir, games: Object.keys(scorers) });
   // Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
   // Flag names are kebab-case (seedBase -> --seed-base).
   const flag = (k: string) => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
