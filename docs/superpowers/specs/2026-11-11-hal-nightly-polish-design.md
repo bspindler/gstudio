@@ -114,11 +114,24 @@ Run on every candidate change, before it can be merged:
 
 As in the mockup, with one change from it: since everything goes straight in, every change made that night gets Keep/Undo, not just the two "calls". Bigger changes (features, anything that changes look or feel) show before/after pictures or a clip and a one-line why; small fixes are a compact list with Undo on each. "Your calls" holds only true questions: liability items awaiting a 👍 before being built, and direction questions when Hal is stuck. Votes and an optional comment are recorded and read by the next run. "Play" opens the current `main` build, served locally for home-Wi-Fi play.
 
+**Free-form feedback and direction** (Brian's decision, 2026-11-11): besides the per-card comment, the report ends with an always-present "Tell Hal" text box for anything at all, such as "Gearhold feels too dark" or "focus on Tidepool's map this week". It can be aimed at one game or at the whole studio. Each note is saved with its date and read by the next run as direction, ranked above Hal's own ideas. It doesn't count as a 👍 for a liability item. The next director's note says what Hal did with each note (acted on it, queued it, or a question back), so nothing disappears silently. Notes stay until Brian clears them.
+
+### 5. Game history (Brian's decision, 2026-11-11)
+
+Separate from the morning report. The report is the nightly conversation; the history is the record for looking things up, showing someone how a game got here, or finding when something changed. Each game card on the GStudio shelf page (`npm run dev`) gets a **History** button that opens that game's page:
+- **Night by night, newest first.** Each night lists the changes Hal made to that game: a one-line plain-English description, why, a before/after picture or clip where there was one, the score change, and its status (kept, undone by Brian with his reason, or later reverted). Brian's own commits to the game appear too, marked as his.
+- **The director's note** for that night, the part about this game, sits above its changes.
+- **A score-over-time line** per measure, so a slow trend is visible.
+- **Search and filter** by text, kind (fix, feature, tuning, polish) and kept/undone.
+- **A permalink per change**, to send someone or reference later.
+
+**Source of truth is git, not `.data/`.** Each Hal merge commit carries structured trailers (`Hal-Pass`, `Hal-Game`, `Hal-Kind`, `Hal-Why`, scores before/after), and the before/after images and each night's director's note are committed under `docs/hal/history/<game>/`, small enough for git. So the history survives a wiped `.data/` or a new Mac, and the page rebuilds from `git log` plus those files. It is read-only and served locally like the shelf, with no outside requests. It is not part of any game build and players never see it.
+
 ## Build order (decided)
 
 1. Robot player, scores, and level tuning on Tidepool (smallest, proves the loop).
 2. The ticket → branch → check → keep/discard loop across all three games, with tripwires, budget, nightly and on-demand runs.
-3. The morning report with director's note, pictures, clips and votes.
+3. The morning report with director's note, pictures, clips, votes and the "Tell Hal" box, plus the per-game History pages (plan 2b writes the commit trailers and history files from its first merge, so nothing has to be backfilled).
 
 ## Left to the builder
 
