@@ -10,3 +10,4 @@ local.settings.json
 _site/
 CLAUDE.local.md
 .claude/settings.local.json
+.hal.env
