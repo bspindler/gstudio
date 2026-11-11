@@ -8,6 +8,7 @@ import {
   type Baseline, type Ledger, type LevelStats, type Range, type ScoreReport, type Scorer,
 } from '@studio/core/hal';
 // Type-only imports are erased, so the CLI still never loads Playwright.
+import { isStoreCommand, runStoreCommand } from './cli-store.js';
 import type { ControlCheck } from './controls.js';
 import type { ScreensResult } from './screens.js';
 
@@ -18,6 +19,8 @@ export type CliDeps = {
   runScreens?: (o: { outDir?: string }) => Promise<ScreensResult[]>;
   /** Loaded lazily too: the real-input controls check (scripts/hal/controls.ts). */
   runControlsCheck?: () => Promise<ControlCheck[]>;
+  /** Injected clock for the stored-state commands (tell, notes, approve, spend). */
+  now?: () => Date;
 };
 
 class Exit extends Error {
@@ -58,9 +61,10 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
   }
 }
 
-async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck }: CliDeps): Promise<number> {
+async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck, now }: CliDeps): Promise<number> {
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
+  if (isStoreCommand(command)) return runStoreCommand(command, rest, { halDir, now, games: Object.keys(scorers) });
   // Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
   // Flag names are kebab-case (seedBase -> --seed-base).
   const flag = (k: string) => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
