@@ -1,36 +1,12 @@
 /// <reference lib="dom" />
-import { createServer, type Server } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
-import type { AddressInfo } from 'node:net';
-import { chromium, type Browser, type Page } from 'playwright';
+import type { Browser, Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
-const repo = join(import.meta.dirname, '..', '..');
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
-
-// Serves games/ and the SDK (at /sdk/), like `npm run dev` does, on a random localhost port.
-function serve(): Promise<{ server: Server; origin: string }> {
-  const server = createServer(async (req, res) => {
-    const path = normalize(decodeURIComponent((req.url ?? '/').split('?')[0]!));
-    const file = path.startsWith('/sdk/') ? join(repo, 'packages', path) : join(repo, 'games', path);
-    if (!file.startsWith(join(repo, 'games')) && !file.startsWith(join(repo, 'packages', 'sdk'))) { res.writeHead(403).end(); return; }
-    try {
-      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' }).end(await readFile(file));
-    } catch { res.writeHead(404).end(); }
-  });
-  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({ server, origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}` })));
-}
-
-async function launch(): Promise<Browser> {
-  try { return await chromium.launch(); } catch { /* try software GL */ }
-  return chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-}
+import { closeAll, launchBrowser, serveGames, type StaticServer } from './browser.js';
 
 const idle = { fwd: 0, str: 0, turn: 0, pitch: 0, fire: false } as const;
 type Hal = { start(l: number): void; state(): any; step(dt: number, i: object): any; render(): void };
 
-let server: Server, origin: string, browser: Browser;
+let server: StaticServer, origin: string, browser: Browser;
 const errors: string[] = [];
 const sent: string[] = [];
 
@@ -43,10 +19,11 @@ async function open(query: string): Promise<Page> {
 }
 
 beforeAll(async () => {
-  ({ server, origin } = await serve());
-  browser = await launch();
+  server = await serveGames();
+  origin = server.origin;
+  browser = await launchBrowser();
 });
-afterAll(async () => { await browser?.close(); server?.close(); });
+afterAll(() => closeAll(browser, server));
 
 describe('gearhold ?hal hook', () => {
   it('is absent without ?hal and the rAF loop runs', async () => {
