@@ -21,8 +21,10 @@ describe('runControlsCheck', () => {
     // the only allowed skip is mouse look, and only for the headless pointer-lock refusal
     expect(checks.filter((c) => c.skipped).map((c) => `${c.check}: ${c.skipped}`)).toEqual(
       checks.some((c) => c.check === 'mouse look' && c.skipped) ? ['mouse look: pointer lock unavailable headless'] : []);
-    // every context runs in newHalContext (no outbound requests); each game reports what it blocked
-    for (const c of checks.filter((c) => c.check === 'no page errors')) expect(c.detail).toMatch(/blocked requests/);
+    // every context runs in newHalContext; fonts are bundled, so each game and context has a passing no-outbound check
+    const outbound = checks.filter((c) => c.check === 'no outbound requests');
+    expect(outbound).toHaveLength(checks.filter((c) => c.check === 'no page errors').length);
+    for (const c of outbound) expect(c).toMatchObject({ ok: true, detail: 'blocked requests: none' });
   }, 180_000);
 
   it('fails the W check when the keydown listener is removed', async () => {
@@ -39,5 +41,22 @@ describe('runControlsCheck', () => {
     expect(find(checks, 'gearhold', 'key Space fires')).toMatchObject({ ok: false });
     // touch does not use keydown, so it still passes: the check fails for the right reason
     expect(find(checks, 'gearhold', 'touch stick (left half drag) moves forward')).toMatchObject({ ok: true });
+  }, 180_000);
+
+  it('fails the stick and look checks when pointermove is dropped', async () => {
+    // Drop every pointermove listener, before the game's scripts run: drags still start and end, but never move.
+    const initScript = `(() => {
+      const orig = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (type, ...rest) {
+        if (type === 'pointermove') return;
+        return orig.call(this, type, ...rest);
+      };
+    })();`;
+    const checks = await runControlsCheck({ initScript });
+    expect(find(checks, 'gearhold', 'touch stick (left half drag) moves forward')).toMatchObject({ ok: false });
+    expect(find(checks, 'gearhold', 'touch look (right half drag) changes a and look')).toMatchObject({ ok: false });
+    // taps and keys do not use pointermove, so they still pass: the check fails for the right reason
+    expect(find(checks, 'gearhold', 'touch tap #fire fires')).toMatchObject({ ok: true });
+    expect(find(checks, 'gearhold', 'key KeyW moves fwd')).toMatchObject({ ok: true });
   }, 180_000);
 });

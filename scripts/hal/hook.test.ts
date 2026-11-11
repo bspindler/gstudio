@@ -59,6 +59,7 @@ describe('gearhold ?hal hook', () => {
   });
 
   it('grant("scatter") owns the scatter cannon with shells and rejects other items', async () => {
+    const before = errors.length;
     const page = await open('?hal=1');
     const r = await page.evaluate(() => {
       const h = (window as any).__hal;
@@ -75,7 +76,9 @@ describe('gearhold ?hal hook', () => {
     expect(r.after).toMatchObject({ shells: 5, weapon: 0 });
     expect(r.weapon).toBe(1);
     expect(r.msg).toMatch(/cannot grant key/);
+    await page.evaluate(() => (window as any).__hal.render()); // the HUD and the scatter gun model render cleanly
     await page.close();
+    expect(errors.slice(before)).toEqual([]);
   });
 
   it('without &live, the rAF loop does not advance time', async () => {

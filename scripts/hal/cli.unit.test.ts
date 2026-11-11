@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gearholdPlayScorer, SCORERS, type PlayRecord, type Scorer } from '@studio/core/hal';
-import { main, type ScreensRun } from './cli.js';
+import { main, type ControlCheckRow, type ScreensRun } from './cli.js';
 
 const rec = (level: number, seed: number): PlayRecord => ({ level, seed, result: 'win', time: 60, hpLeft: 50, kills: 3, foes: 3, shotsFired: 10, hits: 5, damageTaken: 10, damageUnseen: 1, cause: '' });
 let out: string[], err: string[], halDir: string;
@@ -65,6 +65,41 @@ describe('hal screens', () => {
   it('exits 1 when a game did not reach gameplay or had page errors', async () => {
     expect(await main(['screens'], deps(good, async () => [shot({ reached: false })]))).toBe(1);
     expect(await main(['screens'], deps(good, async () => [shot({ errors: ['pageerror: x'] })]))).toBe(1);
+  });
+});
+
+describe('hal controls', () => {
+  const row = (o: Partial<ControlCheckRow>): ControlCheckRow => ({ game: 'gearhold', check: 'key KeyW moves fwd', ok: true, detail: 'along 1.3', ...o });
+  const d = (rows: ControlCheckRow[] | (() => Promise<ControlCheckRow[]>)) =>
+    ({ scorers: SCORERS, halDir, runControlsCheck: typeof rows === 'function' ? rows : async () => rows });
+
+  it('prints one line per check (ok / FAIL / skipped: reason) and exits 0 when nothing non-skipped failed', async () => {
+    const code = await main(['controls'], d([row({}), row({ check: 'mouse look', skipped: 'pointer lock unavailable headless', detail: '' })]));
+    expect(code).toBe(0);
+    expect(out).toContain('ok    gearhold: key KeyW moves fwd (along 1.3)');
+    expect(out).toContain('skipped: pointer lock unavailable headless  gearhold: mouse look');
+    expect(out.at(-1)).toBe('controls: 1 ok, 0 failed, 1 skipped');
+  });
+  it('exits 1 when any non-skipped check fails, and prints FAIL', async () => {
+    expect(await main(['controls'], d([row({}), row({ game: 'hyperline', check: 'no outbound requests', ok: false, detail: 'https://x' })]))).toBe(1);
+    expect(out).toContain('FAIL  hyperline: no outbound requests (https://x)');
+    expect(out.at(-1)).toBe('controls: 1 ok, 1 failed, 0 skipped');
+  });
+  it('exits 1 on an empty result, a rejecting runner, no runner, or any flag', async () => {
+    expect(await main(['controls'], d([]))).toBe(1);
+    expect(err.join('\n')).toMatch(/no checks/);
+    expect(await main(['controls'], d(async () => { throw new Error('browser unavailable: gpu: nope'); }))).toBe(1);
+    expect(err.join('\n')).toMatch(/browser unavailable:/);
+    expect(await main(['controls'], { scorers: SCORERS, halDir })).toBe(1);
+    let called = false;
+    const spy = d(async () => { called = true; return [row({})]; });
+    for (const f of [['--game', 'gearhold'], ['--out', 'x'], ['--json'], ['--seeds', '2']]) {
+      err.length = 0;
+      expect(await main(['controls', ...f], spy)).toBe(1);
+      expect(err.join('\n')).toMatch(/does not apply to controls/);
+    }
+    expect(await main(['controls', '--bogus'], spy)).toBe(1);
+    expect(called).toBe(false);
   });
 });
 

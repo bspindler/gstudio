@@ -70,11 +70,15 @@ class Run {
   async guard(game: string, label: string, fn: () => Promise<void>) {
     try { await fn(); } catch (e) { this.add(game, label, false, `threw: ${String((e as Error)?.message ?? e).split('\n')[0]}`); }
   }
-  /** One check per game and context: no page errors and no console errors; the detail lists blocked requests. */
+  /**
+   * Two checks per game and context: no page or console errors, and no outbound requests. Fonts are bundled, so
+   * any request newHalContext had to block is a failure for every game; the detail lists them.
+   */
   noErrors(game: string, e: Errors) {
     const all = [...e.pageErrors, ...e.consoleErrors.map((m) => `console: ${m}`)];
-    const blocked = e.blocked.length ? `; blocked requests (${e.blocked.length}): ${[...new Set(e.blocked)].join(', ')}` : '; blocked requests: none';
-    this.add(game, 'no page errors', all.length === 0, (all.length ? all.slice(0, 3).join(' | ') : 'none') + blocked);
+    this.add(game, 'no page errors', all.length === 0, all.length ? all.slice(0, 3).join(' | ') : 'none');
+    const blocked = [...new Set(e.blocked)];
+    this.add(game, 'no outbound requests', blocked.length === 0, blocked.length ? `blocked (${e.blocked.length}): ${blocked.join(', ')}` : 'blocked requests: none');
   }
 }
 
@@ -180,7 +184,7 @@ async function gearholdTouch(run: Run) {
       (window as any).__ptypes = [];
       document.getElementById('stage')!.addEventListener('pointerdown', (e) => (window as any).__ptypes.push(e.pointerType), true);
     }); // observe only: records which pointerType the game's stage saw
-    const visible = (id: string) => page.evaluate((id) => { const el = document.getElementById(id)!; return !el.hidden && getComputedStyle(el).display !== 'none'; }, id);
+    const visible = (id: string) => page.evaluate((id) => document.getElementById(id)!.checkVisibility(), id); // honours a hidden #touchui parent
     const W = 390;
 
     // stick: drag up on the left half, hold, release
@@ -267,12 +271,20 @@ async function tidepool(run: Run) {
     }
     await wait(900); // pops, collapse and refill
     const after = await changed(page.locator('#board'), before);
-    run.add(G, 'touch tap on a tile group makes a move', m1 !== m0, `moves ${m0} -> ${m1} after tapping tile #${tapped} of ${n}`);
+    const m2 = await moves(); // re-read once the move has settled: the move must have stuck
+    const ok = m0 !== null && m2 !== null && Number(m2) < Number(m0);
+    run.add(G, 'touch tap on a tile group makes a move', ok, `moves ${m0} -> ${m1} (settled ${m2}) after tapping tile #${tapped} of ${n}`);
     run.add(G, 'board screenshot changes after the move', !before.equals(after), `${before.length} vs ${after.length} bytes`);
   } finally {
     run.noErrors(G, errors);
     await context.close();
   }
+}
+
+/** Polls until Hyperline's run has started (ready overlay hidden, pause button shown), up to ms. */
+async function runStarted(page: Page, ms = 5_000): Promise<boolean> {
+  return page.waitForFunction(() => document.getElementById('ready')!.hidden && !document.getElementById('pauseBtn')!.hidden, undefined, { timeout: ms })
+    .then(() => true, () => false);
 }
 
 async function hyperline(run: Run) {
@@ -287,14 +299,18 @@ async function hyperline(run: Run) {
       const before = await canvas.screenshot();
       const [x, y] = await center(page, '#ready .go');
       await page.touchscreen.tap(x, y);
-      await wait(400);
-      const started = await page.evaluate(() => document.getElementById('ready')!.hidden && !document.getElementById('pauseBtn')!.hidden);
+      const started = await runStarted(page);
       run.add(G, 'touch tap starts the run', started, `ready hidden and pause shown: ${started}`);
       const mid = await changed(canvas, before);
-      await page.touchscreen.tap(x, y); // jump
+      run.add(G, 'canvas changes after the start tap', !before.equals(mid), `${before.length} vs ${mid.length} bytes`);
+      // Hyperline exposes no DOM or state signal for a jump (only a sound and canvas particles), so this checks
+      // only that a tap during the run is accepted: no page error, and the run is still going.
+      const errs0 = errors.pageErrors.length;
+      await page.touchscreen.tap(x, y);
       await wait(300);
-      const after = await changed(canvas, mid);
-      run.add(G, 'canvas changes after the tap and the jump tap', !before.equals(mid) && !mid.equals(after), 'before/after-start/after-jump all differ');
+      const still = await runStarted(page, 1_000);
+      run.add(G, 'tap during the run is accepted without error (no jump signal exposed)', still && errors.pageErrors.length === errs0,
+        `still running: ${still}, new page errors: ${errors.pageErrors.length - errs0}`);
     } finally {
       run.noErrors(`${G} (touch)`, errors);
       await context.close();
@@ -308,8 +324,7 @@ async function hyperline(run: Run) {
       const canvas = page.locator('#game');
       const before = await canvas.screenshot();
       await page.keyboard.press('Space');
-      await wait(400);
-      const started = await page.evaluate(() => document.getElementById('ready')!.hidden && !document.getElementById('pauseBtn')!.hidden);
+      const started = await runStarted(page);
       const after = await changed(canvas, before);
       run.add(G, 'key Space starts the run (desktop)', started, `ready hidden and pause shown: ${started}`);
       run.add(G, 'canvas changes after Space (desktop)', !before.equals(after), `${before.length} vs ${after.length} bytes`);
