@@ -121,3 +121,6 @@ export function walkLevel(map: string[]): Walk {
     startThreat: threatNear(map, [start], SAFE),
   };
 }
+
+/** Shortest cell path (BFS) to the nearest goal cell; reused by the play bot. Locked doors pass only when `keyed`. */
+export const routePath = path;
