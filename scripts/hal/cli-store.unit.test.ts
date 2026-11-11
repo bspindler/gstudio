@@ -26,6 +26,11 @@ describe('hal tell / notes', () => {
     const notes = JSON.parse(await readFile(join(halDir, 'notes.json'), 'utf8'));
     expect(notes.map((n: { id: string; game: string | null; status: string }) => [n.id, n.game, n.status])).toEqual([['N-001', null, 'open'], ['N-002', 'tidepool-pals', 'open']]);
   });
+  it('tell accepts -- so text can start with a dash', async () => {
+    expect(await run('tell', '--', '-5 speed')).toBe(0);
+    expect(await run('tell', '--game', 'gearhold', '--', '--bold colors')).toBe(0);
+    expect((await createStore({ halDir }).readNotes()).map((n) => n.text)).toEqual(['-5 speed', '--bold colors']);
+  });
   it('tell rejects empty text and an unknown game', async () => {
     expect(await run('tell')).toBe(1);
     expect(await run('tell', '   ')).toBe(1);

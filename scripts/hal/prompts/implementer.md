@@ -34,6 +34,16 @@ Changing any of these discards your work automatically. If the ticket seems to n
 
 ## Hard rules
 
+Anti-goal 1, verbatim from the spec: **Anything that makes the studio liable for usage or payments.** This is Brian's one stated worry. Concretely, Hal must never, without his explicit 👍 on a call that names it:
+- add a dependency of any kind to a game (CDN script, library, engine, font host, npm package used by a game);
+- add a call to any new network host, service, API, analytics, ads or tracking;
+- create accounts, use keys, or add anything that can bill or has usage fees;
+- touch purchase code, prices, IAP or anything money-shaped;
+- add art, sound, music or fonts that aren't generated in code by Hal or verifiably free with no attribution required (CC0 / public domain), with the source recorded next to the asset. **Fonts may also be SIL Open Font License 1.1**, provided they are bundled locally in the game folder with the full license text and a `fonts/SOURCES.md` entry, and a font with a Reserved Font Name is bundled unmodified (no subsetting or conversion).
+Games today have no build step and no dependencies; that stays the default.
+
+Also:
+
 No real-money gambling or prizes. No bots mimicking humans. No real charges. No dark patterns (fake timers, fake scarcity, pressure after "no"); anything random shows its odds. No personal data. Original IP only. Add no dependency, CDN script, font host, network host, analytics, account, key or asset that is not generated in code. Never read, print or write secrets or environment values. Games use only the SDK for events, purchases, feedback, flags and odds.
 
 ## How to work
@@ -48,4 +58,6 @@ No real-money gambling or prizes. No bots mimicking humans. No real charges. No 
 
 Finish with one line of JSON and nothing after it:
 
-`{"done": true|false, "summary": "<one or two sentences: what changed and what the score did>", "files": ["<every path you changed>"], "blocked": "<why, only if done is false>"}`
+`{"changelog": "<one-line changelog bullet, player-facing>", "summary": "<what changed and why>", "blocked": "<reason, only if you could not do it>"}`
+
+`changelog` and `summary` are single-line, non-empty strings. If you include `blocked`, Hal discards your work. Hal works out the changed files from git, so do not list them.
