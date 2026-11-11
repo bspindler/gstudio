@@ -95,6 +95,8 @@ Each run: play every game in scope → Claude reviews scores, screenshots, clips
 
 Tickets and the ledger (every attempt: what, why, scores before/after, kept or discarded, cost) are stored in the repo's local state (under `.data/hal/`), not in git history. A readable summary of the ledger is part of the report.
 
+**When a game scores 100** (Brian's decision, 2026-11-11): 100 means every measure is in its healthy band, not that the game is done. From then on, the score acts as a guardrail. Changes must not make any measure worse, and work is driven by the director's note, polish and features judged by Brian's vote, and what screens, controls and console errors show. When a game has sat at 100 for a while, Hal may propose a new measure or a tighter band. Each proposal is a normal 👍/👎 card in the morning report, and Hal never changes its own scoring without that 👍 (scoring code is protected).
+
 **Stagnation:** if a game's attempts keep failing to improve anything for several runs, Hal stops retrying that line of work and says so in the note, asking Brian for direction.
 
 ### 3. Tripwires (automatic rejection)
