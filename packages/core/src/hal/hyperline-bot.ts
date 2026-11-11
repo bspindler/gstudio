@@ -72,7 +72,7 @@ export function clearable(c: Course, until: number, budget: number = SEARCH_BUDG
  */
 export const HYPERLINE_CASUAL = { slip: 0.05, horizon: 1 };
 
-/** States the planner may explore per branch per decision; past it the branch counts as safe. */
+/** States the planner may explore per branch per decision; past it ('unknown') the branch counts as NOT surviving. */
 export const PLAN_BUDGET = 4000;
 
 export type CasualRun = { dist: number; sector: number; cause: string; jumps: number };
@@ -99,17 +99,17 @@ function waitOutNextDecision(r: Runner, c: Course, goal: number): Runner | null 
  * Wait if waiting (through the next decision) has any surviving continuation to x + H; otherwise
  * jump if jumping now does; if neither, take the branch that got further. H is `horizon` seconds
  * converted to distance with speedAt at the decision point. Both use the search bot's grid and
- * memo, bounded by PLAN_BUDGET; a branch whose search runs out of budget counts as surviving.
+ * memo, bounded by PLAN_BUDGET; a branch whose search runs out of budget ('unknown') is treated as not surviving.
  */
 function decide(r: Runner, c: Course, horizon: number): boolean {
   const goal = r.x + speedAt(r.x) * horizon;
   const wait = waitOutNextDecision(r, c, goal);
   const w = wait ? search([wait], c, goal, PLAN_BUDGET) : { ok: false, far: r.x };
-  if (w.ok !== false) return false;
+  if (w.ok === true) return false; // 'unknown' (budget exhausted) is not proof of survival
   const jump = advance({ ...r, landed: false }, c, goal, true);
   if (!jump) return false;
   const j = search([jump], c, goal, PLAN_BUDGET);
-  return j.ok !== false || j.far > w.far;
+  return j.ok === true || j.far > w.far;
 }
 
 /**
