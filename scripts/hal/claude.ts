@@ -26,6 +26,7 @@ export type ClaudeResult = {
   timedOut: boolean;
   stderrTail: string;
 };
+type ChildLike = ChildProcess;
 export type SpawnFn = (cmd: string, args: string[], opts: SpawnOptions) => ChildProcess;
 export type ClaudeDeps = {
   spawn: SpawnFn;
@@ -38,7 +39,19 @@ export type ClaudeDeps = {
 export const ALWAYS_DISALLOWED: string[] = [
   'WebFetch', 'WebSearch', 'Bash(git push:*)', 'Bash(git remote:*)', 'Bash(curl:*)', 'Bash(wget:*)',
   'Bash(npm install:*)', 'Bash(npm i:*)', 'Bash(npx:*)', 'Bash(gh:*)',
+  // The API key lives in .hal.env; no role may read or change it. Rules are gitignore-style: bare/`./` are
+  // relative to the cwd, `**/` matches at any depth (CLI 2.1.322 uses `//` for absolute and `~/` for home).
+  ...['Read', 'Edit', 'Write', 'Grep'].flatMap((t) => [`${t}(.hal.env)`, `${t}(./.hal.env)`, `${t}(**/.hal.env)`]),
 ];
+
+/** Built-in tool set per role (`--tools`); `--allowedTools` only pre-approves, it does not restrict. */
+export function roleTools(role: ClaudeRole): string {
+  switch (role) {
+    case 'planner': return 'Read,Glob,Grep';
+    case 'implementer': return 'Read,Edit,Write,Glob,Grep,Bash';
+    case 'director': return ''; // no tools at all
+  }
+}
 
 /** Deny beats allow in Claude Code, so the implementer runs focused tests via `npm test`, never `npx vitest`. */
 export function roleAllowedTools(role: ClaudeRole): string[] {
@@ -60,6 +73,19 @@ export const LIMIT_RE = /you['’]ve (?:hit|reached) your .*?(?:limit|budget)|us
 
 const STDERR_TAIL_MAX = 4000;
 const KILL_GRACE_MS = 10_000;
+const POST_KILL_WAIT_MS = 2_000;
+
+const live = new Set<ChildLike>();
+/** SIGKILL every Claude child's process group still running; for Hal's SIGINT/exit handler. */
+export function killLiveClaudeChildren(): void {
+  for (const c of live) {
+    try {
+      if (c.pid) process.kill(-c.pid, 'SIGKILL');
+      else c.kill('SIGKILL');
+    } catch { /* already gone */ }
+  }
+  live.clear();
+}
 
 function redact(s: string, key?: string): string {
   return key ? s.split(key).join('[REDACTED]') : s;
@@ -89,26 +115,31 @@ export function buildArgs(call: ClaudeCall): string[] {
     '--max-budget-usd', String(call.maxBudgetUsd),
     '--model', call.model,
     '--no-session-persistence',
-    '--permission-mode', 'acceptEdits',
+    '--tools', roleTools(call.role), // "" disables every tool (director)
+    '--setting-sources', 'project',
   ];
-  // --allowedTools/--disallowedTools are variadic: one comma-joined value each, and the prompt goes after `--`.
+  if (call.role === 'implementer') args.push('--permission-mode', 'acceptEdits'); // planner/director: default mode
+  // --allowedTools/--disallowedTools are variadic: one comma-joined value each, and the prompt is sent on stdin.
   if (call.allowedTools.length > 0) args.push('--allowedTools', call.allowedTools.join(','));
   args.push('--disallowedTools', denied.join(','));
   if (call.billing === 'api') {
     args.push('--bare'); // never reads OAuth / keychain
     if (call.appendSystemPromptFile) args.push('--append-system-prompt-file', call.appendSystemPromptFile);
   } else {
-    args.push('--strict-mcp-config', '--setting-sources', 'project'); // keep personal hooks/plugins out of Hal
+    args.push('--strict-mcp-config'); // keep personal hooks/plugins out of Hal
   }
-  args.push('--', call.prompt);
-  return args;
+  return args; // the prompt goes on stdin, not argv
 }
 
 export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<ClaudeResult> {
+  if (!(call.maxBudgetUsd > 0)) {
+    return { ok: false, text: '', costUsd: null, subtype: 'no_budget', limitHit: false, timedOut: false, stderrTail: '' };
+  }
   // Throws `no API key in .hal.env` (no key value) before anything is spawned.
   const env = childEnv(deps.env, call.billing, deps.apiKey);
   const key = call.billing === 'api' ? deps.apiKey : undefined;
-  const child = deps.spawn('claude', buildArgs(call), { cwd: call.cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = deps.spawn('claude', buildArgs(call), { cwd: call.cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  live.add(child);
 
   return new Promise<ClaudeResult>((resolve) => {
     let out = '';
@@ -117,6 +148,7 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
     let done = false;
     let termTimer: NodeJS.Timeout | undefined;
     let killTimer: NodeJS.Timeout | undefined;
+    let giveUpTimer: NodeJS.Timeout | undefined;
 
     const signal = (sig: NodeJS.Signals) => {
       try {
@@ -124,19 +156,22 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
         else child.kill(sig);
       } catch { try { child.kill(sig); } catch { /* already gone */ } }
     };
-    const build = (r: Omit<ClaudeResult, 'stderrTail' | 'limitHit' | 'timedOut'> & { limitText?: string }): ClaudeResult => {
+    const build = (r: Omit<ClaudeResult, 'stderrTail' | 'limitHit' | 'timedOut'>): ClaudeResult => {
       const stderrTail = redact(err, key).slice(-STDERR_TAIL_MAX);
       const text = redact(r.text, key);
       return {
         ok: r.ok, text, costUsd: r.costUsd, subtype: r.subtype,
-        limitHit: LIMIT_RE.test(text) || LIMIT_RE.test(stderrTail), timedOut, stderrTail,
+        // Only a failed call can be limit-blocked; a successful answer may merely mention the words.
+        limitHit: !r.ok && !timedOut && (LIMIT_RE.test(text) || LIMIT_RE.test(stderrTail)), timedOut, stderrTail,
       };
     };
     const finish = (r: ClaudeResult) => {
       if (done) return;
       done = true;
+      live.delete(child);
       clearTimeout(termTimer);
       clearTimeout(killTimer);
+      clearTimeout(giveUpTimer);
       resolve(r);
     };
 
@@ -146,6 +181,7 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
       err += `${err ? '\n' : ''}${e.message}`;
       finish(build({ ok: false, text: '', costUsd: null, subtype: 'spawn_error' }));
     });
+    child.on('exit', () => { if (timedOut) finishTimeout(); });
     child.on('close', (code: number | null) => {
       if (timedOut) return finish(build({ ok: false, text: redact(out, key).slice(-STDERR_TAIL_MAX), costUsd: null, subtype: 'timeout' }));
       const j = lastJsonObject(out);
@@ -158,10 +194,17 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
       finish(build({ ok: subtype === 'success' && !j.is_error && code === 0, text, costUsd: cost, subtype }));
     });
 
+    child.stdin?.on('error', () => { /* EPIPE if the child exits early */ });
+    child.stdin?.end(call.prompt);
+    const finishTimeout = () => finish(build({ ok: false, text: redact(out, key).slice(-STDERR_TAIL_MAX), costUsd: null, subtype: 'timeout' }));
+
     termTimer = setTimeout(() => {
       timedOut = true;
       signal('SIGTERM');
-      killTimer = setTimeout(() => signal('SIGKILL'), KILL_GRACE_MS);
+      killTimer = setTimeout(() => {
+        signal('SIGKILL');
+        giveUpTimer = setTimeout(finishTimeout, POST_KILL_WAIT_MS); // resolve even if 'close' never fires
+      }, KILL_GRACE_MS);
     }, call.timeoutMs);
   });
 }
@@ -174,6 +217,11 @@ export async function runClaudeWithFallback(
 ): Promise<{ first: ClaudeResult; retry?: ClaudeResult }> {
   const first = await runClaude(call, deps);
   if (call.billing !== 'subscription' || !first.limitHit) return { first };
-  const retry = await runClaude({ ...call, billing: 'api', maxBudgetUsd: apiSliceUsd }, deps);
-  return { first, retry };
+  try {
+    return { first, retry: await runClaude({ ...call, billing: 'api', maxBudgetUsd: apiSliceUsd }, deps) };
+  } catch (e) {
+    // Never lose `first`. The message is key-free (childEnv's error names no value).
+    const msg = e instanceof Error ? e.message : 'retry failed';
+    return { first, retry: { ok: false, text: '', costUsd: null, subtype: 'retry_error', limitHit: false, timedOut: false, stderrTail: redact(msg, deps.apiKey) } };
+  }
 }

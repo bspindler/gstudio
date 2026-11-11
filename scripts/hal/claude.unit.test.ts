@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ALWAYS_DISALLOWED, roleAllowedTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
+import { ALWAYS_DISALLOWED, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
 
 const KEY = 'sk-ant-test-FAKE123';
 
@@ -8,6 +8,9 @@ class FakeChild extends EventEmitter {
   pid = 4242;
   stdout = new EventEmitter();
   stderr = new EventEmitter();
+  stdinData = '';
+  stdinEnded = false;
+  stdin = { on: () => {}, end: (d?: string) => { this.stdinData += d ?? ''; this.stdinEnded = true; } };
   signals: string[] = [];
   kill(sig: string) { this.signals.push(sig); return true; }
 }
@@ -82,9 +85,20 @@ describe('runClaude', () => {
     const f = fake(finish('', 1, 'Claude usage limit reached. Your limit will reset at 5pm'));
     expect((await runClaude(base, deps(f.spawn))).limitHit).toBe(true);
   });
+  it('an ok result mentioning a limit is not limitHit', async () => {
+    const f = fake(finish(json({ subtype: 'success', is_error: false, result: 'docs say: usage limit reached', total_cost_usd: 0.1 })));
+    const r = await runClaude(base, deps(f.spawn));
+    expect(r).toMatchObject({ ok: true, limitHit: false });
+  });
   it('ordinary text is not a limit', async () => {
     const f = fake(finish(json({ subtype: 'success', is_error: false, result: 'we should limit scope' })));
     expect((await runClaude(base, deps(f.spawn))).limitHit).toBe(false);
+  });
+  it('zero budget does not spawn', async () => {
+    const f = fake(finish(json({ subtype: 'success', is_error: false })));
+    const r = await runClaude({ ...base, maxBudgetUsd: 0 }, deps(f.spawn));
+    expect(r).toMatchObject({ ok: false, subtype: 'no_budget' });
+    expect(f.calls).toHaveLength(0);
   });
   it('spawn error event resolves, not throws', async () => {
     const f = fake((c) => c.emit('error', new Error('spawn claude ENOENT')));
@@ -108,6 +122,29 @@ describe('runClaude', () => {
       f.calls[0]!.child.emit('close', null, 'SIGKILL');
       const r = await p;
       expect(r).toMatchObject({ ok: false, timedOut: true, subtype: 'timeout' });
+      kill.mockRestore();
+    });
+    it('resolves after SIGKILL even if close never fires', async () => {
+      const kill = vi.spyOn(process, 'kill').mockImplementation((() => true) as any);
+      const f = fake(() => {});
+      const p = runClaude({ ...base, timeoutMs: 1000 }, deps(f.spawn));
+      await vi.advanceTimersByTimeAsync(1000 + 10_000 + 2_000);
+      await expect(p).resolves.toMatchObject({ timedOut: true, subtype: 'timeout' });
+      kill.mockRestore();
+    });
+    it('killLiveClaudeChildren SIGKILLs live groups and forgets finished ones', async () => {
+      const kills: [number, string][] = [];
+      const kill = vi.spyOn(process, 'kill').mockImplementation(((pid: number, sig: string) => { kills.push([pid, sig]); return true; }) as any);
+      const f = fake(() => {});
+      const p = runClaude({ ...base, timeoutMs: 600_000 }, deps(f.spawn));
+      await vi.advanceTimersByTimeAsync(0);
+      killLiveClaudeChildren();
+      expect(kills).toEqual([[-4242, 'SIGKILL']]);
+      f.calls[0]!.child.emit('close', null, 'SIGKILL');
+      await p;
+      kills.length = 0;
+      killLiveClaudeChildren();
+      expect(kills).toEqual([]);
       kill.mockRestore();
     });
     it('does not SIGKILL when the child exits after SIGTERM', async () => {
@@ -139,13 +176,16 @@ describe('runClaude', () => {
       expect(opts.env.PATH).toBe('/bin');
       expect(baseEnv.ANTHROPIC_API_KEY).toBe('leaked-from-parent');
       expect(args).toEqual(expect.arrayContaining(['-p', '--output-format', 'json', '--no-session-persistence', '--strict-mcp-config']));
-      expect(arg(args, '--permission-mode')).toBe('acceptEdits');
+      expect(args).not.toContain('--permission-mode'); // director: default mode
+      expect(arg(args, '--tools')).toBe('');
       expect(arg(args, '--max-budget-usd')).toBe('1.5');
       expect(arg(args, '--model')).toBe('claude-haiku-5-5');
       expect(arg(args, '--setting-sources')).toBe('project');
       expect(args).not.toContain('--bare');
       expect(args).not.toContain('--allowedTools'); // director: none
-      expect(args.slice(-2)).toEqual(['--', 'do it']);
+      expect(args).not.toContain('do it'); // prompt is on stdin
+      expect(f.calls[0]!.child.stdinData).toBe('do it');
+      expect(f.calls[0]!.child.stdinEnded).toBe(true);
     });
     it('api: key in env, --bare, no strict-mcp / setting-sources, append system prompt file', async () => {
       const f = ok();
@@ -155,9 +195,33 @@ describe('runClaude', () => {
       expect(opts.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
       expect(args).toContain('--bare');
       expect(args).not.toContain('--strict-mcp-config');
-      expect(args).not.toContain('--setting-sources');
+      expect(arg(args, '--setting-sources')).toBe('project');
+      expect(arg(args, '--disallowedTools')!.split(',')).toEqual(expect.arrayContaining(ALWAYS_DISALLOWED));
       expect(arg(args, '--append-system-prompt-file')).toBe('/repo/CLAUDE.md');
       expect(args.join(' ')).not.toContain(KEY);
+    });
+    for (const role of ['planner', 'implementer', 'director'] as const) {
+      for (const billing of ['api', 'subscription'] as const) {
+        it(`argv for ${role} + ${billing}`, async () => {
+          const f = ok();
+          await runClaude({ ...base, role, billing, allowedTools: roleAllowedTools(role) }, deps(f.spawn));
+          const { args } = f.calls[0]!;
+          expect(arg(args, '--tools')).toBe({ planner: 'Read,Glob,Grep', implementer: 'Read,Edit,Write,Glob,Grep,Bash', director: '' }[role]);
+          expect(roleTools(role)).toBe(arg(args, '--tools'));
+          if (role === 'implementer') expect(arg(args, '--permission-mode')).toBe('acceptEdits');
+          else expect(args).not.toContain('--permission-mode');
+          expect(args.includes('--bare')).toBe(billing === 'api');
+          expect(args.includes('--strict-mcp-config')).toBe(billing === 'subscription');
+          expect(arg(args, '--setting-sources')).toBe('project');
+          expect(arg(args, '--disallowedTools')!.split(',')).toEqual(expect.arrayContaining(ALWAYS_DISALLOWED));
+          expect(args).not.toContain('do it');
+        });
+      }
+    }
+    it('.hal.env is denied for Read/Edit/Write/Grep in all path forms', () => {
+      for (const t of ['Read', 'Edit', 'Write', 'Grep']) {
+        for (const form of ['.hal.env', './.hal.env', '**/.hal.env']) expect(ALWAYS_DISALLOWED).toContain(`${t}(${form})`);
+      }
     });
     it('tool lists are single comma-joined args so the variadic flag cannot swallow the prompt', async () => {
       const f = ok();
@@ -168,7 +232,8 @@ describe('runClaude', () => {
       const denied = arg(args, '--disallowedTools')!.split(',');
       for (const d of ALWAYS_DISALLOWED) expect(denied).toContain(d);
       expect(denied).toContain('Bash(rm:*)');
-      expect(args.slice(-2)).toEqual(['--', '--weird prompt']);
+      expect(f.calls[0]!.child.stdinData).toBe('--weird prompt');
+      expect(args).not.toContain('--weird prompt');
     });
     it('api call with no key throws without leaking anything', async () => {
       const f = ok();
@@ -186,7 +251,7 @@ describe('runClaude', () => {
       expect(t.join(' ')).not.toMatch(/npx|vitest/);
     });
     it('always-disallowed list', () => {
-      expect(ALWAYS_DISALLOWED).toEqual(['WebFetch', 'WebSearch', 'Bash(git push:*)', 'Bash(git remote:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'Bash(npm install:*)', 'Bash(npm i:*)', 'Bash(npx:*)', 'Bash(gh:*)']);
+      expect(ALWAYS_DISALLOWED.slice(0, 10)).toEqual(['WebFetch', 'WebSearch', 'Bash(git push:*)', 'Bash(git remote:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'Bash(npm install:*)', 'Bash(npm i:*)', 'Bash(npx:*)', 'Bash(gh:*)']);
     });
   });
 
@@ -223,6 +288,19 @@ describe('runClaudeWithFallback', () => {
     const f = fake(finish(okOut));
     const r = await runClaudeWithFallback(base, deps(f.spawn));
     expect(r.retry).toBeUndefined();
+    expect(f.calls).toHaveLength(1);
+  });
+  it('does not retry an ok result whose text mentions a limit', async () => {
+    const f = fake(finish(json({ subtype: 'success', is_error: false, result: 'usage limit reached', total_cost_usd: 0.1 })));
+    const r = await runClaudeWithFallback(base, deps(f.spawn));
+    expect(r.retry).toBeUndefined();
+    expect(f.calls).toHaveLength(1);
+  });
+  it('a throwing retry (no key) keeps first and reports retry_error', async () => {
+    const f = fake(finish(limitOut));
+    const r = await runClaudeWithFallback(base, deps(f.spawn, { apiKey: undefined }));
+    expect(r.first.limitHit).toBe(true);
+    expect(r.retry).toMatchObject({ ok: false, subtype: 'retry_error' });
     expect(f.calls).toHaveLength(1);
   });
   it('retries once with api billing and a fresh slice on limitHit', async () => {
