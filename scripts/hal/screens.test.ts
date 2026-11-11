@@ -14,6 +14,8 @@ describe('runScreens', () => {
       const bufs = await Promise.all(r.shots.map(async (f) => { expect((await stat(f)).size).toBeGreaterThan(0); return readFile(f); }));
       expect(new Set(bufs.map((b) => b.toString('base64'))).size, `${r.game} shots all identical`).toBeGreaterThan(1);
       expect(Array.isArray(r.errors)).toBe(true);
+      expect(r.reached, `${r.game} reached gameplay: ${r.errors.join('; ')}`).toBe(true);
+      expect(r.errors.filter((e) => e.startsWith('flow:')), r.game).toEqual([]);
       expect(Array.isArray(JSON.parse(await readFile(join(outDir, r.game, 'errors.json'), 'utf8')))).toBe(true);
     }
   }, 120_000);
