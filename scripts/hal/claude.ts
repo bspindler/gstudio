@@ -19,8 +19,9 @@ export type ClaudeCall = {
   timeoutMs: number;
   appendSystemPromptFile?: string;
   /**
-   * Extra absolute paths the implementer's sandboxed Bash may not read. The caller passes `<repo>/.hal.env`
-   * here: the cwd is a worktree, so the repo's .hal.env cannot be derived from it. `<cwd>/.hal.env` is always denied.
+   * Absolute paths the implementer's sandboxed Bash may not read; required (non-empty) for the implementer, else
+   * runClaude returns `no_deny_paths` without spawning. The caller passes `<repo>/.hal.env`: the cwd is a worktree,
+   * so the repo's .hal.env cannot be derived from it. `<cwd>/.hal.env` is always denied as well.
    */
   denyReadPaths?: string[];
 };
@@ -146,6 +147,7 @@ export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyR
       autoAllowBashIfSandboxed: false,
       excludedCommands: [],
       network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
+      // Worktree git metadata stays outside allowWrite on purpose: the allowed Bash is only npm test/typecheck/hal score; Hal does every git write itself, unsandboxed.
       filesystem: { denyRead, allowWrite: [call.cwd, tmpdir()] },
       credentials: { envVars: SANDBOX_DENIED_ENV.map((name) => ({ name, mode: 'deny' })) },
     },
@@ -182,6 +184,10 @@ export function buildArgs(call: ClaudeCall): string[] {
 export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<ClaudeResult> {
   if (!(call.maxBudgetUsd > 0)) {
     return { ok: false, text: '', costUsd: null, subtype: 'no_budget', limitHit: false, timedOut: false, stderrTail: '' };
+  }
+  // The implementer must name <repo>/.hal.env explicitly; never fall back to the cwd-only deny (fail closed).
+  if (call.role === 'implementer' && !(call.denyReadPaths && call.denyReadPaths.length > 0)) {
+    return { ok: false, text: '', costUsd: null, subtype: 'no_deny_paths', limitHit: false, timedOut: false, stderrTail: '' };
   }
   // Throws `no API key in .hal.env` (no key value) before anything is spawned.
   const env = childEnv(deps.env, call.billing, deps.apiKey);

@@ -34,7 +34,7 @@ const finish = (out: string, code = 0, err = '') => (c: FakeChild) => {
 const json = (o: object) => JSON.stringify(o) + '\n';
 const base: ClaudeCall = {
   role: 'implementer', prompt: 'do it', cwd: '/repo', billing: 'subscription', maxBudgetUsd: 1.5, model: 'claude-haiku-5-5',
-  allowedTools: roleAllowedTools('implementer'), disallowedTools: [], timeoutMs: 60_000,
+  allowedTools: roleAllowedTools('implementer'), disallowedTools: [], timeoutMs: 60_000, denyReadPaths: ['/main/.hal.env'],
 };
 const baseEnv = { PATH: '/bin', ANTHROPIC_API_KEY: 'leaked-from-parent', ANTHROPIC_AUTH_TOKEN: 'tok' };
 const deps = (spawn: SpawnFn, extra = {}) => ({ spawn, env: baseEnv, now: () => 0, apiKey: KEY, ...extra });
@@ -100,6 +100,24 @@ describe('runClaude', () => {
     const r = await runClaude({ ...base, maxBudgetUsd: 0 }, deps(f.spawn));
     expect(r).toMatchObject({ ok: false, subtype: 'no_budget' });
     expect(f.calls).toHaveLength(0);
+  });
+  it('implementer without denyReadPaths (missing or empty) does not spawn: no_deny_paths', async () => {
+    for (const denyReadPaths of [undefined, []]) {
+      for (const billing of ['api', 'subscription'] as const) {
+        const f = fake(finish(json({ subtype: 'success', is_error: false })));
+        const r = await runClaude({ ...base, billing, denyReadPaths }, deps(f.spawn));
+        expect(r).toMatchObject({ ok: false, subtype: 'no_deny_paths', costUsd: null });
+        expect(f.calls).toHaveLength(0);
+      }
+    }
+  });
+  it('planner/director need no denyReadPaths', async () => {
+    for (const role of ['planner', 'director'] as const) {
+      const f = fake(finish(json({ subtype: 'success', is_error: false, result: 'x' })));
+      const r = await runClaude({ ...base, role, allowedTools: roleAllowedTools(role), denyReadPaths: undefined }, deps(f.spawn));
+      expect(r.ok).toBe(true);
+      expect(f.calls).toHaveLength(1);
+    }
   });
   it('spawn error event resolves, not throws', async () => {
     const f = fake((c) => c.emit('error', new Error('spawn claude ENOENT')));
