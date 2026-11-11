@@ -18,7 +18,7 @@ if (error) {
 const vars = { slug, title: titleFromSlug(slug) };
 const dir = join(gamesDir, slug);
 mkdirSync(dir, { recursive: true });
-for (const file of ['index.html', 'game.yaml']) {
+for (const file of ['index.html', 'game.yaml', 'CHANGELOG.md']) {
   writeFileSync(join(dir, file), fillTemplate(readFileSync(join(templates, file), 'utf8'), vars));
 }
 

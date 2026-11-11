@@ -38,7 +38,7 @@ The loop plays each game, notices what could be better, writes a ticket, builds 
    - add a call to any new network host, service, API, analytics, ads or tracking;
    - create accounts, use keys, or add anything that can bill or has usage fees;
    - touch purchase code, prices, IAP or anything money-shaped;
-   - add art, sound, music or fonts that aren't generated in code by Hal or verifiably free with no attribution required (CC0 / public domain), with the source recorded next to the asset.
+   - add art, sound, music or fonts that aren't generated in code by Hal or verifiably free with no attribution required (CC0 / public domain), with the source recorded next to the asset. **Fonts may also be SIL Open Font License 1.1** (Brian's decision, 2026-11-11), provided they are bundled locally in the game folder with the full license text and a `fonts/SOURCES.md` entry, and a font with a Reserved Font Name is bundled unmodified (no subsetting or conversion).
    Games today have no build step and no dependencies; that stays the default.
 2. **Dark patterns.** An engagement-optimizing loop drifts toward fake timers, fake scarcity, nagging after "no", and paid luck. These are hard rule 4 and are rejected automatically, never weighed against a score.
 3. **Generic drift.** Fifty "improvements" that each look fine but sand off each game's personality. The director's note must keep each game's identity in view, and Brian's 👎 is the brake.
@@ -73,6 +73,7 @@ The loop plays each game, notices what could be better, writes a ticket, builds 
 
 - **Go far.** New mechanics, a level map, new kinds of earned rewards are all in scope. "It's all in git, we can roll it back."
 - **Everything that passes goes straight in** (Brian's decision, 2026-11-11). Fixes and new features alike: once a change passes every check and tripwire, Hal merges it into `main` the same night. Brian sees each one in the next morning's report and approves or disapproves it then.
+- **Every merged change bumps the game's version and logs it** (Brian's decision, 2026-11-11). Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal updates `game.yaml`, the `createStudio({ version })` call and `games/<slug>/CHANGELOG.md` (a plain-English entry, newest first) in the same commit as the change, and a test fails if the three disagree. A 👎 revert also adds a changelog entry, saying what was undone and why, under a new patch version; versions never go backwards. When several changes land the same night, they go under one version per game per night. `CHANGELOG.md` is the human-readable record that the History page builds on. It isn't copied into the published Pages build.
 - **One idea per commit on `main`.** Each change is built on its own branch and squash-merged as a single commit, so a 👎 is a clean `git revert` of just that idea. Undoing something weeks later works the same way.
 - **👍 = keep, 👎 = revert.** A 👎 reverts the commit the same morning (or on the next run, if the Mac is busy) and records Brian's reason for the next run. No vote means it stays; there is no "stale" timeout.
 - **Big ideas still get a short pitch** in the director's note, so Brian knows why a new feature appeared, but they don't wait for a vote before going in.
@@ -95,6 +96,8 @@ Each run: play every game in scope → Claude reviews scores, screenshots, clips
 
 Tickets and the ledger (every attempt: what, why, scores before/after, kept or discarded, cost) are stored in the repo's local state (under `.data/hal/`), not in git history. A readable summary of the ledger is part of the report.
 
+**When a game scores 100** (Brian's decision, 2026-11-11): 100 means every measure is in its healthy band, not that the game is done. From then on, the score acts as a guardrail. Changes must not make any measure worse, and work is driven by the director's note, polish and features judged by Brian's vote, and what screens, controls and console errors show. When a game has sat at 100 for a while, Hal may propose a new measure or a tighter band. Each proposal is a normal 👍/👎 card in the morning report, and Hal never changes its own scoring without that 👍 (scoring code is protected).
+
 **Stagnation:** if a game's attempts keep failing to improve anything for several runs, Hal stops retrying that line of work and says so in the note, asking Brian for direction.
 
 ### 3. Tripwires (automatic rejection)
@@ -105,18 +108,31 @@ Run on every candidate change, before it can be merged:
 - no new or changed purchase, price, IAP or payment-shaped code;
 - no new random reward without visible odds; nothing purchasable containing randomness;
 - no edits to protected files (listed in Constraints);
-- new assets have a recorded source and are Hal-generated or CC0/public domain;
+- new assets have a recorded source and are Hal-generated or CC0/public domain, or are fonts under SIL OFL 1.1 bundled with their license file (unmodified if the font has a Reserved Font Name);
 - no dark-pattern shapes (countdown pressure, fake scarcity, repeated prompts after decline) that static checks can catch.
 
 ### 4. The morning report
 
 As in the mockup, with one change from it: since everything goes straight in, every change made that night gets Keep/Undo, not just the two "calls". Bigger changes (features, anything that changes look or feel) show before/after pictures or a clip and a one-line why; small fixes are a compact list with Undo on each. "Your calls" holds only true questions: liability items awaiting a 👍 before being built, and direction questions when Hal is stuck. Votes and an optional comment are recorded and read by the next run. "Play" opens the current `main` build, served locally for home-Wi-Fi play.
 
+**Free-form feedback and direction** (Brian's decision, 2026-11-11): besides the per-card comment, the report ends with an always-present "Tell Hal" text box for anything at all, such as "Gearhold feels too dark" or "focus on Tidepool's map this week". It can be aimed at one game or at the whole studio. Each note is saved with its date and read by the next run as direction, ranked above Hal's own ideas. It doesn't count as a 👍 for a liability item. The next director's note says what Hal did with each note (acted on it, queued it, or a question back), so nothing disappears silently. Notes stay until Brian clears them.
+
+### 5. Game history (Brian's decision, 2026-11-11)
+
+Separate from the morning report. The report is the nightly conversation; the history is the record for looking things up, showing someone how a game got here, or finding when something changed. Each game card on the GStudio shelf page (`npm run dev`) gets a **History** button that opens that game's page:
+- **Night by night, newest first.** Each night lists the changes Hal made to that game: a one-line plain-English description, why, a before/after picture or clip where there was one, the score change, and its status (kept, undone by Brian with his reason, or later reverted). Brian's own commits to the game appear too, marked as his.
+- **The director's note** for that night, the part about this game, sits above its changes.
+- **A score-over-time line** per measure, so a slow trend is visible.
+- **Search and filter** by text, kind (fix, feature, tuning, polish) and kept/undone.
+- **A permalink per change**, to send someone or reference later.
+
+**Source of truth is git, not `.data/`.** Each Hal merge commit carries structured trailers (`Hal-Pass`, `Hal-Game`, `Hal-Kind`, `Hal-Why`, scores before/after), and the before/after images and each night's director's note are committed under `docs/hal/history/<game>/`, small enough for git. So the history survives a wiped `.data/` or a new Mac, and the page rebuilds from `git log` plus those files. It is read-only and served locally like the shelf, with no outside requests. It is not part of any game build and players never see it.
+
 ## Build order (decided)
 
 1. Robot player, scores, and level tuning on Tidepool (smallest, proves the loop).
 2. The ticket → branch → check → keep/discard loop across all three games, with tripwires, budget, nightly and on-demand runs.
-3. The morning report with director's note, pictures, clips and votes.
+3. The morning report with director's note, pictures, clips, votes and the "Tell Hal" box, plus the per-game History pages (plan 2b writes the commit trailers and history files from its first merge, so nothing has to be backfilled).
 
 ## Left to the builder
 

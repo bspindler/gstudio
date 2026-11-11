@@ -6,7 +6,7 @@
 
 **Architecture:**
 - **Game hook.** Gearhold's combat lives in `games/gearhold/index.html` and is tied to the page. Rather than rewrite it, the page gets a small test hook, active only when the URL has `?hal`. The hook exposes a state snapshot and a `step(dt, input)` that runs the game's own `update(dt)` with injected controls, so the robot drives time instead of `requestAnimationFrame`.
-- **Determinism.** It comes from seeding `Math.random` before the page loads, with Playwright's `addInitScript` and `mulberry32`. There is no game-logic change for that.
+- **Determinism.** It comes from the URL: the page loads with `?hal=<seed>` and the hook seeds `Math.random` in-page with `mulberry32`. Without `?hal` nothing changes.
 - **Bot policy.** A pure TypeScript function in `packages/core/src/hal/`, tested without a browser: given a state snapshot and the level map, it returns the next input.
 - **Browser runner.** A thin Playwright runner in `scripts/hal/` connects page and policy.
 - **Scores.** The result is a `ScoreReport` registered as a second Gearhold scorer, `gearhold-play`, so the gate, ledger and CLI work unchanged.
@@ -28,7 +28,7 @@
 
 1. **The hook changes how the game plays for real players.** Without `?hal` the page must behave exactly as before. Pinned by a Playwright test that loads without `?hal` and checks `window.__hal` is undefined and the rAF loop runs.
 2. **Non-determinism leaking in** (timing from rAF, `Date`, unseeded randomness). Two runs with the same seed must produce identical results. Pinned in Task 3.
-3. **A robot that's too good or too bad to tell anything.** It is either aimbot-perfect or never hits. Reaction delay and aim error are pinned, and the measured win rate on level 1 must land between 0.4 and 0.95. Pinned in Task 2/3.
+3. **A robot that's too good or too bad to tell anything.** It is either aimbot-perfect or never hits. Reaction delay and aim error are pinned, and the robot must be human-like: (a) the median hit ratio across levels lands inside the feel band [0.35, 0.8], and (b) level 1's (index 1) win rate responds to `AIM_ERR`, so the robot isn't saturated. The first level (index 0) winning 1.0 is fine: it's tutorial-length and inside its own band. Pinned in Task 2/3.
 4. **Headless WebGL unavailable.** The runner must report "browser unavailable" as a clear error (exit 1), never a score of 0 that the gate compares.
 5. **A stuck robot** (walking into a wall forever, or a level that never ends): each run has a sim-time cap (240 s) and reports `timeout` as a loss with its cause.
 
@@ -40,9 +40,10 @@
 games/gearhold/index.html               ?hal hook: window.__hal = { state(), step(dt, input), start(level) } (Task 1)
 packages/core/src/hal/gearhold-bot.ts   pure policy: decide(state, map, memory, rng) → input               (Task 2)
 packages/core/src/hal/gearhold-play-score.ts  measures from many PlayRecords → ScoreReport               (Task 2)
-scripts/hal/browser.ts                  Playwright launch, static server for games/, seeded init script  (Task 3)
+scripts/hal/browser.ts                  Playwright launch, static server for games/, outbound-blocking context (Task 3)
 scripts/hal/gearhold-play.ts            runs the policy against the page, returns PlayRecords             (Task 3)
 scripts/hal/screens.ts                  phone-size screenshots + console errors for all three games      (Task 4)
+scripts/hal/controls.ts                 real keyboard + touch checks, all three games                     (Task 6)
 packages/core/src/hal/scorers.ts        + 'gearhold-play' (async score)                                   (Task 5)
 scripts/hal.ts                          awaits async scorers; `screens` command                           (Task 5)
 ```
@@ -89,10 +90,10 @@ In hal mode the rAF loop stops calling `update` (it may still render if asked). 
 
 - `scripts/hal/browser.ts` launches Chromium headless with WebGL. It tries the default GPU, then `--use-angle=swiftshader`, and if that fails exits 1 with `browser unavailable: <reason>`.
 - It serves `games/` from a local static server on an ephemeral port bound to 127.0.0.1.
-- It injects `Math.random = mulberry32(seed)` via `addInitScript`.
+- It loads the page with `?hal=<seed>`; the in-page hook seeds `Math.random = mulberry32(seed)`.
 - `runGearholdPlay({ levels, seeds })` gives one fresh page per (level, seed): `__hal.start(level)`, then loop `decide` → `step(1/60, input)` × 4 until `result` is set or 240 s of sim time passes.
 - Determinism test (`HAL_BROWSER=1`): the same level and seed twice gives identical PlayRecords.
-- Calibration: report level 1's win rate over 10 seeds. If it's outside 0.4–0.95, adjust `REACT`/`AIM_ERR`, never the bands, and report the table.
+- Calibration: the robot must be human-like. (a) The median hit ratio across levels lands in the feel band [0.35, 0.8], and every level's median hit ratio is at most 0.8. (b) Level 1's (index 1) win rate responds to `AIM_ERR` (not saturated). Tune only `REACT`/`AIM_ERR`, never the bands, and report the per-level table (win rate, median win time, hit ratio, unseen share, loss causes). The first level (index 0) winning 1.0 is fine. Default `seeds` is 50: report the fitness spread over three disjoint 50-seed blocks.
 
 ### Task 4: Screens for all three games
 
@@ -103,6 +104,21 @@ In hal mode the rAF loop stops calling `update` (it may still render if asked). 
 - `SCORERS['gearhold-play']` with defaults `{ levels: 3, seeds: 10 }`; `Scorer.score` may return a Promise, and the CLI awaits it.
 - By hand: `npm run hal -- baseline --game gearhold-play` then `check --game gearhold-play --change no-op` gives DISCARD exit 2, and the same seed twice gives the same fitness.
 - Report each level's win rate, median time, hit ratio and unseen-damage share. That's the first real read on Gearhold's gunplay.
+
+### Task 6: Real controls check (keyboard and touch)
+
+The robot in Task 3 sets input state directly. This task proves the real input paths still work, using real browser events and no injected state. Brian asked for it on 2026-11-11.
+- **Live mode.** Add `?hal=<seed>&live` to the hook. The normal rAF loop runs `update` with real input, pauses stay suppressed, `state()` is available, and `step()` throws. Without `&live`, hal mode is unchanged.
+- **`runControlsCheck()` in `scripts/hal/controls.ts`.** It returns `{ game, check, ok, detail, skipped? }[]` and covers:
+  - **Gearhold keyboard (desktop 1280×800).** Real `page.keyboard` presses for W/S/A/D, the arrow keys, the fire key and the weapon-swap key, each held about 0.3 s. Check through `state()`: W moves along the facing (cos a, sin a), S backs off, A/D strafe, arrows turn, and fire raises `shotsFired`. Mouse look needs pointer lock. Try it, and report `skipped: 'pointer lock unavailable headless'` rather than fail if the browser refuses.
+  - **Gearhold touch (390×844, `hasTouch`, `isMobile`).** Real touch/pointer events:
+    - a drag on the left half moves the player (stick)
+    - a drag on the right half changes `p.a` and `p.look` (look)
+    - a tap on `#fire` (or whatever the fire button's id is) raises `shotsFired`
+    - a tap on `#swap` toggles the weapon once scatter is owned, or shows the "No second weapon yet." message otherwise
+    - the stick and knob appear while dragging and hide on release
+  - **Tidepool and Hyperline (390×844, touch).** Do their primary input with real taps, swipes and keys: a Tidepool tile swap, a Hyperline tap or jump, and Hyperline's keyboard key on desktop. Check that the canvas pixels change between before and after screenshots, with no page errors. They have no hook, so this is a smoke check only.
+- **Browser tests** live in `scripts/hal/controls.test.ts` (`HAL_BROWSER=1`). Task 5 wires `npm run hal -- controls`, which exits 1 if any non-skipped check fails. The nightly loop treats a failure as a tripwire: the change is discarded.
 
 ## Lessons carried over from plan 1b's review
 

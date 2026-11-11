@@ -1,0 +1,13 @@
+# Gearhold changelog
+
+Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
+
+## 0.2.0 (2026-11-11)
+- **A new world, the clockwork citadel,** in real-time WebGL 3D, with lighting, bloom, high-resolution art, particles and a new HUD.
+- **A new hand cannon:** a heavy 3D revolver held in a partly cyborg hand, pointing into the scene.
+- **Controls:** free look, precise aim and momentum movement.
+- Gameplay is the same as before for players. Only Hal's robot uses the test hook added in this version: it is inert unless the page is opened with `?hal`, and in that mode it sends nothing.
+- These changes shipped in the game file after 0.1.0 without a version bump, so they are recorded here.
+
+## 0.1.0 (2026-11-07)
+- First version: a retro raycast first-person shooter.

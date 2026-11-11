@@ -9,6 +9,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { loadGameLibrary } from '@studio/core';
 import { createApp } from '@studio/api';
+import { mountSiteFonts } from './site-routes.js';
 import { gamesDir, localEnv, repo } from './local-env.js';
 
 const onLan = process.env.STUDIO_LAN === '1' || process.argv.includes('--lan');
@@ -33,6 +34,7 @@ site.use('/sdk/*', serveStatic({ root: `${root}/packages`, rewriteRequestPath: (
 const shelf = JSON.stringify(games.map(({ slug, title, genre, version, targetSegment }) =>
   ({ slug, title, genre, version, targetSegment }))).replace(/</g, '\\u003c');
 site.get('/', (c) => c.html(readFileSync(join(repo, 'scripts/site/index.html'), 'utf8').replace('/*__GAMES__*/[]', shelf)));
+mountSiteFonts(site, `${root}/scripts`);
 site.use('/*', serveStatic({ root: `${root}/games` }));
 serve({ fetch: site.fetch, port: 5174, hostname: bind });
 
