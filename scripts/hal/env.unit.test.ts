@@ -41,6 +41,11 @@ describe('childEnv', () => {
     expect(e.ANTHROPIC_API_KEY).toBe('sk-ant-test-FAKE');
     expect(e.PATH).toBe('/bin');
   });
+  it('api also drops an inherited ANTHROPIC_AUTH_TOKEN', () => {
+    const e = childEnv(base, 'api', 'k');
+    expect('ANTHROPIC_AUTH_TOKEN' in e).toBe(false);
+    expect(e.ANTHROPIC_API_KEY).toBe('k');
+  });
   it('api without a key throws', () => {
     expect(() => childEnv({ PATH: '/bin' }, 'api')).toThrow('no API key in .hal.env');
     expect(() => childEnv({ PATH: '/bin' }, 'api', '')).toThrow('no API key in .hal.env');

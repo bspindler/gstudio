@@ -33,6 +33,7 @@ export function childEnv(base: NodeJS.ProcessEnv, billing: 'api' | 'subscription
   if (billing === 'api') {
     if (!key) throw new Error('no API key in .hal.env');
     env.ANTHROPIC_API_KEY = key;
+    delete env.ANTHROPIC_AUTH_TOKEN;
   } else {
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;

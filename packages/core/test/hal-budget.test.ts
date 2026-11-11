@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DAILY_CAP_USD, SLICES, apiSpent, dayOf, recordCall, sliceFor, type SpendDay } from '../src/hal/budget.js';
+import { DAILY_CAP_USD, SLICES, apiSpent, dayFor, dayOf, recordCall, sliceFor, type SpendDay } from '../src/hal/budget.js';
 
 const empty = (day = '2026-11-11'): SpendDay => ({ day, calls: [] });
 const call = (usd: number | undefined, billing: 'api' | 'subscription' = 'api', role = 'planner') => ({ run: 'r1', role, billing, usd, at: '2026-11-11T01:00:00Z' });
@@ -51,9 +51,26 @@ describe('hal budget', () => {
     expect(dayOf(new Date(2026, 10, 12, 0, 1))).toBe('2026-11-12');
     expect(dayOf(new Date(2026, 0, 5, 12))).toBe('2026-01-05');
   });
-  it('rollover: a new day starts fresh', () => {
-    const yesterday: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 20, at: 't' }] };
-    const today = dayOf(new Date(2026, 10, 12, 0, 5)) === yesterday.day ? yesterday : empty('2026-11-12');
-    expect(sliceFor(today, 'planner')).toBe(1.5);
+  it('rollover: dayFor keeps a same-day ledger (still capped) and resets on a new local day', () => {
+    const prev: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 20, at: 't' }] };
+    const same = dayFor(prev, new Date(2026, 10, 11, 23, 59, 59));
+    expect(same).toBe(prev);
+    expect(sliceFor(same, 'planner')).toBe(0);
+    const next = dayFor(prev, new Date(2026, 10, 12, 0, 0, 1));
+    expect(next).toEqual({ day: '2026-11-12', calls: [] });
+    expect(sliceFor(next, 'planner')).toBe(1.5);
+    expect(dayFor(undefined, new Date(2026, 10, 12, 9))).toEqual({ day: '2026-11-12', calls: [] });
+  });
+  it('unknown or prototype roles: slice 0, recordCall throws', () => {
+    for (const r of ['constructor', 'toString', '__proto__', 'nobody']) {
+      expect(sliceFor(empty(), r)).toBe(0);
+      expect(() => recordCall(empty(), call(undefined, 'api', r))).toThrow(/unknown budget role/);
+    }
+  });
+  it('float drift cannot leave a tiny slice at the cap', () => {
+    let d = empty();
+    for (let i = 0; i < 200; i++) d = recordCall(d, call(0.1, 'api', 'director'));
+    expect(apiSpent(d)).toBe(20);
+    expect(sliceFor(d, 'director')).toBe(0);
   });
 });
