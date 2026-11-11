@@ -32,6 +32,7 @@ export const DEFAULT_SEEDS = 50;
 const BATCH = 900; // decisions per page.evaluate (60 s of sim time)
 /** Wall-clock bound per batch; a normal batch takes well under 1 s. */
 export const BATCH_TIMEOUT_MS = 30_000;
+const CLOSE_TIMEOUT_MS = 5_000;
 
 /** Policy rng seed for a run: separate from the page seed, distinct per (seed, level). */
 export function policySeed(seed: number, level: number): number {
@@ -76,7 +77,12 @@ async function playOne(browser: Browser, origin: string, code: string, level: nu
       return `${tag}: page reports no WebGL 2`;
     await page.addScriptTag({ content: code });
     if (failed()) return failed();
-    await page.evaluate(([l, m, p, c]) => (globalThis as any).__halPlay.begin(l, m, p, c), [level, map, policySeed(seed, level), o.cap] as const);
+    try {
+      await bounded(page.evaluate(([l, m, p, c]) => (globalThis as any).__halPlay.begin(l, m, p, c), [level, map, policySeed(seed, level), o.cap] as const), o.batchTimeoutMs);
+    } catch (e) {
+      if ((e as Error)?.message !== HANG) throw e;
+      return `${tag}: hang: starting the level took over ${o.batchTimeoutMs / 1000} s wall`;
+    }
     let out: PageOutcome;
     do {
       try {
@@ -99,7 +105,8 @@ async function playOne(browser: Browser, origin: string, code: string, level: nu
   } catch (e) {
     return `${tag}: ${String((e as Error)?.message ?? e).split('\n')[0]}`;
   } finally {
-    await context.close().catch(() => {}); // also ends a page stuck in an endless evaluate
+    // Also ends a page stuck in an endless evaluate; bounded so a stalled close can't hang the run.
+    await bounded(context.close(), CLOSE_TIMEOUT_MS).catch(() => {});
   }
 }
 

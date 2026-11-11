@@ -13,6 +13,9 @@ const TYPES: Record<string, string> = {
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json',
 };
 
+/** Ports of the static servers serveGames() has open in this process; newHalContext allows only these on loopback. */
+const HAL_SERVER_PORTS = new Set<number>();
+
 export type StaticServer = { server: Server; origin: string; close(): Promise<void> };
 
 /** Serves games/ at / and the SDK at /sdk/ (as `npm run dev` does) on 127.0.0.1 with a random port. */
@@ -34,11 +37,15 @@ export function serveGames(): Promise<StaticServer> {
   });
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve({
-      server,
-      origin: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
-      close: () => new Promise<void>((r) => server.close(() => r())),
-    }));
+    server.listen(0, '127.0.0.1', () => {
+      const port = (server.address() as AddressInfo).port;
+      HAL_SERVER_PORTS.add(port);
+      resolve({
+        server,
+        origin: `http://127.0.0.1:${port}`,
+        close: () => new Promise<void>((r) => { HAL_SERVER_PORTS.delete(port); server.close(() => r()); }),
+      });
+    });
   });
 }
 
@@ -74,11 +81,12 @@ export async function launchBrowser(): Promise<Browser> {
   throw new Error(`browser unavailable: ${reasons.join('; ')}`);
 }
 
-const LOCAL_HOSTS = ['127.0.0.1', 'localhost', '[::1]'];
+const LOOPBACK = ['127.0.0.1', 'localhost', '[::1]'];
+const DEFAULT_PORT: Record<string, string> = { 'http:': '80', 'https:': '443', 'ws:': '80', 'wss:': '443' };
 
 export type HalContext = {
   context: BrowserContext;
-  /** URLs of requests aborted because their host is not local (live; read it after the page work). */
+  /** URLs of requests and WebSockets refused because they are not allowed (live; read it after the page work). */
   blockedRequests: string[];
   /** console.error messages from pages in this context, minus the load failures of blocked requests. */
   consoleErrors: string[];
@@ -92,22 +100,45 @@ export function isBlockedNoise(msg: Pick<ConsoleMessage, 'text' | 'location'>, b
   return blockedRequests.some((b) => b === url || text.includes(b));
 }
 
+/** host:port for a URL (IPv6 hosts bracketed, default ports filled in), or '' when it has no network host. */
+function hostPort(url: string): string {
+  try {
+    const u = new URL(url);
+    if (!u.hostname) return '';
+    return `${u.hostname}:${u.port || DEFAULT_PORT[u.protocol] || ''}`;
+  } catch { return ''; }
+}
+
 /**
- * A fresh browser context for Hal page work. Every request whose host is not 127.0.0.1/localhost (plus
- * `allowHosts`) is aborted and recorded in `blockedRequests`, so nothing leaves the machine; console errors
- * caused by those aborts are left out of `consoleErrors`. Close it with `context.close()`.
+ * A fresh browser context for Hal page work. Allowed: loopback (127.0.0.1, localhost, [::1]) on the port of
+ * a static server serveGames() has open in this process, and each `allowHosts` entry given as "host:port"
+ * (for example "localhost:5173" for `npm run dev`). Everything else is refused and its URL recorded in
+ * `blockedRequests`: HTTP(S) requests, including those a service worker makes, are aborted via context.route,
+ * and WebSockets are closed via context.routeWebSocket before they connect. Other local ports are refused too.
+ * data:/blob: URLs never touch the network and are not routed. Console errors caused by the aborts are left
+ * out of `consoleErrors`. Close it with `context.close()`.
  */
 export async function newHalContext(browser: Browser, opts: { allowHosts?: string[] } = {}): Promise<HalContext> {
-  const allow = new Set([...LOCAL_HOSTS, ...(opts.allowHosts ?? [])]);
+  const extra = new Set(opts.allowHosts ?? []);
+  const allowed = (url: string): boolean => {
+    const hp = hostPort(url);
+    if (!hp) return false;
+    if (extra.has(hp)) return true;
+    const i = hp.lastIndexOf(':');
+    return LOOPBACK.includes(hp.slice(0, i)) && HAL_SERVER_PORTS.has(Number(hp.slice(i + 1)));
+  };
   const context = await browser.newContext();
   const blockedRequests: string[] = [], consoleErrors: string[] = [];
   await context.route('**/*', (route) => {
     const url = route.request().url();
-    let host = '';
-    try { host = new URL(url).hostname; } catch { /* unparsable: block */ }
-    if (allow.has(host) || allow.has(`[${host}]`)) return route.continue();
+    if (allowed(url)) return route.continue();
     blockedRequests.push(url);
     return route.abort('blockedbyclient');
+  });
+  await context.routeWebSocket(/.*/, (ws) => {
+    if (allowed(ws.url())) { ws.connectToServer(); return; }
+    blockedRequests.push(ws.url());
+    void ws.close().catch(() => {});
   });
   context.on('console', (msg) => {
     if (msg.type() === 'error' && !isBlockedNoise(msg, blockedRequests)) consoleErrors.push(msg.text());

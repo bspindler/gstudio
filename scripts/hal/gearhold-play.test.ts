@@ -1,4 +1,7 @@
 // Browser tests for the Gearhold play runner (HAL_BROWSER=1 npx vitest run --project hal-browser).
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import type { Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LEVELS } from '../../games/gearhold/levels.js';
@@ -102,6 +105,85 @@ describe('newHalContext', () => {
     expect(blockedRequests).toEqual(['https://example.com/', 'https://example.com/pixel.png']);
     expect(external).toEqual([]);
     expect(consoleErrors.filter((m) => /ERR_BLOCKED|ERR_FAILED/.test(m))).toEqual([]);
+  });
+
+  // A plain local server: counts WebSocket upgrades and serves a page plus a service worker.
+  const SW = `self.addEventListener('install', () => self.skipWaiting());
+    self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+    self.addEventListener('message', (e) => {
+      fetch('https://example.com/from-sw').then(() => 'ok', (err) => 'rejected: ' + err).then((r) => e.source.postMessage(r));
+    });`;
+  async function listen(host: string): Promise<{ srv: Server; port: number; upgrades: string[] }> {
+    const upgrades: string[] = [];
+    const srv = createServer((req, res) => {
+      if (req.url === '/sw.js') res.writeHead(200, { 'content-type': 'text/javascript' }).end(SW);
+      else res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><title>t</title>');
+    });
+    srv.on('upgrade', (req, sock) => { upgrades.push(req.url ?? ''); sock.destroy(); });
+    await new Promise<void>((r) => srv.listen(0, host, () => r()));
+    return { srv, port: (srv.address() as AddressInfo).port, upgrades };
+  }
+  const lanIp = Object.values(networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
+  const openWs = (url: string) => new Promise<string>((resolve) => {
+    const ws = new (globalThis as any).WebSocket(url);
+    ws.onopen = () => resolve('open');
+    ws.onerror = () => resolve('error');
+    ws.onclose = () => resolve('closed');
+    setTimeout(() => resolve('timeout'), 3000);
+  });
+
+  it('closes non-allowed WebSockets before they connect and lets allowed ones through', async () => {
+    const lan = lanIp ? await listen(lanIp) : null;
+    const local = await listen('127.0.0.1');
+    const { context, blockedRequests } = await newHalContext(browser, { allowHosts: [`127.0.0.1:${local.port}`] });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${server.origin}/gearhold/index.html?hal=1`);
+      const far = lan ? `ws://${lanIp}:${lan.port}/far` : 'ws://10.255.255.1:9/far';
+      const farState = await page.evaluate(openWs, far);
+      await page.evaluate(openWs, `ws://127.0.0.1:${local.port}/near`);
+      expect(farState).not.toBe('open');
+      expect(blockedRequests).toContain(far);
+      if (lan) expect(lan.upgrades).toEqual([]); // nothing reached the LAN listener
+      expect(local.upgrades).toEqual(['/near']); // the allowed socket did connect through
+      expect(blockedRequests.some((u) => u.includes('/near'))).toBe(false);
+    } finally {
+      await context.close();
+      lan?.srv.close(); local.srv.close();
+    }
+  });
+
+  it('refuses other loopback ports unless allowed as host:port', async () => {
+    const other = await listen('127.0.0.1');
+    const { context, blockedRequests } = await newHalContext(browser);
+    try {
+      const page = await context.newPage();
+      await page.goto(`${server.origin}/gearhold/index.html?hal=1`);
+      const url = `http://127.0.0.1:${other.port}/x`;
+      expect(await page.evaluate((u) => fetch(u).then(() => 'ok', () => 'rejected'), url)).toBe('rejected');
+      expect(blockedRequests).toEqual([url]);
+    } finally { await context.close(); other.srv.close(); }
+  });
+
+  it("blocks a service worker's fetch", async () => {
+    const local = await listen('127.0.0.1');
+    const { context, blockedRequests } = await newHalContext(browser, { allowHosts: [`127.0.0.1:${local.port}`] });
+    try {
+      const page = await context.newPage();
+      await page.goto(`http://127.0.0.1:${local.port}/`);
+      const r = await page.evaluate(async () => {
+        const nav = (globalThis as any).navigator;
+        await nav.serviceWorker.register('/sw.js');
+        const reg = await nav.serviceWorker.ready;
+        return new Promise<string>((resolve) => {
+          nav.serviceWorker.addEventListener('message', (e: any) => resolve(String(e.data)));
+          reg.active.postMessage('go');
+          setTimeout(() => resolve('timeout'), 5000);
+        });
+      });
+      expect(r).toMatch(/^rejected/);
+      expect(blockedRequests).toContain('https://example.com/from-sw');
+    } finally { await context.close(); local.srv.close(); }
   });
 });
 
