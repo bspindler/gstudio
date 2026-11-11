@@ -192,4 +192,31 @@ describe('collectDiff fail-closed and binary-blinding defences', () => {
     const r = mk();
     try { await expect(vitestCounts(r, 'no-such-ref')).rejects.toThrow(); } finally { rmSync(r, { recursive: true, force: true }); }
   });
+  it('flags a text file with a NUL byte or UTF-16 BOM, still decoding it', async () => {
+    const r = mk();
+    try {
+      put(r, 'games/g/a.js', Buffer.from([0xff, 0xfe, 0x61, 0x00]));
+      put(r, 'games/g/index.html', 'ok\0\n');
+      const d = await collectDiff(r, 'HEAD', { countTests: counts });
+      expect(d.files.find((f) => f.path === 'games/g/a.js')).toMatchObject({ binary: false, suspectEncoding: true });
+      expect(d.files.find((f) => f.path === 'games/g/index.html')).toMatchObject({ binary: false, suspectEncoding: true });
+      expect(checkTripwires(d).filter((v) => v.rule === 'outside-scope')).toHaveLength(2);
+    } finally { rmSync(r, { recursive: true, force: true }); }
+  });
+  it('level sources: absent at base is fine, any other git failure throws', async () => {
+    const r = mk(); // no level files at base
+    try {
+      const d = await collectDiff(r, 'HEAD', { countTests: counts });
+      expect(d.levelCounts.before).toEqual({});
+      const broken: GitRunner = async (args, cwd) => { if (args[0] === 'ls-tree') throw new Error('corrupt'); return runGit(args, cwd); };
+      await expect(collectDiff(r, 'HEAD', { git: broken, countTests: counts })).rejects.toThrow('corrupt');
+      const showFails: GitRunner = async (args, cwd) => {
+        if (args[0] === 'ls-tree') return 'games/gearhold/levels.js\n';
+        if (args[0] === 'show') throw new Error('unreadable blob');
+        return runGit(args, cwd);
+      };
+      await expect(collectDiff(r, 'HEAD', { git: showFails, countTests: counts })).rejects.toThrow('unreadable blob');
+      await expect(collectDiff(r, 'no-such-ref', { countTests: counts })).rejects.toThrow();
+    } finally { rmSync(r, { recursive: true, force: true }); }
+  });
 });

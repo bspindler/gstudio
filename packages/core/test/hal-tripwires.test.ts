@@ -296,7 +296,7 @@ describe('fix round 1: hal hook tampering from outside the block (important 2)',
   it.each(['window.__hal.step = noop;', 'hal.shots = 0;', 'hal.hits += 5;', 'hal.dmg++;', '--hal.unseen;', 'const hal = {};', 'const HAL = true;', 'if (HAL) go();'])('rejects an added line outside the block: %s', (line) => {
     const v = halHook(diff([M(P, wrap('a'), wrap('a\n' + line))]));
     expect(v.map((x) => x.rule)).toEqual(['hal-hook']);
-    expect(v[0]!.detail).toContain('added line');
+    expect(v[0]!.detail).toContain('added statement');
   });
   it('rejects a removed counter line, and added __hal in another gearhold file', () => {
     expect(halHook(diff([M(P, wrap('hal.shots++;\nb'), wrap('b'))])).some((x) => x.detail.startsWith('removed'))).toBe(true);
@@ -325,9 +325,10 @@ describe('fix round 1: random-reward evidence and wording (important 3, 4, 5)', 
     expect(R(A('games/g/index.html', '<!-- odds -->\n<script>const x = rng(); openChest();</script>\n'))).toHaveLength(1);
   });
   it('accepts the SDK odds calls, oddsLine(), and odds inside a string, template or html text', () => {
-    for (const ok of ['studio.odds.roll(T)', 'studio.odds.format(T)', 'oddsLine()', 'label = "Drop odds: 5%"', "t = 'odds'", 'm = `Odds ${n}`', '<p>Odds: 5%</p>']) {
+    for (const ok of ['studio.odds.roll(T)', 'studio.odds.format(T)', 'oddsLine()', 'label = "Drop odds: 5%"', "t = 'odds'", 'm = `Odds ${n}`']) {
       expect(R(A('games/g/a.js', `const x = Math.random(); openChest();\n${ok}\n`)), ok).toEqual([]);
     }
+    expect(R(A('games/g/index.html', '<p>Odds: 5%</p>\n<script>const x = Math.random(); openChest();</script>\n'))).toEqual([]);
   });
   it('odds in another file does not vouch for randomness in this one', () => {
     expect(R(A('games/g/a.js', 'const x = Math.random();\n'), A('games/g/b.js', 'openChest(); label = "odds 5%";\n'))).toEqual([{ rule: 'random-reward', path: 'games/g/a.js', detail: expect.any(String) }]);
@@ -433,5 +434,52 @@ describe('fix round 2 (R8): secret', () => {
     expect(secret(diff([M('a.js', `k = "${key}"\n`, `k = "${key}"\nlet z;\n`)]))).toEqual([]);
     expect(secret(diff([A('a.js', 'anything\n')], { secrets: ['abc', ''] }))).toEqual([]);
     expect(secret(diff([D('a.js', key)]))).toEqual([]);
+  });
+});
+
+describe('fix round 2', () => {
+  const R = (...f: FileChange[]) => randomReward(diff(f));
+  it('a variable named odds is not evidence (inline script, or a string elsewhere on the line)', () => {
+    expect(R(A('games/g/index.html', '<script>\nconst odds = 0.1;\nif (rng() < odds) openChest();\n</script>\n'))).toHaveLength(1);
+    expect(R(A('games/g/a.js', "label = 'Open'; const odds = 0.1; if (Math.random() < odds) openChest();\n"))).toHaveLength(1);
+    expect(R(A('games/g/a.js', 'const t = `${odds}`; if (Math.random() < odds) openChest();\n'))).toHaveLength(1);
+    expect(R(A('games/g/index.html', "<style>.odds{color:red}</style><script>if (rng() < odds) openChest();</script>\n"))).toHaveLength(1);
+  });
+  it('real evidence still works: html text outside scripts, string in script, SDK call', () => {
+    expect(R(A('games/g/index.html', '<script>\nif (rng() < p) openChest();\n</script>\n<p class="fine">Chest odds: 10%</p>\n'))).toEqual([]);
+    expect(R(A('games/g/index.html', '<script>\nconst odds = 0.1; if (rng() < odds) openChest(); note = "Odds 10%";\n</script>\n'))).toEqual([]);
+  });
+
+  const P = 'games/gearhold/index.html';
+  const hook = '// ---- hal hook (test only)\nwindow.__hal = {};\n// ---- end hal hook ----';
+  const real = readFileSync(new URL('../../../games/gearhold/index.html', import.meta.url), 'utf8');
+  const edit = (a: string, b: string) => { expect(real).toContain(a); return real.replace(a, b); };
+  it('ordinary edits to the real hal-touching lines pass; hal statements changing still trips', () => {
+    const l667 = 'const eff = Math.min(n, P.hp); hal.dmg += eff;';
+    expect(halHook(diff([M(P, real, edit(l667, 'const eff = Math.min(n * 2, P.hp); hal.dmg += eff;'))]))).toEqual([]);
+    expect(halHook(diff([M(P, real, edit(l667, '  const eff = Math.min(n, P.hp);\n    hal.dmg += eff;'))]))).toEqual([]); // re-indented and wrapped over lines
+    expect(halHook(diff([M(P, real, edit(l667, '{ const eff = Math.min(n, P.hp); hal.dmg += eff; }'))]))).toEqual([]); // wrapped in a block
+    expect(halHook(diff([M(P, real, edit('if (HAL) return;', '{ if (HAL) return; }'))]))).toEqual([]);
+    expect(halHook(diff([M(P, real, edit('// test hook drives update(); see the hal hook block', '// drives update()'))]))).toEqual([]);
+    expect(halHook(diff([M(P, real, edit(l667, 'const eff = Math.min(n, P.hp); hal.dmg += eff * 2;'))])).length).toBeGreaterThan(0);
+    expect(halHook(diff([M(P, real, edit(l667, 'const eff = Math.min(n, P.hp);'))])).some((v) => v.detail.startsWith('removed'))).toBe(true);
+    expect(halHook(diff([M(P, real, edit('if (HAL && !hal.live)', 'if (!hal.live)'))])).length).toBeGreaterThan(0);
+  });
+  it('a duplicated hal statement is still an added one (multiset)', () => {
+    expect(halHook(diff([M(P, `${hook}\nhal.shots++;\n`, `${hook}\nhal.shots++;\nhal.shots++;\n`)])).length).toBeGreaterThan(0);
+    expect(halHook(diff([M(P, `${hook}\nhal.shots++;\nx();\n`, `${hook}\nx();\nhal.shots++;\n`)]))).toEqual([]); // moved
+  });
+
+  it('flags a text file hiding behind a NUL byte or UTF-16 BOM', () => {
+    expect(outsideScope(diff([{ ...A('games/g/a.js', 'x'), suspectEncoding: true }])).map((v) => v.rule)).toEqual(['outside-scope']);
+    expect(outsideScope(diff([A('games/g/a.js', 'x\0y')]))).toHaveLength(1);
+    expect(outsideScope(diff([A('games/g/a.js', 'plain')]))).toEqual([]);
+    expect(outsideScope(diff([D('games/g/a.js', 'x\0')]))).toEqual([]);
+  });
+
+  it('only "deal(s) N damage" is stripped: a timer next to "Deal 50% off" still trips', () => {
+    expect(darkPattern(diff([A('games/g/a.js', 'label = "Deal 50% off";\nsetTimeout(x, 5);\n')]))).toHaveLength(1);
+    expect(darkPattern(diff([A('games/g/a.js', 'label = "Deals 2 fire damage";\nsetTimeout(x, 5);\n')]))).toEqual([]);
+    expect(darkPattern(diff([A('games/g/a.js', 'label = "Deal 5 damage, 3 deals left";\nsetTimeout(x, 5);\n')]))).toHaveLength(1);
   });
 });

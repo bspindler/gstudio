@@ -170,6 +170,7 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
     if (!(abs === root || abs.startsWith(root + sep))) throw new Error(`collectDiff: path escapes the worktree: ${r.path}`);
     const isText = TEXT_EXT.has(extOf(r.path));
     let after: string | null = null;
+    let suspect = false;
     let symlinked = false;
     let binary = !isText && binaryPaths.has(r.path);
     // Fail closed: a path that is present and not deleted must be readable, or the whole collection throws (callers treat a throw as a discard).
@@ -179,19 +180,21 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
       else if (st.isFile()) {
         const buf = await readFile(abs);
         if (!isText && looksBinary(buf)) binary = true;
+        if (isText && (buf.includes(0) || (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))))) suspect = true;
         after = binary ? null : buf.toString('utf8');
       } else throw new Error(`collectDiff: not a regular file or symlink: ${r.path}`);
     }
     let before: string | null = null;
     if (r.status !== 'A' && !binary) before = await git(['show', `${base}:${r.oldPath ?? r.path}`], root);
-    files.push({ path: r.path, status: r.status, before, after, binary, ...(r.oldPath !== undefined ? { oldPath: r.oldPath } : {}), ...(symlinked ? { symlink: true } : {}) });
+    files.push({ path: r.path, status: r.status, before, after, binary, ...(r.oldPath !== undefined ? { oldPath: r.oldPath } : {}), ...(symlinked ? { symlink: true } : {}), ...(suspect ? { suspectEncoding: true } : {}) });
   }
 
   const deleted = new Set(files.filter((f) => f.status === 'D').map((f) => f.path));
   const renamedAway = new Set(files.filter((f) => f.oldPath).map((f) => f.oldPath!));
   const repoFiles = [...new Set([...lines(trackedOut), ...lines(untrackedOut)])].filter((p) => !deleted.has(p) && !renamedAway.has(p));
 
-  const baseText = async (file: string) => { try { return await git(['show', `${base}:${file}`], root); } catch { return null; } };
+  // Only a path truly absent at base has "no before count"; any other git failure throws.
+  const baseText = async (file: string) => ((await git(['ls-tree', '--name-only', base, '--', file], root)).trim() === '' ? null : git(['show', `${base}:${file}`], root));
   const beforeTexts = new Map<string, string | null>();
   for (const s of LEVEL_SOURCES) beforeTexts.set(s.file, await baseText(s.file));
   const afterText = async (file: string) => {
