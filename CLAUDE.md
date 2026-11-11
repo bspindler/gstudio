@@ -15,6 +15,7 @@ Phase 1a and 1b are merged to `main`. Plan 1c (console, portal, Azure adapters, 
 5. **Privacy-light by default.** Anonymous player IDs. Store privacy labels must match what we actually collect.
 6. **Original IP only.**
 7. **Secrets in Azure Key Vault**, never in the repo. Least-privilege identity (managed identity + RBAC) per service. *(The original rule named AWS Secrets Manager and IAM; it was adapted when the platform moved to Azure on 2026-10-25, with the same intent.)*
+   Local operator exception: Hal's `ANTHROPIC_API_KEY` lives in the git-ignored `.hal.env` on Brian's Mac (2026-11-11).
 
 ## Autonomy
 
