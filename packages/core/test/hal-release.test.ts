@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { applyRelease, bumpKind, formatTrailers, nightOf, parseTrailers, planVersion, undoEntry, type HalTrailers, type ReleaseFiles } from '../src/hal/release.js';
+import { applyRelease, bumpKind, formatTrailers, nightOf, parseTrailers, planVersion, bumpedTonight, undoEntry, type HalTrailers, type ReleaseFiles } from '../src/hal/release.js';
 
 const gamesDir = fileURLToPath(new URL('../../../games/', import.meta.url));
 const slugs = readdirSync(gamesDir).filter((d) => existsSync(join(gamesDir, d, 'game.yaml')));
@@ -41,6 +41,17 @@ describe('bumpKind / planVersion', () => {
   it('shares a version on the same night', () => {
     expect(planVersion({ ...base, topEntryDate: '2026-11-08', kind: 'fix', alreadyBumpedTonight: 'patch' })).toBe('0.4.1');
     expect(planVersion({ ...base, topEntryDate: '2026-11-08', kind: 'feature', alreadyBumpedTonight: 'minor' })).toBe('0.4.1');
+  });
+  it('throws when tonight has an entry but the bump level is unknown', () => {
+    expect(() => planVersion({ ...base, topEntryDate: '2026-11-08', kind: 'fix' })).toThrow(/bumpedTonight/);
+  });
+  it('a second feature after a minor tonight keeps the version (via bumpedTonight)', () => {
+    const cl = '## 0.5.0 (2026-11-08)\n- a\n\n## 0.4.1 (2026-11-07)\n- b\n';
+    const b = bumpedTonight(cl, '2026-11-08');
+    expect(b).toBe('minor');
+    expect(planVersion({ ...base, current: '0.5.0', topEntryDate: '2026-11-08', kind: 'feature', alreadyBumpedTonight: b })).toBe('0.5.0');
+    expect(bumpedTonight('## 0.4.2 (2026-11-08)\n- a\n\n## 0.4.1 (2026-11-07)\n', '2026-11-08')).toBe('patch');
+    expect(bumpedTonight('## 0.1.0 (2026-11-08)\n- a\n', '2026-11-08')).toBe('minor');
   });
   it('upgrades to minor when a feature follows patch-only changes', () => {
     expect(planVersion({ ...base, topEntryDate: '2026-11-08', kind: 'feature', alreadyBumpedTonight: 'patch' })).toBe('0.5.0');
@@ -93,11 +104,25 @@ describe.each(slugs)('applyRelease on %s', (slug) => {
     expect(out.changelog).toContain('- Undone: Bigger crabs (HAL-012): felt worse\n');
   });
 
-  it('undo on a night that already has an entry shares its version', () => {
+  it('undo on a night that already has an entry still gets a new patch version', () => {
     const a = applyRelease(files, { slug, version: planVersion({ current: cur, topEntryDate: null, night, kind: 'fix', alreadyBumpedTonight: null }), night, entry: { kind: 'fix', text: 'x' } });
     const b = undoEntry(a, { slug, current: ver(a), night, title: 't', pass: 'HAL-001', reason: 'r' });
     check(slug, b);
-    expect(ver(b)).toBe(ver(a));
+    const [x, y, z] = ver(a).split('.').map(Number);
+    expect(ver(b)).toBe(`${x}.${y}.${z! + 1}`);
+    expect(b.changelog).toContain(`## ${ver(b)} (${night})\n- Undone: t (HAL-001): r\n\n## ${ver(a)} (${night})`);
+  });
+
+  it('strips a leading "- " from the entry text', () => {
+    const out = applyRelease(files, { slug, version: planVersion({ current: cur, topEntryDate: null, night, kind: 'fix', alreadyBumpedTonight: null }), night, entry: { kind: 'fix', text: '- hello' } });
+    expect(out.changelog).toContain('\n- hello\n');
+    expect(out.changelog).not.toContain('- - hello');
+  });
+
+  it('bumpedTonight reads the real changelog', () => {
+    const top = /^## \S+ \((\d{4}-\d{2}-\d{2})\)/m.exec(files.changelog)![1]!;
+    expect(bumpedTonight(files.changelog, '2099-01-01')).toBeNull();
+    expect(bumpedTonight(files.changelog, top)).toBe(slug === 'gearhold' ? 'minor' : 'patch');
   });
 
   it('throws on malformed files', () => {
@@ -133,7 +158,26 @@ describe('trailers', () => {
   });
 });
 
+describe('trailer strictness', () => {
+  const t: HalTrailers = { pass: 'HAL-012', game: 'g', kind: 'fix', why: 'w', scoreBefore: 1, scoreAfter: 2, version: '0.1.1', run: 'r' };
+  it('formatTrailers throws on empty required values or non-finite scores', () => {
+    expect(() => formatTrailers({ ...t, why: ' \n ' })).toThrow(/Hal-Why/);
+    expect(() => formatTrailers({ ...t, scoreAfter: NaN })).toThrow(/finite/);
+    expect(() => formatTrailers({ ...t, scoreBefore: Infinity })).toThrow(/finite/);
+  });
+  it('parseTrailers reads only the final paragraph and checks the version', () => {
+    expect(parseTrailers(`subject\n\n${formatTrailers(t)}\n\nNot a trailer block.`)).toBeNull();
+    expect(parseTrailers(`Hal-Why: quoted in body\n\n${formatTrailers(t)}\n`)).toEqual(t);
+    expect(parseTrailers(formatTrailers({ ...t, version: 'v1' }))).toBeNull();
+  });
+});
+
 describe('nightOf', () => {
+  it('handles positive offsets and the year boundary', () => {
+    expect(nightOf(new Date('2026-11-10T20:00:00Z'), 540)).toBe('2026-11-10'); // 05:00 Tokyo Nov 11
+    expect(nightOf(new Date('2026-11-10T21:00:00Z'), 540)).toBe('2026-11-11'); // 06:00
+    expect(nightOf(new Date('2027-01-01T09:00:00Z'), -360)).toBe('2026-12-31'); // 03:00 local Jan 1
+  });
   it('belongs to the previous day before 6 a.m. local', () => {
     const cst = -360;
     expect(nightOf(new Date('2026-11-11T10:00:00Z'), cst)).toBe('2026-11-10'); // 04:00 local

@@ -26,7 +26,7 @@ export interface PlanVersionInput {
   /** Tonight's date, from nightOf(). */
   night: string;
   kind: ChangeKind;
-  /** Bump level already used tonight. Only read when topEntryDate === night; null there means unknown and is treated as 'patch'. */
+  /** Bump level already used tonight (see bumpedTonight). Required when topEntryDate === night: null there throws. */
   alreadyBumpedTonight: BumpKind | null;
 }
 
@@ -34,6 +34,7 @@ export interface PlanVersionInput {
 export function planVersion(i: PlanVersionInput): string {
   parseSemver(i.current);
   if (i.topEntryDate === i.night) {
+    if (i.alreadyBumpedTonight === null) throw new Error('release: alreadyBumpedTonight is required when tonight already has a CHANGELOG entry (use bumpedTonight)');
     if (bumpKind(i.kind) === 'minor' && i.alreadyBumpedTonight !== 'minor') return bump(i.current, 'minor');
     return i.current;
   }
@@ -62,11 +63,27 @@ export function topEntry(changelog: string): { version: string; date: string } |
   return m ? { version: m[1]!, date: m[2]! } : null;
 }
 
+/** What tonight's top entry bumped: compares its version with the previous heading. null if the top entry is not tonight's. */
+export function bumpedTonight(changelog: string, night: string): BumpKind | null {
+  const heads = [...changelog.matchAll(new RegExp(HEADING.source, 'gm'))];
+  const top = heads[0];
+  if (!top || top[2] !== night) return null;
+  const prev = heads[1];
+  if (!prev) return 'minor';
+  const [a, b] = parseSemver(top[1]!);
+  const [pa, pb] = parseSemver(prev[1]!);
+  return a !== pa || b !== pb ? 'minor' : 'patch';
+}
+
 /** Edits game.yaml, index.html and CHANGELOG.md. Throws if any file lacks the expected shape. */
 export function applyRelease(files: ReleaseFiles, r: ReleaseInput): ReleaseFiles {
+  return apply(files, r, false);
+}
+
+function apply(files: ReleaseFiles, r: ReleaseInput, forceNewHeading: boolean): ReleaseFiles {
   parseSemver(r.version);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(r.night)) throw new Error(`release: bad night ${JSON.stringify(r.night)}`);
-  const text = oneLine(r.entry.text);
+  const text = oneLine(r.entry.text).replace(/^-\s+/, '');
   if (!text) throw new Error('release: empty changelog entry');
 
   const yamlRe = /^version:[ \t]*\S+[ \t]*$/m;
@@ -85,7 +102,7 @@ export function applyRelease(files: ReleaseFiles, r: ReleaseInput): ReleaseFiles
   const nextRel = rest.search(/^## /m);
   const sectionEnd = nextRel === -1 ? files.changelog.length : idx + top[0].length + nextRel;
   let changelog: string;
-  if (top[2] === r.night) {
+  if (top[2] === r.night && !forceNewHeading) {
     // Tonight already has an entry: add a bullet, and rename the heading if the version was upgraded.
     const [ca, cb, cc] = parseSemver(top[1]!);
     const [na, nb, nc] = parseSemver(r.version);
@@ -115,15 +132,11 @@ export interface UndoInput {
   reason: string;
 }
 
-/**
- * Adds `Undone: <title> (<pass>): <reason>` under a new patch version (or tonight's entry, if the CHANGELOG
- * already has one for this night, sharing its version). Versions never go backwards.
- */
+/** Adds `Undone: <title> (<pass>): <reason>` under a NEW patch version heading, even if tonight already has one. Versions never go backwards. */
 export function undoEntry(files: ReleaseFiles, u: UndoInput): ReleaseFiles {
-  const top = topEntry(files.changelog);
-  const version = top && top.date === u.night ? u.current : bump(u.current, 'patch');
+  const version = bump(u.current, 'patch');
   const text = `Undone: ${oneLine(u.title)} (${oneLine(u.pass)}): ${oneLine(u.reason)}`;
-  return applyRelease(files, { slug: u.slug, version, night: u.night, entry: { kind: 'fix', text } });
+  return apply(files, { slug: u.slug, version, night: u.night, entry: { kind: 'fix', text } }, true);
 }
 
 export interface HalTrailers {
@@ -149,10 +162,13 @@ const KEYS: Array<[keyof HalTrailers, string]> = [
 /** One `Key: value` line per field (optional fields omitted when undefined). Newlines in values become spaces. */
 export function formatTrailers(t: HalTrailers): string {
   const lines: string[] = [];
+  if (!Number.isFinite(t.scoreBefore) || !Number.isFinite(t.scoreAfter)) throw new Error('release: trailer scores must be finite numbers');
   for (const [f, key] of KEYS) {
     const v = t[f];
     if (v === undefined) continue;
-    lines.push(`${key}: ${oneLine(String(v))}`);
+    const val = oneLine(String(v));
+    if (!val && !['undo', 'reason'].includes(f)) throw new Error(`release: empty value for ${key}`);
+    lines.push(`${key}: ${val}`);
   }
   return lines.join('\n');
 }
@@ -160,7 +176,8 @@ export function formatTrailers(t: HalTrailers): string {
 /** Reads Hal trailers from a commit message. Returns null unless all required keys are present and valid. */
 export function parseTrailers(message: string): HalTrailers | null {
   const map = new Map<string, string>();
-  for (const line of message.split(/\r?\n/)) {
+  const last = message.replace(/\s+$/, '').split(/\r?\n[ \t]*\r?\n/).pop() ?? '';
+  for (const line of last.split(/\r?\n/)) {
     const m = /^(Hal-[A-Za-z-]+):[ \t]*(.*?)[ \t]*$/.exec(line);
     if (m) map.set(m[1]!, m[2]!);
   }
@@ -169,7 +186,7 @@ export function parseTrailers(message: string): HalTrailers | null {
   const before = Number(get('Hal-Score-Before'));
   const after = Number(get('Hal-Score-After'));
   const need = ['Hal-Pass', 'Hal-Game', 'Hal-Why', 'Hal-Version', 'Hal-Run'].map(get);
-  if (need.some((v) => !v) || !['fix', 'tuning', 'polish', 'feature'].includes(kind ?? '')) return null;
+  if (need.some((v) => !v) || !SEMVER.test(get('Hal-Version')!) || !['fix', 'tuning', 'polish', 'feature'].includes(kind ?? '')) return null;
   if (!get('Hal-Score-Before') || !get('Hal-Score-After') || !Number.isFinite(before) || !Number.isFinite(after)) return null;
   const out: HalTrailers = {
     pass: get('Hal-Pass')!, game: get('Hal-Game')!, kind: kind as ChangeKind, why: get('Hal-Why')!,
@@ -180,7 +197,7 @@ export function parseTrailers(message: string): HalTrailers | null {
   return out;
 }
 
-/** A run that starts before 6 a.m. belongs to the previous day's night. tzOffsetMinutes is minutes EAST of UTC (e.g. -300 for US Central standard). */
+/** A run that starts before 6 a.m. belongs to the previous day's night. tzOffsetMinutes is minutes EAST of UTC (e.g. -360 for US Central standard, +540 for Tokyo). */
 export function nightOf(date: Date, tzOffsetMinutes: number): string {
   return new Date(date.getTime() + tzOffsetMinutes * 60_000 - 6 * 3_600_000).toISOString().slice(0, 10);
 }
