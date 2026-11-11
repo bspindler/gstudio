@@ -1,0 +1,59 @@
+import { describe, expect, it } from 'vitest';
+import { DAILY_CAP_USD, SLICES, apiSpent, dayOf, recordCall, sliceFor, type SpendDay } from '../src/hal/budget.js';
+
+const empty = (day = '2026-11-11'): SpendDay => ({ day, calls: [] });
+const call = (usd: number | undefined, billing: 'api' | 'subscription' = 'api', role = 'planner') => ({ run: 'r1', role, billing, usd, at: '2026-11-11T01:00:00Z' });
+
+describe('hal budget', () => {
+  it('has the spec constants', () => {
+    expect(DAILY_CAP_USD).toBe(20);
+    expect(SLICES).toEqual({ planner: 1.5, implementer: 3, director: 1 });
+  });
+  it('apiSpent sums api calls only', () => {
+    let d = empty();
+    d = recordCall(d, call(2));
+    d = recordCall(d, call(5, 'subscription'));
+    d = recordCall(d, call(1.5));
+    expect(apiSpent(d)).toBe(3.5);
+  });
+  it('sliceFor is the role slice, clipped to the remaining cap', () => {
+    expect(sliceFor(empty(), 'implementer')).toBe(3);
+    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 18.5, at: 't' }] };
+    expect(sliceFor(d, 'implementer')).toBe(1.5);
+  });
+  it('cap is reached exactly at 20 and slice is 0', () => {
+    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 20, at: 't' }] };
+    expect(sliceFor(d, 'director')).toBe(0);
+    const over: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 25, at: 't' }] };
+    expect(sliceFor(over, 'planner')).toBe(0);
+  });
+  it('subscription calls do not count against the cap', () => {
+    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'subscription', usd: 99, at: 't' }] };
+    expect(sliceFor(d, 'implementer')).toBe(3);
+  });
+  it('unknown cost records the full slice given', () => {
+    const d = recordCall(empty(), call(undefined, 'api', 'implementer'));
+    expect(d.calls[0]!.usd).toBe(3);
+    const d2 = recordCall(empty(), { ...call(undefined, 'api', 'planner'), usd: Number.NaN });
+    expect(d2.calls[0]!.usd).toBe(1.5);
+  });
+  it('unknown cost never exceeds what is left of the cap', () => {
+    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 19, at: 't' }] };
+    expect(recordCall(d, call(undefined, 'api', 'implementer')).calls[1]!.usd).toBe(1);
+  });
+  it('recordCall does not mutate its input', () => {
+    const d = empty();
+    recordCall(d, call(1));
+    expect(d.calls).toHaveLength(0);
+  });
+  it('dayOf uses the local date of the injected clock', () => {
+    expect(dayOf(new Date(2026, 10, 11, 23, 59))).toBe('2026-11-11');
+    expect(dayOf(new Date(2026, 10, 12, 0, 1))).toBe('2026-11-12');
+    expect(dayOf(new Date(2026, 0, 5, 12))).toBe('2026-01-05');
+  });
+  it('rollover: a new day starts fresh', () => {
+    const yesterday: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 20, at: 't' }] };
+    const today = dayOf(new Date(2026, 10, 12, 0, 5)) === yesterday.day ? yesterday : empty('2026-11-12');
+    expect(sliceFor(today, 'planner')).toBe(1.5);
+  });
+});
