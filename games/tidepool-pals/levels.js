@@ -47,7 +47,7 @@ const RAW = [
   L(10, 24, 5, [ICE(4)],
     ['.......', '.......', '.......', '.i...i.', '.......', '.i...i.', '.......', '.......'],
     { tide: T(5, 3, 'up'), intro: 'Pals tangled in nets! Clear pals next to a net to untangle them. Tangled pals stay put, whatever the tide does, until they are free.' }),
-  L(11, 26, 5, [RESCUE(1), C(0, 12)],
+  L(11, 40, 5, [RESCUE(1), C(0, 12)],
     ['.......', '.P.....', '.......', '.......', '.......', '.......', '.......', '.......'],
     { tide: T(3, 3, 'right'), exit: 'right', intro: 'This pal needs the low tide: it drifts right as the water drains. Clear its row to let it reach the open water on the right.' }),
   L(12, 26, 5, [C(1, 24)],
@@ -56,10 +56,10 @@ const RAW = [
   L(13, 26, 5, [C(0, 16), C(3, 16)],
     ['.......', 'x.....x', 'xx...xx', 'xx...xx', 'x.....x', '.......', '.......', '.......'],
     { tide: T(5, 2, 'up'), intro: 'Tap a special that touches another special to combine them into a bigger blast.' }),
-  L(14, 28, 5, [LITTER, ICE(4)],
+  L(14, 42, 5, [LITTER, ICE(4)],
     ['.......', '.......', '.i...i.', '.......', '.i...i.', '.......', 'll...ll', 'lll.lll'],
     { tide: T(4, 3, 'right') }),
-  L(15, 28, 5, [RESCUE(2)],
+  L(15, 34, 5, [RESCUE(2)],
     ['.P...P.', '.......', '.......', '.l...l.', '.......', '.......', '.......', '.......'],
     { tide: T(5, 2, 'up'), exit: 'down', intro: 'Two pals this time, with litter in the way. Careful: at low tide they float back up.' }),
   L(16, 26, 5, [C(2, 22)],
@@ -71,7 +71,7 @@ const RAW = [
   L(18, 28, 5, [LITTER, C(2, 18)],
     ['x.....x', '.......', '.......', 'l.....l', 'll...ll', '.......', '.......', 'x.....x'],
     { tide: T(4, 3, 'right') }),
-  L(19, 28, 5, [RESCUE(1), LITTER],
+  L(19, 34, 5, [RESCUE(1), LITTER],
     ['.......', '....P..', '.......', '.......', '.......', '.......', 'll...ll', 'lll.lll'],
     { tide: T(3, 4, 'left'), exit: 'left' }),
   L(20, 32, 5, [LITTER, ICE(4), C(4, 16)],
@@ -123,6 +123,8 @@ const ROCKS = [
   [[3, 2], [3, 3], [3, 4], [4, 2], [4, 3], [4, 4]],
 ];
 const TIDE_DIRS = ['up', 'left', 'right'];
+/** Extra moves for generated levels that hard-stopped players (measured by the play scorer). */
+export const MOVE_BONUS = { 25: 14, 26: 16, 28: 16 };
 
 export function generateLevel(n) {
   const rng = mulberry32(hashSeed('tidepool:' + n));
@@ -220,6 +222,8 @@ export function generateLevel(n) {
   const slack = Math.max(1.12, 1.55 - 0.045 * tier);
   const holesFactor = 1 + (features(def).holes / (ROWS * COLS)) * 0.6;
   def.moves = Math.max(16, Math.min(40, Math.round(workload(def) * holesFactor * slack) + 5));
+  // 9. A few generated levels proved to wall players: they get extra moves, nothing else changes.
+  if (MOVE_BONUS[n]) def.moves = Math.min(45, def.moves + MOVE_BONUS[n]);
   return def;
 }
 

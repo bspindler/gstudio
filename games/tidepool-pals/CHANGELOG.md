@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.4.2 (2026-11-12)
+- Gave a few of the trickiest tide pools a little more room: levels 11, 14, 15, 19, 25, 26 and 28 now have extra moves.
+
 ## 0.4.1 (2026-11-11)
 - **Fonts ship with the game.** Bagel Fat One and Nunito now load from the game's own `fonts/` folder (SIL OFL), so players' phones no longer contact Google Fonts. The look is unchanged.
 - Fix: the reef's litter art was renamed so the merged page script loads.

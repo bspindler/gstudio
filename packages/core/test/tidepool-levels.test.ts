@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { COLS, ROWS, buildBoard, counter, hasMoves, mulberry32 } from '../../../games/tidepool-pals/board.js';
 import {
-  AUTHORED, HELPER_LEVEL, difficulty, features, generateLevel, levelDef, levelFor, poolOf, validateLevel, withoutTides,
+  AUTHORED, HELPER_LEVEL, MOVE_BONUS, difficulty, features, generateLevel, levelDef, levelFor, poolOf, validateLevel, withoutTides,
 } from '../../../games/tidepool-pals/levels.js';
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -123,6 +123,16 @@ describe('tidepool levels: procedural generator beyond 20', () => {
     const late = range(60, 110).map((n) => features(levelDef(n)));
     expect(late.some((f) => f.goals >= 3)).toBe(true);
     expect(late.some((f) => f.holes > 0)).toBe(true);
+  });
+
+  it('gives the levels that walled players extra moves, leaving their boards and goals alone', () => {
+    for (const n of [11, 14, 15, 19]) expect(levelDef(n).moves).toBeGreaterThanOrEqual(32);
+    for (const n of [25, 26, 28]) {
+      const { moves, ...rest } = generateLevel(n);
+      expect(MOVE_BONUS[n]).toBeGreaterThan(0);
+      expect(moves).toBeLessThanOrEqual(45);
+      expect(rest.layout).toHaveLength(ROWS);
+    }
   });
 
   it('never exceeds sane limits however high the level goes', () => {
