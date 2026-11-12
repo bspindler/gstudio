@@ -14,8 +14,10 @@ export type UndoStatus = 'pending' | 'done' | 'failed' | 'rejected';
  * An undo request or its outcome. `pass` (HAL-0xx) and `status` are set by `hal undo` and by the run's preflight:
  * `pending` (asked, e.g. from the report page) and `failed` (conflict, tests) are retried by the next run's preflight;
  * `rejected` (no such merged pass) and `done` are not.
+ * `run` is the run whose report asked for it (feedbackFor filters on it); `undoRun` is the run or `hal undo` that applied
+ * or tried it, when that differs. `version` is the game version the undo commit released (set when done).
  */
-export type Undo = { run: string; reason: string; at: string; pass?: string; status?: UndoStatus; commit?: string; error?: string };
+export type Undo = { run: string; reason: string; at: string; pass?: string; status?: UndoStatus; commit?: string; error?: string; undoRun?: string; version?: string };
 export type Feedback = { votes: Vote[]; undos: Undo[] };
 export type Store = ReturnType<typeof createStore>;
 
@@ -135,13 +137,18 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
       const f = await readFeedback();
       await writeJsonAtomic(p('feedback.json'), { ...f, undos: [...f.undos, { ...u, at: now().toISOString() }] });
     },
-    /** Re-reads feedback.json and updates the newest unfinished entry for `u.pass` (pending/failed), or appends one. */
-    async recordUndo(u: Omit<Undo, 'at'> & { pass: string; status: UndoStatus }): Promise<void> {
+    /**
+     * Re-reads feedback.json and updates the newest unfinished entry for `u.pass` (pending/failed), or appends one.
+     * `u.run` is the applying run's id: an existing entry keeps its own `run` (the report that asked) and gets `undoRun`.
+     */
+    async recordUndo(u: Omit<Undo, 'at' | 'undoRun'> & { pass: string; status: UndoStatus }): Promise<void> {
       const f = await readFeedback();
       const undos = [...f.undos];
       let i = -1;
       for (let j = undos.length - 1; j >= 0; j--) if (undos[j]!.pass === u.pass && (undos[j]!.status === 'pending' || undos[j]!.status === 'failed')) { i = j; break; }
-      const merged: Undo = { ...(i >= 0 ? undos[i]! : {}), ...u, at: now().toISOString() };
+      const prev = i >= 0 ? undos[i]! : undefined;
+      const merged: Undo = { ...(prev ?? {}), ...u, at: now().toISOString() };
+      if (prev && typeof prev.run === 'string' && prev.run !== u.run) { merged.run = prev.run; merged.undoRun = u.run; }
       if (u.status === 'done') delete merged.error;
       if (i >= 0) undos[i] = merged; else undos.push(merged);
       await writeJsonAtomic(p('feedback.json'), { ...f, undos });
