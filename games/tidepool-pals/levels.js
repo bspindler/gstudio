@@ -57,7 +57,7 @@ const RAW = [
     ['.......', 'x.....x', 'xx...xx', 'xx...xx', 'x.....x', '.......', '.......', '.......'],
     { tide: T(5, 2, 'up'), intro: 'Tap a special that touches another special to combine them into a bigger blast.' }),
   L(14, 42, 5, [LITTER, ICE(3)],
-    ['.......', '.......', '.i...i.', '.......', '.i...i.', '.......', 'll...ll', 'lll.lll'],
+    ['.......', '.......', '.i...i.', '.......', '.i...i.', '.......', 'l.....l', 'll...ll'],
     { tide: T(4, 3, 'right') }),
   L(15, 34, 5, [RESCUE(1)],
     ['.P...P.', '.......', '.......', '.l...l.', '.......', '.......', '.......', '.......'],
@@ -126,7 +126,7 @@ const TIDE_DIRS = ['up', 'left', 'right'];
 /** Extra moves for generated levels that hard-stopped players (measured by the play scorer). */
 export const MOVE_BONUS = { 25: 14, 26: 16, 28: 16 };
 /** Lighter boards for generated levels that walled players: [row, replacement row] pairs, moves untouched. */
-export const BOARD_EASE = { 21: [[6, '.......']] };
+export const BOARD_EASE = { 21: [[6, '.......']], 28: [[1, '.......'], [4, '...P...']] };
 
 export function generateLevel(n) {
   const rng = mulberry32(hashSeed('tidepool:' + n));

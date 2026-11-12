@@ -8,7 +8,7 @@ export type Pattern = { id: string; sector: number; weight(s: number): number; b
 export type Course = { seed: number; rng: () => number; objs: Obj[]; nextX: number; introduced: number[]; last: string; count: number };
 export const PATTERNS: Pattern[];
 export const INTRO: Record<number, string>;
-export function createCourse(seed: number): Course;
+export function createCourse(seed: number, startX?: number): Course;
 export function extendCourse(c: Course, untilX: number): void;
 export function lowerBound(objs: Obj[], v: number): number;
 export function pruneCourse(c: Course, x: number): void;

@@ -1,7 +1,7 @@
 export type Mode = 'endless' | 'daily';
 export type RunStats = {
   mode: Mode; dist: number; chips: number; streak: number; maxStreak: number; chipPts: number; near: number;
-  maxAirSpikes: number; pads: number; bars: number; flips: number; sector: number; cleanSector: number;
+  maxAirSpikes: number; pads: number; bars: number; flips: number; sector: number; cleanSector: number; from: number;
 };
 export type MetaEvent = { t: string; spikes?: number; sector?: number; margin?: number };
 export type Mission = { id: string; text: string; stat: keyof RunStats; target: number; reward: number; mode?: Mode };
@@ -9,12 +9,15 @@ export type Save = {
   v: 3; credits: number; owned: Record<string, number>; eq: string; trails: Record<string, number>; trail: string;
   best: number; runs: number; crates: number; opened: number; top: { run: number; d: number; at: number }[];
   daily: { day: string; best: number }; missions: string[]; missionSeq: number;
-  settings: { sound: boolean; music: boolean; haptics: boolean }; mode: Mode;
+  settings: { sound: boolean; music: boolean; haptics: boolean }; mode: Mode; far: number;
 };
 export const CHIP_CR: number;
 export const NEAR_CR: number;
 export function chipMultiplier(streak: number): number;
-export function newRunStats(mode: Mode): RunStats;
+export function newRunStats(mode: Mode, start?: number): RunStats;
+export function sectorStart(n: number): number;
+export function isPractice(s: RunStats): boolean;
+export function clampStart(n: number, far: number): number;
 export function applyEvent(s: RunStats, ev: MetaEvent): RunStats;
 export function runCredits(s: RunStats): number;
 export const MISSIONS: Mission[];

@@ -158,11 +158,12 @@ import { createRenderer, M4 } from './render3d.js';
 import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildScenery, buildArmillary } from './models.js';
 import { buildGuns, gunTriangles } from './gun3d.js';
 import { spawnYaw } from './spawn.js';
+import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.2.2', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.3.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -179,6 +180,14 @@ try { unlocked = Math.min(LEVELS.length - 1, Number(localStorage.getItem(SAVE_KE
 function saveUnlocked(n) {
   unlocked = Math.max(unlocked, Math.min(n, LEVELS.length - 1));
   try { localStorage.setItem(SAVE_KEY, String(unlocked)); } catch { /* memory only */ }
+}
+// Gear-key checkpoint (see checkpoint.js): set on picking up the key, cleared on a fresh start or a clear.
+const CP_KEY = 'gearhold.checkpoint';
+let checkpoint = null;
+try { checkpoint = parseCheckpoint(localStorage.getItem(CP_KEY), LEVELS, WALLS); } catch { /* private mode */ }
+function setCheckpoint(cp) {
+  checkpoint = cp;
+  try { if (cp) localStorage.setItem(CP_KEY, JSON.stringify(cp)); else localStorage.removeItem(CP_KEY); } catch { /* memory only */ }
 }
 
 // ---------- sound (synthesised, no files) ----------
@@ -292,13 +301,35 @@ function loadLevel(i) {
     if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
       enemies.push({ kind: c, ...STATS[c], x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0 });
-    } else if (ITEM_KINDS.includes(c)) items.push({ kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
+    } else if (ITEM_KINDS.includes(c)) items.push({ id: items.length, kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
   }
   foes = enemies.filter((e) => !e.prop).length;
   const sx = Math.floor(P.x), sy = Math.floor(P.y);
   P.a = spawnYaw(map, sx, sy, WALLS + 'DK');
   kills = 0; levelTime = 0; noiseRadius = 0;
   if (R3) buildGfx();
+}
+
+// Picking up the key: remember the level as it stands (taken is filled in by the caller once the key is gone).
+function saveCheckpoint() {
+  const taken = new Set(items.map((it) => it.id));
+  const all = LEVELS[level].map.join('').split('').filter((c) => ITEM_KINDS.includes(c)).length;
+  setCheckpoint(makeCheckpoint({
+    level, x: P.x, y: P.y, shells: P.shells, scatter: P.scatter,
+    dead: enemies.flatMap((e, i) => (e.dead ? [i] : [])),
+    taken: Array.from({ length: all }, (_, i) => i).filter((i) => !taken.has(i)),
+    doors: Array.from(doorMoving.keys()).filter((i) => doorMoving[i]),
+  }));
+}
+// Rebuild the level at the checkpoint: what was scrapped, taken or opened stays so; the key is in hand.
+function applyCheckpoint(cp) {
+  loadLevel(cp.level);
+  for (const i of cp.dead) { const e = enemies[i]; if (e) { e.dead = true; if (!e.prop) kills += 1; } }
+  const taken = new Set(cp.taken);
+  items = items.filter((it) => !taken.has(it.id));
+  for (const i of cp.doors) if (isDoor(grid[i])) { doorMoving[i] = 1; doorOpen[i] = 1; }
+  Object.assign(P, { x: cp.x, y: cp.y, key: true, scatter: cp.scatter, shells: cp.shells, weapon: cp.scatter && cp.shells > 0 ? 1 : 0 });
+  P.a = spawnYaw(LEVELS[cp.level].map, Math.floor(cp.x), Math.floor(cp.y), WALLS + 'DK');
 }
 
 // ---------- graphics resources ----------
@@ -831,9 +862,10 @@ function updateWorld(dt) {
     if ((it.x - P.x) ** 2 + (it.y - P.y) ** 2 > 0.5 * 0.5) continue;
     if (it.kind === 'h') { if (P.hp >= 100) continue; P.hp = Math.min(100, P.hp + 25); say('Repair kit +25'); }
     else if (it.kind === 'a') { if (P.shells >= 50) continue; P.shells = Math.min(50, P.shells + 6); say('Scatter shells +6'); }
-    else if (it.kind === 'k') { P.key = true; say('Gear key. Locked doors will open now.'); }
+    else if (it.kind === 'k') { P.key = true; say('Gear key. Locked doors will open now. Checkpoint saved.'); }
     else if (it.kind === 'w') { P.scatter = true; P.weapon = 1; P.shells = Math.min(50, P.shells + 8); say(coarse ? 'Scatter cannon! Tap SWAP to switch.' : 'Scatter cannon! Press 1 / 2 to switch.'); }
     items.splice(i, 1); sfx.pickup(); glowFx = 1;
+    if (it.kind === 'k') saveCheckpoint();
   }
 
   for (let y = py0 - 1; y <= py0 + 1; y++) for (let x = px0 - 1; x <= px0 + 1; x++) {
@@ -1024,17 +1056,19 @@ function showOverlay(title, tag, detail, stats, buttons) {
   $('hurt').style.opacity = '0';
 }
 
-function startLevel(i) {
-  loadLevel(i);
+// A fresh start drops any checkpoint; startLevel(i, cp) respawns at that gear-key checkpoint instead.
+function startLevel(i, cp = null) {
+  if (cp) applyCheckpoint(cp);
+  else { setCheckpoint(null); loadLevel(i); }
   mode = 'play';
   overlay.hidden = true;
   $('hud').hidden = false;
   if (coarse) $('touchui').hidden = false;
   hudKey = '';
   updateHud();
-  say(LEVELS[i].hint);
+  say(cp ? 'Rebooted at the gear key.' : LEVELS[i].hint);
   lockPointer();
-  studio.track('level_start', { level: i + 1 });
+  studio.track('level_start', cp ? { level: i + 1, checkpoint: true } : { level: i + 1 });
 }
 
 function resume() {
@@ -1076,6 +1110,7 @@ function endLevel(result) {
   const stats = `Scrapped ${kills}/${foes} · time ${clock(levelTime)}`;
   if (result === 'win') {
     sfx.exit();
+    setCheckpoint(null);
     if (level + 1 < LEVELS.length) {
       saveUnlocked(level + 1);
       showOverlay('SECTOR CLEAR', `next: ${LEVELS[level + 1].name}`, LEVELS[level + 1].hint, stats, [['Next level', () => startLevel(level + 1)]]);
@@ -1083,7 +1118,10 @@ function endLevel(result) {
       showOverlay('CITADEL RESTORED', 'the gears turn true', 'Every rogue machine is scrap and Gearhold drifts quietly above the clouds again. Nice work, repair unit.', stats, [['Play again', () => startLevel(0)]]);
     }
   } else {
-    showOverlay('WRECKED', 'chassis failure', 'Your chassis gave out. Reboot and try that sector again.', stats, [['Try again', () => startLevel(level)], ['Title', title, true]]);
+    const cp = checkpoint && checkpoint.level === level ? checkpoint : null;
+    showOverlay('WRECKED', 'chassis failure', cp ? 'Your chassis gave out. Reboot at the gear key, or start the sector over.' : 'Your chassis gave out. Reboot and try that sector again.', stats, cp
+      ? [['Reboot at gear key', () => startLevel(level, cp)], ['Restart level', () => startLevel(level), true], ['Title', title, true]]
+      : [['Try again', () => startLevel(level)], ['Title', title, true]]);
   }
   studio.feedback.maybePrompt();
 }
@@ -1095,7 +1133,9 @@ function title() {
     return;
   }
   loadLevel(unlocked);
-  const buttons = [[unlocked > 0 ? `Continue: ${LEVELS[unlocked].name}` : 'Play', () => startLevel(unlocked)]];
+  const buttons = [];
+  if (checkpoint) buttons.push([`Continue: ${LEVELS[checkpoint.level].name} (gear key)`, () => startLevel(checkpoint.level, checkpoint)]);
+  buttons.push([unlocked > 0 ? `${checkpoint ? 'Start' : 'Continue'}: ${LEVELS[unlocked].name}` : 'Play', () => startLevel(unlocked), !!checkpoint]);
   for (let i = 0; i < unlocked; i++) buttons.push([`${i + 1} · ${LEVELS[i].name}`, () => startLevel(i), true]);
   showOverlay('GEARHOLD', 'the clockwork citadel', 'Gearhold floats above a sea of clouds, kept turning by its caretaker machines. They have gone rogue and sealed the halls. You are the last repair unit online: scrap them and reach the exit arches.', '', buttons);
 }

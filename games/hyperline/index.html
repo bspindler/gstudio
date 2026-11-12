@@ -78,6 +78,12 @@ button:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
 .mode small{font-size:11px;letter-spacing:.04em;text-transform:none;font-weight:600;opacity:.85}
 .mode[aria-checked="true"]{background:var(--cyan);color:var(--void);box-shadow:0 0 14px rgba(34,240,255,.45)}
 .mode.daily[aria-checked="true"]{background:var(--pink);box-shadow:0 0 14px rgba(255,43,214,.45)}
+.startpick{pointer-events:auto;display:grid;grid-template-columns:40px 1fr 40px;align-items:center;gap:4px;background:rgba(18,10,36,.85);border:1px solid var(--edge);border-radius:12px;padding:4px;width:min(100%,300px)}
+.startpick button{border:0;background:none;color:var(--cyan);font-weight:700;font-size:20px;border-radius:9px;height:36px;cursor:pointer}
+.startpick button[disabled]{opacity:.3;cursor:default}
+.startpick span{font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;display:flex;flex-direction:column;line-height:1.2}
+.startpick small{font-size:11px;letter-spacing:.04em;text-transform:none;font-weight:600;color:var(--dim)}
+.startpick.on span{color:var(--volt)}
 .mlist{pointer-events:auto;width:min(100%,340px);display:flex;flex-direction:column;gap:5px;margin-top:auto;text-align:left}
 .mlist h4{margin:0 0 2px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
 .mis{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;background:rgba(18,10,36,.85);border:1px solid var(--edge);border-radius:10px;padding:7px 10px;font-size:13px;font-weight:600}
@@ -201,6 +207,11 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
           <button class="mode" role="radio" data-act="mode" data-mode="endless" aria-checked="true">Endless<small id="modeBestE">Best 0m</small></button>
           <button class="mode daily" role="radio" data-act="mode" data-mode="daily" aria-checked="false">Daily run<small id="modeBestD">Today 0m</small></button>
         </div>
+        <div class="startpick" id="startPick" hidden>
+          <button data-act="start" data-d="-1" aria-label="Start one sector earlier">‹</button>
+          <span id="startTxt">Start · Sector 1</span>
+          <button data-act="start" data-d="1" aria-label="Start one sector later">›</button>
+        </div>
         <div class="go">TAP TO RUN</div>
         <p id="readySub">Tap to jump · hold to keep jumping</p>
         <div class="mlist" id="readyMissions"></div>
@@ -227,7 +238,7 @@ import { createCourse, extendCourse, pruneCourse } from './lib/course.js';
 import { createRunner, step } from './lib/sim.js';
 import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
-import { applyEvent, checkMissions, chipMultiplier, migrateSave, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
+import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, migrateSave, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
 import { drawScene, drawSkinThumb, skinColors } from './render.js';
 import { createAudio } from './audio.js';
@@ -374,13 +385,19 @@ function resize() {
 new ResizeObserver(resize).observe(stage);
 
 let G, pressed = false;
-function makeCourse(mode) {
-  const c = createCourse(mode === 'daily' ? dailySeed(today()) : (Math.random() * 4294967296) >>> 0);
-  extendCourse(c, 90);
+/* Practice start: endless runs may begin at any sector already reached. Free, and never saved as a BEST or ghost. */
+let pick = 1;
+const startFor = (mode) => (mode === 'endless' ? clampStart(pick, S.far) : 1);
+function makeCourse(mode, start = 1) {
+  const from = sectorStart(start);
+  const c = createCourse(mode === 'daily' ? dailySeed(today()) : (Math.random() * 4294967296) >>> 0, from);
+  extendCourse(c, from + 90);
   return c;
 }
+function runnerAt(start) { const r = createRunner(); r.x += sectorStart(start); return r; }
 function reset() {
-  G = { state: 'ready', mode: S.mode, course: makeCourse(S.mode), runner: createRunner(), stats: newRunStats(S.mode), simT: 0, acc: 0,
+  const start = startFor(S.mode);
+  G = { state: 'ready', mode: S.mode, start, course: makeCourse(S.mode, start), runner: runnerAt(start), stats: newRunStats(S.mode, start), simT: 0, acc: 0,
     t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
     blink: 0, lift: 0, flipT: 0, doneM: [], ghost: null, rec: null, day: today(), trailTick: 0 };
   $('ready').hidden = false; $('paused').hidden = true; $('pauseBtn').hidden = true;
@@ -388,16 +405,18 @@ function reset() {
 }
 function startRun() {
   // Run the course shown behind the ready screen, unless the mode or the UTC day changed since.
-  if (G.mode !== S.mode || G.day !== today()) G.course = makeCourse(S.mode);
-  S.runs++; G.run = S.runs; G.mode = S.mode; G.day = today();
-  G.runner = createRunner(); G.stats = newRunStats(G.mode);
-  G.ghost = G.mode === 'daily' ? (GH.daily && GH.daily.day === G.day ? GH.daily.g : null) : GH.endless;
+  const start = startFor(S.mode);
+  if (G.mode !== S.mode || G.day !== today() || G.start !== start) G.course = makeCourse(S.mode, start);
+  S.runs++; G.run = S.runs; G.mode = S.mode; G.day = today(); G.start = start;
+  G.runner = runnerAt(start); G.stats = newRunStats(G.mode, start);
+  // Ghosts replay a run from sector 1, so a practice start races no ghost.
+  G.ghost = start > 1 ? null : G.mode === 'daily' ? (GH.daily && GH.daily.day === G.day ? GH.daily.g : null) : GH.endless;
   G.rec = createGhostRecorder(); G.simT = 0; G.acc = 0;
   G.state = 'run'; $('ready').hidden = true; $('pauseBtn').hidden = false;
   save();
-  studio.track('level_start', { level: 1, run: S.runs, mode: G.mode });
-  audio.startBeat(0);
-  banner(0);
+  studio.track('level_start', { level: 1, run: S.runs, mode: G.mode, start });
+  audio.startBeat(start - 1);
+  banner(start - 1);
 }
 
 /* particles live in world space and are projected like everything else */
@@ -460,6 +479,7 @@ function simStep() {
     G.stats = applyEvent(G.stats, { t: 'sector', sector: sec });
     banner(sec - 1); audio.sector(); audio.setSector(sec - 1);
     studio.track('custom', { event: 'sector_reached', sector: sec, mode: G.mode, run: G.run });
+    if (sec > S.far) { S.far = sec; save(); }
   }
   for (const id of checkMissions(S.missions, G.stats)) {
     if (G.doneM.includes(id)) continue;
@@ -490,7 +510,9 @@ function showDeath() {
   const st = G.stats, dist = Math.floor(st.dist), total = runCredits(st), delta = total - G.awarded;
   G.awarded = total; S.credits += delta;
   let prevBest, newBest;
-  if (G.mode === 'daily') {
+  const practice = isPractice(st);
+  if (practice) { prevBest = S.best; newBest = false; } // practice never sets BEST, ghosts or top runs
+  else if (G.mode === 'daily') {
     if (S.daily.day !== G.day) S.daily = { day: G.day, best: 0 };
     prevBest = S.daily.best; newBest = dist > prevBest;
     if (newBest) { S.daily.best = dist; GH.daily = { day: G.day, g: finishGhost(G.rec) }; saveGhosts(); }
@@ -501,7 +523,7 @@ function showDeath() {
   }
   let crate = false;
   if (!G.counted) { G.counted = true; if (S.runs % CRATE_EVERY === 0) { S.crates++; crate = true; } }
-  const apex = !S.owned.apex && dist >= APEX_AT; if (apex) S.owned.apex = 1;
+  const apex = !practice && !S.owned.apex && dist >= APEX_AT; if (apex) S.owned.apex = 1;
   // Swap completed missions for the next ones in the list.
   const done = G.doneM.map((id) => missionById(id));
   for (const id of G.doneM) {
@@ -511,7 +533,7 @@ function showDeath() {
   const fresh = G.doneM.length ? S.missions.filter((id) => !lastActive.includes(id)) : [];
   G.doneM = [];
   save(); cred(); hud();
-  studio.track('level_end', { level: 1, result: 'lose', score: dist, run: G.run || 0, revived: G.cont, mode: G.mode,
+  studio.track('level_end', { level: 1, result: 'lose', score: dist, run: G.run || 0, revived: G.cont, mode: G.mode, start: G.start || 1,
     sector: st.sector, chips: st.chips, maxStreak: st.maxStreak, nearMisses: st.near });
   if (G.mode === 'daily') studio.track('custom', { event: 'daily_run_end', score: dist, day: G.day, best: S.daily.best, newBest, revived: G.cont });
   deathScreen({ dist, prevBest, newBest, delta, crate, apex, done, fresh, total });
@@ -530,18 +552,18 @@ function deathScreen(d) {
   lastDeath = d;
   const st = G.stats, daily = G.mode === 'daily', gap = d.prevBest - d.dist, toNext = CRATE_EVERY - (S.runs % CRATE_EVERY);
   const secName = sectorInfo(st.sector - 1).name;
-  const distCr = Math.floor(st.dist / 5);
+  const practice = isPractice(st), distCr = Math.floor(Math.max(0, st.dist - st.from) / 5);
   showModal(`<div class="wreck">WRECKED</div><div class="big">${fmt(d.dist)}m</div>
     <p class="muted">Sector ${st.sector} · ${secName}${daily ? ' · Daily run' : ''}</p>
-    ${d.newBest ? `<div class="newbest">${daily ? 'NEW DAILY BEST' : 'NEW BEST'}</div>`
+    ${practice ? `<p class="muted">Practice from sector ${G.start} · BEST ${fmt(d.prevBest)}m counts runs from sector 1</p>` : d.newBest ? `<div class="newbest">${daily ? 'NEW DAILY BEST' : 'NEW BEST'}</div>`
       : `<p class="muted">${daily ? 'Daily best' : 'Best'} ${fmt(d.prevBest)}m${gap > 0 && gap <= 80 ? ` · ${gap}m short` : ''}</p>`}
-    <div class="brk"><span>Distance</span><b>+${distCr}</b>
+    <div class="brk"><span>Distance${practice ? ` · ${fmt(st.dist - st.from)}m run` : ''}</span><b>+${distCr}</b>
       <span>Chips ${st.chips} · best streak ${st.maxStreak}</span><b>+${st.chipPts}</b>
       <span>Near misses ${st.near}</span><b>+${st.near * NEAR_CR}</b>
       ${d.done.length ? `<span>Missions ${d.done.length}</span><b>+${d.done.reduce((a, m) => a + m.reward, 0)}</b>` : ''}
       <span class="tot">${G.cont ? 'Earned since revive' : 'Run total'}</span><b class="tot">+${d.delta + d.done.reduce((a, m) => a + m.reward, 0)}</b></div>
     ${d.done.map((m) => `<div class="mis done"><span>✓ ${m.text}</span><span class="rw"><span class="dia"></span>${m.reward}</span></div>`).join('')}
-    <div class="mlist" style="margin:0;width:100%"><h4>Missions</h4>${missionRows(st, d.fresh)}</div>
+    <div class="mlist" style="margin:0;width:100%"><h4>Missions${practice ? ' · run from sector 1 to progress' : ''}</h4>${missionRows(practice ? null : st, d.fresh)}</div>
     ${d.crate ? '<div class="newbest">NEON CRATE EARNED</div>' : `<p class="fine">${toNext} more run${toNext > 1 ? 's' : ''} to your next free Neon Crate</p>`}
     ${d.apex ? '<div class="newbest">APEX UNLOCKED</div>' : ''}
     ${daily ? `<p class="fine">Same course for everyone today. A new one starts at 00:00 UTC (in ${untilReset()}).</p>` : ''}
@@ -592,8 +614,13 @@ function renderReady() {
   document.querySelectorAll('.mode').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === S.mode)));
   $('modeBestE').textContent = `Best ${fmt(S.best)}m`;
   $('modeBestD').textContent = `Today ${fmt(dailyBest())}m`;
+  const start = startFor(S.mode), sp = $('startPick');
+  sp.hidden = S.mode !== 'endless' || S.far < 2; sp.classList.toggle('on', start > 1);
+  sp.querySelector('[data-d="-1"]').disabled = start <= 1; sp.querySelector('[data-d="1"]').disabled = start >= S.far;
+  $('startTxt').innerHTML = `Start · Sector ${start}<small>${start > 1 ? `${sectorInfo(start - 1).name} · practice, no BEST or missions` : 'Full run · counts for BEST'}</small>`;
   $('readySub').textContent = S.mode === 'daily'
     ? `Same course for everyone today · new course in ${untilReset()}`
+    : start > 1 ? 'Practice start · tap to jump · hold to keep jumping'
     : (GH.endless ? 'Race your best-run ghost · hold to keep jumping' : 'Tap to jump · hold to keep jumping');
   $('readyMissions').innerHTML = `<h4>Missions</h4>${missionRows(null)}`;
 }
@@ -779,6 +806,8 @@ document.addEventListener('click', async (e) => {
     case 'again': closeModal(); reset(); studio.feedback.maybePrompt(); break;
     case 'close': closeModal(); break;
     case 'mode': if (G.state !== 'ready') break; S.mode = b.dataset.mode === 'daily' ? 'daily' : 'endless'; save(); audio.click(); reset(); break;
+    case 'start': if (G.state !== 'ready' || S.mode !== 'endless') break;
+      pick = clampStart(startFor('endless') + Number(b.dataset.d), S.far); audio.click(); reset(); break;
     case 'pause': pause(); break;
     case 'settings': pause(); showSettings(); break;
     case 'set': {

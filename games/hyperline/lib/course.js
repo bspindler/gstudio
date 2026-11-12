@@ -165,8 +165,9 @@ const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 /** The pattern each sector opens with: the obstacle it introduces. */
 export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate' };
 
-export function createCourse(seed) {
-  return { seed: seed >>> 0, rng: mulberry32(seed), objs: [], nextX: 24, introduced: [], last: '', count: 0 };
+/** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
+export function createCourse(seed, startX = 0) {
+  return { seed: seed >>> 0, rng: mulberry32(seed), objs: [], nextX: startX + 24, introduced: [], last: '', count: 0 };
 }
 
 /** Appends patterns until the course reaches untilX. Idempotent for x already built. */

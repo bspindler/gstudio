@@ -1,6 +1,8 @@
 // Run scoring (near misses, chip streaks), missions and save migration. No DOM; tested in
 // packages/core/test/hyperline-meta.test.ts.
 
+import { SECTOR_LEN } from './world.js';
+
 export const CHIP_CR = 3, NEAR_CR = 5;
 
 /** Chip value multiplier: x2 at 8 in a row, x3 at 16, x4 at 24 and beyond. */
@@ -9,9 +11,21 @@ export function chipMultiplier(streak) {
 }
 
 /** Sectors are 1-based for players: sector 1 is 0 to 250m. */
-export function newRunStats(mode) {
-  return { mode, dist: 0, chips: 0, streak: 0, maxStreak: 0, chipPts: 0, near: 0, maxAirSpikes: 0,
-    pads: 0, bars: 0, flips: 0, sector: 1, cleanSector: 1 };
+export function newRunStats(mode, start = 1) {
+  const from = sectorStart(start), sec = from / SECTOR_LEN + 1;
+  return { mode, dist: from, chips: 0, streak: 0, maxStreak: 0, chipPts: 0, near: 0, maxAirSpikes: 0,
+    pads: 0, bars: 0, flips: 0, sector: sec, cleanSector: sec, from };
+}
+
+/* ---------- practice starts ---------- */
+
+/** Distance where a 1-based sector begins. */
+export const sectorStart = (n) => (Math.max(1, Math.floor(n) || 1) - 1) * SECTOR_LEN;
+/** A run begun past sector 1 is practice: no BEST, ghost or missions; credits only for distance actually run. */
+export const isPractice = (s) => (s.from || 0) > 0;
+/** The start sector a player may pick: 1 up to the furthest sector they have reached. */
+export function clampStart(n, far) {
+  return Math.max(1, Math.min(Math.max(1, Math.floor(far) || 1), Math.floor(n) || 1));
 }
 
 /** Folds one sim (or game) event into the run stats. Returns a new object. */
@@ -37,7 +51,7 @@ export function applyEvent(s, ev) {
 }
 
 export function runCredits(s) {
-  return Math.floor(s.dist / 5) + s.chipPts + s.near * NEAR_CR;
+  return Math.floor(Math.max(0, s.dist - (s.from || 0)) / 5) + s.chipPts + s.near * NEAR_CR;
 }
 
 /** Missions, roughly easy to hard. New ones roll in list order, so progression is predictable. */
@@ -68,6 +82,7 @@ export function missionProgress(m, s) {
 
 /** Ids of the active missions this run has completed. */
 export function checkMissions(active, s) {
+  if (isPractice(s)) return [];
   return active.filter((id) => { const m = MISSION_BY_ID[id]; return m && missionProgress(m, s) >= m.target; });
 }
 
@@ -87,7 +102,7 @@ export function freshSave() {
   return { v: 3, credits: 150, owned: { volt: 1 }, eq: 'volt', trails: { classic: 1 }, trail: 'classic',
     best: 0, runs: 0, crates: 0, opened: 0, top: [], daily: { day: '', best: 0 },
     missions: ['chips25', 'dist300', 'near3'], missionSeq: 3,
-    settings: { sound: true, music: true, haptics: true }, mode: 'endless' };
+    settings: { sound: true, music: true, haptics: true }, mode: 'endless', far: 1 };
 }
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -130,5 +145,7 @@ export function migrateSave(raw) {
     missions, missionSeq: seq,
     settings: { sound: st.sound !== false, music: st.music !== false, haptics: st.haptics !== false },
     mode: s.mode === 'daily' ? 'daily' : 'endless',
+    // Furthest sector reached; older saves infer it from their best endless distance.
+    far: Math.max(1, count(s.far), Math.floor(count(s.best) / SECTOR_LEN) + 1),
   };
 }

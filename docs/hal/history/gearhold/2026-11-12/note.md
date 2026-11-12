@@ -32,3 +32,15 @@ Changes:
 - HAL-011 feature(gearhold): Add a new Gearhold level built around one new clockwork hazard: **discarded** (0.3.0) (implementer blocked: Any new Gearhold level makes the play scorer's limit message read 'at most 4', but the protected test packages/core/test/hal-scorers.test.ts:47 expects 'at most 3', and the scorer default (levels: 3, pinned at line 43) would never play the new level. Hal's scorer and its test mu)
 - HAL-012 tuning(gearhold): Retune the Gearhold level the play-bot still can't win: **discarded** (implementer blocked: The ticket blames Kiln Heart, but the out-of-band level is The Orrery, which is too easy (0.94). No measured layout change brought it to 0.9 or below within the 12-score limit (best was 0.92). Suggested follow-up: start from the corner-key layout and try a crawler guarding the e)
 - HAL-013 tuning(gearhold): Shorten the slowest Gearhold level's route to the exit arch: **discarded** (implementer blocked: The ticket's premise is wrong: the level outside the pace band is the fastest one (Terrace of Dials, 15.4s, below the 30s minimum), not the slowest. Shortening The Orrery cannot raise pace; it needs a new ticket to lengthen Terrace of Dials.)
+
+## Run run-2026-11-12T15-54-46-170Z
+
+**Gearhold:** a tense brass-citadel crawl with code-drawn clockwork.
+
+**Merged (0.3.0):** a gear-key checkpoint, saved locally. The WRECKED screen offers *Reboot at gear key*, and the title offers *Continue*. The crawl is kept, and only the replay of the whole level is gone. Scores held at gearhold 100 and gearhold-play 83.
+
+**Discarded:** level 4, Piston Gallery. It has visible, audible piston rhythms, landed in band, and stayed on-identity. It was blocked only by the protected test that pins 3 levels.
+
+Changes:
+- HAL-015 feature(gearhold): Gearhold mid-level checkpoint: respawn at the gear key, not the level start: **merged** (0.3.0)
+- HAL-018 feature(gearhold): Add Gearhold level 4 built around one new clockwork hazard: **discarded** (0.3.0) (implementer blocked: Protected test scripts/hal/cli.unit.test.ts:30 assumes exactly 3 Gearhold levels, so any fourth level fails it, and scripts/hal/** may not be edited. The ticket says the level-count contract is resolved, but this test still pins 3. It needs updating in Hal's own code (count take)
