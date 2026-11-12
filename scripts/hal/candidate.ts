@@ -495,7 +495,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       if (!(fixSlice > 0)) discard(`${failure}${after}`, 'no budget left for a fix round');
       // Back to the implementer's own tree: Hal's release edits come out (the next attempt gets a fresh release).
       for (const k of ['yaml', 'html', 'changelog'] as const) await writeFile(join(wt.dir, files[k]), cur[k]);
-      await guard(t1);
+      try { await guard(t1); } catch (e) { throw e instanceof Discard ? new Discard([...e.reasons, failure]) : e; } // keep what failed
       res.fixRounds = round + 1;
       parsed = await implement(`${prompt}\n${renderPrompt(loadPrompt('implementer-fix'), { round: String(round + 1), rounds: String(rounds), failure })}`, fixSlice);
     }

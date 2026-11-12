@@ -384,7 +384,8 @@ describe('push', () => {
     expect(gitIn(repo, 'log', '-1', '--format=%s', halHead())).toMatch(/^revert\(hyperline\): undo/);
     expect(gitIn(repo, 'log', '-1', '--format=%B', halHead())).not.toContain('speed must stay under'); // player-facing text stays clean
     expect(gitIn(repo, 'show', `${halHead()}:games/hyperline/CHANGELOG.md`)).toContain(CI_UNDO_REASON);
-    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: expect.stringMatching(/ci:local failed on this change after it merged.*speed must stay under 1/s) })]);
+    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: expect.stringMatching(/^ci:local failed on this change after it merged .*: failed: test; failing tests: hyperline-speed\.test\.ts$/) })]);
+    expect(feedback().undos[0]!.reason).not.toContain('speed must stay under'); // no raw test output for the planner
     expect(r.warnings.join('\n')).toMatch(/ci:local failed on HAL-001 .* Hal undid it/);
     expect(before).not.toBe(originMain());
   }, 60_000);
@@ -435,6 +436,38 @@ describe('push', () => {
     expect(halHead()).toBe(halOnly);
     expect(ci).not.toHaveBeenCalled();
     expect(readReport().warnings.join('\n')).toMatch(/--report-only, so Hal did not try/);
+  }, 60_000);
+  it('triage blames the first commit that fails twice: a one-off failure on an earlier good change does not get it undone', async () => {
+    const seen = new Map<string, number>();
+    const ci = vi.fn(async (sha: string) => {
+      const file = gitIn(repo, 'show', `${sha}:games/hyperline/game.js`);
+      const n = (seen.get(sha) ?? 0) + 1; seen.set(sha, n);
+      if (file.includes('trail')) return { ok: false, detail: 'failed: test\nhyperline-trail.test.ts: trail too long' };
+      if (file.includes('1.2') && !file.includes('trail') && n === 1 && sha !== originMain()) return { ok: false, detail: 'failed: test\nflake' };
+      return { ok: true, detail: 'passed' };
+    });
+    // Two changes: HAL-001 (speed 1.2) is fine, HAL-002 (adds a trail) breaks ci:local.
+    await runNight(opts(), deps({ ciLocal: ci, claude: fakeClaude({ tickets: [GOOD, THIRD] }) }));
+    const r = readReport();
+    expect(r.changes.map((x) => x.verdict)).toEqual(['merged', 'merged']);
+    expect(r.pushed).toBe(true);
+    const undos = feedback().undos;
+    expect(undos.map((u) => u.pass)).toEqual(['HAL-002']);
+    expect(gitIn(repo, 'show', `${originMain()}:games/hyperline/game.js`)).not.toContain('trail');
+  }, 90_000);
+  it('an undo that does not make ci:local pass is taken back: nothing pushed, refs/hal/main as before, no undo recorded', async () => {
+    const before = originMain();
+    const ci = vi.fn(async (sha: string) => (sha === before ? { ok: true, detail: 'passed' } : { ok: false, detail: 'failed: test\nstill broken' }));
+    let headBeforePush = '';
+    const d = deps({ ciLocal: async (sha) => { headBeforePush ||= halHead(); return ci(sha); } });
+    await runNight(opts(), d);
+    const r = readReport();
+    expect(r.pushed).toBe(false);
+    expect(halHead()).toBe(headBeforePush);
+    expect(gitIn(repo, 'log', '-1', '--format=%s', halHead())).not.toMatch(/^revert/);
+    expect(existsSync(join(halDir, 'feedback.json')) ? feedback().undos : []).toEqual([]);
+    expect(r.warnings.join('\n')).toMatch(/did not make it pass, so Hal took the undo back/);
+    expect(originMain()).toBe(before);
   }, 60_000);
   it('R22: diverged with a conflict: the run is forced report-only, nothing built or pushed, recovery steps in a warning', async () => {
     const halOnly = await diverge('OTHER.txt', 'hal\n'); // the same file origin changes: conflict

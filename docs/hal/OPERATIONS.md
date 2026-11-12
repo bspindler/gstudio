@@ -128,6 +128,10 @@ already in git, but that includes your undo reasons and the director's notes.
   you. Otherwise Hal finds the first of its own commits that fails, undoes it the way a 👎 does, checks again and
   pushes the rest. The game's changelog says only that the change "failed an automated check". The full failure goes
   into the undo's record in `feedback.json`, so the next night's planner can retry the ticket with a fix.
+  Each commit is checked twice before Hal blames it, at most 8 unpushed commits are checked, and an undo that does not
+  make ci:local pass is taken back rather than shipped. A manual `hal undo` never triages: it only undoes what you
+  asked for. A test that fails only sometimes can still get through on the re-run; the report names the first failure,
+  so a flaky test shows up there.
 
 **origin/main moved while Hal had unpushed commits.** This happens after a `--no-push` run, or a night whose push
 failed, when someone then pushes to origin. Hal handles it itself at the start of the next run. It rebuilds its own

@@ -287,6 +287,14 @@ function undoCtx(d: RunDeps, runId: string): UndoCtx {
 /** What a Hal undo for a build failure says in the game's player-facing changelog (the failure itself goes to feedback.json). */
 export const CI_UNDO_REASON = 'it failed an automated check after it merged; Hal will try it again';
 export type PushOutcome = { pushed: boolean; reason?: string; warnings: string[] };
+/** pushStep checks at most this many unpushed commits one by one when it looks for the one that broke ci:local. */
+export const TRIAGE_MAX_COMMITS = 8;
+/** A ci:local failure as one capped line for feedback.json (the planner reads it): failing steps and test names only. */
+export function ciGist(detail: string): string {
+  const [head = '', ...rest] = detail.split('\n');
+  const names = [...new Set(rest.join('\n').match(/[\w./-]+\.test\.[cm]?[jt]s/g) ?? [])].slice(0, 5);
+  return `${head.replace(/\s+/g, ' ').trim()}${names.length ? `; failing tests: ${names.join(', ')}` : ''}`.slice(0, 300);
+}
 
 /**
  * ci:local on refs/hal/main's head, then the fast-forward push. Never throws. When ci:local fails, Hal works out whose
@@ -297,7 +305,7 @@ export type PushOutcome = { pushed: boolean; reason?: string; warnings: string[]
  *     into its feedback.json undo record (the planner reads those, so the next night retries it with a fix and a test),
  *     and the rest is checked again and pushed. At most one undo per push, and none for a commit that is not a Hal pass.
  */
-async function pushStep(d: RunDeps, c: Common, runId: string): Promise<PushOutcome> {
+async function pushStep(d: RunDeps, c: Common, runId: string, o: { triage: boolean } = { triage: true }): Promise<PushOutcome> {
   const warnings: string[] = [];
   const short = (s: string) => s.slice(0, 12);
   const halHead = async () => (await c.git(['rev-parse', HAL_MAIN], d.repo)).trim();
@@ -311,6 +319,7 @@ async function pushStep(d: RunDeps, c: Common, runId: string): Promise<PushOutco
     if (!first.ok) {
       const retry = await ci(head);
       if (retry.ok) warnings.push(`ci:local failed once for ${short(head)} and passed when run again (a flaky test?), so Hal pushed: ${first.detail}`);
+      else if (!o.triage) return stop('ci:local failed', `ci:local failed for ${short(head)}: ${retry.detail}; not pushed (the commits stay on ${HAL_MAIN}; the next run triages it)`);
       else {
         if (!remote) return stop('ci:local failed', `ci:local failed for ${short(head)}: ${retry.detail}; not pushed (no origin/main to compare with)`);
         const base = await ci(remote);
@@ -319,32 +328,54 @@ async function pushStep(d: RunDeps, c: Common, runId: string): Promise<PushOutco
             + `Hal made and not one it can fix: it needs you. Hal's commits stay on ${HAL_MAIN} and go out with the first push after origin/main passes again. `
             + `origin/main: ${base.detail}`);
         }
-        // origin/main passes and Hal's head fails: find the first of Hal's commits that fails (the head is known to).
+        // origin/main passes and Hal's head fails: blame the first of Hal's commits whose tree fails twice in a row (one
+        // failure could be a flake). Between a pass and a later undo of it in the range, a failure may be that pass's, so
+        // nothing there is blamed; a culprit that is not an open Hal pass stops for Brian instead of a guess.
         const list = (await c.git(['rev-list', '--reverse', `${remote}..${head}`], d.repo)).trim().split('\n').filter(Boolean);
-        let culprit = head, detail = retry.detail;
-        for (const sha of list) {
-          if (sha === head) break;
-          const r = await ci(sha);
-          if (!r.ok) { culprit = sha; detail = r.detail; break; }
+        if (list.length > TRIAGE_MAX_COMMITS) {
+          return stop('ci:local failed', `ci:local failed for ${short(head)} and Hal has ${list.length} unpushed commits, more than the ${TRIAGE_MAX_COMMITS} it will `
+            + `check one by one, so nothing was pushed and it needs you: ${retry.detail}`);
         }
-        const t = parseTrailers(await c.git(['log', '-1', '--format=%B', culprit], d.repo));
-        const subject = (await c.git(['log', '-1', '--format=%s', culprit], d.repo)).trim();
-        if (!t || t.undo !== undefined) {
-          return stop('ci:local failed', `ci:local failed for ${short(head)}; the first failing commit is ${short(culprit)} ("${subject}"), which is not a Hal `
+        const info = await Promise.all(list.map(async (sha) => {
+          const t = parseTrailers(await c.git(['log', '-1', '--format=%B', sha], d.repo));
+          return { sha, t, subject: (await c.git(['log', '-1', '--format=%s', sha], d.repo)).trim() };
+        }));
+        const undoneLater = (i: number) => { const pass = info[i]!.t?.pass; return pass !== undefined && info.slice(i + 1).some((x) => x.t?.undo === pass); };
+        /** Commit i sits between some pass (at or before it) and that pass's undo (after it). */
+        const inWindow = (i: number) => info.slice(0, i + 1).some((x) => x.t?.pass !== undefined && x.t.undo === undefined && info.slice(i + 1).some((y) => y.t?.undo === x.t!.pass));
+        let culprit = info.length - 1, detail = retry.detail;
+        for (let i = 0; i < info.length - 1; i++) {
+          if (inWindow(i)) continue;
+          const r = await ci(info[i]!.sha);
+          if (r.ok || (await ci(info[i]!.sha)).ok) continue;
+          culprit = i; detail = r.detail;
+          break;
+        }
+        const { sha: bad, t, subject } = info[culprit]!;
+        if (!t || t.undo !== undefined || undoneLater(culprit)) {
+          return stop('ci:local failed', `ci:local failed for ${short(head)}; the first failing commit is ${short(bad)} ("${subject}"), which is not a Hal `
             + `change Hal can undo, so nothing was pushed and it needs you: ${detail}`);
         }
         const u = await applyUndo(t.pass, CI_UNDO_REASON, undoCtx(d, runId));
-        const record = c.R.str(`ci:local failed on this change after it merged (origin/main passed without it): ${detail}`);
-        if (!u.ok) {
-          return stop('ci:local failed', `ci:local failed on ${t.pass} (${short(culprit)}, "${subject}"); Hal tried to undo it so the rest could ship, `
-            + `but the undo failed (${u.error}), so nothing was pushed: ${detail}`);
+        if (!u.ok || u.already) {
+          return stop('ci:local failed', `ci:local failed on ${t.pass} (${short(bad)}, "${subject}"); Hal tried to undo it so the rest could ship, `
+            + `but ${u.ok ? 'it was already undone' : `the undo failed (${u.error})`}, so nothing was pushed and it needs you: ${detail}`);
         }
-        await c.store.recordUndo({ pass: t.pass, run: runId, reason: record, status: 'done', commit: u.commit, version: u.version });
-        warnings.push(`ci:local failed on ${t.pass} (${short(culprit)}, "${subject}") after it merged, while origin/main passed without it. Hal undid it `
+        const undone = await halHead();
+        let again = await ci(undone);
+        if (!again.ok) again = await ci(undone); // the same second chance every blame got
+        if (!again.ok) {
+          // The undo did not fix it: take it back (CAS), so a guess never ships and the next run starts from the same place.
+          await c.git(['update-ref', '-m', 'hal: take back a triage undo that did not help', HAL_MAIN, head, undone], d.repo);
+          await ensureMainWorktree(d.repo, { git: c.raw });
+          return stop('ci:local failed', `ci:local failed for ${short(head)}; undoing ${t.pass} (${short(bad)}) did not make it pass, so Hal took the undo `
+            + `back and pushed nothing: it needs you. Before: ${detail}. After the undo: ${again.detail}`);
+        }
+        // Only what the planner needs: the failing steps and test names, one line, capped (test output is the candidate's).
+        await c.store.recordUndo({ pass: t.pass, run: runId, reason: c.R.str(`ci:local failed on this change after it merged (origin/main passed without it): ${ciGist(detail)}`), status: 'done', commit: u.commit, version: u.version });
+        warnings.push(`ci:local failed on ${t.pass} (${short(bad)}, "${subject}") after it merged, while origin/main passed without it. Hal undid it `
           + `(${u.game} ${u.version}) so the rest could ship; the failure is in its undo record, so the planner can retry it with a fix and a test: ${detail}`);
-        head = await halHead();
-        const again = await ci(head);
-        if (!again.ok) return stop('ci:local failed', `ci:local still fails for ${short(head)} after undoing ${t.pass}, so nothing was pushed: ${again.detail}`);
+        head = undone;
       }
     }
     const p = await pushHalMain(d.repo, d.git ? { git: d.git } : {});
@@ -783,9 +814,14 @@ async function ciFollowUp(d: RunDeps, c: Common, warn: (s: string) => void): Pro
   } catch { return; }
   const out = await c.git(['log', '-n', '500', '--format=%H%x00%B%x1e', HAL_MAIN], d.repo);
   const shas: string[] = [];
+  const undone = new Set<string>();
+  const passOf = new Map<string, string>();
   for (const rec of out.split('\x1e')) {
     const i = rec.indexOf('\0');
     if (i < 0) continue;
+    const t = parseTrailers(rec.slice(i + 1));
+    if (t?.undo !== undefined) undone.add(t.undo);
+    else if (t) passOf.set(rec.slice(0, i).trim(), t.pass);
     const paras = rec.slice(i + 1).replace(/\s+$/, '').split(/\n[ \t]*\n/);
     if (new RegExp(`^Hal-Run:[ \\t]*${prev.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[ \\t]*$`, 'm').test(paras[paras.length - 1] ?? '')) shas.push(rec.slice(0, i).trim());
   }
@@ -795,6 +831,7 @@ async function ciFollowUp(d: RunDeps, c: Common, warn: (s: string) => void): Pro
     try { r = JSON.parse(await readFile(join(d.repo, '.data', 'ci', `${sha}.json`), 'utf8')); } catch { continue; }
     found++;
     if (r.ok !== true) {
+      if (undone.has(passOf.get(sha) ?? '')) continue; // a failure Hal already undid (pushStep's triage, or a 👎)
       const failed = (r.steps ?? []).filter((s) => s.ok === false).map((s) => s.step).join(', ');
       warn(`ci:local failed for ${sha.slice(0, 12)} (${prev})${failed ? `: ${failed}` : ''}; not undone automatically`);
     }
@@ -982,7 +1019,7 @@ export async function undoCommand(pass: string, reason: string, o: { push: boole
       if (!o.push) c.log('not pushed (--no-push)');
       else if (main.diverged) c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged`);
       else {
-        const p = await pushStep(d, c, runId);
+        const p = await pushStep(d, c, runId, { triage: false }); // a manual undo never undoes something else on its own
         for (const w of p.warnings) c.log(`warning: ${w}`);
         c.log(p.pushed ? 'pushed to origin main' : `not pushed: ${p.reason}`);
       }
