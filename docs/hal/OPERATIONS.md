@@ -98,6 +98,12 @@ answers in the thread. It does not answer right away. A thread stays until you c
 
 The next run's planner and director also read your votes and comments.
 
+**New features wait for you.** Fixes, tuning and polish ship on their own. A new feature passes the same checks
+but stays off `main`, under "Waiting for your OK" at the top of the report. **▶ Try it** opens the game as that
+feature built it, in a new tab. **👍 Ship it** puts it on `main`, runs ci:local and pushes. **👎 Drop it** throws it
+away (the planner reads your reason). The same from the terminal: `npm run hal -- ship HAL-0xx` or
+`npm run hal -- drop HAL-0xx`. If Hal is busy, your decision is saved and the next run applies it.
+
 **What Hal has learned.** Each night the director may write up to five lessons, short and specific things the
 results showed, such as "Gearhold: moving a repair crystal fixed `supplied`" (in `.data/hal/lessons.json`). It
 retires one when later results contradict it. The planner reads them all before it plans. They show on the report

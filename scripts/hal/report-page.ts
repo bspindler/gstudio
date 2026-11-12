@@ -9,7 +9,7 @@ import type { CandidateResult } from './candidate.js';
 import { esc, noteHtml, pageHead } from './page-style.js';
 import { phaseProgress, spendLine } from './status-client.js';
 import type { RunReport } from './run.js';
-import { lastAt, threadOf, type Lesson, type Note, type Undo, type Vote } from './store.js';
+import { lastAt, threadOf, type HeldDecision, type Lesson, type Note, type Undo, type Vote } from './store.js';
 
 // perGame and Vote.comment land with Task 2; typed here as optional so this compiles before and after it.
 type ViewReport = RunReport & { perGame?: Record<string, string> };
@@ -19,7 +19,7 @@ type ViewUndo = Undo & { version?: string };
 
 export type ReportView = {
   report: ViewReport; note: string;
-  feedback: { votes: ViewVote[]; undos: ViewUndo[] };   // this run's (store.feedbackFor)
+  feedback: { votes: ViewVote[]; undos: ViewUndo[]; held?: HeldDecision[] };   // this run's (store.feedbackFor); held: decisions on its held features
   notes: Note[];                                          // every thread Brian has not cleared, for Tell Hal
   /** What Hal has learned across nights (lessons.json), oldest first. */
   lessons?: Lesson[];
@@ -195,6 +195,43 @@ ${c.shots ? `<div class="grid2 shots">${shot('before')}${shot('after')}</div>${c
 ${scoreLine(c)}
 ${withState(changeState(c.pass, v.feedback), forms)}
 </article>`;
+}
+
+/** Brian's decision on a held feature, newest first; null while undecided. */
+function heldState(pass: string, fb: ReportView['feedback']): State | null {
+  const h = (fb.held ?? []).filter((x) => x.pass === pass).at(-1);
+  if (!h) return null;
+  if (h.status === 'pending') return { text: h.decision === 'ship' ? 'Shipping…' : 'Dropping…', tone: 'accent' };
+  if (h.status === 'failed') return { text: `Not shipped yet: ${clip(h.error ?? 'unknown error', 200)} (retried next run)`, tone: 'warn' };
+  if (h.decision === 'drop') return { text: 'Dropped', tone: 'accent' };
+  return h.error ? { text: 'It no longer applied to the game, so Hal will rebuild it', tone: 'warn' } : { text: h.version ? `Shipped in v${h.version}` : 'Shipped', tone: 'good' };
+}
+
+/** A new feature that passed every check and waits for Brian: try it, then ship or drop it. */
+function heldCard(v: ReportView, c: CandidateResult): string {
+  const run = v.report.runId;
+  const t = c.ticket;
+  const lead = c.changelog?.trim() || c.summary?.trim() || '';
+  const shot = (which: 'before' | 'after') =>
+    `<figure class="shot"><img src="${esc(`/shot?run=${encodeURIComponent(run)}&pass=${encodeURIComponent(c.pass)}&which=${which}`)}" alt="${esc(`${cap(which)}: ${t.title}`)}" loading="lazy"><figcaption class="tag">${cap(which)}</figcaption></figure>`;
+  const forms = `<div class="grid2 votes">
+<form method="post" action="/vote" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}<input type="text" name="comment" maxlength="500" placeholder="Comment" aria-label="Comment on shipping ${esc(t.title)}"><button type="submit" class="good">👍 Ship it</button></form>
+<form method="post" action="/undo" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}<input type="text" name="reason" maxlength="500" placeholder="Why not? (optional)" aria-label="Reason to drop ${esc(t.title)}"><button type="submit" class="warn">👎 Drop it</button></form>
+</div>`;
+  return `<article class="card change held">
+<div class="label">${esc(cap(t.kind))} · ${esc(gameName(t.game))}${c.version ? ` ${esc(c.version)}` : ''} · ${esc(c.pass)}</div>
+<h3>${esc(t.title)}</h3>
+${lead ? `<p class="lead">${esc(clip(lead, 700))}</p>` : ''}
+<a class="btn tonal try" href="/preview/${esc(encodeURIComponent(c.pass))}/${esc(encodeURIComponent(t.game))}/index.html" target="_blank" rel="noopener">▶ Try it</a>
+${c.shots ? `<div class="grid2 shots">${shot('before')}${shot('after')}</div>${c.shotsOf ? `<p class="shots-of small muted">Showing ${esc(clip(c.shotsOf, 80))}, the part this change touched</p>` : ''}` : ''}
+${scoreLine(c)}
+${withState(heldState(c.pass, v.feedback), forms)}
+</article>`;
+}
+
+function waiting(v: ReportView, list: CandidateResult[]): string {
+  if (!list.length) return '';
+  return `<section><h2>Waiting for your OK</h2><p class="small muted held-hint">New features passed every check but ship only when you say so. Try one, then ship or drop it.</p><div class="changes-grid">${list.map((c) => heldCard(v, c)).join('\n')}</div></section>`;
 }
 
 function changes(v: ReportView, cards: CandidateResult[]): string {
@@ -472,6 +509,9 @@ const REPORT_CSS = `
 .bar.warn>span{background:var(--warn)}
 .num{flex:none;font-variant-numeric:tabular-nums}
 .why{margin:6px 0 0}
+.held{border-color:var(--accent)}
+.held .try{margin:0 0 12px}
+.held-hint{margin:-4px 0 12px}
 .lessons-hint{margin-top:12px}
 .why p{margin:4px 0 0}
 .why ul,.why ol{margin:4px 0 0;padding-left:20px}
@@ -539,13 +579,14 @@ export function renderReport(v: ReportView): string {
   // Every merged change but a fix is a card (feature, polish, tuning, and any kind added later), so none goes unshown.
   const cards = merged.filter((c) => c.ticket.kind !== 'fix');
   const fixed = merged.filter((c) => c.ticket.kind === 'fix');
-  const gone = r.changes.filter((c) => c.verdict !== 'merged');
+  const held = r.changes.filter((c) => c.verdict === 'held');
+  const gone = r.changes.filter((c) => c.verdict !== 'merged' && c.verdict !== 'held');
   const approved = new Set(v.approvals.map(normItem));
   const needYou = r.calls.filter((t) => !approved.has(normItem(t.liability ?? '')) && !isDeclined(v, t.liability ?? '')).length;
   const plan = r.planned ?? [];
-  const main = [director(v), play(v), calls(v), changes(v, cards), standings(v), lessons(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
+  const main = [waiting(v, held), director(v), play(v), calls(v), changes(v, cards), standings(v), lessons(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
   const side = `${runHal(v, r.runId)}\n<div class="side-rest">${tell(v)}\n${recent(v, r.runId)}</div>`;
-  return shell(`Hal · ${r.night}`, header(v, merged.length, gone.length, needYou), main, side, v.flash);
+  return shell(`Hal · ${r.night}`, header(v, merged.length, gone.length, needYou + held.length), main, side, v.flash);
 }
 
 /** The page before Hal's first report: Run Hal and the latest reports only. */

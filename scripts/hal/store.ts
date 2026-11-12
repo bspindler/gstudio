@@ -43,7 +43,9 @@ export type UndoStatus = 'pending' | 'done' | 'failed' | 'rejected';
  * or tried it, when that differs. `version` is the game version the undo commit released (set when done).
  */
 export type Undo = { run: string; reason: string; at: string; pass?: string; status?: UndoStatus; commit?: string; error?: string; undoRun?: string; version?: string };
-export type Feedback = { votes: Vote[]; undos: Undo[] };
+/** Brian's decision on a held feature: ship it onto main, or drop it. Applied at once, or by the next run if Hal is busy. */
+export type HeldDecision = { pass: string; run: string; decision: 'ship' | 'drop'; status: 'pending' | 'done' | 'failed'; at: string; commit?: string; error?: string; version?: string };
+export type Feedback = { votes: Vote[]; undos: Undo[]; held?: HeldDecision[] };
 export type Store = ReturnType<typeof createStore>;
 
 export const KEEP_SPEND_DAYS = 60;
@@ -261,6 +263,28 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
         if (i >= 0) undos[i] = merged; else undos.push(merged);
         await writeJsonAtomic(p('feedback.json'), { ...f, undos });
       });
+    },
+    /** Records a decision on a held feature, or updates the newest one for that pass (status, commit, error). */
+    async recordHeld(h: Omit<HeldDecision, 'at'>): Promise<void> {
+      return locked('feedback.json', async () => {
+        const f = await readFeedback();
+        const list = [...(f.held ?? [])];
+        let i = -1;
+        for (let j = list.length - 1; j >= 0; j--) if (list[j]!.pass === h.pass && list[j]!.status !== 'done') { i = j; break; }
+        const next: HeldDecision = { ...(i >= 0 ? list[i]! : {}), ...h, at: now().toISOString() };
+        if (h.status === 'done') delete next.error;
+        if (i >= 0) list[i] = next; else list.push(next);
+        await writeJsonAtomic(p('feedback.json'), { ...f, held: list });
+      });
+    },
+    /** Decisions on held features still to apply (pending, or failed last time), newest per pass. */
+    async pendingHeld(): Promise<HeldDecision[]> {
+      const by = new Map<string, HeldDecision>();
+      for (const h of (await readFeedback()).held ?? []) {
+        if (!/^HAL-\d+$/.test(h.pass)) continue;
+        if (h.status === 'done') by.delete(h.pass); else by.set(h.pass, h);
+      }
+      return [...by.values()];
     },
     /** Undos still to do (pending, or failed last time), newest request per pass. */
     async pendingUndos(): Promise<Array<Undo & { pass: string }>> {

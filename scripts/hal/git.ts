@@ -495,6 +495,86 @@ export async function replayHalOnto(repo: string, deps: GitDeps & { onto?: strin
   return { ok: true, head, from, onto, replayed, dropped };
 }
 
+// ---- held features ----------------------------------------------------------------------------------------------
+//
+// A new feature is not merged onto refs/hal/main. Its verified commit is kept at refs/hal/held/<pass> (on the base it
+// was built on) until Brian decides: adoptHeld replays it onto refs/hal/main (plumbing only, like replayHalOnto) and
+// deletes the ref; dropHeld deletes the ref. The commit object stays in the repo for the report's shots and preview.
+
+export const HELD_PREFIX = 'refs/hal/held/';
+const heldRef = (pass: string) => { checkPass(pass); return `${HELD_PREFIX}${pass}`; };
+
+/** Keeps a verified feature off refs/hal/main: commits exactly `verified.tree` on its base and creates the held ref. */
+export async function holdCandidate(repo: string, passId: string, message: string, verified: Verified, deps: GitDeps = {}): Promise<SquashResult> {
+  const git = safeGit(deps.git ?? runGit);
+  const root = resolve(repo);
+  try {
+    const ref = heldRef(passId);
+    const vTree = (await git(['rev-parse', `${verified.commit}^{tree}`], root)).trim();
+    if (vTree !== verified.tree) return { ok: false, error: `verified commit's tree ${vTree} is not the verified tree ${verified.tree}` };
+    const parents = (await git(['rev-list', '--parents', '-n', '1', verified.commit], root)).trim().split(' ').slice(1);
+    if (parents.length !== 1) return { ok: false, error: 'the candidate commit has no single base' };
+    const commit = await commitTree(root, verified.tree, parents[0]!, message, deps);
+    await git(['update-ref', '-m', `hal: hold ${passId}`, ref, commit, ''], root); // create only
+    return { ok: true, commit };
+  } catch (e) {
+    return { ok: false, error: errText(e) };
+  }
+}
+
+export type Held = { pass: string; commit: string; subject: string };
+/** Every held feature, oldest pass first. */
+export async function listHeld(repo: string, deps: GitDeps = {}): Promise<Held[]> {
+  const git = safeGit(deps.git ?? runGit);
+  const out = await git(['for-each-ref', '--format=%(refname)%00%(objectname)%00%(contents:subject)', HELD_PREFIX], resolve(repo)).catch(() => '');
+  return out.split('\n').filter(Boolean).map((l) => { const [ref, commit, subject] = l.split('\0'); return { pass: ref!.slice(HELD_PREFIX.length), commit: commit!, subject: subject ?? '' }; })
+    .filter((h) => /^HAL-\d+$/.test(h.pass)).sort((a, b) => Number(a.pass.slice(4)) - Number(b.pass.slice(4)));
+}
+
+export type AdoptResult = { ok: true; commit: string; held: string } | { ok: false; error: string; conflict?: boolean };
+/**
+ * Ships a held feature: replays its commit onto refs/hal/main (merge-tree against its own base, then commit-tree with
+ * its message and author), moves refs/hal/main by CAS and deletes the held ref. A conflict (main changed the same
+ * lines since, e.g. the game's version) leaves everything as it was and says so; the caller asks for a rebuild.
+ */
+export async function adoptHeld(repo: string, passId: string, deps: GitDeps = {}): Promise<AdoptResult> {
+  const git = safeGit(deps.git ?? runGit);
+  const root = resolve(repo);
+  let ref: string;
+  try { ref = heldRef(passId); } catch (e) { return { ok: false, error: errText(e) }; }
+  const held = await revOrNull(git, ref, root);
+  if (!held) return { ok: false, error: `${passId} is not held` };
+  try {
+    const head = await rev(git, HAL_MAIN, root);
+    const base = (await git(['rev-parse', `${held}^`], root)).trim();
+    let tree: string;
+    try { tree = (await git(['merge-tree', '--write-tree', '--no-messages', '--merge-base', base, head, held], root)).trim().split('\n')[0]!; }
+    catch { return { ok: false, conflict: true, error: `${passId} no longer applies cleanly: ${HAL_MAIN} changed the same lines since it was built` }; }
+    const [name, email, date] = (await git(['log', '-1', '--format=%an%x00%ae%x00%aI', held], root)).trim().split('\0');
+    const message = await git(['log', '-1', '--format=%B', held], root);
+    const commit = (await git(['commit-tree', '--no-gpg-sign', tree, '-p', head, '-F', '-'], root, {
+      input: message.endsWith('\n') ? message : `${message}\n`, env: { GIT_AUTHOR_NAME: name!, GIT_AUTHOR_EMAIL: email!, GIT_AUTHOR_DATE: date! },
+    })).trim();
+    await git(['update-ref', '-m', `hal: ship held ${passId}`, HAL_MAIN, commit, head], root);
+    await git(['update-ref', '-d', ref, held], root);
+    return { ok: true, commit, held };
+  } catch (e) {
+    return { ok: false, error: errText(e) };
+  }
+}
+
+/** Drops a held feature (its commit object stays for the report). False if it was not held. */
+export async function dropHeld(repo: string, passId: string, deps: GitDeps = {}): Promise<boolean> {
+  const git = safeGit(deps.git ?? runGit);
+  const root = resolve(repo);
+  let ref: string;
+  try { ref = heldRef(passId); } catch { return false; }
+  const held = await revOrNull(git, ref, root);
+  if (!held) return false;
+  await git(['update-ref', '-d', ref, held], root);
+  return true;
+}
+
 export type CandidateWorktree = { dir: string; branch: string; base: string };
 
 /** Creates branch hal/<pass> at refs/hal/main, checked out at <repo>/.data/hal/wt/<pass>. Clears a stale one of the same pass first. */

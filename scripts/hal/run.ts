@@ -36,7 +36,7 @@ import { runCandidate, scorersFor, type CandidateCtx, type CandidateResult } fro
 import { killLiveClaudeChildren, roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
-  changedPaths, commitTree, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, pushHalMain, replayHalOnto, runGit, safeGit, type GitRunner,
+  changedPaths, commitTree, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, pushHalMain, replayHalOnto, adoptHeld, dropHeld, listHeld, type Held, runGit, safeGit, type GitRunner,
 } from './git.js';
 import { loadPrompt, renderPrompt } from './prompts.js';
 import { assertNoRepoFilters, errMsg, extractJson, redactor, type Redactor } from './run-util.js';
@@ -277,6 +277,80 @@ async function drainUndos(d: RunDeps, c: Pick<Common, 'R' | 'store'>, runId: str
     }
   }
   return done;
+}
+
+/**
+ * Applies Brian's decision on one held feature. ship: replay it onto refs/hal/main (git.ts adoptHeld) and move the
+ * main worktree there; the run's (or the command's) push sends it with ci:local first. A feature that no longer applies
+ * cleanly is dropped, and a 👍 vote with the reason tells the planner to rebuild it. drop: delete the held ref.
+ */
+async function applyHeld(d: RunDeps, c: Pick<Common, 'store' | 'raw' | 'R'>, h: { pass: string; decision: 'ship' | 'drop'; run: string }, runId: string): Promise<{ ok: boolean; message: string }> {
+  if (h.decision === 'drop') {
+    const gone = await dropHeld(d.repo, h.pass, { git: c.raw });
+    await c.store.recordHeld({ pass: h.pass, run: h.run, decision: 'drop', status: 'done' });
+    return { ok: true, message: gone ? `dropped ${h.pass}` : `${h.pass} was not held` };
+  }
+  const r = await adoptHeld(d.repo, h.pass, { git: c.raw });
+  if (r.ok) {
+    await ensureMainWorktree(d.repo, { git: c.raw });
+    const t = parseTrailers(await c.raw(['log', '-1', '--format=%B', r.commit], d.repo).catch(() => ''));
+    await c.store.recordHeld({ pass: h.pass, run: h.run, decision: 'ship', status: 'done', commit: r.commit, ...(t?.version ? { version: t.version } : {}) });
+    return { ok: true, message: `shipped ${h.pass} onto ${HAL_MAIN} (${r.commit.slice(0, 12)})` };
+  }
+  if (r.conflict) {
+    await dropHeld(d.repo, h.pass, { git: c.raw });
+    await c.store.recordHeld({ pass: h.pass, run: h.run, decision: 'ship', status: 'done', error: r.error });
+    await c.store.addVote({ run: h.run, item: h.pass, vote: 'up', comment: c.R.str(`Brian wants ${h.pass} shipped, but it no longer applies to main (the game changed since it was built): rebuild it on the current game.`) });
+    return { ok: false, message: `${r.error}; dropped it, and the planner is asked to rebuild it` };
+  }
+  await c.store.recordHeld({ pass: h.pass, run: h.run, decision: 'ship', status: 'failed', error: c.R.str(r.error) });
+  void runId;
+  return { ok: false, message: `${h.pass} not shipped (retried next run): ${r.error}` };
+}
+
+/** Preflight: decisions Brian made while Hal was busy. */
+async function drainHeld(d: RunDeps, c: Common, runId: string, say: (s: string) => void): Promise<void> {
+  for (const h of await c.store.pendingHeld()) {
+    const r = await applyHeld(d, c, h, runId);
+    say(r.ok ? `${r.message} (Brian's ${h.decision === 'ship' ? '👍' : '👎'})` : r.message);
+  }
+}
+
+/** `hal ship HAL-0xx` / `hal drop HAL-0xx`: Brian's decision on a held feature, now. Ship also pushes (ci:local first). */
+export async function heldCommand(decision: 'ship' | 'drop', pass: string, o: { push: boolean }, d: RunDeps): Promise<number> {
+  const c = common(d);
+  const startedAt = d.now();
+  const runId = `${decision}-${stamp(startedAt)}`;
+  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: `${decision} ${pass}`, trigger: 'manual' }, d.isAlive, d.startTimeOf);
+  if ('busy' in lock) {
+    await c.store.recordHeld({ pass, run: runId, decision, status: 'pending' });
+    c.log(`busy: run ${lock.busy.runId} is running; the decision is saved and the next run applies it`);
+    return 2;
+  }
+  const unguard = guard(d.proc ?? process, lock, c.log);
+  try {
+    await assertNoRepoFilters(d.repo, existsSync(mainWorktreeDir(d.repo)) ? mainWorktreeDir(d.repo) : d.repo, c.git);
+    const main = await ensureMainWorktree(d.repo, { git: c.raw });
+    const pending = (await c.store.pendingHeld()).find((h) => h.pass === pass);
+    const r = await applyHeld(d, c, { pass, decision, run: pending?.run ?? runId }, runId);
+    c.log(r.message);
+    if (r.ok && decision === 'ship') {
+      if (!o.push) c.log('not pushed (--no-push)');
+      else if (main.diverged) c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged; the next run replays and pushes it`);
+      else {
+        const p = await pushStep(d, c, runId, { triage: false });
+        for (const w of p.warnings) c.log(`warning: ${w}`);
+        c.log(p.pushed ? 'pushed to origin main' : `not pushed: ${p.reason}`);
+      }
+    }
+    return r.ok ? 0 : 1;
+  } catch (e) {
+    c.log(`${decision} ${pass} failed: ${errMsg(e)}`);
+    return 1;
+  } finally {
+    unguard();
+    lock.release();
+  }
 }
 
 function undoCtx(d: RunDeps, runId: string): UndoCtx {
@@ -579,6 +653,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     }
     await ciFollowUp(d, c, warn);
     if (!reportOnly) await drainUndos(d, { R, store }, runId, warn); // report-only changes nothing
+    if (!reportOnly) await drainHeld(d, c, runId, warn);
 
     // 3. Play.
     setPhase('play');
@@ -611,7 +686,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     const open = notesInScope(await store.readNotes(), o.games);
     const shotsDir = join(runDir, 'play', 'screens');
     await mkdir(shotsDir, { recursive: true });
-    const plannerText = await ask('planner', renderPrompt(loadPrompt('planner'), plannerVars(o, d, c, { scores, screens, controls, ledger, open, mainDir, lessons: await lessonsVar(c, o.games) })), mainDir, PLANNER_TIMEOUT_MS, [shotsDir]);
+    const plannerText = await ask('planner', renderPrompt(loadPrompt('planner'), plannerVars(o, d, c, { scores, screens, controls, ledger, open, mainDir, lessons: await lessonsVar(c, o.games), held: await listHeld(repo, { git: raw }) })), mainDir, PLANNER_TIMEOUT_MS, [shotsDir]);
     let tickets: Ticket[] = [];
     if (plannerText !== null) {
       const measures = Object.fromEntries(o.games.map((g) => [g, [...new Set(scorersFor(g).flatMap((s) => Object.keys(scores[s]?.measures ?? {})))]]));
@@ -636,19 +711,22 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       // Pass ids continue from the larger of the ledger and refs/hal/main's Hal-Pass trailers (a fresh .data/hal).
       const gitPass = await maxHalPass(git, repo);
       st.holdDirector = true;
+      // New features are built last and held for Brian (refs/hal/held/<pass>), so every fix, tuning and polish of the
+      // night is already on refs/hal/main when they are built, and a held feature never sits under a merged change.
+      const ordered = [...build.filter((t) => t.kind !== 'feature'), ...build.filter((t) => t.kind === 'feature')];
       try {
-        for (const [i, t] of build.entries()) {
+        for (const [i, t] of ordered.entries()) {
           const skip = (why: string) => { changes.push({ pass: '', ticket: t, verdict: 'skipped', reasons: [why], scoresBefore: {}, scoresAfter: {}, costUsd: 0 }); };
           if (st.trustRoot) { skip('stopped: trust root modified'); continue; }
           if (existsSync(stopPath)) { skip('stopped'); continue; }
           if (!canCall()) { skip('no API key'); continue; }
           if (!(budget.slice('implementer') > 0)) { st.capReached = true; skip('budget'); continue; }
           const pass = nextPassId(ledger, gitPass);
-          setPhase(`build ${pass} (${i + 1}/${build.length})`);
+          setPhase(`build ${pass} (${i + 1}/${ordered.length})`);
           const ctx: CandidateCtx = {
             repo, pass, run: runId, now: d.now, tzOffsetMinutes: tz, model: d.implementerModel ?? d.model, billing: st.billing, secrets: [...d.secrets],
             budget: { slice: () => budget.slice('implementer'), record: (_r, b, u) => budget.record('implementer', b, u) },
-            claude, mainDir, baseline, ...(d.git ? { git: d.git } : {}),
+            claude, mainDir, baseline, ...(d.git ? { git: d.git } : {}), ...(t.kind === 'feature' ? { hold: true } : {}),
             ...(d.appendSystemPromptFile ? { appendSystemPromptFile: d.appendSystemPromptFile } : {}), ...(d.candidateCtx ?? {}),
           };
           const r = R.deep(await (d.candidate ?? runCandidate)(t, ctx));
@@ -672,7 +750,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
             ts: d.now().toISOString(), game: t.game, change: t.title, ...(t.target !== undefined ? { target: t.target } : {}),
             fitness: Number.isFinite(after?.fitness) ? after!.fitness : Number.isFinite(before?.fitness) ? before!.fitness : 0,
             baseline: Number.isFinite(before?.fitness) ? before!.fitness : null, measures: after?.measures ?? {},
-            kept: r.verdict === 'merged', reasons: r.reasons, costUsd: r.costUsd,
+            kept: r.verdict === 'merged' || r.verdict === 'held', reasons: r.reasons, costUsd: r.costUsd,
           }, pass);
           await writeJsonAtomic(ledgerPath, R.deep(ledger));
           if (r.verdict === 'merged') {
@@ -826,8 +904,9 @@ const QUIET_PUSH = ['--no-push', '--report-only', 'nothing new to push'];
  * waiting); a clean nightly run stays quiet.
  */
 export function runAlert(r: { code: number; phase: string; trigger: 'nightly' | 'manual'; pushed: boolean; pushSkippedReason?: string | undefined; warnings: string[]; changes: Array<{ verdict: string }> }): { title: string; body: string } | null {
-  const merged = r.changes.filter((c) => c.verdict === 'merged').length, dropped = r.changes.length - merged;
-  const tally = `${merged} merged, ${dropped} dropped`;
+  const merged = r.changes.filter((c) => c.verdict === 'merged').length, held = r.changes.filter((c) => c.verdict === 'held').length;
+  const dropped = r.changes.filter((c) => c.verdict === 'discarded').length;
+  const tally = `${merged} merged, ${held ? `${held} waiting for your OK, ` : ''}${dropped} dropped`;
   if (r.code !== 0) return { title: 'Hal: the run failed', body: `It stopped in ${r.phase}. ${tally}. Open the report for details.` };
   if (!r.pushed && r.pushSkippedReason && !QUIET_PUSH.includes(r.pushSkippedReason)) return { title: "Hal: nothing was pushed", body: `${r.pushSkippedReason}. ${tally}; the commits wait on Hal's branch.` };
   const needs = r.warnings.find((w) => /needs you/i.test(w));
@@ -879,6 +958,8 @@ type PlanInputs = {
   ledger: Ledger | null; open: Note[]; mainDir: string;
   /** The lessons, already rendered for the prompt (lessonsVar). */
   lessons: string;
+  /** Features built and waiting for Brian's OK. */
+  held: Held[];
 };
 function plannerVars(o: RunOptions, d: RunDeps, c: Common, p: PlanInputs): Record<string, string> {
   const left = (() => { try { return c.store.loadSpendTodaySync(); } catch { return null; } })();
@@ -903,6 +984,7 @@ function plannerVars(o: RunOptions, d: RunDeps, c: Common, p: PlanInputs): Recor
     notes: J(p.open.map(noteForPrompt)),
     stagnation: stagnationText(o.games, p.ledger),
     lessons: p.lessons,
+    held: p.held.length ? p.held.map((h) => `- ${h.pass}: ${h.subject}`).join('\n') : '(none)',
     budget: left
       ? `${fmt(Math.max(0, DAILY_CAP_USD - apiSpent(left)))} of API credits left today; each ticket's implementer gets up to ${fmt(sliceFor(left, 'implementer'))}. At most ${o.maxTickets} tickets will be built.`
       : `At most ${o.maxTickets} tickets will be built.`,

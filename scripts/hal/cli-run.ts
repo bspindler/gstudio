@@ -16,11 +16,11 @@ import { CHECK_TIMEOUT_MS, defaultCommands, resolveTools } from './candidate.js'
 import { runClaude, type ClaudeDeps } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import { loadHalEnv } from './env.js';
-import { runNight, STOP_FILE, undoCommand, type CiLocal, type PlayPort, type RunDeps, type RunOptions } from './run.js';
+import { runNight, STOP_FILE, heldCommand, undoCommand, type CiLocal, type PlayPort, type RunDeps, type RunOptions } from './run.js';
 import { entryCheck } from './run-util.js';
 import type { ScreensResult } from './screens.js';
 
-export const RUN_COMMANDS = ['run', 'stop', 'undo'] as const;
+export const RUN_COMMANDS = ['run', 'stop', 'undo', 'ship', 'drop'] as const;
 export type RunCommand = (typeof RUN_COMMANDS)[number];
 export const isRunCommand = (c: string | undefined): c is RunCommand => !!c && (RUN_COMMANDS as readonly string[]).includes(c);
 
@@ -97,6 +97,12 @@ export async function runRunCommand(c: RunCommand, rest: string[], d: RunCmdDeps
   if (c === 'run') {
     const o = parseRunArgs(rest, d.games);
     return runNight(o, (d.makeDeps ?? (() => realRunDeps(repo, d.halDir)))());
+  }
+  if (c === 'ship' || c === 'drop') {
+    const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { 'no-push': { type: 'boolean' } } });
+    const pass = positionals[0];
+    if (!pass || positionals.length > 1 || !/^HAL-\d+$/.test(pass)) throw new Error(`usage: hal ${c} HAL-0xx${c === 'ship' ? ' [--no-push]' : ''}`);
+    return heldCommand(c, pass, { push: values['no-push'] !== true }, (d.makeDeps ?? (() => realRunDeps(repo, d.halDir)))());
   }
   const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { reason: { type: 'string' }, 'no-push': { type: 'boolean' } } });
   const pass = positionals[0];

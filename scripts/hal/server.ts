@@ -107,8 +107,21 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const secure = (c: Context) => {
   if (!c.res.headers.has('cache-control')) c.header('Cache-Control', 'no-store'); // /shot's images set their own
   c.header('Referrer-Policy', 'same-origin');
-  c.header('Content-Security-Policy', CSP);
+  if (!c.res.headers.has('content-security-policy')) c.header('Content-Security-Policy', CSP); // /preview sets its own
 };
+
+/**
+ * The preview's policy: the held game's own files and inline scripts, its images and sounds, and nothing else: no
+ * requests anywhere (connect-src 'none'), no form posts (so a game cannot press Hal's buttons), not framed.
+ */
+const PREVIEW_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'";
+const PREVIEW_TYPES: Record<string, string> = {
+  html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8',
+  json: 'application/json', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
+  woff2: 'font/woff2', woff: 'font/woff', ttf: 'font/ttf', otf: 'font/otf', mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', txt: 'text/plain; charset=utf-8', md: 'text/plain; charset=utf-8',
+};
+/** A path inside games/ for the preview: plain segments only (no dot files, no `..`), a known file type. */
+const PREVIEW_PATH = /^(?:[a-z0-9][a-z0-9_-]*\/)*[a-zA-Z0-9][a-zA-Z0-9._-]*\.([a-z0-9]+)$/;
 
 const notFound = () => new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain' } });
 
@@ -189,13 +202,27 @@ export function createServerApp(d: ServerDeps) {
     const [own, all] = await Promise.all([store.feedbackFor(r.runId), store.readFeedback()]);
     const passes = new Set(r.changes.map((x) => x.pass).filter(Boolean));
     const elsewhere = all.undos.filter((u) => u.run !== r.runId && u.status === 'done' && !!u.pass && passes.has(u.pass));
-    return { votes: own.votes, undos: [...own.undos, ...elsewhere].sort((a, b) => String(a.at).localeCompare(String(b.at))) };
+    const held = (all.held ?? []).filter((h) => passes.has(h.pass));
+    return { votes: own.votes, undos: [...own.undos, ...elsewhere].sort((a, b) => String(a.at).localeCompare(String(b.at))), held };
   };
   /** One writer at a time (the server is one process): a check and the write it guards are atomic, so a double tap records once. */
   let chain: Promise<unknown> = Promise.resolve();
   const serial = <T>(f: () => Promise<T>): Promise<T> => { const p = chain.then(f, f); chain = p.catch(() => {}); return p; };
+  /** The pass's change in this run if it merged or is held (votes, undos, shots and previews act on those). */
   const merged = (r: RunReport, pass: unknown) =>
-    typeof pass === 'string' && PASS.test(pass) ? r.changes.find((x) => x.pass === pass && x.verdict === 'merged') ?? null : null;
+    typeof pass === 'string' && PASS.test(pass) ? r.changes.find((x) => x.pass === pass && (x.verdict === 'merged' || x.verdict === 'held')) ?? null : null;
+  /** Ship or drop a held feature: now when Hal is free (`hal ship|drop`), else the next run applies the saved decision. */
+  const decideHeld = async (c: Context, r: RunReport, pass: string, decision: 'ship' | 'drop') => {
+    const done = ((await store.readFeedback()).held ?? []).some((h) => h.pass === pass && h.status === 'done');
+    if (done) return back(c, r.runId, 'Already decided');
+    await store.recordHeld({ pass, run: r.runId, decision, status: 'pending' });
+    if (running()) return back(c, r.runId, `${decision === 'ship' ? 'Ship' : 'Drop'} queued: Hal is busy, so the next run applies it`);
+    try {
+      if (!spawnRun) throw new Error('no spawn');
+      spawnRun({ args: [decision, pass], logPath: join(d.halDir, 'logs', `${decision}-${stamp(now())}.log`) });
+    } catch { return back(c, r.runId, `${decision === 'ship' ? 'Ship' : 'Drop'} queued: the next run applies it`); }
+    return back(c, r.runId, decision === 'ship' ? 'Shipping: Hal puts it on main, runs ci:local and pushes' : 'Dropped');
+  };
 
   /** Commits on refs/hal/main that HEAD lacks (Play serves the checkout), or undefined: no ref, no git, or a failure. */
   const behindHal = async (): Promise<number | undefined> => {
@@ -270,6 +297,27 @@ export function createServerApp(d: ServerDeps) {
     return c.body(new Uint8Array(bytes), 200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
   });
 
+  /** A held (or shipped) feature's games, straight from its commit, to play before deciding. Read-only, from git. */
+  app.get('/preview/:pass/*', async (c) => {
+    const pass = c.req.param('pass');
+    let rest: string;
+    try { rest = decodeURIComponent(c.req.path.slice(`/preview/${pass}/`.length)); } catch { return notFound(); }
+    const m = PREVIEW_PATH.exec(rest);
+    if (!d.git || !PASS.test(pass) || !m || !PREVIEW_TYPES[m[1]!]) return notFound();
+    let commit = '';
+    for (const n of await runNames()) { // the newest report that has this pass held or merged names its commit
+      const r = await loadRun(n);
+      const ch = r && merged(r, pass);
+      if (ch && typeof ch.commit === 'string' && /^[0-9a-f]{7,64}$/.test(ch.commit)) { commit = ch.commit; break; }
+    }
+    if (!commit) return notFound();
+    let bytes: Buffer;
+    // Laid out as the games are served (browser.ts serveGames): games/ at the root, packages/sdk/ at sdk/.
+    const file = rest.startsWith('sdk/') ? `packages/${rest}` : `games/${rest}`;
+    try { bytes = await d.git(['show', `${commit}:${file}`]); } catch { return notFound(); }
+    return c.body(new Uint8Array(bytes), 200, { 'content-type': PREVIEW_TYPES[m[1]!]!, 'content-security-policy': PREVIEW_CSP, 'x-content-type-options': 'nosniff' });
+  });
+
   /** 303 back to the run's page (`/` for the latest) with the flash in a short-lived cookie, never in the URL. */
   const back = (c: Context, run: string | null, flash: string) => {
     setCookie(c, FLASH, flash, { httpOnly: true, sameSite: 'Strict', path: '/', maxAge: 60 });
@@ -289,6 +337,10 @@ export function createServerApp(d: ServerDeps) {
       const ch = r && merged(r, b.pass);
       if (!r || !ch) return bad(c);
       const comment = oneLine(b.comment, 500);
+      if (ch.verdict === 'held') {
+        await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'up', ...(comment ? { comment } : {}) });
+        return decideHeld(c, r, ch.pass, 'ship');
+      }
       // A repeat tap of the same Keep records nothing new: the newest vote on this pass in this run already says it.
       const last = (await store.feedbackFor(r.runId)).votes.filter((v) => v.item === ch.pass).at(-1);
       if (last?.vote === 'up' && (last.comment ?? '') === comment) return back(c, r.runId, 'Kept');
@@ -304,6 +356,11 @@ export function createServerApp(d: ServerDeps) {
       const r = await loadRun(b.run);
       const ch = r && merged(r, b.pass);
       if (!r || !ch) return bad(c);
+      if (ch.verdict === 'held') {
+        const given = oneLine(b.reason, 500);
+        await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'down', ...(given ? { comment: given } : {}) });
+        return decideHeld(c, r, ch.pass, 'drop');
+      }
       // Already asked for on this run, or already undone by any run (a CLI `hal undo`, another report).
       const { undos } = await store.readFeedback();
       if (undos.some((u) => u.pass === ch.pass && u.status === 'done')) return back(c, r.runId, 'Already undone');

@@ -30,6 +30,10 @@ variety of challenges in a level or sector, or decisions per minute.
 score, not a play session. Fine for a moved crystal; risky for a whole new level or sector nobody has played.
 **Fix:** tuning, polish and fixes ship as now; new features are held on their own branch until a 👍, then
 shipped (or dropped on 👎).
+**Done 2026-11-12:** features are built last and kept at `refs/hal/held/HAL-xxx`. The report's "Waiting for your
+OK" has ▶ Try it (the held game served straight from its commit, with no network and no form posts), 👍 Ship it
+(`hal ship`: replayed onto main, ci:local, pushed) and 👎 Drop it (`hal drop`). A decision made while Hal is busy is
+applied by the next run. A held feature that no longer applies is dropped, and the planner is asked to rebuild it.
 
 ## 3. The learning is shallow
 
