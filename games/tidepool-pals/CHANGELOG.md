@@ -9,6 +9,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Returning players open on the reef map with a Continue button at their furthest unlocked level, right in the pool they're restoring.
 - Level 14 has less litter to clear and level 28's stranded pal starts closer to open water, so neither feels like a sudden wall any more.
 - On tall phones the board now sits right under the goal and moves bar, with the level label just below it, instead of floating in a band of empty water.
+- Tidepool Pals: the puzzle board now grows to fill the empty space on tall phones, with the level label tucked right under it.
 
 ## 0.4.1 (2026-11-11)
 - **Fonts ship with the game.** Bagel Fat One and Nunito now load from the game's own `fonts/` folder (SIL OFL), so players' phones no longer contact Google Fonts. The look is unchanged.
