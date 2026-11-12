@@ -1,9 +1,13 @@
-// The morning report: one run's report.json, its note and the feedback on it, as a phone-first HTML page.
-// Pure: data in, HTML string out. No JavaScript; every action is a same-origin form POST that carries the run id.
+// The morning report: one run's report.json, its note and the feedback on it, as an HTML page. Two columns from 840px
+// (Material 3's expanded width): the report on the left, and a panel that stays in view on the right (Run Hal with its
+// live status, Tell Hal, the latest reports). One column below that, Run Hal first. Pure: data in, HTML string out.
+// Every action is a same-origin form POST that carries the run id. The only script is Hal's own /hal.js (live status),
+// and everything works without it.
 // Every user and Claude string goes through esc. Fields added by plan 3 (perGame, Vote.comment) are optional.
 import type { Ticket } from '@studio/core/hal';
 import type { CandidateResult } from './candidate.js';
 import { esc, noteHtml, pageHead } from './page-style.js';
+import { phaseProgress } from './status-client.js';
 import type { RunReport } from './run.js';
 import type { Note, Undo, Vote } from './store.js';
 
@@ -19,12 +23,14 @@ export type ReportView = {
   notes: Note[];                                          // all open notes, for Tell Hal
   approvals: string[];                                    // approved liability items
   status: { running: boolean; phase?: string; startedAt?: string };
+  /** latest.json's run when the page was rendered: /hal.js offers the new report once a newer one exists. */
+  latestRunId?: string | null;
   spendToday: number; capUsd: number;
   playUrl: string | null;
   /** How many commits refs/hal/main has that the checkout's HEAD lacks (Play serves the checkout); absent when unknown. */
   behindHal?: number;
   games: string[];
-  runs: Array<{ runId: string; endedAt: string }>;       // for the "Earlier reports" list, newest first
+  runs: Array<{ runId: string; endedAt: string }>;       // the newest few, for the panel's "Earlier reports", newest first
   flash?: string;                                         // one line after a POST ("Undo started", ...)
   /** IANA zone for the times shown; default the Mac's own zone (Brian reads the page in his). Injected by tests. */
   timeZone?: string;
@@ -44,6 +50,12 @@ const score = (n: number) => n.toFixed(1);
 const hidden = (name: string, value: string) => `<input type="hidden" name="${esc(name)}" value="${esc(value)}">`;
 const gameOptions = (games: string[]) => games.map((g) => `<option value="${esc(g)}">${esc(gameName(g))}</option>`).join('');
 const minOf = (xs: number[]) => (xs.length ? Math.min(...xs) : null);
+/** How many rows a list that keeps growing shows before "Show all N". */
+export const LIST_HEAD = 5;
+/** The first LIST_HEAD rows, and the rest folded under "Show all N" (no script needed). */
+const capped = (items: string[], cls = 'rows') => items.length <= LIST_HEAD
+  ? `<ul class="${cls}">${items.join('\n')}</ul>`
+  : `<ul class="${cls}">${items.slice(0, LIST_HEAD).join('\n')}</ul><details class="rest"><summary>Show all ${items.length}</summary><ul class="${cls} rest-rows">${items.slice(LIST_HEAD).join('\n')}</ul></details>`;
 
 // ---- the director's note -------------------------------------------------------------------------------------------
 
@@ -87,10 +99,10 @@ function header(v: ReportView, merged: number, dropped: number, needYou: number)
   const r = v.report;
   const h1 = merged ? "Good morning. Here's what changed." : r.trigger === 'nightly' ? 'Nothing changed overnight.' : 'Nothing changed this run.';
   const spend = `${usd(r.spend.api)} API · ${usd(r.spend.subscription)} subscription${r.capReached ? ' · daily cap reached' : ''}`;
-  return `<header class="hero">
+  return `<header class="hero head">
 <div class="label">${esc(nightLabel(r))}</div>
 <h1>${esc(h1)}</h1>
-<p class="tally">${merged} merged · ${dropped} tried and dropped · ${needYou} need you</p>
+<p class="tally"><span class="pill${merged ? ' good' : ' outline'}">${merged} merged</span> <span class="pill outline">${dropped} tried and dropped</span> <span class="pill${needYou ? ' warn' : ' outline'}">${needYou} need you</span></p>
 <p class="small muted">Spent ${esc(spend)}</p>
 </header>`;
 }
@@ -135,7 +147,7 @@ function standings(v: ReportView): string {
     return `<li class="game">
 <div class="game-top"><span class="game-name">${esc(gameName(g))}</span>${pill(badge[0], badge[1])}</div>
 <div class="meter"><div class="bar ${badge[1]}"><span style="width:${pct}%"></span></div><span class="num small muted">${esc(nums)}</span></div>
-${why ? `<p class="why small muted">${esc(clip(why, 600))}</p>` : ''}
+${why ? `<div class="why small muted">${noteHtml(why.length > 900 ? `${why.slice(0, 899)}…` : why)}</div>` : ''}
 </li>`;
   });
   return `<section><h2>Where each game stands</h2><div class="card"><ul class="rows">${rows.join('\n')}</ul></div></section>`;
@@ -181,7 +193,7 @@ ${withState(changeState(c.pass, v.feedback), forms)}
 
 function changes(v: ReportView, cards: CandidateResult[]): string {
   if (!cards.length) return '';
-  return `<section><h2>Changes</h2>${cards.map((c) => changeCard(v, c)).join('\n')}</section>`;
+  return `<section><h2>Changes</h2><div class="changes-grid">${cards.map((c) => changeCard(v, c)).join('\n')}</div></section>`;
 }
 
 /** Brian tapped "Leave it" on this call in this run: the newest vote on the item is down. */
@@ -229,7 +241,7 @@ ${n.reply ? `<p class="reply small"><span class="who">Hal</span> ${esc(clip(n.re
 <form method="post" action="/notes/clear" class="clear">${hidden('run', run)}${hidden('id', n.id)}<button type="submit" class="inline">Clear</button></form>
 </li>`;
   });
-  return `<section><h2>Tell Hal</h2>
+  return `<section class="tell"><h2>Tell Hal</h2>
 <form method="post" action="/tell" class="card stack">${hidden('run', run)}
 <label class="label" for="tell-game">About</label>
 <select name="game" id="tell-game"><option value="">The whole studio</option>${opts}</select>
@@ -237,7 +249,7 @@ ${n.reply ? `<p class="reply small"><span class="who">Hal</span> ${esc(clip(n.re
 <textarea name="text" id="tell-text" maxlength="2000" required placeholder="An idea, a gripe, something you noticed while playing"></textarea>
 <button type="submit" class="primary">Send to Hal</button>
 </form>
-${notes.length ? `<div class="card"><ul class="rows">${notes.join('\n')}</ul></div>` : ''}
+${notes.length ? `<div class="card">${capped(notes)}</div>` : ''}
 </section>`;
 }
 
@@ -274,12 +286,12 @@ function planned(list: Ticket[], open: boolean): string {
 <div class="item-title">${esc(t.title)}</div>
 <p class="small muted">${esc(clip(t.why, 300))}</p>
 </li>`);
-  return `<section><details class="fold"${open ? ' open' : ''}><summary><h2>Planned, not built (${list.length})</h2></summary><ul class="rows">${items.join('\n')}</ul></details></section>`;
+  return `<section><details class="fold"${open ? ' open' : ''}><summary><h2>Planned, not built (${list.length})</h2></summary>${capped(items)}</details></section>`;
 }
 
 function warnings(r: ViewReport): string {
   if (!r.warnings.length) return '';
-  return `<section><h2>Warnings</h2><div class="card warnings"><ul class="rows">${r.warnings.map((w) => `<li class="small">${esc(clip(w, 500))}</li>`).join('')}</ul></div></section>`;
+  return `<section><h2>Warnings</h2><div class="card warnings">${capped(r.warnings.map((w) => `<li class="small">${esc(clip(w, 500))}</li>`))}</div></section>`;
 }
 
 /** `Nov 12, 1:02 AM` in `timeZone` (default: the local zone); the raw text if it is not a date. */
@@ -289,38 +301,129 @@ const when = (iso: string, timeZone?: string) => {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone }).format(d);
 };
 
-type RunHalView = Pick<ReportView, 'status' | 'spendToday' | 'capUsd' | 'games' | 'runs' | 'timeZone'>;
+type RunHalView = Pick<ReportView, 'status' | 'spendToday' | 'capUsd' | 'games' | 'runs' | 'timeZone' | 'latestRunId'>;
 
+/** The Run Hal card: the state as of now (kept live by /hal.js), and Run now or Stop, whichever applies. */
 function runHal(v: RunHalView, run: string): string {
   const s = v.status;
-  const status = s.running ? `Running${s.phase ? `: ${esc(s.phase)}` : ''}${s.startedAt ? ` (since ${esc(when(s.startedAt, v.timeZone))})` : ''}` : 'Idle';
+  const p = s.running ? phaseProgress(s.phase) : null;
   const opts = gameOptions(v.games);
-  const earlier = v.runs.slice(0, 10).map((x) =>
-    `<li><a class="run-link" href="/runs/${esc(encodeURIComponent(x.runId))}"><span>${esc(when(x.endedAt, v.timeZone))}</span>${x.runId === run ? '<span class="pill">this one</span>' : ''}</a></li>`);
-  return `<section><h2>Run Hal</h2>
-<div class="card stack">
-<p class="status"><span class="dot${s.running ? ' on' : ''}" aria-hidden="true"></span><strong>${status}</strong><br><span class="small muted">API spend today: ${usd(v.spendToday)} of ${usd(v.capUsd)}</span></p>
-<form method="post" action="/run" class="stack">${hidden('run', run)}
+  return `<section class="runhal" aria-labelledby="runhal-h"><div class="card run-card stack" data-hal-status data-running="${s.running ? '1' : '0'}" data-latest="${esc(v.latestRunId ?? '')}">
+<h2 id="runhal-h">Run Hal</h2>
+<p class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><strong data-state>${s.running ? 'Running' : 'Idle'}</strong> <span data-phase>${s.running ? esc(s.phase ?? 'starting') : ''}</span><br>
+<span class="small" data-since>${s.running && s.startedAt ? `since ${esc(when(s.startedAt, v.timeZone))}` : ''}</span></p>
+<progress data-progress max="1"${p !== null ? ` value="${p.toFixed(3)}"` : ''}${s.running ? '' : ' hidden'} aria-label="Run progress"></progress>
+<p class="small" data-spend>${usd(v.spendToday)} of ${usd(v.capUsd)} API today</p>
+<p class="small new" data-new hidden><a href="/">A new report is ready: see it</a></p>
+<p class="small offline" data-offline hidden>Can't reach Hal right now; the status may be out of date.</p>
+<form method="post" action="/run" class="stack" data-run-form${s.running ? ' hidden' : ''}>${hidden('run', run)}
 <label class="label" for="run-game">Game</label>
 <select name="game" id="run-game"><option value="">All games</option>${opts}</select>
 <label class="check"><input type="checkbox" name="reportOnly" value="1"> Report only (plan, don't build)</label>
 <button type="submit" class="primary">Run now</button>
 </form>
-<form method="post" action="/stop">${hidden('run', run)}<button type="submit">Stop</button></form>
-</div>
-${earlier.length ? `<div class="card"><div class="label">Earlier reports</div><ul class="rows runs">${earlier.join('')}</ul></div>` : ''}
-</section>`;
+<form method="post" action="/stop" data-stop-form${s.running ? '' : ' hidden'}>${hidden('run', run)}<button type="submit">Stop</button></form>
+</div></section>`;
+}
+
+/** The panel's newest reports, and a link to all of them. */
+function recent(v: RunHalView, run: string): string {
+  const rows = v.runs.slice(0, LIST_HEAD).map((x) =>
+    `<li><a class="run-link" href="/runs/${esc(encodeURIComponent(x.runId))}"><span>${esc(when(x.endedAt, v.timeZone))}</span>${x.runId === run ? '<span class="pill">this one</span>' : ''}</a></li>`);
+  if (!rows.length) return '';
+  return `<section class="recent"><div class="card"><div class="label">Earlier reports</div><ul class="rows runs">${rows.join('')}</ul>
+<a class="all-link small" href="/runs">All reports</a></div></section>`;
+}
+
+/** The two-column shell: header and report in the main column, the panel beside it. */
+const shell = (title: string, head: string, main: string, side: string, flash?: string) =>
+  `${pageHead(title, REPORT_CSS)}<body><div class="app">
+${flash ? `<p class="flash head" role="status">${esc(clip(flash, 300))}</p>` : ''}
+${head}
+<aside class="side" aria-label="Run Hal and notes">${side}</aside>
+<main class="main">${main}</main>
+</div><script src="/hal.js" defer></script></body></html>`;
+
+export type RunsIndexView = {
+  runs: Array<{ runId: string; endedAt: string; trigger?: string; merged: number; dropped: number }>;
+  page: number; pages: number; timeZone?: string;
+};
+
+/** /runs: every report, newest first, grouped by day, RUNS_PER_PAGE to a page. */
+export function renderRunsIndex(v: RunsIndexView): string {
+  const day = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? 'Unknown day' : new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: v.timeZone }).format(d); };
+  const time = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? iso : new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone: v.timeZone }).format(d); };
+  const groups: Array<{ day: string; rows: string[] }> = [];
+  for (const r of v.runs) {
+    const d = day(r.endedAt);
+    if (groups.at(-1)?.day !== d) groups.push({ day: d, rows: [] });
+    groups.at(-1)!.rows.push(`<li><a class="run-link" href="/runs/${esc(encodeURIComponent(r.runId))}"><span>${esc(time(r.endedAt))} · ${r.trigger === 'nightly' ? 'overnight' : 'manual'}</span><span class="small muted">${r.merged} merged · ${r.dropped} dropped</span></a></li>`);
+  }
+  const nav = v.pages > 1 ? `<nav class="pager small" aria-label="Pages">${v.page > 1 ? `<a href="/runs?page=${v.page - 1}">Newer</a>` : '<span></span>'}<span class="muted">Page ${v.page} of ${v.pages}</span>${v.page < v.pages ? `<a href="/runs?page=${v.page + 1}">Older</a>` : '<span></span>'}</nav>` : '';
+  const body = groups.length
+    ? groups.map((g) => `<section><h2>${esc(g.day)}</h2><div class="card"><ul class="rows runs">${g.rows.join('')}</ul></div></section>`).join('\n')
+    : '<p class="muted">No reports yet.</p>';
+  return `${pageHead('Hal · All reports', REPORT_CSS)}<body><main class="page">
+<header class="hero"><a class="small" href="/">← Latest report</a><h1>All reports</h1></header>
+${body}
+${nav}
+</main></body></html>`;
 }
 
 // ---- the page ------------------------------------------------------------------------------------------------------
 
 /** Report-only styles, on top of PAGE_CSS. */
 const REPORT_CSS = `
+/* ---- layout: one column below 840px (Run Hal first), two from 840px with the panel in view as you scroll ---- */
+.app{display:flex;flex-direction:column;gap:0;max-width:600px;margin:0 auto;
+  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(40px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.side{display:contents}
+.app>.flash{order:-1}
+.head{order:0}
+.runhal{order:1;margin-top:20px}
+.main{order:2}
+.side-rest{order:3}
+.main>section:first-child{margin-top:28px}
+@media (min-width:840px){
+  .app{display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-areas:"flash flash" "head side" "main side";
+    column-gap:24px;max-width:1280px;padding:24px}
+  .app>.flash{grid-area:flash}
+  .head{grid-area:head}
+  .main{grid-area:main;min-width:0}
+  .side{display:block;grid-area:side;position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;
+    padding-bottom:8px;scrollbar-width:thin}
+  .runhal{margin-top:0}
+  .changes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;align-items:start}
+  .changes-grid>.card{margin:0}
+}
+.side-rest>section{margin-top:16px}
+.side h2{font-size:16px;line-height:24px;font-weight:500;margin-bottom:8px}
+.side-rest p,.side-rest li{font-size:14px;line-height:20px}
 .hero{margin:4px 0 0}
-.hero h1{margin:6px 0 8px}
-.hero .tally{margin:0 0 2px;font-weight:600}
+.hero h1{margin:6px 0 10px}
+.hero .tally{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
+/* ---- Run Hal ---- */
+.run-card{position:relative;background:var(--accent-soft);color:var(--md-on-secondary-container);border-color:transparent}
+.run-card[data-running="1"]{background:var(--md-primary-container);color:var(--md-on-primary-container)}
+.run-card h2{font-size:16px;line-height:24px;font-weight:500;margin:0}
+.run-card .status{margin:0}
+.run-card .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--md-outline);margin-right:8px;vertical-align:0}
+.run-card[data-running="1"] .dot{background:var(--good);box-shadow:0 0 0 3px var(--good-soft);animation:hal-pulse 1.4s ease-in-out infinite}
+@keyframes hal-pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.run-card[data-running="1"] .dot{animation:none}}
+.run-card [data-phase]{font-variant-numeric:tabular-nums}
+.run-card progress{display:block;width:100%;height:4px;border:0;border-radius:2px;background:var(--md-surface-high);accent-color:var(--accent);-webkit-appearance:none;appearance:none}
+.run-card progress[hidden]{display:none}
+.run-card progress::-webkit-progress-bar{background:color-mix(in srgb,var(--md-on-primary-container) 15%,transparent);border-radius:2px}
+.run-card progress::-webkit-progress-value{background:var(--accent);border-radius:2px}
+.run-card progress::-moz-progress-bar{background:var(--accent);border-radius:2px}
+.run-card select{background:var(--surface)}
+.run-card .new a{font-weight:500}
+.run-card .offline{color:var(--warn)}
+.all-link{display:inline-flex;align-items:center;min-height:44px;margin-top:4px;font-weight:500}
+.pager{display:flex;justify-content:space-between;align-items:center;margin-top:24px;min-height:44px}
 .play{margin-top:16px}
-.play .btn{min-height:52px;padding:14px;font-size:18px;border-radius:12px;letter-spacing:.01em}
+.play .btn{min-height:56px;padding:16px;font-size:16px;border-radius:16px}
 .behind{margin:8px 2px 0;color:var(--muted)}
 .play-off{display:flex;align-items:center;gap:12px}
 .play-icon{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent-soft);color:var(--accent)}
@@ -338,10 +441,12 @@ const REPORT_CSS = `
 .bar.warn>span{background:var(--warn)}
 .num{flex:none;font-variant-numeric:tabular-nums}
 .why{margin:6px 0 0}
+.why p{margin:4px 0 0}
+.why ul,.why ol{margin:4px 0 0;padding-left:20px}
 .change h3,.call h3{margin:6px 0 8px;font-size:17px}
 .change .lead{margin-bottom:12px}
 .shots{margin:0 0 12px}
-.shot{position:relative;margin:0;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
+.shot{position:relative;margin:0;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
 .shot img{width:100%}
 .shot .tag{position:absolute;left:6px;top:6px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
   padding:3px 7px;border-radius:999px;background:var(--surface);color:var(--fg);opacity:.92}
@@ -369,14 +474,11 @@ const REPORT_CSS = `
 .inline-form{display:flex;gap:8px;margin-top:8px}
 .inline-form input{flex:1;min-width:0}
 .hal-note p{margin:6px 0 0}
-.reply{padding:8px 10px;border-radius:10px;background:var(--accent-soft)}
+.reply{padding:8px 12px;border-radius:12px;background:var(--md-surface-container)}
 .reply .who{font-weight:700;color:var(--accent);margin-right:4px}
 .clear{display:flex;justify-content:flex-end;margin-top:8px}
 .warnings{background:var(--warn-soft);border-color:transparent}
 .warnings .rows>li{border-color:color-mix(in srgb,var(--warn) 25%,transparent)}
-.status{margin:0}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);margin-right:8px;vertical-align:1px}
-.dot.on{background:var(--good);box-shadow:0 0 0 3px var(--good-soft)}
 .runs>li{padding:0;border-top:1px solid var(--line)}
 .run-link{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;text-decoration:none}
 `;
@@ -391,27 +493,13 @@ export function renderReport(v: ReportView): string {
   const approved = new Set(v.approvals.map(normItem));
   const needYou = r.calls.filter((t) => !approved.has(normItem(t.liability ?? '')) && !isDeclined(v, t.liability ?? '')).length;
   const plan = r.planned ?? [];
-  return `${pageHead(`Hal · ${r.night}`, REPORT_CSS)}<body><main class="page">
-${v.flash ? `<p class="flash" role="status">${esc(clip(v.flash, 300))}</p>` : ''}
-${header(v, merged.length, gone.length, needYou)}
-${director(v)}
-${play(v)}
-${standings(v)}
-${changes(v, cards)}
-${calls(v)}
-${tell(v)}
-${fixes(v, fixed)}
-${dropped(gone)}
-${planned(plan, merged.length === 0)}
-${warnings(r)}
-${runHal(v, r.runId)}
-</main></body></html>`;
+  const main = [director(v), play(v), calls(v), changes(v, cards), standings(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
+  const side = `${runHal(v, r.runId)}\n<div class="side-rest">${tell(v)}\n${recent(v, r.runId)}</div>`;
+  return shell(`Hal · ${r.night}`, header(v, merged.length, gone.length, needYou), main, side, v.flash);
 }
 
-/** The page before Hal's first report: the flash and the Run Hal section only. */
+/** The page before Hal's first report: Run Hal and the latest reports only. */
 export function renderRunHalOnly(v: RunHalView & { flash?: string }): string {
-  return `${pageHead('Hal', REPORT_CSS)}<body><main class="page">
-${v.flash ? `<p class="flash" role="status">${esc(clip(v.flash, 300))}</p>` : ''}
-${runHal(v, '')}
-</main></body></html>`;
+  const head = '<header class="hero head"><h1>Hal</h1><p class="muted">No report yet. Start a run and its report shows up here.</p></header>';
+  return shell('Hal', head, '', `${runHal(v, '')}\n<div class="side-rest">${recent(v, '')}</div>`, v.flash);
 }

@@ -68,8 +68,11 @@ folder, and the sandbox allows none.
 ## The morning report
 
 The bookmark from `npm run hal -- setup` opens the morning report. `npm run hal -- serve` serves it (add `--lan` so
-your phone can reach it). `install` keeps it running. The page shows the newest report. Earlier reports links to past
-ones.
+your phone can reach it). `install` keeps it running. The page shows the newest report. On a laptop the report is on
+the left and a panel stays in view on the right: Run Hal, Tell Hal and the 5 newest reports. On a phone it is one
+column, with Run Hal first. Run Hal updates itself while a run is going (phase, progress, Stop), with no refresh, and
+says when a new report is ready. All reports (`/runs`) lists every report, 25 to a page. Long lists (planned work,
+notes, warnings) show 5 and fold the rest under "Show all".
 
 Each change has two buttons:
 
