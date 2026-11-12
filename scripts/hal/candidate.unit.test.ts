@@ -7,9 +7,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTrailers, type ScoreReport, type Ticket } from '@studio/core/hal';
-import { HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, runCandidate, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
+import { defaultCommands, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseResult, runCandidate, scriptArgv, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
 import type { ClaudeCall, ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
+import { sandboxAvailable } from './sandbox.js';
 
 const KEY = 'sk-ant-api03-FAKEKEYFAKEKEYFAKEKEY0123456789';
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -37,7 +38,8 @@ const fakeJpeg = (w: number, h: number) => Buffer.concat([
 const J = (v: unknown) => JSON.stringify(v);
 /** argv for `node -e <code>`. */
 const node = (code: string) => [process.execPath, '-e', code];
-const result = (v: unknown, extra = '') => node(`${extra};console.log('noise');console.log('HAL-RESULT ' + ${J(J(v))})`);
+/** A check that prints its result with the nonce Hal passed it (as check-entry.ts does). */
+const result = (v: unknown, extra = '') => node(`${extra};console.log('noise');console.log('HAL-RESULT ' + process.env.HAL_CHECK_NONCE + ' ' + ${J(J(v))})`);
 const writeJpeg = (out: string, buf: Buffer) => `const fs=require('fs'),p=require('path');fs.mkdirSync(p.dirname(${J(out)}),{recursive:true});fs.writeFileSync(${J(out)},Buffer.from(${J(buf.toString('hex'))},'hex'))`;
 
 const ticket = (over: Partial<Ticket> = {}): Ticket => ({ id: 't1', game: 'hyperline', kind: 'tuning', title: 'Smoother jumps', why: 'Players miss the second jump.', ...over });
@@ -64,8 +66,9 @@ describe('runCandidate (temp git repo)', () => {
     repo = realpathSync(mkdtempSync(join(tmpdir(), 'hal-cand-')));
     gitIn(repo, 'init', '-q', '-b', 'main');
     for (const [k, v] of [['user.name', 't'], ['user.email', 't@t'], ['commit.gpgsign', 'false'], ['core.hooksPath', join(repo, '.git/hooks')]]) gitIn(repo, 'config', k!, v!);
-    put(repo, '.gitignore', 'node_modules/\n.data/\n*.log\n');
-    put(repo, 'package.json', '{"name":"x"}\n');
+    put(repo, '.gitignore', 'node_modules/\n.data/\n*.log\ndist/\n');
+    put(repo, 'package.json', '{"name":"x","type":"module","scripts":{"test":"vitest run games","typecheck":"tsc --version"}}\n');
+    put(repo, 'games/hyperline/fail.test.js', "import { it, expect } from 'vitest';\nit('REAL-FAILURE-SEEN', () => expect(1).toBe(2));\n");
     for (const [p, t] of Object.entries({ ...GAME('hyperline', '0.3.1'), ...GAME('gearhold', '0.2.0') })) put(repo, p, t);
     gitIn(repo, 'add', '-A');
     gitIn(repo, 'commit', '-q', '-m', 'base');
@@ -81,8 +84,8 @@ describe('runCandidate (temp git repo)', () => {
   };
   const recording: GitRunner = async (args, cwd, o) => { gitSubs.push(sub(args)!); return runGit(args, cwd, o); };
   const passing: CheckCommands = {
-    test: () => { ran.push('test'); return node('console.log("all green")'); },
-    typecheck: () => { ran.push('typecheck'); return node(''); },
+    test: () => { ran.push('test'); return [node('console.log("all green")')]; },
+    typecheck: () => { ran.push('typecheck'); return [node('')]; },
     score: (_d, s) => { ran.push(`score:${s}`); const b = BEFORE[s as keyof typeof BEFORE]; return result({ ...b, fitness: b.fitness + 1 }); },
     screens: (_d, game) => { ran.push('screens'); return result({ game, shots: [], errors: [], reached: true, notes: [], blockedRequests: [] }); },
     controls: (_d, game) => { ran.push('controls'); return result([{ game, check: 'tap', ok: true, detail: '' }, { game: 'other', check: 'x', ok: false, detail: 'not ours' }]); },
@@ -271,7 +274,7 @@ describe('runCandidate (temp git repo)', () => {
 
   it('a gitignored file the candidate relies on is pruned before the checks, so they judge exactly the committed tree', async () => {
     const seen: string[] = [];
-    const c = ctx({ cmds: { test: (dir) => { seen.push(dir); return node(`process.exit(require('fs').existsSync('games/hyperline/secret.log') ? 1 : 0)`); } } },
+    const c = ctx({ cmds: { test: (dir) => { seen.push(dir); return [node(`process.exit(require('fs').existsSync('games/hyperline/secret.log') ? 1 : 0)`)]; } } },
       (cwd) => { put(cwd, 'games/hyperline/game.js', 'export const speed = 4;\n'); put(cwd, 'games/hyperline/secret.log', 'hidden\n'); });
     const r = await runCandidate(ticket(), c);
     expect(r.verdict).toBe('merged');
@@ -307,11 +310,11 @@ describe('runCandidate (temp git repo)', () => {
   it('failing tests are discarded with the output tail, key redacted; typecheck too', async () => {
     const old = halHead();
     const failing = node(`for (let i = 0; i < 2000; i++) console.log('noise'); console.error('FAIL games/hyperline.test.ts: expected 1 got 2 (${KEY})'); process.exit(1)`);
-    const r = await runCandidate(ticket(), ctx({ cmds: { test: () => failing } }));
+    const r = await runCandidate(ticket(), ctx({ cmds: { test: () => [failing] } }));
     expectDiscarded(r, old, /npm test failed[\s\S]*FAIL games\/hyperline\.test\.ts: expected 1 got 2 \(\[REDACTED\]\)/);
     expect(r.reasons.join('\n').length).toBeLessThan(4000);
-    expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { typecheck: () => node(`console.log('TS2322: nope'); process.exit(2)`) } })), old, /npm run typecheck failed[\s\S]*TS2322/);
-    expectDiscarded(await runCandidate(ticket(), ctx({ checkTimeoutMs: 300, cmds: { test: () => node('setTimeout(() => {}, 30000)') } })), old, /npm test failed \(timed out\)/);
+    expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { typecheck: () => [node(''), node(`console.log('TS2322: nope'); process.exit(2)`)] } })), old, /npm run typecheck failed[\s\S]*TS2322/);
+    expectDiscarded(await runCandidate(ticket(), ctx({ checkTimeoutMs: 300, cmds: { test: () => [node('setTimeout(() => {}, 30000)')] } })), old, /npm test failed \(timed out\)/);
   });
 
   it('a score regression past the tolerance is discarded; a target picks score mode', async () => {
@@ -348,11 +351,56 @@ describe('runCandidate (temp git repo)', () => {
     expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { controls: () => node('process.exit(1)') } })), old, /controls hyperline failed/);
   });
 
-  it('files changed by the checks themselves (e.g. a test that writes into the tree) are discarded', async () => {
+  it('a check that rewrites a game file (and leaves an ignored dist/x.js) is caught before the next check: tampered between checks', async () => {
     const old = halHead();
-    const c = ctx({ cmds: { test: () => node(`require('fs').writeFileSync('games/hyperline/game.js', "export const k = '${KEY}';\\n")`) } });
-    expectDiscarded(await runCandidate(ticket(), c), old, /worktree changed while the checks ran/);
+    const c = ctx({ cmds: { test: () => [node(`const fs = require('fs'); fs.writeFileSync('games/hyperline/game.js', "export const k = '${KEY}';\\n"); fs.mkdirSync('dist'); fs.writeFileSync('dist/x.js', 'x')`)] } });
+    const r = await runCandidate(ticket(), c);
+    expectDiscarded(r, old, /^tampered between checks$/); // caught by the guard before typecheck
   });
+
+  it('an ignored file one check leaves behind is gone before the next check runs', async () => {
+    const c = ctx({ cmds: {
+      test: () => [node(`require('fs').mkdirSync('dist', { recursive: true }); require('fs').writeFileSync('dist/x.js', 'feed the next check')`)],
+      typecheck: () => [node(`process.exit(require('fs').existsSync('dist/x.js') ? 1 : 0)`)],
+    } });
+    expect((await runCandidate(ticket(), c)).verdict).toBe('merged');
+  });
+
+  it('the last check (the after shot) touching the tree is caught too', async () => {
+    const old = halHead();
+    let n = 0;
+    const c = ctx({ cmds: { shoot: (_d, _g, out) => result({ ok: true }, `${writeJpeg(out, fakeJpeg(390, 844))};${n++ === 1 ? "require('fs').writeFileSync('games/hyperline/game.js', 'x')" : ''}`) } });
+    expectDiscarded(await runCandidate(ticket(), c), old, /tampered between checks/);
+  });
+
+  it('forged results are rejected: a second result line, or a line without this check\'s nonce', async () => {
+    const old = halHead();
+    const two = (_d: string, s: string) => node(`console.log('HAL-RESULT ' + process.env.HAL_CHECK_NONCE + ' ' + ${J(J(BEFORE.hyperline))}); console.log('HAL-RESULT ' + process.env.HAL_CHECK_NONCE + ' ' + ${J(J({ ...BEFORE.hyperline, fitness: 99 }))}); void ${J(s)}`);
+    expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { score: two } })), old, /2 result lines/);
+    const forged = () => node(`console.log('HAL-RESULT deadbeef ' + ${J(J({ ...BEFORE.hyperline, fitness: 99 }))})`);
+    expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { score: forged } })), old, /wrong nonce/);
+    expect(() => parseResult('HAL-RESULT abc {"a":1}', 'abc')).not.toThrow();
+    expect(parseResult<{ a: number }>('x\nHAL-RESULT abc {"a":1}\n', 'abc')).toEqual({ a: 1 });
+    expect(() => parseResult('HAL-RESULT  {"a":1}', '')).toThrow(/nonce/);
+  });
+
+  it('a stubbed vitest in the worktree changes nothing: Hal runs its own, and node_modules is rebuilt before each check', async () => {
+    const old = halHead();
+    symlinkSync(join(import.meta.dirname, '..', '..', 'node_modules'), join(repo, 'node_modules'));
+    const c = ctx({ cmds: { test: undefined as unknown as CheckCommands['test'] } }, (cwd) => {
+      put(cwd, 'games/hyperline/game.js', 'export const speed = 5;\n');
+      const nm = join(cwd, 'node_modules');
+      rmSync(join(nm, '.bin'), { recursive: true, force: true });
+      put(nm, '.bin/vitest', '#!/bin/sh\nexit 0\n');
+      execFileSync('chmod', ['+x', join(nm, '.bin/vitest')]);
+      rmSync(join(nm, 'vitest'), { recursive: true, force: true });
+      put(nm, 'vitest/vitest.mjs', 'process.exit(0);\n');
+      put(nm, 'vitest/package.json', '{"name":"vitest","type":"module","bin":{"vitest":"vitest.mjs"}}\n');
+    });
+    delete c.commands!.test; // the real `npm test` script (vitest run games), with Hal's vitest
+    const r = await runCandidate(ticket(), c);
+    expectDiscarded(r, old, /npm test failed[\s\S]*REAL-FAILURE-SEEN/);
+  }, 60_000);
 
   it('history shots must be 390x844 JPEGs', async () => {
     const old = halHead();
@@ -393,14 +441,14 @@ describe('runCandidate (temp git repo)', () => {
   it('without sandbox-exec (and without the test-only flag) it fails closed: no sandbox', async () => {
     const old = halHead();
     const real = process.platform;
-    Object.defineProperty(process, 'platform', { value: 'linux' });
+    Object.defineProperty(process, 'platform', { value: 'linux' }); // also covers running nested (HAL_SANDBOXED=1)
     try {
       expectDiscarded(await runCandidate(ticket(), ctx({ unsandboxedForTests: false })), old, /^no sandbox$/);
     } finally { Object.defineProperty(process, 'platform', { value: real }); }
     expect(calls).toHaveLength(0);
   });
 
-  it.runIf(process.platform === 'darwin')('darwin: the checks really run sandboxed (no .hal.env, no network, no key, no writes outside)', async () => {
+  it.runIf(sandboxAvailable())('darwin: the checks really run sandboxed (no .hal.env, no network, no key, no writes outside)', async () => {
     const old = halHead();
     put(repo, '.hal.env', `ANTHROPIC_API_KEY=${KEY}\n`);
     // Real node_modules so the sandboxed `vitest list` (the tripwires' test count) runs in the worktree.
@@ -412,6 +460,7 @@ describe('runCandidate (temp git repo)', () => {
       try { fs.readFileSync(${J(join(repo, '.hal.env'))}); out.push('read:OK'); } catch (e) { out.push('read:' + e.code); }
       try { fs.writeFileSync(${J(escape)}, 'x'); out.push('write:OK'); } catch (e) { out.push('write:' + e.code); }
       out.push('key:' + (process.env.ANTHROPIC_API_KEY ? 'SET' : 'none'));
+      try { fs.writeFileSync('node_modules/stub.js', 'x'); out.push('nm:OK'); } catch (e) { out.push('nm:' + e.code); }
       const s = net.connect(80, '10.255.255.1');
       s.on('connect', () => { out.push('net:OK'); done(); });
       s.on('error', (e) => { out.push('net:' + e.code); done(); });
@@ -419,12 +468,32 @@ describe('runCandidate (temp git repo)', () => {
     const prev = process.env.ANTHROPIC_API_KEY;
     process.env.ANTHROPIC_API_KEY = KEY;
     try {
-      const { countTests: _drop, ...c } = ctx({ unsandboxedForTests: false, cmds: { test: () => probe } });
+      const { countTests: _drop, ...c } = ctx({ unsandboxedForTests: false, cmds: { test: () => [probe] } });
       void _drop;
       const r = await runCandidate(ticket(), c);
-      expectDiscarded(r, old, /npm test failed[\s\S]*PROBE read:EPERM write:EPERM key:none net:EPERM/);
+      expectDiscarded(r, old, /npm test failed[\s\S]*PROBE read:EPERM write:EPERM key:none nm:EPERM net:EPERM/);
       expect(existsSync(escape)).toBe(false);
     } finally {
       rmSync(escape, { force: true }); if (prev === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prev; }
   }, 60_000);
+});
+
+describe('default commands', () => {
+  const tools = { node: '/n', vitest: '/r/vitest.mjs', tsc: '/r/tsc', tsx: '/r/tsx.mjs' };
+  it('runs package.json scripts with Hal\'s tools (vitest run gets --no-cache), and check-entry from the tree', () => {
+    expect(scriptArgv('vitest run', tools)).toEqual([['/n', '/r/vitest.mjs', 'run', '--no-cache']]);
+    expect(scriptArgv('tsc -b packages/core packages/sdk && tsc -p scripts', tools)).toEqual([['/n', '/r/tsc', '-b', 'packages/core', 'packages/sdk'], ['/n', '/r/tsc', '-p', 'scripts']]);
+    const d = defaultCommands(tools, { test: 'vitest run', typecheck: 'tsc -p scripts' });
+    expect(d.score('/wt', 'hyperline')).toEqual(['/n', '/r/tsx.mjs', '/wt/scripts/hal/check-entry.ts', 'score', 'hyperline']);
+    expect(d.shoot('/wt', 'g', '/o.jpg')).toEqual(['/n', '/r/tsx.mjs', '/wt/scripts/hal/check-entry.ts', 'shoot', 'g', '/o.jpg']);
+  });
+  it('refuses anything shell-like or another binary', () => {
+    for (const bad of ['vitest run | tee x', 'vitest run; rm -rf /', 'vitest "run"', 'node x.js', 'vitest run & sleep 1', 'tsc $(x)']) expect(() => scriptArgv(bad, tools), bad).toThrow();
+    expect(() => defaultCommands(tools, {}).test('/wt')).toThrow(/no test script/);
+  });
+  it('matches the real package.json', () => {
+    const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+    expect(() => defaultCommands(tools, pkg.scripts).test('/wt')).not.toThrow();
+    expect(defaultCommands(tools, pkg.scripts).typecheck('/wt').length).toBeGreaterThanOrEqual(1);
+  });
 });
