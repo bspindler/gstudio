@@ -2,8 +2,8 @@ import { mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { writeJsonAtomic, createStore, defaultHalDir, KEEP_SPEND_DAYS, threadOf } from './store.js';
-import { writeFileSync } from 'node:fs';
+import { writeJsonAtomic, createStore, defaultHalDir, KEEP_SPEND_DAYS, threadOf, withFileLock } from './store.js';
+import { existsSync, writeFileSync } from 'node:fs';
 
 let dir: string, clock: Date;
 const mk = () => createStore({ halDir: dir, now: () => clock });
@@ -169,5 +169,26 @@ describe('store: run-time additions (Task 7)', () => {
     s.saveSpendDaySync({ ...day, calls: [{ run: 'r', role: 'planner', billing: 'api', usd: 1.5, at: now.toISOString() }] });
     expect(s.loadSpendTodaySync().calls).toHaveLength(1);
     expect((await s.loadSpendToday()).calls).toHaveLength(1);
+  });
+});
+
+describe('file locks (the report server and a running Hal both write these files)', () => {
+  it('concurrent writes from two stores lose nothing: notes, votes and undos', async () => {
+    const a = mk(), b = mk();
+    const n = await a.addNote({ text: 'start', game: null });
+    await Promise.all(Array.from({ length: 30 }, (_, i) => (i % 2 ? a : b).addReply(n.id, `r${i}`)));
+    expect(threadOf((await a.readNotes())[0]!).length).toBe(31);
+    await Promise.all(Array.from({ length: 30 }, (_, i) => (i % 2 ? a : b).addVote({ run: 'r', item: `HAL-${i}`, game: 'g', vote: 'up' })));
+    expect((await b.readFeedback()).votes).toHaveLength(30);
+    expect(existsSync(join(dir, 'notes.json.lock'))).toBe(false);
+    expect(existsSync(join(dir, 'feedback.json.lock'))).toBe(false);
+  });
+  it('a lock left by a dead process is taken over; one held by a live process makes the writer wait, then time out', async () => {
+    writeFileSync(join(dir, 'notes.json.lock'), '999999999 2026-01-01T00:00:00Z\n'); // no such pid
+    await mk().addNote({ text: 'after a crash', game: null });
+    expect((await mk().readNotes()).map((x) => x.text)).toEqual(['after a crash']);
+    writeFileSync(join(dir, 'x.lock'), `${process.ppid} ${new Date().toISOString()}\n`); // alive, and not us
+    await expect(withFileLock(join(dir, 'x.lock'), async () => 1, { timeoutMs: 200 })).rejects.toThrow(/timed out/);
+    expect(await withFileLock(join(dir, 'x.lock'), async () => 2, { timeoutMs: 200, staleMs: 0 })).toBe(2); // too old: taken over
   });
 });

@@ -29,6 +29,15 @@ export const DEFAULT_MAX_TICKETS = 6;
 export const DEFAULT_MODEL = 'opus';
 /** The implementer (about 88% of spend; fix rounds and Hal's checks catch weaker builds). Override with HAL_IMPLEMENTER_MODEL. */
 export const DEFAULT_IMPLEMENTER_MODEL = 'sonnet';
+
+/** A macOS notification through osascript (no shell). Best effort: no notification is not an error. */
+export function macNotify(title: string, body: string): void {
+  if (process.platform !== 'darwin') return;
+  const q = (s: string) => `"${s.replace(/[\\"]/g, '\\$&').replace(/[\r\n]+/g, ' ')}"`;
+  const child = spawn('/usr/bin/osascript', ['-e', `display notification ${q(body)} with title ${q(title)}`], { stdio: 'ignore', detached: true });
+  child.on('error', () => {});
+  child.unref();
+}
 const KINDS: readonly TicketKind[] = ['fix', 'tuning', 'polish', 'feature'];
 
 export type RunCmdDeps = {
@@ -112,6 +121,7 @@ export function realRunDeps(repo: string, halDir: string): RunDeps {
     ...(existsSync(join(repo, 'CLAUDE.md')) ? { appendSystemPromptFile: join(repo, 'CLAUDE.md') } : {}),
     // One spawn per call; run.ts reserves spend first and does the subscription -> API fallback itself.
     claude: (call) => runClaude(call, claudeDeps),
+    notify: macNotify,
     play: realPlay(repo, secrets),
     ciLocal: realCiLocal(repo, secrets),
   };
