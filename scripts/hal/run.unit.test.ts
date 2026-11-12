@@ -356,16 +356,56 @@ describe('push', () => {
     expect(originMain()).toBe(before);
     expect(r.changes[0]!.verdict).toBe('merged');
   }, 60_000);
-  it('R22: diverged refs/hal/main and origin/main: the run is forced report-only, nothing built or pushed, recovery steps in a warning', async () => {
+  /** Hal gets an unpushed commit writing `halText` to `halFile`; origin then moves on with OTHER.txt = 'x'. Returns Hal's commit. */
+  const diverge = async (halFile: string, halText: string) => {
     await ensureMainWorktree(repo);
-    // Hal is ahead with an unpushed commit, and origin moved on independently.
-    const tree = gitIn(repo, 'rev-parse', `${HAL_MAIN}^{tree}`);
-    const halOnly = execFileSync('git', ['commit-tree', tree, '-p', halHead(), '-m', 'hal only'], { cwd: repo, encoding: 'utf8' }).trim();
-    gitIn(repo, 'update-ref', HAL_MAIN, halOnly);
     const other = join(dirname(repo), 'other');
     gitIn(dirname(repo), 'clone', '-q', origin, other);
     for (const [k, v] of [['user.name', 'o'], ['user.email', 'o@o']]) gitIn(other, 'config', k!, v!);
+    put(other, halFile, halText); gitIn(other, 'add', '-A'); gitIn(other, 'commit', '-q', '-m', 'hal only');
+    gitIn(repo, 'fetch', '-q', other, 'HEAD');
+    const halOnly = gitIn(repo, 'rev-parse', 'FETCH_HEAD');
+    gitIn(repo, 'update-ref', HAL_MAIN, halOnly);
+    gitIn(other, 'reset', '-q', '--hard', 'HEAD~1');
     put(other, 'OTHER.txt', 'x\n'); gitIn(other, 'add', '-A'); gitIn(other, 'commit', '-q', '-m', 'other'); gitIn(other, 'push', '-q', 'origin', 'main');
+    return halOnly;
+  };
+  it('diverged but replayable: Hal replays its commit onto origin/main, ci:local checks it first, and the run goes on', async () => {
+    const halOnly = await diverge('HAL.txt', 'hal\n');
+    const onto = originMain();
+    const ci = vi.fn(async () => ({ ok: true, detail: '' }));
+    expect(await runNight(opts(), deps({ ciLocal: ci }))).toBe(0);
+    const r = readReport();
+    expect(r.pushSkippedReason ?? '').not.toMatch(/diverged/);
+    expect(r.warnings.join('\n')).toMatch(/Hal replayed 1 of its commits onto origin\/main and ci:local passed/);
+    const replayed = (ci.mock.calls[0] as unknown as [string])[0];
+    expect(gitIn(repo, 'rev-parse', `${replayed}^`)).toBe(onto); // the replay was checked before anything was built on it
+    expect(gitIn(repo, 'log', '-1', '--format=%s', replayed)).toBe('hal only');
+    expect(replayed).not.toBe(halOnly);
+    gitIn(repo, 'merge-base', '--is-ancestor', replayed, halHead()); // Hal built on the replay
+    expect(gitIn(repo, 'show', `${halHead()}:HAL.txt`)).toBe('hal');
+    expect(gitIn(repo, 'show', `${halHead()}:OTHER.txt`)).toBe('x');
+  }, 60_000);
+  it('diverged and ci:local fails on the replay: report-only, refs/hal/main untouched', async () => {
+    const halOnly = await diverge('HAL.txt', 'hal\n');
+    const ci = vi.fn(async () => ({ ok: false, detail: 'tests broke' }));
+    expect(await runNight(opts(), deps({ ciLocal: ci }))).toBe(0);
+    const r = readReport();
+    expect(r.pushSkippedReason).toMatch(/diverged/);
+    expect(r.changes).toEqual([]);
+    expect(halHead()).toBe(halOnly);
+    expect(r.warnings.join('\n')).toMatch(/ci:local failed on the replayed commits .*tests broke/);
+  }, 60_000);
+  it('diverged on a --report-only run: no replay, refs/hal/main untouched', async () => {
+    const halOnly = await diverge('HAL.txt', 'hal\n');
+    const ci = vi.fn(async () => ({ ok: true, detail: '' }));
+    expect(await runNight(opts({ reportOnly: true }), deps({ ciLocal: ci }))).toBe(0);
+    expect(halHead()).toBe(halOnly);
+    expect(ci).not.toHaveBeenCalled();
+    expect(readReport().warnings.join('\n')).toMatch(/--report-only, so Hal did not try/);
+  }, 60_000);
+  it('R22: diverged with a conflict: the run is forced report-only, nothing built or pushed, recovery steps in a warning', async () => {
+    const halOnly = await diverge('OTHER.txt', 'hal\n'); // the same file origin changes: conflict
     const before = originMain();
     const ci = vi.fn(async () => ({ ok: true, detail: '' }));
     put(halDir, 'feedback.json', J({ votes: [], undos: [{ pass: 'HAL-001', reason: 'pending', at: NOW.toISOString(), status: 'pending' }] }));
@@ -377,9 +417,10 @@ describe('push', () => {
     expect(calls.map((c) => c.role)).toEqual(['planner', 'director']);
     expect(halHead()).toBe(halOnly); // no merge, no history commit, no undo
     const w = r.warnings.join('\n');
-    expect(w).toMatch(/diverged: this run is report-only/);
+    expect(w).toMatch(/could not replay its commits onto origin\/main \(.*hal only.*conflicts with origin\/main\): this run is report-only/);
+    expect(w).toMatch(/NOT on origin\/main/);
     expect(w).toContain(`git log origin/main..${HAL_MAIN}`);
-    expect(w).toContain(`git update-ref ${HAL_MAIN} origin/main`);
+    expect(w).toMatch(new RegExp(`git update-ref ${HAL_MAIN} origin/main\`, which discards them`));
     expect(ci).not.toHaveBeenCalled();
     expect(originMain()).toBe(before);
   }, 60_000);

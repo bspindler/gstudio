@@ -116,15 +116,26 @@ already in git, but that includes your undo reasons and the director's notes.
 
 ## Recovery
 
-**"refs/hal/main and origin/main have diverged".** Someone pushed to origin while Hal had commits it had not pushed.
-Hal runs report-only until you fix it. First see what Hal has that origin doesn't, and keep anything you want:
+**origin/main moved while Hal had unpushed commits.** This happens after a `--no-push` run, or a night whose push
+failed, when someone then pushes to origin. Hal handles it itself at the start of the next run. It rebuilds its own
+commits on top of origin/main with git plumbing (no checkout, no hooks), runs ci:local on the result, and only then
+moves `refs/hal/main` there. The report says so in a warning. The changes are the same but the SHAs are new, and the
+commits are still not on origin until Hal pushes. 👎 still works, because undo finds a change by its `Hal-Pass` trailer.
+
+**"refs/hal/main and origin/main have diverged and Hal could not replay its commits".** One of Hal's commits conflicts
+with origin, or ci:local failed on the replay. The warning says which. Hal runs report-only until you fix it, and its
+commits are untouched. **They are not on origin/main**, so do not just reset. To keep them, replay them yourself:
 
 ```sh
 git fetch origin
-git log origin/main..refs/hal/main
+git log origin/main..refs/hal/main          # what Hal has that origin lacks
+git worktree add --detach /tmp/hal-fix origin/main
+cd /tmp/hal-fix && git cherry-pick <oldest>^..<newest>   # resolve, git cherry-pick --continue
+npm run ci:local -- HEAD
+git update-ref refs/hal/main HEAD <old refs/hal/main>     # compare-and-swap from the ref you replayed
 ```
 
-Then point Hal's ref back at origin. The next run starts from there:
+Only if you don't want Hal's commits at all, point its ref back at origin. This discards them:
 
 ```sh
 git update-ref refs/hal/main origin/main

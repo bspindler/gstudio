@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkTripwires } from '@studio/core/hal';
 import {
   blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
-  addFileToTree, linkNodeModules, pushHalMain, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
+  addFileToTree, linkNodeModules, pushHalMain, replayHalOnto, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
 } from './git.js';
 
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -324,6 +324,63 @@ describe('Hal worktrees (temp git repo)', () => {
       const m = await ensureMainWorktree(r);
       expect(m.fetched).toBe(false);
       expect(head(m.dir)).toBe(head(r, 'refs/heads/main'));
+    });
+  });
+
+  describe('replayHalOnto', () => {
+    const trailers = (pass: string) => `Hal-Pass: ${pass}\nHal-Game: g\nHal-Kind: fix\nHal-Why: w\nHal-Score-Before: 1\nHal-Score-After: 2\nHal-Version: 0.1.1\nHal-Run: r1`;
+    /** Hal merges HAL-1 (touching `halFile`) without pushing; then origin gets a commit touching `otherFile`. */
+    const divergedRepo = async (halFile: string, otherFile: string) => {
+      const origin = bare();
+      const r = fresh();
+      gitIn(r, 'remote', 'add', 'origin', origin);
+      gitIn(r, 'push', '-q', 'origin', 'main');
+      await ensureMainWorktree(r);
+      const c = await candidate(r, 'HAL-1', halFile, 'hal\n');
+      expect((await squashMerge(r, 'HAL-1', `fix(g): hal change\n\n${trailers('HAL-1')}`, c.verified)).ok).toBe(true);
+      const other = clone(origin);
+      put(other, otherFile, 'origin\n'); gitIn(other, 'add', '-A'); gitIn(other, 'commit', '-q', '-m', 'origin change'); gitIn(other, 'push', '-q', 'origin', 'HEAD:main');
+      expect(await ensureMainWorktree(r)).toMatchObject({ diverged: true });
+      return r;
+    };
+    it('rebuilds Hal\'s commits on origin/main with the same message, author and change, without moving any ref', async () => {
+      const r = await divergedRepo('games/g/hal.js', 'games/g/origin.js');
+      const from = head(r, HAL_MAIN);
+      const rp = await replayHalOnto(r);
+      if (!rp.ok) throw new Error(rp.reason);
+      expect(rp).toMatchObject({ from, onto: head(r, 'refs/remotes/origin/main'), replayed: 1, dropped: 0 });
+      expect(head(r, HAL_MAIN)).toBe(from); // the caller moves it, after ci:local
+      expect(gitIn(r, 'rev-parse', `${rp.head}^`)).toBe(rp.onto);
+      expect(gitIn(r, 'log', '-1', '--format=%B', rp.head)).toBe(gitIn(r, 'log', '-1', '--format=%B', from));
+      expect(gitIn(r, 'log', '-1', '--format=%an %ae %aI', rp.head)).toBe(gitIn(r, 'log', '-1', '--format=%an %ae %aI', from));
+      expect(gitIn(r, 'show', `${rp.head}:games/g/hal.js`)).toBe('hal');
+      expect(gitIn(r, 'show', `${rp.head}:games/g/origin.js`)).toBe('origin');
+      // Undo still finds the pass by its trailer once Hal's ref points at the replay.
+      gitIn(r, 'update-ref', HAL_MAIN, rp.head, from);
+      expect(await revertPass(r, 'HAL-1')).toBe(rp.head);
+    });
+    it('refuses on a conflict and leaves refs/hal/main alone', async () => {
+      const r = await divergedRepo('games/g/same.js', 'games/g/same.js');
+      const from = head(r, HAL_MAIN);
+      const rp = await replayHalOnto(r);
+      expect(rp.ok).toBe(false);
+      if (!rp.ok) expect(rp.reason).toMatch(/fix\(g\): hal change.*conflicts with origin\/main/);
+      expect(head(r, HAL_MAIN)).toBe(from);
+    });
+    it('drops a commit whose change origin already has', async () => {
+      const origin = bare();
+      const r = fresh();
+      gitIn(r, 'remote', 'add', 'origin', origin);
+      gitIn(r, 'push', '-q', 'origin', 'main');
+      await ensureMainWorktree(r);
+      const base = head(r, HAL_MAIN);
+      const { verified } = await candidate(r, 'HAL-1', 'games/g/x.js', 'x\n');
+      gitIn(r, 'update-ref', HAL_MAIN, await commitTree(r, verified.tree, base, 'hal x'));
+      gitIn(r, 'push', '-q', 'origin', `${await commitTree(r, verified.tree, base, 'brian x')}:refs/heads/main`); // same change, other commit
+      await ensureMainWorktree(r);
+      const rp = await replayHalOnto(r);
+      expect(rp).toMatchObject({ ok: true, replayed: 0, dropped: 1 });
+      if (rp.ok) expect(rp.head).toBe(rp.onto);
     });
   });
 
