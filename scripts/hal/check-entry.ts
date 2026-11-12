@@ -1,7 +1,7 @@
 // One Hal check, run in the tree that holds this file and printed as `HAL-RESULT <json>` on the last line.
 // Hal runs it in a candidate worktree under sandbox-exec (scripts/hal/sandbox.ts), never in its own process: the
 // scorers, screens and controls execute the candidate's game code. scripts/hal/** is protected, so this file is main's.
-//   check-entry.ts score <scorer> | screens <game> | controls <game> | shoot <game> <out.jpg>
+//   check-entry.ts score <scorer> | screens <game> [outDir] | controls <game> | shoot <game> <out.jpg>
 // The result line is `HAL-RESULT <nonce> <json>`: the nonce comes in $HAL_CHECK_NONCE. check-nonce.ts is imported
 // first: it deletes the nonce from the env and captures JSON.stringify and stdout.write before anything else loads;
 // everything that can load game code is imported dynamically, after the channel has been taken.
@@ -28,7 +28,8 @@ async function main(op: string | undefined, a: string | undefined, b: string | u
       return out(await s.score(s.defaults));
     }
     case 'screens': {
-      const outDir = await mkdtemp(join(tmpdir(), 'hal-screens-'));
+      // `screens <game> [outDir]`: Hal's play phase names the (writable) dir to keep the shots; otherwise the child's own temp dir.
+      const outDir = b ?? await mkdtemp(join(tmpdir(), 'hal-screens-'));
       const [r] = await (await import('./screens.js')).runScreens({ outDir, games: [a] });
       if (!r) throw new Error(`no screen flow for ${a}`);
       return out(r);

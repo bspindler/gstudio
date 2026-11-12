@@ -6,8 +6,9 @@
 //   npm run hal -- undo HAL-0xx --reason "<text>" [--no-push]
 import { spawn } from 'node:child_process';
 import { ciLocalSandboxed } from './ci-sandboxed.js';
-import { copyFile, mkdir, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { lstatSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { Billing, ScoreReport, TicketKind } from '@studio/core/hal';
@@ -115,17 +116,15 @@ export function realRunDeps(repo: string, halDir: string): RunDeps {
  */
 export function realPlay(repo: string, secrets: string[]): PlayPort {
   const cmds = () => defaultCommands(resolveTools(repo), {});
-  const run = <T>(argv: string[], dir: string) => entryCheck<T>(argv, { cwd: dir, repo, secrets, writable: [], timeoutMs: CHECK_TIMEOUT_MS });
+  const run = <T>(argv: string[], dir: string, writable: string[] = []) => entryCheck<T>(argv, { cwd: dir, repo, secrets, writable, timeoutMs: CHECK_TIMEOUT_MS });
   return {
     score: (dir, scorer) => run<ScoreReport<unknown>>(cmds().score(dir, scorer), dir),
     async screens(dir, game, outDir) {
-      const r = await run<ScreensResult>(cmds().screens(dir, game), dir);
+      // The check writes its shots straight into outDir (its only writable dir besides its private temp dir, which is
+      // removed when it ends). Only files directly in outDir that are regular files are listed.
       await mkdir(outDir, { recursive: true });
-      const shots: string[] = [];
-      for (const s of r.shots ?? []) {
-        const to = join(outDir, basename(s));
-        try { await copyFile(s, to); shots.push(to); } catch { /* a shot that is gone is just not listed */ }
-      }
+      const r = await run<ScreensResult>([...cmds().screens(dir, game), outDir], dir, [outDir]);
+      const shots = (r.shots ?? []).filter((s) => dirname(s) === outDir || dirname(resolve(s)) === resolve(outDir)).filter((s) => { try { return lstatSync(s).isFile(); } catch { return false; } });
       return { ...r, shots };
     },
     controls: (dir, game) => run<ControlCheck[]>(cmds().controls(dir, game), dir),
