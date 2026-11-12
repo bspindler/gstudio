@@ -15,6 +15,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 import { LIST_HEAD, renderReport, renderRunHalOnly, renderRunsIndex } from './report-page.js';
 import { phaseProgress, STATUS_JS, type StatusJson } from './status-client.js';
+import type { SpendDay } from '@studio/core/hal';
 import type { RunReport } from './run.js';
 import { GIT_TIMEOUT_MS, gitEnv } from './git.js';
 import { createStore } from './store.js';
@@ -111,6 +112,17 @@ const secure = (c: Context) => {
 
 const notFound = () => new Response('Not Found', { status: 404, headers: { 'content-type': 'text/plain' } });
 
+/** Today's spend for the Run Hal card: API against the cap, settled subscription dollars, and the running run so far. */
+export function spendOf(day: SpendDay, runId?: string): { spendToday: number; subscriptionToday: number; runSpend?: number } {
+  const cents = (pick: (c: SpendDay['calls'][number]) => boolean) =>
+    day.calls.reduce((t, c) => (pick(c) && Number.isFinite(c.usd) ? t + Math.round(c.usd * 100) : t), 0) / 100;
+  return {
+    spendToday: apiSpent(day),
+    subscriptionToday: cents((c) => c.billing === 'subscription' && !c.pending),
+    ...(runId ? { runSpend: cents((c) => c.run === runId && !c.pending) } : {}),
+  };
+}
+
 export function createServerApp(d: ServerDeps) {
   const now = d.now ?? (() => new Date());
   const alive = d.isAlive ?? defaultAlive;
@@ -200,7 +212,7 @@ export function createServerApp(d: ServerDeps) {
     if (flash !== undefined) deleteCookie(c, FLASH, { path: '/' });
     const base = {
       status: lock ? { running: true, phase: lock.phase, startedAt: lock.startedAt } : { running: false },
-      spendToday: apiSpent(await store.loadSpendToday()), capUsd: DAILY_CAP_USD,
+      ...spendOf(await store.loadSpendToday(), lock?.runId), capUsd: DAILY_CAP_USD,
       games: d.games, runs: await recentRuns(), latestRunId: latestRunId(d.halDir), ...(flash ? { flash: flash.slice(0, 300) } : {}),
     };
     if (!report) return c.html(renderRunHalOnly(base));
@@ -233,7 +245,7 @@ export function createServerApp(d: ServerDeps) {
     const body: StatusJson = {
       running: !!lock, ...(lock?.phase ? { phase: lock.phase } : {}), ...(lock?.startedAt ? { startedAt: lock.startedAt } : {}),
       progress: lock ? phaseProgress(lock.phase) : null, latestRunId: latestRunId(d.halDir),
-      spendToday: apiSpent(await store.loadSpendToday()), capUsd: DAILY_CAP_USD,
+      ...spendOf(await store.loadSpendToday(), lock?.runId), capUsd: DAILY_CAP_USD,
     };
     return c.json(body, 200, { 'x-content-type-options': 'nosniff' });
   });

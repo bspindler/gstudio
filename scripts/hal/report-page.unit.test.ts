@@ -326,14 +326,14 @@ describe('renderReport', () => {
 
   it('Run Hal shows the live-status hooks, spend, Run now or Stop (whichever applies), and the 5 newest reports plus All reports', () => {
     const runs = Array.from({ length: 12 }, (_, i) => ({ runId: `run-2026-11-${String(12 - i).padStart(2, '0')}T08-00-00-000Z`, endedAt: `2026-11-${String(12 - i).padStart(2, '0')}T09:00:00Z` }));
-    const html = renderReport(view({ runs, status: { running: true, phase: 'build HAL-003 (2/4) <x>', startedAt: '2026-11-12T08:00:00Z' }, spendToday: 3.5, timeZone: 'UTC', latestRunId: RUN }));
+    const html = renderReport(view({ runs, status: { running: true, phase: 'build HAL-003 (2/4) <x>', startedAt: '2026-11-12T08:00:00Z' }, spendToday: 3.5, subscriptionToday: 4.25, runSpend: 1.1, timeZone: 'UTC', latestRunId: RUN }));
     const run = section(html, 'Run Hal');
     expect(run).toContain('data-hal-status data-running="1"');
     expect(run).toContain(`data-latest="${RUN}"`);
     expect(run).toMatch(/<strong data-state>Running<\/strong> <span data-phase>build HAL-003 \(2\/4\) &lt;x&gt;<\/span>/);
     expect(run).toMatch(/since Nov 12, 8:00\sAM/);
     expect(run).toMatch(/<progress data-progress max="1" value="0\.375"/); // build 2 of 4
-    expect(run).toContain('$3.50 of $20.00 API today');
+    expect(run).toContain('Today: $3.50 of $20.00 API · $4.25 subscription · this run $1.10');
     const fs = forms(run);
     const now = fs.find((f) => f.action === '/run')!;
     expect(now.body).toMatch(/<select name="game"/);
@@ -347,6 +347,7 @@ describe('renderReport', () => {
     expect(recent).toContain('href="/runs">All reports</a>');
     const idle = section(renderReport(view()), 'Run Hal');
     expect(idle).toContain('<strong data-state>Idle</strong>');
+    expect(idle).toContain('Today: $1.23 of $20.00 API · $0.00 subscription<'); // no "this run" when idle
     expect(idle).toMatch(/<progress data-progress max="1" hidden/);
     expect(idle).toMatch(/action="\/run" class="stack" data-run-form>/);
     expect(idle).toMatch(/action="\/stop" data-stop-form hidden>/);
