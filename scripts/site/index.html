@@ -154,6 +154,7 @@
 
 <script type="module">
 const GAMES = /*__GAMES__*/[];
+const HISTORY = /*__HISTORY__*/false; // dev server only: the History pages are rebuilt from git and never ship to Pages
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const canHover = matchMedia('(hover: hover)').matches;
 
@@ -340,6 +341,7 @@ const cards = GAMES.map((game) => {
       <div class="actions">
         <a class="play" href="${href}">${PLAY_ICON}Play ${esc(game.title)}</a>
         <a class="alt" href="${href}?ch=portal" title="Open as the web portal channel would">Play as portal</a>
+        ${HISTORY ? `<a class="alt" href="/_history/${encodeURIComponent(game.slug)}">History</a>` : ''}
       </div>
     </div>`;
   grid.append(el);

@@ -133,6 +133,8 @@ export type NoteReply = { id: string; status: Exclude<NoteStatus, 'open'>; reply
 export type RunReport = {
   runId: string;
   night: string;
+  /** The director's per-game text (absent when the director did not answer). */
+  perGame?: Record<string, string>;
   startedAt: string;
   endedAt: string;
   trigger: RunTrigger;
@@ -249,6 +251,29 @@ function common(d: RunDeps): Common {
   return { R, log: (s) => out(R.str(s)), store: createStore({ halDir: d.halDir, now: d.now }), git: safeGit(raw), raw };
 }
 
+/**
+ * Applies every pending (or last-time failed) undo in feedback.json, oldest first, under the caller's lock: the run's
+ * preflight, and `hal undo` after its own pass (so several 👎s from the report page all land that morning). `skip` is
+ * a pass the caller already handled. Returns how many were done.
+ */
+async function drainUndos(d: RunDeps, c: Pick<Common, 'R' | 'store'>, runId: string, say: (s: string) => void, skip?: string): Promise<number> {
+  let done = 0;
+  for (const u of await c.store.pendingUndos()) {
+    if (u.pass === skip) continue;
+    const r = await applyUndo(u.pass, u.reason, undoCtx(d, runId));
+    const reason = c.R.str(u.reason);
+    if (r.ok) {
+      done++;
+      await c.store.recordUndo({ pass: u.pass, run: runId, reason, status: 'done', commit: r.commit, version: r.version });
+      say(`undid ${u.pass} (${reason})${r.already ? ': it was already undone' : ` as ${r.game} ${r.version}`}`);
+    } else {
+      await c.store.recordUndo({ pass: u.pass, run: runId, reason, status: r.permanent ? 'rejected' : 'failed', error: c.R.str(r.error) });
+      say(`pending undo of ${u.pass} failed${r.permanent ? '' : ' (retried next run)'}: ${r.error}`);
+    }
+  }
+  return done;
+}
+
 function undoCtx(d: RunDeps, runId: string): UndoCtx {
   return {
     repo: d.repo, runId, now: d.now, secrets: d.secrets,
@@ -318,6 +343,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   const replies: NoteReply[] = [];
   let scores: Record<string, ScoreReport<unknown>> = {};
   let finalScores: Record<string, ScoreReport<unknown>> = {};
+  let directorPerGame: Record<string, string> | undefined;
   let noteText = '';
   let phase = 'lock';
   const setPhase = (p: string) => { phase = p; lock.setPhase(p); log(`phase: ${p}`); };
@@ -434,17 +460,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       }
     }
     await ciFollowUp(d, c, warn);
-    for (const u of reportOnly ? [] : await store.pendingUndos()) { // report-only changes nothing
-      const r = await applyUndo(u.pass, u.reason, undoCtx(d, runId));
-      const reason = R.str(u.reason);
-      if (r.ok) {
-        await store.recordUndo({ pass: u.pass, run: runId, reason, status: 'done', commit: r.commit });
-        warn(`undid ${u.pass} (${reason})${r.already ? ': it was already undone' : ` as ${r.game} ${r.version}`}`);
-      } else {
-        await store.recordUndo({ pass: u.pass, run: runId, reason, status: r.permanent ? 'rejected' : 'failed', error: R.str(r.error) });
-        warn(`pending undo of ${u.pass} failed${r.permanent ? '' : ' (retried next run)'}: ${r.error}`);
-      }
-    }
+    if (!reportOnly) await drainUndos(d, { R, store }, runId, warn); // report-only changes nothing
 
     // 3. Play.
     setPhase('play');
@@ -578,14 +594,16 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       })),
       notes: J(notesNow.map(noteForPrompt)),
       stagnation,
+      feedback: feedbackVars(c).feedback,
     }), mainDir, DIRECTOR_TIMEOUT_MS);
     const dir = parseDirector(directorText);
+    if (dir) directorPerGame = dir.perGame;
     if (directorText !== null && !dir) warn("the director's reply did not match its contract: Hal wrote the note");
     noteText = dir?.note ?? fallbackNote(st.capReached, changes);
     await writeText(join(runDir, 'note.md'), `# Hal, night of ${night} (${runId})\n\n${noteText.trim()}\n`);
     if (!reportOnly) {
       try {
-        const files = historyFiles(o.games, mainDir, night, runId, dir?.perGame ?? {}, changes).map((f) => ({ ...f, text: R.str(f.text) }));
+        const files = historyFiles(o.games, mainDir, night, runId, dir?.perGame ?? {}, changes, finalScores, d.now().toISOString()).map((f) => ({ ...f, text: R.str(f.text) }));
         const commit = await commitHistory(files);
         if (commit) log(`history notes committed: ${commit.slice(0, 12)}`);
       } catch (e) { warn(`history notes not committed: ${errMsg(e)}`); }
@@ -655,6 +673,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     }
     const report: RunReport = {
       runId, night, startedAt: startedAt.toISOString(), endedAt, trigger: o.trigger, billing: o.billing, billingEnded: st.billing, spend: st.spend, games,
+      ...(directorPerGame ? { perGame: directorPerGame } : {}),
       changes, calls, planned, notes: replies, pushed: st.pushed, warnings,
       ...(st.pushSkippedReason ? { pushSkippedReason: st.pushSkippedReason } : {}),
       ...(st.capReached ? { capReached: true } : {}),
@@ -801,11 +820,19 @@ function fallbackNote(capReached: boolean, changes: CandidateResult[]): string {
   return [`Hal wrote this note itself: ${why}.`, '', changes.length ? changes.map(line).join('\n') : 'No changes were attempted.'].join('\n');
 }
 
-function historyFiles(games: string[], mainDir: string, night: string, runId: string, perGame: Record<string, string>, changes: CandidateResult[]): { path: string; text: string }[] {
+function historyFiles(games: string[], mainDir: string, night: string, runId: string, perGame: Record<string, string>, changes: CandidateResult[], finalScores: Record<string, ScoreReport<unknown>>, at: string): { path: string; text: string }[] {
   const out: { path: string; text: string }[] = [];
   for (const g of games) {
     const mine = changes.filter((c) => c.ticket.game === g && c.verdict !== 'skipped');
     const text = perGame[g]?.trim();
+    const scoresPath = `docs/hal/history/${g}/${night}/scores.json`;
+    let runs: unknown[] = [];
+    try {
+      const prevScores = JSON.parse(readFileSync(join(mainDir, scoresPath), 'utf8')) as { runs?: unknown };
+      if (Array.isArray(prevScores.runs)) runs = prevScores.runs;
+    } catch { /* first run tonight */ }
+    const scorers = Object.fromEntries(scorersFor(g).flatMap((s) => (finalScores[s] ? [[s, { fitness: finalScores[s]!.fitness, measures: finalScores[s]!.measures }]] : [])));
+    out.push({ path: scoresPath, text: JSON.stringify({ night, runs: [...runs, { run: runId, at, scorers }] }, null, 2) + '\n' });
     if (!text && mine.length === 0) continue;
     const path = `docs/hal/history/${g}/${night}/note.md`;
     const section = [`## Run ${runId}`, '', ...(text ? [text, ''] : []), ...(mine.length ? ['Changes:', ...mine.map(line)] : [])].join('\n').trimEnd();
@@ -842,7 +869,10 @@ function reportMarkdown(r: RunReport, note: string): string {
 
 // ---- undo -----------------------------------------------------------------------------------------------------------
 
-/** `hal undo HAL-0xx --reason "..."`: lock, applyUndo, feedback, then ci:local and push unless --no-push. 0 ok, 1 failed, 2 busy. */
+/**
+ * `hal undo HAL-0xx --reason "..."`: lock, applyUndo, feedback, then every other pending undo (drainUndos), then one
+ * ci:local and push unless --no-push. 0 ok, 1 this pass failed, 2 busy (feedback.json untouched).
+ */
 export async function undoCommand(pass: string, reason: string, o: { push: boolean }, d: RunDeps): Promise<number> {
   const c = common(d);
   const startedAt = d.now();
@@ -861,15 +891,21 @@ export async function undoCommand(pass: string, reason: string, o: { push: boole
     if (!r.ok) {
       await c.store.recordUndo({ pass, run: runId, reason: why, status: r.permanent ? 'rejected' : 'failed', error: c.R.str(r.error) });
       c.log(`undo ${pass} failed${r.permanent ? ' (rejected: not retried)' : ' (saved; the next run retries it)'}: ${r.error}`);
-      return 1;
+    } else {
+      await c.store.recordUndo({ pass, run: runId, reason: why, status: 'done', commit: r.commit, version: r.version });
+      c.log(r.already ? `${pass} was already undone (${r.commit.slice(0, 12)})` : `undid ${pass}: ${r.commit.slice(0, 12)} on ${HAL_MAIN}, ${r.game} ${r.version}`);
     }
-    await c.store.recordUndo({ pass, run: runId, reason: why, status: 'done', commit: r.commit });
-    c.log(r.already ? `${pass} was already undone (${r.commit.slice(0, 12)})` : `undid ${pass}: ${r.commit.slice(0, 12)} on ${HAL_MAIN}, ${r.game} ${r.version}`);
-    if (!o.push) { c.log('not pushed (--no-push)'); return 0; }
-    if (main.diverged) { c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged`); return 0; }
-    const p = await pushStep(d, c);
-    c.log(p.pushed ? 'pushed to origin main' : `not pushed: ${p.warning ?? p.reason}`);
-    return 0;
+    // R5: every other undo asked for meanwhile (e.g. more 👎s on the report page) lands now, under this lock; one push covers all.
+    const others = await drainUndos(d, c, runId, c.log, pass);
+    if (r.ok || others) {
+      if (!o.push) c.log('not pushed (--no-push)');
+      else if (main.diverged) c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged`);
+      else {
+        const p = await pushStep(d, c);
+        c.log(p.pushed ? 'pushed to origin main' : `not pushed: ${p.warning ?? p.reason}`);
+      }
+    }
+    return r.ok ? 0 : 1;
   } catch (e) {
     c.log(`undo ${pass} failed: ${errMsg(e)}`);
     return 1;

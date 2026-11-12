@@ -162,7 +162,7 @@ describe('full fake run', () => {
     expect(r.capReached).toBe(true);
     expect(r).toMatchObject({ night: NIGHT, trigger: 'nightly', billing: 'api', pushed: true });
     expect(r.spend.api).toBe(7); // never past 19.50 for slicing; the report still shows the $20 cap
-    expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'planned', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
+    expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'perGame', 'planned', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
     expect(r.planned).toEqual([]); // all built or tried
     expect(r.games.hyperline).toMatchObject({ before: { hyperline: 60 }, after: { hyperline: 61 } });
     // R21: the director's $1 was held through the builds, so the note still got written by the director.
@@ -174,6 +174,11 @@ describe('full fake run', () => {
     // refs/hal/main: the merge, then the history-note commit with Hal-Run; origin's main equals it.
     expect(gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN)).toMatch(new RegExp(`Hal-Run: ${r.runId}`));
     expect(gitIn(repo, 'show', `${HAL_MAIN}:docs/hal/history/hyperline/${NIGHT}/note.md`)).toMatch(/HAL-001/);
+    expect(r.perGame).toEqual({ hyperline: 'Hyperline kept its snap.' });
+    const scores = JSON.parse(gitIn(repo, 'show', `${HAL_MAIN}:docs/hal/history/hyperline/${NIGHT}/scores.json`)) as { night: string; runs: { run: string; at: string; scorers: Record<string, { fitness: number }> }[] };
+    expect(scores.night).toBe(NIGHT);
+    expect(scores.runs).toHaveLength(1);
+    expect(scores.runs[0]).toMatchObject({ run: r.runId, at: NOW.toISOString(), scorers: { hyperline: { fitness: 61 } } });
     expect(gitIn(repo, 'rev-list', '--count', `${brian}..${HAL_MAIN}`)).toBe('2');
     expect(originMain()).toBe(halHead());
     expect(brianMain()).toBe(brian);
@@ -196,6 +201,25 @@ describe('full fake run', () => {
     const r = readReport();
     expect(r.changes.map((c) => c.verdict)).toEqual(['merged', 'merged']);
     expect(r.changes[1]!.scoresBefore.hyperline!.fitness).toBe(61);
+  }, 60_000);
+});
+
+describe('history scores and director feedback', () => {
+  it('a second run the same night appends to scores.json, even with no changes', async () => {
+    expect(await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [] }) }))).toBe(0);
+    const first = readReport().runId;
+    expect(await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [], director: { note: 'n', perGame: {}, noteReplies: [] } }) }))).toBe(0);
+    const second = readReport().runId;
+    expect(second).not.toBe(first);
+    const f = JSON.parse(gitIn(repo, 'show', `${HAL_MAIN}:docs/hal/history/hyperline/${NIGHT}/scores.json`)) as { runs: { run: string }[] };
+    expect(f.runs.map((x) => x.run)).toEqual([first, second]);
+  }, 60_000);
+  it('the director prompt contains the recorded votes and undo reasons', async () => {
+    put(halDir, 'feedback.json', J({ votes: [{ run: 'r0', item: 'c1', game: 'hyperline', vote: 'down', comment: 'too floaty', at: 'x' }], undos: [{ run: 'r0', reason: 'bouncy mess', at: 'x' }] }));
+    await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [] }) }));
+    const p = calls.find((c) => c.role === 'director')!.prompt;
+    expect(p).toContain('too floaty');
+    expect(p).toContain('bouncy mess');
   }, 60_000);
 });
 
@@ -430,14 +454,15 @@ describe('signals', () => {
 // ---- undo ---------------------------------------------------------------------------------------------------------
 
 /** Puts a Hal-style pass commit on refs/hal/main (game.js change + release), like a merged candidate. */
-async function makePass(pass = 'HAL-001'): Promise<string> {
+async function makePass(pass = 'HAL-001', o: { file?: string; text?: string; from?: string; to?: string } = {}): Promise<string> {
+  const { file = 'game.js', text = 'export const speed = 1.2;\n', from = '0.3.1', to = '0.3.2' } = o;
   const { dir } = await ensureMainWorktree(repo);
-  put(dir, 'games/hyperline/game.js', 'export const speed = 1.2;\n');
-  put(dir, 'games/hyperline/game.yaml', read(dir, 'games/hyperline/game.yaml').replace('0.3.1', '0.3.2'));
-  put(dir, 'games/hyperline/index.html', read(dir, 'games/hyperline/index.html').replace("'0.3.1'", "'0.3.2'"));
-  put(dir, 'games/hyperline/CHANGELOG.md', read(dir, 'games/hyperline/CHANGELOG.md').replace('## 0.3.1', `## 0.3.2 (${NIGHT})\n- Jumps feel smoother.\n\n## 0.3.1`));
+  put(dir, `games/hyperline/${file}`, text);
+  put(dir, 'games/hyperline/game.yaml', read(dir, 'games/hyperline/game.yaml').replace(from, to));
+  put(dir, 'games/hyperline/index.html', read(dir, 'games/hyperline/index.html').replace(`'${from}'`, `'${to}'`));
+  put(dir, 'games/hyperline/CHANGELOG.md', read(dir, 'games/hyperline/CHANGELOG.md').replace(`## ${from}`, `## ${to} (${NIGHT})\n- Jumps feel smoother.\n\n## ${from}`));
   put(dir, `docs/hal/history/hyperline/${NIGHT}/${pass}-before.jpg`, fakeJpeg(390, 844));
-  const trailers = formatTrailers({ pass, game: 'hyperline', kind: 'tuning', why: 'Players miss the jump.', scoreBefore: 60, scoreAfter: 61, version: '0.3.2', run: 'run-x' });
+  const trailers = formatTrailers({ pass, game: 'hyperline', kind: 'tuning', why: 'Players miss the jump.', scoreBefore: 60, scoreAfter: 61, version: to, run: 'run-x' });
   gitIn(dir, 'add', '-A');
   gitIn(dir, 'commit', '-q', '-m', `tuning(hyperline): Smoother jumps\n\nPlayers miss the jump.\n\n${trailers}`);
   gitIn(repo, 'update-ref', HAL_MAIN, gitIn(dir, 'rev-parse', 'HEAD'));
@@ -459,7 +484,7 @@ describe('undo', () => {
     expect(show('index.html')).toContain("version: '0.3.3'");
     expect(show('CHANGELOG.md')).toMatch(new RegExp(`## 0\\.3\\.3 \\(${NIGHT}\\)\\n- Undone: Smoother jumps \\(HAL-001\\): too bouncy\\n\\n## 0\\.3\\.2 \\(${NIGHT}\\)\\n- Jumps feel smoother\\.`));
     expect(gitIn(repo, 'show', '--stat', '--format=', HAL_MAIN)).not.toMatch(/history/); // the pictures stay as history
-    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: 'too bouncy' })]);
+    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: 'too bouncy', version: '0.3.3' })]);
     expect(brianMain()).toBe(brian);
     expect(existsSync(join(halDir, 'run.lock'))).toBe(false);
   });
@@ -533,6 +558,35 @@ describe('undo', () => {
     put(halDir, 'run.lock', J({ pid: process.pid, runId: 'other', startedAt: new Date().toISOString() }));
     expect(await undoCommand('HAL-404', 'r', { push: false }, deps())).toBe(2);
   });
+  it('R5: hal undo also applies every other pending undo under its lock, then one ci:local and one push', async () => {
+    await makePass('HAL-001');
+    await makePass('HAL-002', { file: 'extra.js', text: 'export const extra = 1;\n', from: '0.3.2', to: '0.3.3' });
+    put(halDir, 'feedback.json', J({ votes: [], undos: [
+      { run: 'page', pass: 'HAL-001', reason: 'too bouncy', status: 'pending', at: NOW.toISOString() },
+      { run: 'page', pass: 'HAL-002', reason: 'meh', status: 'pending', at: NOW.toISOString() },
+    ] }));
+    const ci = vi.fn(async () => ({ ok: true, detail: '' }));
+    expect(await undoCommand('HAL-001', 'too bouncy', { push: true }, deps({ ciLocal: ci }))).toBe(0);
+    const u = feedback().undos;
+    expect(u).toEqual([
+      expect.objectContaining({ run: 'page', pass: 'HAL-001', status: 'done' }),
+      expect.objectContaining({ run: 'page', pass: 'HAL-002', status: 'done' }),
+    ]);
+    expect(gitIn(repo, 'log', '--format=%B', HAL_MAIN).match(/^Hal-Undo: HAL-00[12]$/gm)).toHaveLength(2);
+    expect(ci).toHaveBeenCalledTimes(1);
+    expect(ci).toHaveBeenCalledWith(halHead());
+    expect(originMain()).toBe(halHead());
+    // A later spawn for a pass that is already done exits cleanly.
+    expect(await undoCommand('HAL-002', 'meh', { push: false }, deps())).toBe(0);
+  });
+  it('R5: a hal undo that finds the lock busy exits 2 and leaves feedback.json untouched', async () => {
+    await makePass();
+    const fbText = J({ votes: [], undos: [{ run: 'page', pass: 'HAL-001', reason: 'r', status: 'pending', at: NOW.toISOString() }] });
+    put(halDir, 'feedback.json', fbText);
+    put(halDir, 'run.lock', J({ pid: process.pid, runId: 'other', startedAt: new Date().toISOString() }));
+    expect(await undoCommand('HAL-001', 'r', { push: false }, deps())).toBe(2);
+    expect(read(halDir, 'feedback.json')).toBe(fbText);
+  });
   it('preflight applies a pending undo from feedback.json the same way, and reports last run\'s ci:local failures', async () => {
     await makePass();
     put(halDir, 'feedback.json', J({ votes: [], undos: [{ run: 'page', pass: 'HAL-001', reason: 'too bouncy', status: 'pending', at: NOW.toISOString() }] }));
@@ -542,7 +596,8 @@ describe('undo', () => {
     put(halDir, 'runs/run-x/report.json', J({ runId: 'run-x', pushed: true }));
     expect(await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [] }) }))).toBe(0);
     expect(gitIn(repo, 'log', '--format=%B', HAL_MAIN)).toMatch(/^Hal-Undo: HAL-001$/m);
-    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done' })]);
+    // R3: the page's request keeps its run (the report's), so the report card finds it; the version it released is recorded.
+    expect(feedback().undos).toEqual([expect.objectContaining({ run: 'page', pass: 'HAL-001', status: 'done', version: '0.3.3', undoRun: expect.stringMatching(/^run-/) })]);
     const w = readReport().warnings.join('\n');
     expect(w).toMatch(/undid HAL-001/);
     expect(w).toMatch(/ci:local failed for .* \(run-x\)/);
@@ -566,6 +621,13 @@ describe('cli flags', () => {
   it('undo needs a pass id and --reason', async () => {
     await expect(runRunCommand('undo', ['HAL-001'], { halDir, games })).rejects.toThrow(/reason/);
     await expect(runRunCommand('undo', ['nope', '--reason', 'x'], { halDir, games })).rejects.toThrow(/HAL-/);
+  });
+  it('--reason=<text> is one argv element: a reason starting with -- stays the reason (the report page spawns it this way)', async () => {
+    const makeDeps = () => deps();
+    await makePass();
+    expect(await runRunCommand('undo', ['HAL-001', '--reason=--no-push'], { halDir, games, makeDeps })).toBe(0);
+    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: '--no-push' })]);
+    expect(parseTrailers(gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN))!).toMatchObject({ undo: 'HAL-001', reason: '--no-push' });
   });
 });
 

@@ -8,7 +8,7 @@ export type PromptRole = 'planner' | 'implementer' | 'director';
 export const ROLE_PLACEHOLDERS: Record<PromptRole, readonly string[]> = {
   planner: ['games', 'scores', 'ledger', 'screens', 'controls', 'consoleErrors', 'changelogs', 'notes', 'feedback', 'approvals', 'stagnation', 'budget'],
   implementer: ['game', 'ticket'],
-  director: ['results', 'notes', 'stagnation'],
+  director: ['results', 'notes', 'stagnation', 'feedback'],
 };
 
 export const placeholders = (template: string): string[] => [...new Set([...template.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]!))];

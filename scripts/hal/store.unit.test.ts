@@ -69,6 +69,20 @@ describe('store', () => {
     });
   });
 
+  it('feedbackFor filters by run, newest last, and a vote comment round-trips', async () => {
+    const s = mk();
+    await s.addVote({ run: 'r1', item: 'a', vote: 'up', comment: 'love it' });
+    await s.addVote({ run: 'r2', item: 'b', vote: 'down' });
+    await s.addVote({ run: 'r1', item: 'c', vote: 'down' });
+    await s.addUndo({ run: 'r2', reason: 'nope' });
+    await s.addUndo({ run: 'r1', reason: 'meh' });
+    const f = await s.feedbackFor('r1');
+    expect(f.votes.map((v) => v.item)).toEqual(['a', 'c']);
+    expect(f.votes[0]!.comment).toBe('love it');
+    expect(f.undos.map((u) => u.reason)).toEqual(['meh']);
+    expect(await s.feedbackFor('zzz')).toEqual({ votes: [], undos: [] });
+  });
+
   it('spend: loadSpendToday is empty for a new day, save keeps one SpendDay per day', async () => {
     const s = mk();
     expect(await s.loadSpendToday()).toEqual({ day: '2026-11-11', calls: [] });
@@ -109,6 +123,21 @@ describe('store: run-time additions (Task 7)', () => {
     expect((await s.pendingUndos()).map((u) => u.pass)).toEqual(['HAL-002']);
     await s.recordUndo({ pass: 'HAL-002', run: 'r2', reason: 'meh', status: 'rejected', error: 'no such pass' });
     expect(await s.pendingUndos()).toEqual([]);
+  });
+  it('R3: recordUndo keeps the request\'s run (the report\'s), records the undo\'s own run as undoRun, and the done version', async () => {
+    const s = createStore({ halDir: await mkdtemp(join(tmpdir(), 'hal-store-r3-')), now: () => new Date('2026-11-12T03:00:00Z') });
+    await s.addUndo({ run: 'run-report', pass: 'HAL-003', reason: 'felt worse', status: 'pending' });
+    await s.recordUndo({ pass: 'HAL-003', run: 'undo-1', reason: 'felt worse', status: 'failed', error: 'conflict' });
+    expect((await s.feedbackFor('run-report')).undos).toEqual([expect.objectContaining({ pass: 'HAL-003', status: 'failed', undoRun: 'undo-1' })]);
+    await s.recordUndo({ pass: 'HAL-003', run: 'run-next', reason: 'felt worse', status: 'done', commit: 'abc', version: '0.2.2' });
+    const [u] = (await s.feedbackFor('run-report')).undos;
+    expect(u).toMatchObject({ run: 'run-report', undoRun: 'run-next', pass: 'HAL-003', status: 'done', commit: 'abc', version: '0.2.2' });
+    expect(u!.error).toBeUndefined();
+    expect((await s.feedbackFor('run-next')).undos).toEqual([]);
+    // No earlier request: the undo's own run is the entry's run.
+    await s.recordUndo({ pass: 'HAL-009', run: 'undo-2', reason: 'cli', status: 'done', commit: 'def', version: '1.0.1' });
+    expect((await s.feedbackFor('undo-2')).undos).toEqual([expect.objectContaining({ pass: 'HAL-009', version: '1.0.1' })]);
+    expect((await s.feedbackFor('undo-2')).undos[0]!.undoRun).toBeUndefined();
   });
   it('sync spend: save then load round-trips, keeps 60 days', async () => {
     const now = new Date(2026, 10, 12, 3);

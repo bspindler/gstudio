@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import { loadGameLibrary } from '@studio/core';
 import { createApp } from '@studio/api';
 import { mountSiteFonts } from './site-routes.js';
+import { mountHistory } from './hal/history-routes.js';
 import { gamesDir, localEnv, repo } from './local-env.js';
 
 const onLan = process.env.STUDIO_LAN === '1' || process.argv.includes('--lan');
@@ -33,8 +34,9 @@ site.use('/sdk/*', serveStatic({ root: `${root}/packages`, rewriteRequestPath: (
 // The GStudio shelf page; read per request so edits show on refresh. `<` is escaped so a title can't close the script tag.
 const shelf = JSON.stringify(games.map(({ slug, title, genre, version, targetSegment }) =>
   ({ slug, title, genre, version, targetSegment }))).replace(/</g, '\\u003c');
-site.get('/', (c) => c.html(readFileSync(join(repo, 'scripts/site/index.html'), 'utf8').replace('/*__GAMES__*/[]', shelf)));
+site.get('/', (c) => c.html(readFileSync(join(repo, 'scripts/site/index.html'), 'utf8').replace('/*__GAMES__*/[]', shelf).replace('/*__HISTORY__*/false', 'true')));
 mountSiteFonts(site, `${root}/scripts`);
+mountHistory(site, { repo, games: games.map(({ slug, title }) => ({ slug, title })) }); // before the static /* below
 site.use('/*', serveStatic({ root: `${root}/games` }));
 serve({ fetch: site.fetch, port: 5174, hostname: bind });
 

@@ -35,6 +35,9 @@ export const runGit: GitRunner = async (args, cwd, opts) => (await gitBytes(args
 /** Config for every git call Hal makes in a worktree: no hooks, no fsmonitor daemon. */
 export const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false'];
 
+/** How long one read-only git call from the report server or the History pages may take. */
+export const GIT_TIMEOUT_MS = 10_000;
+
 /** The env Hal's own git calls get: no Claude credentials, no Hal token, no inherited GIT_* overrides. */
 export function gitEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
