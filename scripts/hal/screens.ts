@@ -160,24 +160,80 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR, games }: { outD
   }
 }
 
+/**
+ * The same randomness in every shot: Math.random is a fixed-seed generator before any game code runs, so a before and
+ * an after shot differ only by the change (Tidepool's tile deal, Hyperline's course seed, particles).
+ */
+const seedRandom = () => {
+  let a = 0x2545f491;
+  Math.random = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+};
+
+/** Shows level or sector `i` (0-based) of a game, ready for one screenshot: what a change to it looks like. */
+type FocusFn = (page: Page, origin: string, i: number) => Promise<void>;
+const FOCUS: Record<string, FocusFn> = {
+  async gearhold(page, origin, i) {
+    await step('load', async () => {
+      await page.goto(`${origin}/gearhold/index.html?hal=1`);
+      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
+    });
+    await step(`level ${i + 1} from above`, () => page.evaluate((n) => { const h = (globalThis as any).__hal; h.start(n); h.overhead(true); h.render(); }, i));
+  },
+  async 'tidepool-pals'(page, origin, i) {
+    const n = i + 1;
+    // A save that has reached level n, so the map offers it (the game fills in the rest of the save).
+    await page.addInitScript((lvl) => { try { localStorage.setItem('tidepool_v2', JSON.stringify({ v: 2, level: lvl, stars: {} })); } catch { /* none */ } }, n);
+    await step('load map', async () => {
+      await page.goto(`${origin}/tidepool-pals/index.html`);
+      await page.waitForSelector(`#view-map [data-act="open-level"][data-n="${n}"]`, { state: 'attached', timeout: T });
+    });
+    await step(`open level ${n}`, async () => {
+      await page.waitForTimeout(SETTLE);
+      if (await page.locator('#modal').isVisible()) await page.keyboard.press('Escape').catch(() => {});
+      await page.evaluate((k) => (document.querySelector(`#view-map [data-act="open-level"][data-n="${k}"]`) as HTMLElement | null)?.click(), n);
+      await page.locator('#modal [data-act="start"]').waitFor({ state: 'visible', timeout: T });
+      await page.locator('#modal [data-act="start"]').click({ timeout: T });
+    });
+    await settle(page);
+  },
+  async hyperline(page, origin, i) {
+    await step('load', async () => {
+      await page.goto(`${origin}/hyperline/index.html?hal=1`);
+      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
+    });
+    // A little into the sector, so its first patterns are on screen ahead of the runner.
+    await step(`sector ${i + 1}`, () => page.evaluate((s) => (globalThis as any).__hal.view(s * 250 + 30), i));
+    await page.waitForTimeout(600); // a few frames, and the sector banner
+  },
+};
+
 /** History-shot settings: phone portrait at device scale 1, JPEG quality 70, so a night's images stay small in git. */
 export const HISTORY_SHOT = { width: 390, height: 844, deviceScaleFactor: 1, quality: 70 } as const;
 
 /**
- * Hal's `shoot` port: one JPEG of `game` in gameplay (the flow's second shot, as in runScreens), served from the tree at
- * `rootDir` (a worktree), written to `outPath`. Throws when the game has no flow, the browser is unavailable, or the flow
- * fails before gameplay.
+ * Hal's `shoot` port: one JPEG of `game` served from the tree at `rootDir` (a worktree), written to `outPath`. With
+ * `focus` (a 0-based level or sector, see focus.ts) it shows that part of the game; without, gameplay at the start (the
+ * flow's second shot, as in runScreens). Randomness is seeded, so two trees differ only where their code does. Throws
+ * when the game has no flow, the browser is unavailable, or the flow fails before the shot.
  */
-export async function shootGame(rootDir: string, game: string, outPath: string): Promise<void> {
+export async function shootGame(rootDir: string, game: string, outPath: string, focus?: number): Promise<void> {
   const flowFn = Object.hasOwn(FLOWS, game) ? FLOWS[game]! : undefined;
   if (!flowFn) throw new Error(`shoot: no screen flow for ${game}`);
+  const focusFn = focus === undefined ? undefined : Object.hasOwn(FOCUS, game) ? FOCUS[game]! : undefined;
+  if (focus !== undefined && (!focusFn || !Number.isInteger(focus) || focus < 0)) throw new Error(`shoot: cannot show part ${focus} of ${game}`);
   let server: StaticServer | undefined, browser: Browser | undefined, hal: HalContext | undefined;
   try {
     server = await serveGames(rootDir);
     browser = await launchBrowser();
     hal = await newHalContext(browser, { contextOptions: { viewport: { width: HISTORY_SHOT.width, height: HISTORY_SHOT.height }, deviceScaleFactor: HISTORY_SHOT.deviceScaleFactor, hasTouch: true, isMobile: true } });
+    await hal.context.addInitScript(seedRandom);
     const page = await hal.context.newPage();
     await mkdir(dirname(outPath), { recursive: true });
+    if (focusFn) {
+      await focusFn(page, server.origin, focus!);
+      await page.screenshot({ path: outPath, type: 'jpeg', quality: HISTORY_SHOT.quality });
+      return;
+    }
     let n = 0, done = false;
     const shoot: Shoot = async () => {
       if (++n !== 2) return;

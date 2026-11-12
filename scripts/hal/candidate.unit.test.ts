@@ -93,6 +93,7 @@ describe('runCandidate (temp git repo)', () => {
     screens: (_d, game) => { ran.push('screens'); return result({ game, shots: [], errors: [], reached: true, notes: [], blockedRequests: [] }); },
     controls: (_d, game) => { ran.push('controls'); return result([{ game, check: 'tap', ok: true, detail: '' }, { game: 'other', check: 'x', ok: false, detail: 'not ours' }]); },
     shoot: (_d, _g, out) => { ran.push('shoot'); return result({ ok: true }, writeJpeg(out, fakeJpeg(390, 844))); },
+    fingerprint: () => result([{ key: 'same', label: 'level 1' }]), // no level data changed: the default shot
   };
 
   type Ctx = CandidateCtx & { budget: { slice: ReturnType<typeof vi.fn>; record: ReturnType<typeof vi.fn> } };
@@ -450,6 +451,37 @@ describe('runCandidate (temp git repo)', () => {
     expect(r.verdict).toBe('merged');
     worktreesGone();
   });
+  describe('history shots show what changed', () => {
+    const fp = (keys: string[]) => keys.map((key, i) => ({ key, label: `level ${i + 1}, Hall ${i + 1}` }));
+    it('a change to level 3 is shot at level 3 in both trees, and the result says so', async () => {
+      const shots: Array<{ dir: string; focus?: number }> = [];
+      const c = ctx({ cmds: {
+        fingerprint: (d) => result(d === mainDir ? fp(['a', 'b', 'c']) : fp(['a', 'b', 'C', 'd'])),
+        shoot: (d, _g, out, focus) => { shots.push({ dir: d === mainDir ? 'main' : 'wt', ...(focus === undefined ? {} : { focus }) }); return result({ ok: true }, writeJpeg(out, fakeJpeg(390, 844))); },
+      } });
+      const r = await runCandidate(ticket(), c);
+      expect(r.verdict).toBe('merged');
+      expect(shots).toEqual([{ dir: 'main' }, { dir: 'main', focus: 2 }, { dir: 'wt', focus: 2 }]); // the early check, then both at level 3
+      expect(r.shotsOf).toBe('level 3, Hall 3');
+    });
+    it('a new level after the existing ones is the one shown', async () => {
+      const c = ctx({ cmds: { fingerprint: (d) => result(d === mainDir ? fp(['a', 'b']) : fp(['a', 'b', 'new'])) } });
+      expect((await runCandidate(ticket(), c)).shotsOf).toBe('level 3, Hall 3');
+    });
+    it('no level data changed, or a fingerprint that fails or is junk: the default shot, and the change still merges', async () => {
+      const cases = [() => result(fp(['a'])), () => node('process.exit(3)'), () => result({ not: 'a fingerprint' })];
+      for (const [k, fingerprint] of cases.entries()) {
+        const shots: Array<number | undefined> = [];
+        const edit = (cwd: string) => put(cwd, 'games/hyperline/game.js', `export const speed = 1.${k + 3};\n`); // a new edit each pass
+        const r = await runCandidate(ticket(), ctx({ pass: `HAL-${k + 1}`, cmds: { fingerprint, shoot: (_d, _g, out, focus) => { shots.push(focus); return result({ ok: true }, writeJpeg(out, fakeJpeg(390, 844))); } } }, edit));
+        expect(r.reasons).toEqual([]);
+        expect(r.verdict).toBe('merged');
+        expect(r.shotsOf).toBeUndefined();
+        expect(shots).toEqual([undefined, undefined]);
+      }
+    });
+  });
+
   it('a score regression past the tolerance is discarded; a target picks score mode', async () => {
     const old = halHead();
     expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { score: () => result(report('hyperline', 60, { flow: 60, fair: 65 })) } })), old, /hyperline: fair regressed/);

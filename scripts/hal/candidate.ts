@@ -26,6 +26,7 @@ import {
   type Billing, type Diff, type FileChange, type ScoreReport, type Ticket,
 } from '@studio/core/hal';
 import { secretReadPaths } from './env.js';
+import { asFingerprint, firstChanged } from './focus.js';
 import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
@@ -66,7 +67,10 @@ export type CheckCommands = {
   score: (dir: string, scorer: string) => string[];
   screens: (dir: string, game: string) => string[];
   controls: (dir: string, game: string) => string[];
-  shoot: (dir: string, game: string, outPath: string) => string[];
+  /** `focus`: the 0-based level or sector to show (focus.ts); omitted, gameplay at the start. */
+  shoot: (dir: string, game: string, outPath: string, focus?: number) => string[];
+  /** Per-level fingerprints of the tree's game data (focus.ts), printed as the check's result. */
+  fingerprint: (dir: string, game: string) => string[];
 };
 
 /** The node scripts Hal runs checks with, resolved (real paths) under <repo>/node_modules: never the worktree's. */
@@ -106,7 +110,8 @@ export function defaultCommands(tools: HalTools, scripts: Record<string, string>
     score: (dir, scorer) => [...entry(dir), 'score', scorer],
     screens: (dir, game) => [...entry(dir), 'screens', game],
     controls: (dir, game) => [...entry(dir), 'controls', game],
-    shoot: (dir, game, out) => [...entry(dir), 'shoot', game, out],
+    shoot: (dir, game, out, focus) => [...entry(dir), 'shoot', game, out, ...(focus === undefined ? [] : [String(focus)])],
+    fingerprint: (dir, game) => [...entry(dir), 'fingerprint', game],
   };
 }
 
@@ -167,6 +172,8 @@ export type CandidateResult = {
   commit?: string;
   /** Repo-relative paths of the history images in the commit. */
   shots?: { before: string; after: string };
+  /** What the shots show when it is not gameplay at the start: the level or sector the change touched (focus.ts). */
+  shotsOf?: string;
   /** The game's version after this pass (set once the release step ran). */
   version?: string;
   /** The changelog bullet the implementer wrote. */
@@ -321,10 +328,10 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     }, { tmpRoot: privDir, repo: ctx.repo });
 
     /** Runs a shot command (its nonce-checked result is required). */
-    const shoot = async (dir: string, outPath: string, writable: string[], label: string) => {
+    const shoot = async (dir: string, outPath: string, writable: string[], label: string, focus?: number) => {
       const nonce = newNonce();
       let r: IsolatedResult;
-      try { r = await inTree(dir, (await cmd('shoot'))(dir, game, outPath), writable, nonce); } catch (e) { return discard(`${label} shot failed: ${msg(e)}`); }
+      try { r = await inTree(dir, (await cmd('shoot'))(dir, game, outPath, focus), writable, nonce); } catch (e) { return discard(`${label} shot failed: ${msg(e)}`); }
       try { if (r.code !== 0) throw new Error(r.timedOut ? 'timed out' : `exit ${r.code}: ${tail(r.stderr || r.stdout)}`); parseResult(r.stdout, nonce); } catch (e) { discard(`${label} shot failed: ${msg(e)}`); }
     };
     const checkJpeg = (buf: Buffer | null, label: string) => {
@@ -536,11 +543,33 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
 
     // 7. History shots. The after shot is the last check; then the before shot is copied in, and the bytes committed
     // (read back from T3) are the ones validated. Nothing else may have changed.
+    // Both shots show the level or sector the change touched (focus.ts): main's and the candidate's game data are
+    // fingerprinted (each in its own isolated check) and the first one that differs is shot in both trees. No
+    // difference, or a fingerprint that fails, keeps the default shot (gameplay at the start). Tampering still discards.
+    let focus: { i: number; label: string } | null = null;
+    const fingerprint = async (dir: string, writable: string[]) => {
+      const nonce = newNonce();
+      const r = await inTree(dir, (await cmd('fingerprint'))(dir, game), writable, nonce);
+      if (r.code !== 0) throw new Error(r.timedOut ? 'timed out' : `exit ${r.code}`);
+      return asFingerprint(parseResult(r.stdout, nonce));
+    };
+    try {
+      const fb = await fingerprint(ctx.mainDir, [shotDir]);
+      await guard(t2);
+      const fa = await fingerprint(wt.dir, [wt.dir]);
+      const i = fb && fa ? firstChanged(fb, fa) : null;
+      if (i !== null) focus = { i, label: fa![i]!.label };
+    } catch (e) { if (e instanceof Discard) throw e; focus = null; }
+    if (focus) {
+      await shoot(ctx.mainDir, beforeTmp, [shotDir], 'before', focus.i); // replaces the default before shot
+      checkJpeg(await readFile(beforeTmp).catch(() => null), 'before');
+      res.shotsOf = redact(focus.label);
+    }
     await guard(t2);
     const hist = `docs/hal/history/${game}/${night}`;
     const shots = { before: `${hist}/${ctx.pass}-before.jpg`, after: `${hist}/${ctx.pass}-after.jpg` };
     await mkdir(join(wt.dir, hist), { recursive: true });
-    await shoot(wt.dir, join(wt.dir, shots.after), [wt.dir], 'after');
+    await shoot(wt.dir, join(wt.dir, shots.after), [wt.dir], 'after', focus?.i);
     await checkTrustRoot();
     const afterTree = await extendTree(wt.dir, t2, [shots.after], tree);
     if ((await snapshotTree(wt.dir, wt.base, tree)) !== afterTree) discard('tampered between checks');
