@@ -163,7 +163,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.3.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.3.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -195,6 +195,8 @@ let ac = null, master = null, muted = false, noiseBuf = null;
 function wakeAudio() {
   if (!ac) {
     try {
+      // iPhone: Web Audio is muted by the ring/silent switch unless the page's audio session is 'playback', like a music app.
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers: follows the ringer */ }
       ac = new (window.AudioContext || window.webkitAudioContext)();
       master = ac.createDynamicsCompressor();
       master.connect(ac.destination);

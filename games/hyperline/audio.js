@@ -11,6 +11,8 @@ export function createAudio() {
     if (!ctx) {
       const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
       if (!AC) return null;
+      // iPhone: Web Audio is muted by the ring/silent switch unless the page's audio session is 'playback', like a music app.
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers: follows the ringer */ }
       try { ctx = new AC(); } catch { return null; }
       master = ctx.createGain(); master.gain.value = 0.42; master.connect(ctx.destination);
       musicBus = ctx.createGain(); musicBus.gain.value = 0.32; musicBus.connect(master);
