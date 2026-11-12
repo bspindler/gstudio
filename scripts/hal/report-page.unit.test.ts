@@ -219,7 +219,8 @@ describe('renderReport', () => {
       planned: [ticket('T1', 'gearhold', 'tuning', 'Tune Kiln Heart'), ticket('T2', 'hyperline', 'polish', 'Brighter lanes')],
     };
     const page = renderReport(view({ note: '' }, ro));
-    expect(page).toContain('Nothing changed overnight.');
+    expect(page).toContain('Nothing changed this run.');
+    expect(page).not.toContain('overnight.');
     expect(page).toContain('Wednesday, Nov 11 · manual run');
     expect(page).toContain('Planned, not built (2)');
     expect(page).toContain('Tune Kiln Heart');
@@ -278,9 +279,9 @@ describe('renderReport', () => {
 
   it('Run Hal keeps the status line, spend, Run now and Stop forms, and links the 10 newest earlier reports', () => {
     const runs = Array.from({ length: 12 }, (_, i) => ({ runId: `run-2026-11-${String(12 - i).padStart(2, '0')}T08-00-00-000Z`, endedAt: `2026-11-${String(12 - i).padStart(2, '0')}T09:00:00Z` }));
-    const html = renderReport(view({ runs, status: { running: true, phase: 'scoring <x>', startedAt: '2026-11-12T08:00:00Z' }, spendToday: 3.5 }));
+    const html = renderReport(view({ runs, status: { running: true, phase: 'scoring <x>', startedAt: '2026-11-12T08:00:00Z' }, spendToday: 3.5, timeZone: 'UTC' }));
     const run = section(html, 'Run Hal');
-    expect(run).toMatch(/Running: scoring &lt;x&gt; \(since Nov 12, \d{1,2}:00\s[AP]M\)/);
+    expect(run).toMatch(/Running: scoring &lt;x&gt; \(since Nov 12, 8:00\sAM\)/);
     expect(run).toContain('API spend today: $3.50 of $20.00');
     const fs = forms(run);
     const now = fs.find((f) => f.action === '/run')!;
@@ -340,6 +341,32 @@ describe('renderReport', () => {
     const html = renderReport(view({ flash: 'Undo started' }));
     expect(html).toContain('Undo started');
     expect(html).not.toMatch(/tok-|[?&]t=/);
+  });
+
+  it('final fix 1: Play says how many Hal commits the checkout is behind; nothing when not behind or unknown', () => {
+    const line = (html: string) => html.match(/<p class="behind[^"]*">[\s\S]*?<\/p>/)?.[0] ?? null;
+    const three = renderReport(view({ behindHal: 3 }));
+    expect(line(three)).toBe('<p class="behind small">Play shows your checkout, which is 3 Hal commits behind. Run <code>git pull</code> on the Mac to play last night&#39;s changes.</p>');
+    expect(three.indexOf('▶ Play')).toBeLessThan(three.indexOf('class="behind'));
+    expect(line(renderReport(view({ behindHal: 1 })))).toContain('which is 1 Hal commit behind.');
+    expect(line(renderReport(view({ behindHal: 2, playUrl: null })))).toContain('2 Hal commits behind');
+    for (const behindHal of [undefined, 0, -1, Number.NaN]) expect(line(renderReport(view(behindHal === undefined ? {} : { behindHal })))).toBeNull();
+  });
+
+  it('final fix 7: "need you" leaves out calls declined in this run (and approved ones)', () => {
+    const LIAB = 'network host api.leaders.test';
+    expect(renderReport(view())).toContain('1 need you');
+    expect(renderReport(view({ feedback: { votes: [{ run: RUN, item: LIAB, game: 'hyperline', vote: 'down', at: 'x' }], undos: [] } }))).toContain('0 need you');
+    // a later up vote on the item (not a decline any more) counts it again
+    expect(renderReport(view({ feedback: { votes: [{ run: RUN, item: LIAB, game: 'hyperline', vote: 'down', at: 'x' }, { run: RUN, item: LIAB, game: 'hyperline', vote: 'up', at: 'y' }], undos: [] } }))).toContain('1 need you');
+  });
+
+  it('final fix 8: no merges says "overnight" only for a nightly run', () => {
+    const empty = (trigger: Report['trigger']): Report => ({ ...fullReport(), trigger, changes: [] });
+    expect(renderReport(view({}, empty('nightly')))).toContain('<h1>Nothing changed overnight.</h1>');
+    const manual = renderReport(view({}, empty('manual')));
+    expect(manual).toContain('<h1>Nothing changed this run.</h1>');
+    expect(manual).not.toContain('overnight.');
   });
 
   it('esc escapes the five HTML characters', () => {

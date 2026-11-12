@@ -15,6 +15,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 import { renderReport, renderRunHalOnly } from './report-page.js';
 import type { RunReport } from './run.js';
+import { GIT_TIMEOUT_MS, gitEnv } from './git.js';
 import { createStore } from './store.js';
 
 export const SERVER_PORT = 5180;
@@ -40,7 +41,7 @@ export type ServerDeps = {
   spawnRun?: SpawnRun;
   /** The dev server's games URL when it is up, else null. */
   devUrl?: () => Promise<string | null>;
-  /** `git <args>` in the repo, stdout as bytes (for /shot). Default: none, so /shot 404s; `serve` passes realGit(repo). */
+  /** `git <args>` in the repo, stdout as bytes (for /shot and Play's "behind" line). Default: none, so /shot 404s; `serve` passes realGit(repo). */
   git?: (args: string[]) => Promise<Buffer>;
 };
 
@@ -69,10 +70,10 @@ export function realSpawnRun(repo: string, spawnFn: typeof spawn = spawn): Spawn
   };
 }
 
-/** `git -C <repo> <args>` through execFile (no shell), stdout as a Buffer. */
+/** `git -C <repo> <args>` through execFile (no shell), with the scrubbed env (no GIT_*, no secrets), stdout as a Buffer. */
 export function realGit(repo: string): (args: string[]) => Promise<Buffer> {
   return (args) => new Promise((resolve, reject) => {
-    execFile('git', ['-C', repo, ...args], { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024, timeout: 10_000 }, (err, out) => (err ? reject(err) : resolve(out)));
+    execFile('git', ['-C', repo, ...args], { encoding: 'buffer', env: gitEnv(), maxBuffer: 16 * 1024 * 1024, timeout: GIT_TIMEOUT_MS }, (err, out) => (err ? reject(err) : resolve(out)));
   });
 }
 
@@ -180,6 +181,15 @@ export function createServerApp(d: ServerDeps) {
   const merged = (r: RunReport, pass: unknown) =>
     typeof pass === 'string' && PASS.test(pass) ? r.changes.find((x) => x.pass === pass && x.verdict === 'merged') ?? null : null;
 
+  /** Commits on refs/hal/main that HEAD lacks (Play serves the checkout), or undefined: no ref, no git, or a failure. */
+  const behindHal = async (): Promise<number | undefined> => {
+    if (!d.git) return undefined;
+    try {
+      const out = (await d.git(['rev-list', '--count', 'HEAD..refs/hal/main'])).toString('utf8').trim();
+      return /^\d+$/.test(out) ? Number(out) : undefined;
+    } catch { return undefined; }
+  };
+
   const page = async (c: Context, report: RunReport | null) => {
     const lock = running();
     const flash = getCookie(c, FLASH);
@@ -190,11 +200,11 @@ export function createServerApp(d: ServerDeps) {
       games: d.games, runs: await recentRuns(), ...(flash ? { flash: flash.slice(0, 300) } : {}),
     };
     if (!report) return c.html(renderRunHalOnly(base));
-    const [note, feedback, notes, approvals, playUrl] = await Promise.all([
+    const [note, feedback, notes, approvals, playUrl, behind] = await Promise.all([
       readNote(report.runId), feedbackOf(report), store.readNotes(), store.readApprovals(),
-      d.devUrl ? d.devUrl().catch(() => null) : Promise.resolve(null),
+      d.devUrl ? d.devUrl().catch(() => null) : Promise.resolve(null), behindHal(),
     ]);
-    return c.html(renderReport({ ...base, report, note, feedback, notes, approvals: approvals.map((a) => a.item), playUrl }));
+    return c.html(renderReport({ ...base, report, note, feedback, notes, approvals: approvals.map((a) => a.item), playUrl, ...(behind ? { behindHal: behind } : {}) }));
   };
 
   app.get('/', async (c) => page(c, await loadRun(latestRunId(d.halDir))));
@@ -215,7 +225,7 @@ export function createServerApp(d: ServerDeps) {
     if (typeof ch.commit !== 'string' || !/^[0-9a-f]{7,64}$/.test(ch.commit)) return notFound();
     let bytes: Buffer;
     try { bytes = await d.git(['show', `${ch.commit}:${path}`]); } catch { return notFound(); }
-    return c.body(new Uint8Array(bytes), 200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+    return c.body(new Uint8Array(bytes), 200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400', 'x-content-type-options': 'nosniff' });
   });
 
   /** 303 back to the run's page (`/` for the latest) with the flash in a short-lived cookie, never in the URL. */
@@ -224,15 +234,22 @@ export function createServerApp(d: ServerDeps) {
     return c.redirect(!run || run === latestRunId(d.halDir) ? '/' : `/runs/${encodeURIComponent(run)}`, 303);
   };
   const bad = (c: Context) => c.text('bad request', 400);
-  const form = async (c: Context) => (await c.req.parseBody()) as Record<string, unknown>;
+  /** The parsed form, or null when the body is not a form we can read (a malformed multipart throws): the caller 400s. */
+  const form = async (c: Context): Promise<Record<string, unknown> | null> => {
+    try { return (await c.req.parseBody()) as Record<string, unknown>; } catch { return null; }
+  };
 
   app.post('/vote', async (c) => {
     const b = await form(c);
+    if (!b) return bad(c);
     return serial(async () => {
       const r = await loadRun(b.run);
       const ch = r && merged(r, b.pass);
       if (!r || !ch) return bad(c);
       const comment = oneLine(b.comment, 500);
+      // A repeat tap of the same Keep records nothing new: the newest vote on this pass in this run already says it.
+      const last = (await store.feedbackFor(r.runId)).votes.filter((v) => v.item === ch.pass).at(-1);
+      if (last?.vote === 'up' && (last.comment ?? '') === comment) return back(c, r.runId, 'Kept');
       await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'up', ...(comment ? { comment } : {}) });
       return back(c, r.runId, 'Kept');
     });
@@ -240,6 +257,7 @@ export function createServerApp(d: ServerDeps) {
 
   app.post('/undo', async (c) => {
     const b = await form(c);
+    if (!b) return bad(c);
     return serial(async () => {
       const r = await loadRun(b.run);
       const ch = r && merged(r, b.pass);
@@ -267,6 +285,7 @@ export function createServerApp(d: ServerDeps) {
   const callItem = (r: RunReport, item: unknown) => (typeof item === 'string' && item ? r.calls.find((t) => t.liability === item) ?? null : null);
   app.post('/approve', async (c) => {
     const b = await form(c);
+    if (!b) return bad(c);
     return serial(async () => {
       const r = await loadRun(b.run);
       const t = r && callItem(r, b.item);
@@ -277,6 +296,7 @@ export function createServerApp(d: ServerDeps) {
   });
   app.post('/decline', async (c) => {
     const b = await form(c);
+    if (!b) return bad(c);
     return serial(async () => {
       const r = await loadRun(b.run);
       const t = r && callItem(r, b.item);
@@ -290,6 +310,7 @@ export function createServerApp(d: ServerDeps) {
   const backRun = async (v: unknown) => (await loadRun(v))?.runId ?? null;
   app.post('/tell', async (c) => {
     const b = await form(c);
+    if (!b) return bad(c);
     return serial(async () => {
       const game = str(b.game);
       if (game !== '' && !d.games.includes(game)) return bad(c);
@@ -301,6 +322,7 @@ export function createServerApp(d: ServerDeps) {
   });
   app.post('/notes/clear', async (c) => {
     const b = await form(c);
+    if (!b) return bad(c);
     return serial(async () => {
       const id = str(b.id);
       if (!/^N-\d+$/.test(id) || !(await store.clearNote(id))) return bad(c);
@@ -309,8 +331,9 @@ export function createServerApp(d: ServerDeps) {
   });
 
   app.post('/run', async (c) => {
-    if (running()) return c.text('busy', 409);
-    const body = await c.req.parseBody();
+    if (running()) return back(c, null, 'Hal is busy; try again when this run finishes');
+    const body = await form(c);
+    if (!body) return bad(c);
     const game = typeof body.game === 'string' && body.game !== '' ? body.game : null;
     if (game !== null && !d.games.includes(game)) return c.text('unknown game', 400);
     const args = ['run', '--billing', 'subscription', ...(game ? ['--game', game] : []), ...(body.reportOnly ? ['--report-only'] : [])];

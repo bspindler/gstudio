@@ -344,6 +344,88 @@ describe('votes and undo', () => {
   });
 });
 
+describe('final fixes: repeat Keep and malformed bodies', () => {
+  it('final fix 4: a repeat Keep with the same comment adds nothing; a new comment adds a vote; the flash says kept each time', async () => {
+    await seed();
+    const app = mk();
+    for (let i = 0; i < 3; i++) {
+      const r = await post(app, '/vote', form({ run: RUN, pass: 'HAL-003', comment: 'nice' }));
+      expect(r.status).toBe(303);
+      expect(await follow(app, r)).toContain('Kept');
+    }
+    expect((await fb()).votes).toHaveLength(1);
+    await post(app, '/vote', form({ run: RUN, pass: 'HAL-003', comment: 'nicer' }));
+    await post(app, '/vote', form({ run: RUN, pass: 'HAL-003', comment: 'nicer' }));
+    expect((await fb()).votes.map((v) => v.comment)).toEqual(['nice', 'nicer']);
+    // a Keep with no comment after one with a comment is a different vote; then a repeat of it is skipped
+    await post(app, '/vote', form({ run: RUN, pass: 'HAL-003' }));
+    await post(app, '/vote', form({ run: RUN, pass: 'HAL-003' }));
+    expect((await fb()).votes).toHaveLength(3);
+    // after an undo's down vote, Keep is newest-not-up, so it records again
+    await writeFile(join(halDir, 'feedback.json'), JSON.stringify({ votes: [{ run: RUN, item: 'HAL-003', vote: 'down', at: 'x' }], undos: [] }));
+    await post(app, '/vote', form({ run: RUN, pass: 'HAL-003' }));
+    expect((await fb()).votes.map((v) => v.vote)).toEqual(['down', 'up']);
+  });
+  it('final fix 3: a malformed multipart or urlencoded body is 400 with no change on every POST, never a 500', async () => {
+    await seed();
+    alive = false;
+    const app = mk();
+    const before = { fb: await fb(), notes: await json('notes.json'), approvals: await json('approvals.json') };
+    const bodies: Array<[string, string]> = [
+      ['multipart/form-data; boundary=zz', '--zz\r\nContent-Disposition: form-data; name="run"\r\n\r\nx'],
+      ['multipart/form-data', 'garbage'],
+      ['multipart/form-data; boundary=zz', 'no boundary here at all'],
+    ];
+    let malformed = 0;
+    for (const path of ['/vote', '/undo', '/approve', '/decline', '/tell', '/notes/clear', '/run']) {
+      for (const [type, body] of bodies) {
+        const r = await post(app, path, body, { 'content-type': type });
+        expect(r.status, `${path} ${type}`).not.toBe(500);
+        if (r.status === 400) malformed++;
+        expect([400, 303], `${path} ${type}`).toContain(r.status);
+      }
+    }
+    expect(malformed).toBeGreaterThan(0);
+    expect(spawned).toEqual([]);
+    expect({ fb: await fb(), notes: await json('notes.json'), approvals: await json('approvals.json') }).toEqual(before);
+  });
+});
+
+describe('final fix 1: Play and refs/hal/main', () => {
+  const mkG = (git: (args: string[]) => Promise<Buffer>) => createServerApp({
+    halDir, token: TOKEN, games: ['gearhold'], now: () => new Date('2026-11-11T09:00:00Z'), isAlive: () => false,
+    devUrl: async () => 'http://10.0.0.5:5174/', git,
+  });
+  it('asks git how far HEAD is behind refs/hal/main and shows the line next to Play', async () => {
+    await seed();
+    const calls: string[][] = [];
+    const html = await (await get(mkG(async (a) => { calls.push(a); return Buffer.from('4\n'); }), '/')).text();
+    expect(calls).toEqual([['rev-list', '--count', 'HEAD..refs/hal/main']]);
+    expect(html).toContain('Play shows your checkout, which is 4 Hal commits behind. Run <code>git pull</code> on the Mac');
+  });
+  it('shows nothing when not behind, on a git failure, on junk output, or with no git', async () => {
+    await seed();
+    for (const git of [async () => Buffer.from('0\n'), async () => { throw new Error('fatal: bad revision'); }, async () => Buffer.from('lots')]) {
+      expect(await (await get(mkG(git), '/')).text()).not.toContain('Play shows your checkout');
+    }
+    expect(await (await get(mk(), '/')).text()).not.toContain('Play shows your checkout');
+  });
+  it('with the real git: N commits behind; no refs/hal/main shows nothing', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const { realGit } = await import('./server.js');
+    await seed();
+    const repo = await mkdtemp(join(tmpdir(), 'hal-srv-behind-'));
+    const g = (...a: string[]) => execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { encoding: 'utf8' }).trim();
+    g('init', '-q', '-b', 'main'); g('commit', '-q', '--allow-empty', '-m', 'one');
+    expect(await (await get(mkG(realGit(repo)), '/')).text()).not.toContain('Play shows your checkout');
+    g('checkout', '-q', '-b', 'hal'); g('commit', '-q', '--allow-empty', '-m', 'two'); g('commit', '-q', '--allow-empty', '-m', 'three');
+    g('update-ref', 'refs/hal/main', 'HEAD'); g('checkout', '-q', 'main');
+    expect(await (await get(mkG(realGit(repo)), '/')).text()).toContain('which is 2 Hal commits behind');
+    g('merge', '-q', '--ff-only', 'refs/hal/main');
+    expect(await (await get(mkG(realGit(repo)), '/')).text()).not.toContain('Play shows your checkout');
+  });
+});
+
 describe('calls and Tell Hal', () => {
   it('POST /approve with an item not in calls is 400; with the exact item adds the approval', async () => {
     await seed();
@@ -401,6 +483,7 @@ describe('GET /shot', () => {
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toBe('image/jpeg');
     expect(r.headers.get('cache-control')).toBe('private, max-age=86400');
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff'); // final fix 6
     expect(Buffer.from(await r.arrayBuffer())).toEqual(JPEG);
     expect(gitCalls).toEqual([['show', `${SHA}:${SHOT('HAL-003', 'after')}`]]);
     gitCalls = [];
@@ -467,11 +550,14 @@ describe('POST', () => {
     expect((await post(mk(), '/run', 'game=../../etc;rm')).status).toBe(400);
     expect(spawned).toEqual([]);
   });
-  it('/run while locked by a live pid returns 409; a dead lock is idle', async () => {
+  it('final fix 9: /run while locked by a live pid redirects to / with a busy flash; a dead lock is idle', async () => {
     await lock();
-    const r = await post(mk(), '/run');
-    expect(r.status).toBe(409);
-    expect(await r.text()).toBe('busy');
+    const app = mk();
+    const r = await post(app, '/run');
+    expect(r.status).toBe(303);
+    expect(r.headers.get('location')).toBe('/');
+    expect(r.headers.get('set-cookie')).toMatch(/hal_flash=[^;]+; Max-Age=60; Path=\/; HttpOnly; SameSite=Strict/);
+    expect(await follow(app, r)).toContain('Hal is busy; try again when this run finishes');
     expect(spawned).toEqual([]);
     alive = false;
     expect((await post(mk(), '/run')).status).toBe(303);
@@ -481,7 +567,8 @@ describe('POST', () => {
     const get = async () => (await mk().request(`${H}/`, { headers: { cookie: `hal_token=${TOKEN}` } })).text();
     startedAt = new Date('2026-11-11T07:59:59Z'); // the run itself
     expect(await get()).toContain('Running: scoring');
-    expect((await post(mk(), '/run')).status).toBe(409);
+    expect((await post(mk(), '/run')).status).toBe(303);
+    expect(spawned).toEqual([]);
     startedAt = new Date('2026-11-11T08:30:00Z'); // another process reusing the pid
     expect(await get()).toContain('Idle');
     expect((await post(mk(), '/run')).status).toBe(303);

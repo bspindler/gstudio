@@ -21,6 +21,8 @@ export type ReportView = {
   status: { running: boolean; phase?: string; startedAt?: string };
   spendToday: number; capUsd: number;
   playUrl: string | null;
+  /** How many commits refs/hal/main has that the checkout's HEAD lacks (Play serves the checkout); absent when unknown. */
+  behindHal?: number;
   games: string[];
   runs: Array<{ runId: string; endedAt: string }>;       // for the "Earlier reports" list, newest first
   flash?: string;                                         // one line after a POST ("Undo started", ...)
@@ -83,7 +85,7 @@ function nightLabel(r: ViewReport): string {
 
 function header(v: ReportView, merged: number, dropped: number, needYou: number): string {
   const r = v.report;
-  const h1 = merged ? "Good morning. Here's what changed." : 'Nothing changed overnight.';
+  const h1 = merged ? "Good morning. Here's what changed." : r.trigger === 'nightly' ? 'Nothing changed overnight.' : 'Nothing changed this run.';
   const spend = `${usd(r.spend.api)} API · ${usd(r.spend.subscription)} subscription${r.capReached ? ' · daily cap reached' : ''}`;
   return `<header class="hero">
 <div class="label">${esc(nightLabel(r))}</div>
@@ -103,9 +105,14 @@ ${noteHtml(v.note)}
 }
 
 function play(v: ReportView): string {
+  const n = v.behindHal;
+  // The dev server serves Brian's checkout; Hal's merges sit on refs/hal/main until he pulls.
+  const behind = typeof n === 'number' && Number.isInteger(n) && n > 0
+    ? `<p class="behind small">Play shows your checkout, which is ${n} Hal commit${n === 1 ? '' : 's'} behind. Run <code>git pull</code> on the Mac to play last night${esc("'")}s changes.</p>`
+    : '';
   return v.playUrl
-    ? `<section class="play"><a class="btn primary" href="${esc(v.playUrl)}">▶ Play</a></section>`
-    : `<section class="play"><div class="card play-off"><span class="play-icon" aria-hidden="true">▶</span><div><strong>Play</strong><br><span class="small muted">Start <code>npm run dev:lan</code> on the Mac to play here</span></div></div></section>`;
+    ? `<section class="play"><a class="btn primary" href="${esc(v.playUrl)}">▶ Play</a>${behind}</section>`
+    : `<section class="play"><div class="card play-off"><span class="play-icon" aria-hidden="true">▶</span><div><strong>Play</strong><br><span class="small muted">Start <code>npm run dev:lan</code> on the Mac to play here</span></div></div>${behind}</section>`;
 }
 
 function standings(v: ReportView): string {
@@ -177,6 +184,9 @@ function changes(v: ReportView, cards: CandidateResult[]): string {
   return `<section><h2>Changes</h2>${cards.map((c) => changeCard(v, c)).join('\n')}</section>`;
 }
 
+/** Brian tapped "Leave it" on this call in this run: the newest vote on the item is down. */
+const isDeclined = (v: ReportView, item: string) => v.feedback.votes.filter((x) => x.item === item).at(-1)?.vote === 'down';
+
 function calls(v: ReportView): string {
   const r = v.report;
   if (!r.calls.length) return '';
@@ -184,7 +194,7 @@ function calls(v: ReportView): string {
   const cards = r.calls.map((t: Ticket) => {
     const item = t.liability ?? '';
     const isApproved = approved.has(normItem(item));
-    const declined = v.feedback.votes.filter((x) => x.item === item).at(-1)?.vote === 'down';
+    const declined = isDeclined(v, item);
     const forms = `<div class="grid2">
 <form method="post" action="/approve">${hidden('run', r.runId)}${hidden('item', item)}<button type="submit" class="primary">Approve</button></form>
 <form method="post" action="/decline">${hidden('run', r.runId)}${hidden('item', item)}<button type="submit">Leave it</button></form>
@@ -311,6 +321,7 @@ const REPORT_CSS = `
 .hero .tally{margin:0 0 2px;font-weight:600}
 .play{margin-top:16px}
 .play .btn{min-height:52px;padding:14px;font-size:18px;border-radius:12px;letter-spacing:.01em}
+.behind{margin:8px 2px 0;color:var(--muted)}
 .play-off{display:flex;align-items:center;gap:12px}
 .play-icon{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent-soft);color:var(--accent)}
 .note p,.note li{font-size:16px}
@@ -378,7 +389,7 @@ export function renderReport(v: ReportView): string {
   const fixed = merged.filter((c) => c.ticket.kind === 'fix');
   const gone = r.changes.filter((c) => c.verdict !== 'merged');
   const approved = new Set(v.approvals.map(normItem));
-  const needYou = r.calls.filter((t) => !approved.has(normItem(t.liability ?? ''))).length;
+  const needYou = r.calls.filter((t) => !approved.has(normItem(t.liability ?? '')) && !isDeclined(v, t.liability ?? '')).length;
   const plan = r.planned ?? [];
   return `${pageHead(`Hal · ${r.night}`, REPORT_CSS)}<body><main class="page">
 ${v.flash ? `<p class="flash" role="status">${esc(clip(v.flash, 300))}</p>` : ''}
