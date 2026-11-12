@@ -11,3 +11,16 @@ Its identity is a gentle, cozy tide-pool puzzler with hand-authored level person
 Changes:
 - HAL-007 tuning(tidepool-pals): Add moves to the Tidepool Pals levels that wall players: **merged** (0.4.2)
 - HAL-008 tuning(tidepool-pals): Retune goal counts on the off-band Tidepool Pals levels: **merged** (0.4.2)
+
+## Run run-2026-11-12T14-07-27-199Z
+
+**Identity:** gentle reef restoration, forgiving puzzles.
+
+Level 21 lost two litter pieces, with the same moves and goals. Its win rate rose from 40% to 50%, which clears the 20→21 wall. Fitness went from 83.9 to 85.1. This follows your upvote on board-level easing rather than stacking more moves.
+
+Level 24 is still a wall. Easing it enough would make level 25 the wall instead, so it needs a two-level reshape rather than a single tweak.
+
+**Next:** treat 24 and 25 together.
+
+Changes:
+- HAL-014 tuning(tidepool-pals): Ease the Tidepool Pals levels that still wall players beyond levels 11–28: **merged** (0.4.2)

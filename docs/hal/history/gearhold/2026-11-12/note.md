@@ -13,3 +13,22 @@ Changes:
 - HAL-003 fix(gearhold): Start each Gearhold level facing down the open hall, not into a corner: **merged** (0.2.2)
 - HAL-004 polish(gearhold): Add an inert ?hal-only overhead camera that frames the whole level: **discarded** (implementer output does not match the contract)
 - HAL-006 tuning(gearhold): Thin the enemy count on the Gearhold level the play-bot can't clear: **merged** (0.2.2)
+
+## Run run-2026-11-12T14-07-27-199Z
+
+**Identity:** clockwork citadel with methodical repair-unit combat. Dials, kilns and caretaker machines gone rogue.
+
+Nothing merged tonight:
+- The **overhead camera** was stopped by the hal-hook tripwire. It needs your OK, see the note.
+- **Bellows Gallery**, with its rhythmic kiln vents, was built and stayed in band. It's blocked only by the protected scorer test pinned to 3 levels. It fits the citadel well and is ready once you allow the scorer to follow the real level count.
+- **Both tuning tickets** targeted the wrong levels. The real problems are The Orrery being too easy (0.94) and Terrace of Dials being too fast (15.4 s).
+
+gearhold-play stays at 83.0.
+
+**Next:** put a crawler guarding the exit pocket on The Orrery, and lengthen the route on Terrace of Dials.
+
+Changes:
+- HAL-010 feature(gearhold): Add an inert ?hal-only overhead camera that frames the whole level: **discarded** (tripwire hal-hook: games/gearhold/index.html: added statement touches the hal hook, counters or HAL flag: let halOverhead = HAL && new URLSearchParams(location.search).has('overhead'); tripwire hal-hook: games/gearhold/index.html: added statement touches the hal hook, counters or HAL flag: if (HAL) )
+- HAL-011 feature(gearhold): Add a new Gearhold level built around one new clockwork hazard: **discarded** (0.3.0) (implementer blocked: Any new Gearhold level makes the play scorer's limit message read 'at most 4', but the protected test packages/core/test/hal-scorers.test.ts:47 expects 'at most 3', and the scorer default (levels: 3, pinned at line 43) would never play the new level. Hal's scorer and its test mu)
+- HAL-012 tuning(gearhold): Retune the Gearhold level the play-bot still can't win: **discarded** (implementer blocked: The ticket blames Kiln Heart, but the out-of-band level is The Orrery, which is too easy (0.94). No measured layout change brought it to 0.9 or below within the 12-score limit (best was 0.92). Suggested follow-up: start from the corner-key layout and try a crawler guarding the e)
+- HAL-013 tuning(gearhold): Shorten the slowest Gearhold level's route to the exit arch: **discarded** (implementer blocked: The ticket's premise is wrong: the level outside the pace band is the fastest one (Terrace of Dials, 15.4s, below the 30s minimum), not the slowest. Shortening The Orrery cannot raise pace; it needs a new ticket to lengthen Terrace of Dials.)

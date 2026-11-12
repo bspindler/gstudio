@@ -10,3 +10,14 @@ Its identity is a neon synthwave runner with code-drawn art, a WebAudio synth an
 
 Changes:
 - HAL-005 feature(hyperline): Add a new Hyperline sector built around one new obstacle interaction: **discarded** (0.4.0) (hyperline: no real gain: 0.00 < 0.5)
+
+## Run run-2026-11-12T14-07-27-199Z
+
+**Identity:** neon synthwave, a one-tap jump rhythm, no extra controls.
+
+Tonight added **SLOT GATES**, gates with a gap you thread mid-jump on the way up or down. HYPERCORE now comes after it. The new sector uses the same single tap with a new decision about timing, so it adds depth without drift. All measures stay at 100, earlier sectors are unchanged, and the new sector has a 0.29 death rate.
+
+**Next:** more in-band sectors in the same spirit. Each should add one new interaction, never a new control.
+
+Changes:
+- HAL-009 feature(hyperline): Add a SLOT GATES sector built around one new obstacle interaction: **merged** (0.4.0)
