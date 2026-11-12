@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkTripwires } from '@studio/core/hal';
 import {
   blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
-  pushHalMain, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, vitestCounts, type GitRunner,
+  linkNodeModules, pushHalMain, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
 } from './git.js';
 
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -383,6 +383,59 @@ describe('Hal worktrees (temp git repo)', () => {
       await removeWorktree(r, 'HAL-5');
       expect(readFileSync(join(r, 'node_modules/vitest/package.json'), 'utf8')).toContain('vitest');
       expect(realpathSync(join(r, 'node_modules/@studio/core'))).toBe(join(r, 'packages/core'));
+    });
+  });
+
+  describe('node_modules of a worktree', () => {
+    it('verifyNodeModules accepts exactly what linkNodeModules makes, and rejects swapped, extra or replaced entries', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      put(r, 'node_modules/vitest/vitest.mjs', 'real\n');
+      put(r, 'node_modules/.bin/vitest', '#!/bin/sh\n');
+      mkdirSync(join(r, 'node_modules/@studio'), { recursive: true });
+      symlinkSync('../../packages/core', join(r, 'node_modules/@studio/core'));
+      const wt = await newCandidateWorktree(r, 'HAL-40');
+      const nm = join(wt.dir, 'node_modules');
+      await expect(verifyNodeModules(wt.dir, r)).resolves.toBeUndefined();
+      const tamper: Array<[string, () => void]> = [
+        ['stub .bin', () => { unlinkSync(join(nm, '.bin')); put(nm, '.bin/vitest', '#!/bin/sh\nexit 0\n'); }],
+        ['relinked package', () => { unlinkSync(join(nm, 'vitest')); symlinkSync('/tmp', join(nm, 'vitest')); }],
+        ['extra entry', () => { put(nm, 'evil/index.js', 'x\n'); }],
+        ['@studio pointed back at the checkout', () => { unlinkSync(join(nm, '@studio/core')); symlinkSync(join(r, 'packages/core'), join(nm, '@studio/core')); }],
+        ['node_modules itself a symlink', () => { rmSync(nm, { recursive: true }); symlinkSync(join(r, 'node_modules'), nm); }],
+      ];
+      for (const [name, f] of tamper) {
+        f();
+        await expect(verifyNodeModules(wt.dir, r), name).rejects.toThrow(/node_modules/);
+        await linkNodeModules(wt.dir, r);
+        await expect(verifyNodeModules(wt.dir, r), `${name} relinked`).resolves.toBeUndefined();
+      }
+      expect(readFileSync(join(r, 'node_modules/vitest/vitest.mjs'), 'utf8')).toBe('real\n'); // the real ones untouched
+      await removeWorktree(r, 'HAL-40');
+    });
+  });
+
+  describe('vitestCounts', () => {
+    it('exports the base (safe git archive) under tmpRoot with its own node_modules, and cleans up', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      mkdirSync(join(r, 'node_modules/@studio'), { recursive: true });
+      symlinkSync('../../packages/core', join(r, 'node_modules/@studio/core'));
+      const wt = await newCandidateWorktree(r, 'HAL-41');
+      const root = join(r, '.data/hal/tmp/HAL-41');
+      const dirs: string[] = [];
+      const list = async (dir: string) => {
+        dirs.push(dir);
+        if (dir !== wt.dir) expect(realpathSync(join(dir, 'node_modules/@studio/core'))).toBe(join(dir, 'packages/core'));
+        return `[{"file":"${realpathSync(dir)}/a.test.ts"}]`;
+      };
+      put(r, '.git/hooks/post-checkout', `#!/bin/sh\ntouch ${join(r, 'hook-ran')}\n`);
+      chmodSync(join(r, '.git/hooks/post-checkout'), 0o755);
+      expect(await vitestCounts(wt.dir, wt.base, list, { tmpRoot: root, repo: r })).toEqual({ before: 1, after: 1, beforeByFile: { 'a.test.ts': 1 }, afterByFile: { 'a.test.ts': 1 } });
+      expect(dirs[0]!.startsWith(join(root, 'hal-base-'))).toBe(true);
+      expect(existsSync(dirs[0]!)).toBe(false);
+      expect(existsSync(join(r, 'hook-ran'))).toBe(false);
+      await removeWorktree(r, 'HAL-41');
     });
   });
 

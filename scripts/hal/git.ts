@@ -125,14 +125,25 @@ export async function vitestCount(dir: string, list: ListTests = npxVitestList):
   return { total: parsed.length, byFile };
 }
 
-/** Default test counter: the candidate worktree as it is, and the base exported with `git archive` into a temp dir that borrows the worktree's node_modules. */
-export async function vitestCounts(worktree: string, base: string, list: ListTests = npxVitestList): Promise<TestCounts> {
-  const tmp = await mkdtemp(join(tmpdir(), 'hal-base-'));
+export type CountOptions = {
+  /** Where the base export goes (default os.tmpdir()); runCandidate passes a dir the checks cannot write. */
+  tmpRoot?: string;
+  /** Repo whose node_modules the base export links (workspace packages pointing into the export). Default: borrow the worktree's. */
+  repo?: string;
+};
+
+/**
+ * Default test counter: the candidate worktree as it is, and the base exported with `git archive` (SAFE_GIT, scrubbed
+ * env) into a temp dir with node_modules.
+ */
+export async function vitestCounts(worktree: string, base: string, list: ListTests = npxVitestList, o: CountOptions = {}): Promise<TestCounts> {
+  const tmp = await (async () => { const r = o.tmpRoot ?? tmpdir(); await mkdir(r, { recursive: true }); return mkdtemp(join(r, 'hal-base-')); })();
   try {
     // No shell pipe: a failing `git archive` throws instead of leaving an empty tree to count as zero tests.
-    const tar = execFileSync('git', ['archive', '--format=tar', base], { cwd: worktree, maxBuffer: 1024 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
+    const tar = await safeBytes(['archive', '--format=tar', base], worktree);
     execFileSync('tar', ['-x', '-C', tmp], { input: tar, stdio: ['pipe', 'pipe', 'pipe'] });
-    await symlink(join(worktree, 'node_modules'), join(tmp, 'node_modules'), 'dir');
+    if (o.repo) await linkNodeModules(tmp, o.repo);
+    else await symlink(join(worktree, 'node_modules'), join(tmp, 'node_modules'), 'dir');
     const before = await vitestCount(tmp, list);
     const after = await vitestCount(worktree, list);
     return { before: before.total, after: after.total, beforeByFile: before.byFile, afterByFile: after.byFile };
@@ -297,28 +308,63 @@ const realOr = async (p: string) => { try { return await realpath(p); } catch { 
  * (`@studio/*`, linked by npm to ../../packages/...) point into the worktree, so its tests and scorers load the worktree's
  * code, not the checkout's. node_modules is gitignored, so this never shows in a diff. No-op without <repo>/node_modules.
  */
-export async function linkNodeModules(dir: string, repo: string): Promise<void> {
-  const src = join(resolve(repo), 'node_modules');
-  let names: string[];
-  try { names = await readdir(src); } catch { return; }
+export async function linkNodeModules(dir: string, repo: string): Promise<Map<string, string>> {
+  const links = await expectedNodeModules(dir, repo);
   const dst = join(dir, 'node_modules');
   await rm(dst, { recursive: true, force: true }); // unlinks symlinks, never follows them
-  await mkdir(dst, { recursive: true });
+  if (links.size === 0) return links;
+  await mkdir(join(dst, '@studio'), { recursive: true });
+  for (const [rel, target] of links) await symlink(target, join(dst, rel), rel.startsWith('@studio/') ? 'dir' : undefined);
+  return links;
+}
+
+/** What linkNodeModules makes: entry (relative to node_modules) -> symlink target. Read from <repo>/node_modules. */
+async function expectedNodeModules(dir: string, repo: string): Promise<Map<string, string>> {
+  const src = join(resolve(repo), 'node_modules');
+  const links = new Map<string, string>();
+  let names: string[];
+  try { names = await readdir(src); } catch { return links; }
   for (const name of names) {
     if (name.startsWith('.') && name !== '.bin') continue; // caches (.vite, .package-lock.json) stay per tree
     if (name === '@studio') {
-      await mkdir(join(dst, name));
       for (const pkg of await readdir(join(src, name))) {
         const link = join(src, name, pkg);
         const st = await lstat(link);
         const target = st.isSymbolicLink() ? resolve(dirname(link), await readlink(link)) : link;
         const rel = relative(resolve(repo), target);
         const inRepo = rel !== '' && !rel.startsWith('..') && !rel.startsWith(sep) && !rel.startsWith('node_modules');
-        await symlink(inRepo ? join(dir, rel) : target, join(dst, name, pkg), 'dir');
+        links.set(`${name}/${pkg}`, inRepo ? join(dir, rel) : target);
       }
       continue;
     }
-    await symlink(join(src, name), join(dst, name));
+    links.set(name, join(src, name));
+  }
+  return links;
+}
+
+/**
+ * Throws unless <dir>/node_modules is exactly what linkNodeModules makes: a real directory (and @studio/ in it) holding
+ * only symlinks, each to its expected target. Run after relinking, before every isolated check.
+ */
+export async function verifyNodeModules(dir: string, repo: string): Promise<void> {
+  const want = await expectedNodeModules(dir, repo);
+  const dst = join(dir, 'node_modules');
+  if (want.size === 0) { if (await ok(lstat(dst))) throw new Error('node_modules: present but nothing to link'); return; }
+  const top = await lstat(dst);
+  if (!top.isDirectory() || top.isSymbolicLink()) throw new Error('node_modules: not a real directory');
+  const seen = new Set<string>();
+  for (const name of await readdir(dst)) {
+    if (name === '@studio') {
+      const st = await lstat(join(dst, name));
+      if (!st.isDirectory() || st.isSymbolicLink()) throw new Error('node_modules/@studio: not a real directory');
+      for (const pkg of await readdir(join(dst, name))) seen.add(`${name}/${pkg}`);
+    } else seen.add(name);
+  }
+  for (const rel of seen) if (!want.has(rel)) throw new Error(`node_modules: unexpected entry ${rel}`);
+  for (const [rel, target] of want) {
+    const p = join(dst, rel);
+    const st = await lstat(p).catch(() => null);
+    if (!st?.isSymbolicLink() || (await readlink(p)) !== target) throw new Error(`node_modules: ${rel} is not a link to ${target}`);
   }
 }
 
@@ -487,7 +533,9 @@ export async function revertPass(repo: string, passId: string, deps: GitDeps = {
 // the candidate is hashed from the bytes on disk into a private index with `hash-object --no-filters`, and the tripwires,
 // the release edits and the commit all work on that tree object.
 
-export type TreeDeps = { git?: GitRunner };
+/** `tmpRoot`: where Hal's private index files go (default os.tmpdir()); runCandidate uses a dir the checks cannot write. */
+export type TreeDeps = { git?: GitRunner; tmpRoot?: string };
+const privateTmp = async (root: string | undefined, prefix: string) => { const r = root ?? tmpdir(); await mkdir(r, { recursive: true }); return mkdtemp(join(r, prefix)); };
 type TreeEntry = { mode: string; sha: string };
 
 /** `ls-tree -r` of a tree-ish as path -> {mode, sha}. */
@@ -540,8 +588,8 @@ async function hashPaths(git: GitRunner, dir: string, paths: string[]): Promise<
 }
 
 /** Writes `entries` into a fresh private index (optionally starting from `fromTree`) and returns the tree. */
-async function writeTree(git: GitRunner, dir: string, entries: Map<string, TreeEntry>, fromTree?: string): Promise<string> {
-  const tmp = await mkdtemp(join(tmpdir(), 'hal-index-'));
+async function writeTree(git: GitRunner, dir: string, entries: Map<string, TreeEntry>, fromTree: string | undefined, tmpRoot: string | undefined): Promise<string> {
+  const tmp = await privateTmp(tmpRoot, 'hal-index-');
   const env = { GIT_INDEX_FILE: join(tmp, 'index') };
   try {
     if (fromTree) await git(['read-tree', fromTree], dir, { env });
@@ -563,7 +611,7 @@ export async function snapshotTree(dir: string, base: string, deps: TreeDeps & {
   const git = safeGit(deps.git ?? runGit);
   if (deps.prune && !resolve(dir).includes(`${sep}.data${sep}hal${sep}wt${sep}`)) throw new Error(`snapshotTree: refusing to prune outside a Hal worktree: ${dir}`);
   const tracked = await lsTree(git, base, dir);
-  const tmp = await mkdtemp(join(tmpdir(), 'hal-index-'));
+  const tmp = await privateTmp(deps.tmpRoot, 'hal-index-');
   let others: Set<string>;
   try {
     const env = { GIT_INDEX_FILE: join(tmp, 'index') };
@@ -575,19 +623,24 @@ export async function snapshotTree(dir: string, base: string, deps: TreeDeps & {
     if (tracked.has(p) || others.has(p)) keep.push(p);
     else if (deps.prune) await rm(join(dir, p), { force: true });
   }
-  return writeTree(git, dir, await hashPaths(git, dir, keep));
+  return writeTree(git, dir, await hashPaths(git, dir, keep), undefined, deps.tmpRoot);
 }
 
 /** `tree` with `paths` re-hashed from disk (no filters). Hal's own edits (release files, history images) go in this way. */
 export async function extendTree(dir: string, tree: string, paths: string[], deps: TreeDeps = {}): Promise<string> {
   const git = safeGit(deps.git ?? runGit);
-  return writeTree(git, dir, await hashPaths(git, dir, paths), tree);
+  return writeTree(git, dir, await hashPaths(git, dir, paths), tree, deps.tmpRoot);
 }
 
 /** Paths that differ between two tree-ish objects (no rename detection), sorted. */
 export async function changedPaths(dir: string, a: string, b: string, deps: TreeDeps = {}): Promise<string[]> {
   const git = safeGit(deps.git ?? runGit);
   return (await git(['diff-tree', '-r', '-z', '--name-only', '--no-renames', a, b], dir)).split('\0').filter(Boolean).sort();
+}
+
+/** A blob's bytes at `treeish:path`, from the object store (SAFE_GIT, scrubbed env). */
+export async function blobBytes(dir: string, treeish: string, path: string): Promise<Buffer> {
+  return safeBytes(['cat-file', 'blob', `${treeish}:${path}`], dir);
 }
 
 /** A blob's text at `treeish:path`, from the object store. */

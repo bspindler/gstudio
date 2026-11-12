@@ -20,7 +20,7 @@ describe('sandboxEnv / sandboxProfile', () => {
     expect(base.ANTHROPIC_API_KEY).toBe(KEY); // never mutated
   });
   it('denies network except loopback, writes except the given paths and /dev, and reads of the denied files; quotes paths', () => {
-    const p = sandboxProfile({ writable: ['/w/a "b"'], denyRead: ['/r/.hal.env'] });
+    const p = sandboxProfile({ writable: ['/w/a "b"'], denyRead: ['/r/.hal.env'], denyWrite: ['/w/a "b"/node_modules'] });
     expect(p).toContain('(allow default)');
     expect(p).toContain('(deny network-outbound)');
     expect(p).toContain('(allow network-outbound (remote ip "localhost:*"))');
@@ -28,13 +28,15 @@ describe('sandboxEnv / sandboxProfile', () => {
     expect(p).toContain('(subpath "/w/a \\"b\\"")');
     expect(p).toContain('(deny file-read* (literal "/r/.hal.env"))');
     expect(p.indexOf('(deny file-write*)')).toBeLessThan(p.indexOf('(allow file-write*')); // later rules win
+    expect(p.indexOf('(allow file-write*')).toBeLessThan(p.indexOf('(deny file-write* (subpath "/w/a \\"b\\"/node_modules")'));
   });
   it('requires a policy unless explicitly unsandboxed', () => {
     expect(() => runIsolated(['true'], { cwd: tmpdir(), env: {}, timeoutMs: 1000 })).toThrow(/policy is required/);
   });
 });
 
-describe.runIf(process.platform === 'darwin')('runIsolated under sandbox-exec (darwin)', () => {
+// Real sandbox-exec: macOS only, and not when this suite itself runs inside a Hal sandbox (a candidate's npm test).
+describe.runIf(sandboxAvailable())('runIsolated under sandbox-exec (darwin)', () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'hal-sbx-')));
   const repo = join(root, 'repo');
   const wt = join(repo, '.data/hal/wt/HAL-1');
@@ -76,6 +78,14 @@ describe.runIf(process.platform === 'darwin')('runIsolated under sandbox-exec (d
     expect(r.stdout.trim()).toBe('EPERM');
     expect(existsSync(join(wt, 'inside.txt'))).toBe(true);
     expect(existsSync(outside)).toBe(false);
+  });
+
+  it('cannot write the worktree\'s node_modules (denyWrite) though the worktree is writable', async () => {
+    mkdirSync(join(wt, 'node_modules/.bin'), { recursive: true });
+    const r = await runIsolated(node(`const fs = require('fs'); fs.writeFileSync('ok.txt', '1'); try { fs.writeFileSync('node_modules/.bin/vitest', 'stub'); console.log('WROTE'); } catch (e) { console.log(e.code); }`),
+      { cwd: wt, env, timeoutMs: 20_000, policy: { ...policy, denyWrite: [join(wt, 'node_modules')] } });
+    expect(r.stdout.trim()).toBe('EPERM');
+    expect(existsSync(join(wt, 'node_modules/.bin/vitest'))).toBe(false);
   });
 
   it('kills the whole process group when the check ends, and on timeout', async () => {

@@ -4,16 +4,19 @@
 //
 //   1. budget slice (0 -> skipped: budget)        5. npm test, npm run typecheck              } sandboxed child
 //   2. implementer claude -p (fail/timeout/       6. scores + gate, screens, controls         } processes (R13)
-//      blocked/unparsable/no edits -> discard)    7. before/after history shots (JPEG, checked)
+//      blocked/unparsable/no edits -> discard)    7. before/after history shots (JPEG, checked as committed)
 //   3. tree from disk (private index, no          8. commit-tree of the verified tree, squashMerge onto refs/hal/main
 //      filters) + checkTripwires on it            9. remove the worktree and branch (finally)
 //   4. applyRelease (Hal's version + changelog), added to that tree and verified as the only extra paths
 //
 // What gets committed is a tree object built by Hal, never the worktree's index: T1 (Claude's edits, as hashed from
-// disk) is what the tripwires judge, T2 = T1 + the three release files, T3 = T2 + the two history images. The disk is
-// pruned to exactly T1 before any check runs, and must still hash to T2 after the checks.
+// disk) is what the tripwires judge, T2 = T1 + the three release files, T3 = T2 + the two history images. Before EVERY
+// isolated check the disk is pruned and must hash to the expected tree (T1, then T2), and <wt>/node_modules is rebuilt
+// and verified ("tampered between checks" otherwise); the checks cannot write node_modules, and the tools that run them
+// (vitest, tsc, tsx) are resolved by Hal under <repo>/node_modules, never from the worktree.
+import { randomBytes } from 'node:crypto';
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -23,8 +26,8 @@ import {
 import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
-  blobText, changedPaths, collectTreeDiff, commitTree, extendTree, newCandidateWorktree, removeWorktree, runGit, snapshotTree, squashMerge, vitestCounts,
-  type CollectDeps, type GitRunner,
+  blobBytes, blobText, changedPaths, collectTreeDiff, commitTree, extendTree, linkNodeModules, newCandidateWorktree, removeWorktree, runGit, snapshotTree,
+  squashMerge, verifyNodeModules, vitestCounts, type CollectDeps, type GitRunner,
 } from './git.js';
 import { loadPrompt, parseImplementerOutput, renderPrompt } from './prompts.js';
 import { runIsolated, sandboxAvailable, sandboxEnv, type IsolatedResult, type SandboxPolicy } from './sandbox.js';
@@ -33,6 +36,7 @@ import type { ScreensResult } from './screens.js';
 export const IMPLEMENTER_TIMEOUT_MS = 20 * 60_000;
 export const CHECK_TIMEOUT_MS = 20 * 60_000;
 export const RESULT_PREFIX = 'HAL-RESULT ';
+export const NONCE_ENV = 'HAL_CHECK_NONCE';
 const TAIL_CHARS = 1500;
 
 /** The run's budget, owned by Task 7 under the run lock. `slice` is dollars this role may spend now (0 = stop). */
@@ -44,29 +48,62 @@ export type CandidateBudget = {
 
 /**
  * The argv of each check, run with cwd = the tree being checked (a candidate worktree, or Hal's main worktree for the
- * before shot), always as an isolated child (sandboxed unless `unsandboxedForTests`). score/screens/controls/shoot print
- * `HAL-RESULT <json>` as their last line (scripts/hal/check-entry.ts); test/typecheck pass on exit 0.
+ * before shot), always as an isolated child (sandboxed unless `unsandboxedForTests`). test/typecheck are a sequence of
+ * argv that must all exit 0. score/screens/controls/shoot print exactly one `HAL-RESULT <nonce> <json>` line, with the
+ * nonce from $HAL_CHECK_NONCE (scripts/hal/check-entry.ts).
  */
 export type CheckCommands = {
-  test: (dir: string) => string[];
-  typecheck: (dir: string) => string[];
+  test: (dir: string) => string[][];
+  typecheck: (dir: string) => string[][];
   score: (dir: string, scorer: string) => string[];
   screens: (dir: string, game: string) => string[];
   controls: (dir: string, game: string) => string[];
   shoot: (dir: string, game: string, outPath: string) => string[];
 };
-const entry = (dir: string) => [process.execPath, join(dir, 'node_modules', 'tsx', 'dist', 'cli.mjs'), join(dir, 'scripts', 'hal', 'check-entry.ts')];
-export const DEFAULT_COMMANDS: CheckCommands = {
-  test: () => ['npm', 'test'],
-  typecheck: () => ['npm', 'run', 'typecheck'],
-  score: (dir, scorer) => [...entry(dir), 'score', scorer],
-  screens: (dir, game) => [...entry(dir), 'screens', game],
-  controls: (dir, game) => [...entry(dir), 'controls', game],
-  shoot: (dir, game, out) => [...entry(dir), 'shoot', game, out],
-};
+
+/** The node scripts Hal runs checks with, resolved (real paths) under <repo>/node_modules: never the worktree's. */
+export type HalTools = { node: string; vitest: string; tsc: string; tsx: string };
+export function resolveTools(repo: string): HalTools {
+  const nm = join(repo, 'node_modules');
+  return {
+    node: process.execPath,
+    vitest: realpathSync(join(nm, 'vitest', 'vitest.mjs')),
+    tsc: realpathSync(join(nm, 'typescript', 'bin', 'tsc')),
+    tsx: realpathSync(join(nm, 'tsx', 'dist', 'cli.mjs')),
+  };
+}
+
+/**
+ * An npm script (`a && b`, each `<bin> args...`, bin one of vitest/tsc/tsx) as argv run with Hal's tools. Anything
+ * shell-like (quotes, pipes, $, ;, redirects, a lone &) throws. `vitest run` gets --no-cache (its cache would live in
+ * the read-only node_modules).
+ */
+export function scriptArgv(script: string, tools: HalTools): string[][] {
+  if (/["'`|;$<>(){}\\]/.test(script) || script.replace(/&&/g, '').includes('&')) throw new Error(`npm script is not a plain command list: ${script}`);
+  return script.split('&&').map((part) => {
+    const [bin, ...args] = part.trim().split(/\s+/);
+    const path = bin === 'vitest' ? tools.vitest : bin === 'tsc' ? tools.tsc : bin === 'tsx' ? tools.tsx : undefined;
+    if (!path) throw new Error(`npm script uses ${bin}; Hal only runs vitest, tsc and tsx`);
+    return [tools.node, path, ...args, ...(bin === 'vitest' && args[0] === 'run' ? ['--no-cache'] : [])];
+  });
+}
+
+/** The real checks: package.json's test and typecheck scripts, and check-entry.ts in the tree, all with Hal's tools. */
+export function defaultCommands(tools: HalTools, scripts: Record<string, string>): CheckCommands {
+  const script = (name: string) => { const v = scripts[name]; if (typeof v !== 'string') throw new Error(`package.json has no ${name} script`); return scriptArgv(v, tools); };
+  const entry = (dir: string) => [tools.node, tools.tsx, join(dir, 'scripts', 'hal', 'check-entry.ts')];
+  return {
+    test: () => script('test'),
+    typecheck: () => script('typecheck'),
+    score: (dir, scorer) => [...entry(dir), 'score', scorer],
+    screens: (dir, game) => [...entry(dir), 'screens', game],
+    controls: (dir, game) => [...entry(dir), 'controls', game],
+    shoot: (dir, game, out) => [...entry(dir), 'shoot', game, out],
+  };
+}
 
 export type CandidateCtx = {
-  /** The repo root holding .data/hal (Brian's checkout; never written to). */
+  /** The repo root holding .data/hal and node_modules (Brian's checkout; never written to). */
   repo: string;
   /** Pass id, e.g. 'HAL-012': names the branch hal/<pass>, the worktree and the history images. */
   pass: string;
@@ -147,6 +184,19 @@ export function jpegSize(buf: Buffer): { width: number; height: number } | null 
 }
 export const HISTORY_SIZE = { width: 390, height: 844 } as const;
 
+/**
+ * The JSON of the one `HAL-RESULT <nonce> ` line, or throws: none, more than one, or a wrong nonce. Defence in depth
+ * against game code forging a result (the host-api tripwire, R15, is the primary guard).
+ */
+export function parseResult<T>(stdout: string, nonce: string): T {
+  const lines = stdout.split('\n').filter((l) => l.startsWith(RESULT_PREFIX));
+  if (lines.length === 0) throw new Error('no result printed');
+  if (lines.length > 1) throw new Error(`${lines.length} result lines (forged output?)`);
+  const want = `${RESULT_PREFIX}${nonce} `;
+  if (!nonce || !lines[0]!.startsWith(want)) throw new Error('result line has the wrong nonce (forged output?)');
+  return JSON.parse(lines[0]!.slice(want.length)) as T;
+}
+
 class Discard extends Error {
   constructor(readonly reasons: string[]) { super(reasons.join('; ')); }
 }
@@ -154,12 +204,9 @@ const discard = (...reasons: string[]): never => { throw new Discard(reasons); }
 const msg = (e: unknown) => String((e as Error)?.message ?? e).trim();
 const oneLine = (s: string) => s.replace(/\s*[\r\n]+\s*/g, ' ').trim();
 const GAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
-/** The JSON after the last `HAL-RESULT ` line, or throws. */
-function parseResult<T>(r: IsolatedResult): T {
-  const line = r.stdout.split('\n').reverse().find((l) => l.startsWith(RESULT_PREFIX));
-  if (!line) throw new Error('no result printed');
-  return JSON.parse(line.slice(RESULT_PREFIX.length)) as T;
+const newNonce = () => randomBytes(16).toString('hex');
+function scriptsOf(packageJson: string): Record<string, string> {
+  try { return (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts ?? {}; } catch { return {}; }
 }
 
 /** Runs one ticket through the whole pipeline. Never throws: every failure is a `discarded` result. */
@@ -185,42 +232,73 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
   const unsandboxed = ctx.unsandboxedForTests === true;
   if (!unsandboxed && !sandboxAvailable()) return finish('discarded', ['no sandbox']);
 
+  // Hal's private files (index files, the base export for test counting, the before shot): the checks cannot write here.
+  const privDir = join(ctx.repo, '.data', 'hal', 'tmp', ctx.pass);
+  const shotDir = join(privDir, 'shots');
   // Every piece of candidate code runs through here: isolated child, scrubbed env, sandboxed, group killed afterwards.
-  const commands: CheckCommands = { ...DEFAULT_COMMANDS, ...(ctx.commands ?? {}) };
   const env = sandboxEnv(process.env, secrets);
   const denyRead = [join(ctx.repo, '.hal.env')];
-  const isolated = (argv: string[], cwd: string, writable: string[]) => {
-    const policy: SandboxPolicy = { writable: [...writable, tmpdir()], denyRead };
-    return runIsolated(argv, { cwd, env, timeoutMs: ctx.checkTimeoutMs ?? CHECK_TIMEOUT_MS, ...(unsandboxed ? { unsandboxed: true } : { policy }) });
+  const isolated = (argv: string[], cwd: string, writable: string[], o: { nonce?: string; denyWrite?: string[] } = {}) => {
+    const policy: SandboxPolicy = { writable: [...writable, tmpdir()], denyRead, denyWrite: o.denyWrite ?? [] };
+    const e = o.nonce ? { ...env, [NONCE_ENV]: o.nonce } : env;
+    return runIsolated(argv, { cwd, env: e, timeoutMs: ctx.checkTimeoutMs ?? CHECK_TIMEOUT_MS, ...(unsandboxed ? { unsandboxed: true } : { policy }) });
   };
-  const countTests: NonNullable<CollectDeps['countTests']> = unsandboxed && ctx.countTests ? ctx.countTests : (wtDir, base) => vitestCounts(wtDir, base, async (dir) => {
-    const r = await isolated(['npx', 'vitest', 'list', '--json'], dir, [dir]);
-    if (r.code !== 0) throw new Error(`vitest list failed (${r.timedOut ? 'timed out' : `exit ${r.code}`}): ${tail(r.stderr || r.stdout)}`);
-    return r.stdout;
-  });
+  /** A check in a tree: the tree writable (unless read-only), its node_modules never. */
+  const inTree = (dir: string, argv: string[], writable: string[], nonce?: string) =>
+    isolated(argv, dir, writable, { denyWrite: [join(dir, 'node_modules')], ...(nonce ? { nonce } : {}) });
 
-  const shotDir = join(ctx.repo, '.data', 'hal', 'tmp', ctx.pass); // not writable by the checks
   try {
     const wt = await newCandidateWorktree(ctx.repo, ctx.pass, { git });
     if (ctx.baseline.sha !== wt.base) discard(`stale baseline: scores are for ${ctx.baseline.sha.slice(0, 12)}, the candidate starts at ${wt.base.slice(0, 12)}`);
     const night = nightOf(ctx.now(), ctx.tzOffsetMinutes ?? -ctx.now().getTimezoneOffset());
     const baseTree = (await git(['rev-parse', `${wt.base}^{tree}`], ctx.repo)).trim();
+    const tree = { git, tmpRoot: privDir };
 
-    /** Runs a shot command and checks the file is a 390x844 JPEG. */
+    // package.json is protected, so the base's scripts are the candidate's. Tools come from <repo>/node_modules.
+    let defaults: CheckCommands | undefined;
+    let packageJson: string | undefined;
+    const cmd = async <K extends keyof CheckCommands>(k: K): Promise<CheckCommands[K]> => {
+      const o = ctx.commands?.[k];
+      if (o) return o;
+      if (!defaults) {
+        packageJson ??= await blobText(wt.dir, wt.base, 'package.json', { git });
+        defaults = defaultCommands(resolveTools(ctx.repo), scriptsOf(packageJson));
+      }
+      return defaults[k];
+    };
+
+    /** Before each isolated check: the disk must still be exactly `expected`, and node_modules is rebuilt and verified. */
+    const guard = async (expected: string) => {
+      if ((await snapshotTree(wt.dir, wt.base, { ...tree, prune: true })) !== expected) discard('tampered between checks');
+      await linkNodeModules(wt.dir, ctx.repo);
+      try { await verifyNodeModules(wt.dir, ctx.repo); } catch (e) { discard(`tampered between checks: ${msg(e)}`); }
+    };
+    const countTests: NonNullable<CollectDeps['countTests']> = unsandboxed && ctx.countTests ? ctx.countTests : (wtDir, base) => vitestCounts(wtDir, base, async (dir) => {
+      const t = resolveTools(ctx.repo);
+      const r = await inTree(dir, [t.node, t.vitest, 'list', '--json'], [dir]);
+      if (r.code !== 0) throw new Error(`vitest list failed (${r.timedOut ? 'timed out' : `exit ${r.code}`}): ${tail(r.stderr || r.stdout)}`);
+      return r.stdout;
+    }, { tmpRoot: privDir, repo: ctx.repo });
+
+    /** Runs a shot command (its nonce-checked result is required). */
     const shoot = async (dir: string, outPath: string, writable: string[], label: string) => {
-      const r = await isolated(commands.shoot(dir, game, outPath), dir, writable);
-      try { if (r.code !== 0) throw new Error(r.timedOut ? 'timed out' : `exit ${r.code}: ${tail(r.stderr || r.stdout)}`); parseResult(r); } catch (e) { discard(`${label} shot failed: ${msg(e)}`); }
-      let size: ReturnType<typeof jpegSize> = null;
-      try { size = jpegSize(await readFile(outPath)); } catch { /* missing */ }
+      const nonce = newNonce();
+      let r: IsolatedResult;
+      try { r = await inTree(dir, (await cmd('shoot'))(dir, game, outPath), writable, nonce); } catch (e) { return discard(`${label} shot failed: ${msg(e)}`); }
+      try { if (r.code !== 0) throw new Error(r.timedOut ? 'timed out' : `exit ${r.code}: ${tail(r.stderr || r.stdout)}`); parseResult(r.stdout, nonce); } catch (e) { discard(`${label} shot failed: ${msg(e)}`); }
+    };
+    const checkJpeg = (buf: Buffer | null, label: string) => {
+      const size = buf ? jpegSize(buf) : null;
       if (!size) discard(`${label} shot is not a JPEG`);
       if (size!.width !== HISTORY_SIZE.width || size!.height !== HISTORY_SIZE.height) discard(`${label} shot is ${size!.width}x${size!.height}, not ${HISTORY_SIZE.width}x${HISTORY_SIZE.height}`);
     };
 
-    // Before shot: main as it is, before anything is built.
+    // Before shot: main as it is, before anything is built (checked now to fail early, and again as committed).
     await rm(shotDir, { recursive: true, force: true });
     await mkdir(shotDir, { recursive: true });
     const beforeTmp = join(shotDir, 'before.jpg');
     await shoot(ctx.mainDir, beforeTmp, [shotDir], 'before');
+    checkJpeg(await readFile(beforeTmp).catch(() => null), 'before');
 
     // 2. Implementer. The ticket is data: rendered into the template, never anything from the env.
     const ticketData: Record<string, string> = { id: ticket.id, game, kind: ticket.kind, title: ticket.title, why: ticket.why };
@@ -253,14 +331,15 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     res.summary = parsed!.summary;
 
     // 3. The candidate tree from the bytes on disk (index flags and filters cannot hide anything), disk pruned to it.
-    const t1 = await snapshotTree(wt.dir, wt.base, { git, prune: true });
+    const t1 = await snapshotTree(wt.dir, wt.base, { ...tree, prune: true });
     if (t1 === baseTree) discard('no edits');
+    await guard(t1); // node_modules rebuilt before the test listing runs candidate code
     let diff: Diff;
     try { diff = await collectTreeDiff(wt.dir, wt.base, t1, { git, countTests }); } catch (e) { return discard(`diff collection failed: ${msg(e)}`); }
     if (diff.files.length === 0) discard('no edits');
     const hits = checkTripwires(diff, secrets);
     if (hits.length) discard(...hits.map((v) => `tripwire ${v.rule}${v.path ? `: ${v.path}` : ''}: ${v.detail}`));
-    if ((await snapshotTree(wt.dir, wt.base, { git })) !== t1) discard('worktree changed while the tripwires ran');
+    await guard(t1);
 
     // 4. Release: Hal's own version bump and changelog entry, read from T1 and added to it.
     const rel = (f: string) => `games/${game}/${f}`;
@@ -285,21 +364,31 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     const leaks = TRIPWIRE_RULES.secret!(releaseDiff);
     if (leaks.length) discard(...leaks.map((v) => `tripwire ${v.rule}: ${v.path}: ${v.detail} (in Hal's release edit)`));
     const releasePaths = Object.values(files);
-    const t2 = await extendTree(wt.dir, t1, releasePaths, { git });
-    const extra = await changedPaths(wt.dir, t1, t2, { git });
+    const t2 = await extendTree(wt.dir, t1, releasePaths, tree);
+    const extra = await changedPaths(wt.dir, t1, t2, tree);
     if (!extra.every((p) => releasePaths.includes(p))) discard(`release changed unexpected paths: ${extra.join(', ')}`);
 
-    // 5. Tests and typecheck, isolated.
-    for (const [name, argv] of [['npm test', commands.test(wt.dir)], ['npm run typecheck', commands.typecheck(wt.dir)]] as const) {
-      const r = await isolated(argv, wt.dir, [wt.dir]);
+    // 5. Tests and typecheck, isolated, each step guarded.
+    let steps: Array<[string, string[]]>;
+    try {
+      steps = [
+        ...(await cmd('test'))(wt.dir).map((a): [string, string[]] => ['npm test', a]),
+        ...(await cmd('typecheck'))(wt.dir).map((a): [string, string[]] => ['npm run typecheck', a]),
+      ];
+    } catch (e) { return discard(`checks unavailable: ${msg(e)}`); }
+    for (const [name, argv] of steps) {
+      await guard(t2);
+      const r = await inTree(wt.dir, argv, [wt.dir]);
       if (r.code !== 0) discard(`${name} failed${r.timedOut ? ' (timed out)' : r.error ? ` to run: ${r.error}` : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`);
     }
 
-    // 6. Scores and gate, then screens and controls, isolated.
+    // 6. Scores and gate, then screens and controls, isolated, each guarded, each result nonce-checked.
     const check = async <T>(label: string, argv: string[]): Promise<T> => {
-      const r = await isolated(argv, wt.dir, [wt.dir]);
+      await guard(t2);
+      const nonce = newNonce();
+      const r = await inTree(wt.dir, argv, [wt.dir], nonce);
       if (r.code !== 0) throw new Error(`${r.timedOut ? 'timed out' : r.error ?? `exit ${r.code}`}: ${tail(r.stderr || r.stdout)}`);
-      try { return parseResult<T>(r); } catch (e) { throw new Error(`${label}: ${msg(e)}`); }
+      try { return parseResult<T>(r.stdout, nonce); } catch (e) { throw new Error(`${label}: ${msg(e)}`); }
     };
     const scorers = scorersFor(game);
     const before = ctx.baseline.scores;
@@ -309,34 +398,36 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     if (target !== undefined && !scorers.some(hasTarget)) reasons.push(`target measure "${target}" is not a measure of ${game}`);
     for (const s of scorers) {
       let after: ScoreReport<unknown>;
-      try { after = await check<ScoreReport<unknown>>(`score ${s}`, commands.score(wt.dir, s)); } catch (e) { reasons.push(`score ${s} failed: ${msg(e)}`); continue; }
+      try { after = await check<ScoreReport<unknown>>(`score ${s}`, (await cmd('score'))(wt.dir, s)); } catch (e) { if (e instanceof Discard) throw e; reasons.push(`score ${s} failed: ${msg(e)}`); continue; }
       res.scoresAfter[s] = after;
       const g = compareScores(before[s] ?? null, after, hasTarget(s) ? { mode: 'score', target } : { mode: 'polish' });
       reasons.push(...g.reasons.map((r) => `${s}: ${r}`));
     }
     if (reasons.length) discard(...reasons);
     let sc: ScreensResult;
-    try { sc = await check<ScreensResult>('screens', commands.screens(wt.dir, game)); } catch (e) { return discard(`screens ${game} failed: ${msg(e)}`); }
+    try { sc = await check<ScreensResult>('screens', (await cmd('screens'))(wt.dir, game)); } catch (e) { if (e instanceof Discard) throw e; return discard(`screens ${game} failed: ${msg(e)}`); }
     if (!sc.reached) reasons.push(`screens ${game}: did not reach gameplay`);
     reasons.push(...(sc.errors ?? []).map((e) => `screens ${game}: ${e}`), ...(sc.blockedRequests ?? []).map((u) => `screens ${game}: blocked request ${u}`));
     if (reasons.length) discard(...reasons);
     let all: ControlCheck[];
-    try { all = await check<ControlCheck[]>('controls', commands.controls(wt.dir, game)); } catch (e) { return discard(`controls ${game} failed: ${msg(e)}`); }
+    try { all = await check<ControlCheck[]>('controls', (await cmd('controls'))(wt.dir, game)); } catch (e) { if (e instanceof Discard) throw e; return discard(`controls ${game} failed: ${msg(e)}`); }
     const checks = (Array.isArray(all) ? all : []).filter((c) => c.game === game);
     if (checks.length === 0) discard(`controls ${game}: no controls checks ran`);
     reasons.push(...checks.filter((c) => !c.ok && !c.skipped).map((c) => `controls ${game} ${c.check}: ${c.detail}`));
     if (reasons.length) discard(...reasons);
-    // The checks ran Claude's code: nothing they did to the tree may reach main.
-    if ((await snapshotTree(wt.dir, wt.base, { git })) !== t2) discard('worktree changed while the checks ran');
 
-    // 7. History shots, added to the tree.
+    // 7. History shots. The after shot is the last check; then the before shot is copied in, and the bytes committed
+    // (read back from T3) are the ones validated. Nothing else may have changed.
+    await guard(t2);
     const hist = `docs/hal/history/${game}/${night}`;
     const shots = { before: `${hist}/${ctx.pass}-before.jpg`, after: `${hist}/${ctx.pass}-after.jpg` };
     await mkdir(join(wt.dir, hist), { recursive: true });
-    await copyFile(beforeTmp, join(wt.dir, shots.before));
     await shoot(wt.dir, join(wt.dir, shots.after), [wt.dir], 'after');
-    const t3 = await extendTree(wt.dir, t2, [shots.before, shots.after], { git });
-    if ((await changedPaths(wt.dir, t2, t3, { git })).join('\n') !== [shots.after, shots.before].sort().join('\n')) discard('history images did not land as the only new paths');
+    await copyFile(beforeTmp, join(wt.dir, shots.before));
+    const t3 = await extendTree(wt.dir, t2, [shots.before, shots.after], tree);
+    if ((await changedPaths(wt.dir, t2, t3, tree)).join('\n') !== [shots.after, shots.before].sort().join('\n')) discard('history images did not land as the only new paths');
+    if ((await snapshotTree(wt.dir, wt.base, tree)) !== t3) discard('tampered between checks');
+    for (const [label, p] of [['before', shots.before], ['after', shots.after]] as const) checkJpeg(await blobBytes(wt.dir, t3, p).catch(() => null), label);
 
     // 8. Commit exactly T3 on the base, then squash onto refs/hal/main.
     const primary = scorers.find(hasTarget) ?? scorers[0]!;
@@ -361,6 +452,6 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
   } finally {
     // 9. Always.
     await removeWorktree(ctx.repo, ctx.pass, { git }); // never throws; also clears a half-made worktree
-    await rm(shotDir, { recursive: true, force: true }).catch(() => {});
+    await rm(privDir, { recursive: true, force: true }).catch(() => {});
   }
 }

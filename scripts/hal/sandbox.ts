@@ -1,7 +1,8 @@
 // Isolation for Claude-written code that Hal runs (ruling R13): npm test, typecheck, test listing, scorers, screens,
 // controls and shots of a candidate each run as a child process, in their own process group (killed afterwards), with
 // a scrubbed env, under macOS sandbox-exec: allow by default, but no outbound network except loopback, no reading
-// <repo>/.hal.env, and no writes outside the paths given (the worktree and os.tmpdir()). Fails closed without sandbox-exec.
+// <repo>/.hal.env, no writes outside the paths given (the worktree and os.tmpdir()), and none to the denyWrite paths
+// (the worktree's node_modules). Fails closed without sandbox-exec.
 import { spawn } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,13 +10,16 @@ import { join, resolve } from 'node:path';
 import { childEnv } from './env.js';
 
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
-export const sandboxAvailable = (): boolean => process.platform === 'darwin' && existsSync(SANDBOX_EXEC);
+/** sandbox-exec exists and we are not already inside a Hal sandbox (macOS cannot nest them; sandboxEnv sets HAL_SANDBOXED). */
+export const sandboxAvailable = (): boolean => process.platform === 'darwin' && existsSync(SANDBOX_EXEC) && process.env.HAL_SANDBOXED !== '1';
 
 export type SandboxPolicy = {
   /** Directories (and everything under them) the child may write. /dev is always writable. */
   writable: string[];
   /** Files the child may not read. */
   denyRead: string[];
+  /** Directories under a writable one that stay read-only (the worktree's node_modules). */
+  denyWrite?: string[];
 };
 
 const q = (p: string) => `"${p.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
@@ -31,6 +35,7 @@ function variants(p: string): string[] {
 export function sandboxProfile(p: SandboxPolicy): string {
   const writable = p.writable.flatMap(variants).map((d) => `(subpath ${q(d)})`).join(' ');
   const denyRead = p.denyRead.flatMap(variants).map((f) => `(literal ${q(f)})`).join(' ');
+  const denyWrite = (p.denyWrite ?? []).flatMap(variants).map((d) => `(subpath ${q(d)})`).join(' ');
   return [
     '(version 1)',
     '(allow default)',
@@ -38,6 +43,7 @@ export function sandboxProfile(p: SandboxPolicy): string {
     '(allow network-outbound (remote ip "localhost:*"))',
     '(deny file-write*)',
     `(allow file-write* (subpath "/dev")${writable ? ` ${writable}` : ''})`,
+    ...(denyWrite ? [`(deny file-write* ${denyWrite})`] : []),
     ...(denyRead ? [`(deny file-read* ${denyRead})`] : []),
   ].join('\n');
 }
