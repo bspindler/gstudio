@@ -8,7 +8,7 @@ import { dayFor, type Approval, type SpendDay } from '@studio/core/hal';
 
 export type NoteStatus = 'open' | 'acted' | 'queued' | 'asked';
 export type Note = { id: string; at: string; game: string | null; text: string; status: NoteStatus; reply?: string };
-export type Vote = { run: string; item: string; game?: string; vote: 'up' | 'down'; at: string };
+export type Vote = { run: string; item: string; game?: string; vote: 'up' | 'down'; at: string; /** Brian's words, capped at 500 characters by the caller. */ comment?: string };
 export type UndoStatus = 'pending' | 'done' | 'failed' | 'rejected';
 /**
  * An undo request or its outcome. `pass` (HAL-0xx) and `status` are set by `hal undo` and by the run's preflight:
@@ -122,6 +122,11 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
       return a;
     },
 
+    /** Votes and undo reasons for one run, newest last. */
+    async feedbackFor(run: string): Promise<Feedback> {
+      const f = await readFeedback();
+      return { votes: f.votes.filter((v) => v.run === run), undos: f.undos.filter((u) => u.run === run) };
+    },
     async addVote(v: Omit<Vote, 'at'>): Promise<void> {
       const f = await readFeedback();
       await writeJsonAtomic(p('feedback.json'), { ...f, votes: [...f.votes, { ...v, at: now().toISOString() }] });

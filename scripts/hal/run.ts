@@ -133,6 +133,8 @@ export type NoteReply = { id: string; status: Exclude<NoteStatus, 'open'>; reply
 export type RunReport = {
   runId: string;
   night: string;
+  /** The director's per-game text (absent when the director did not answer). */
+  perGame?: Record<string, string>;
   startedAt: string;
   endedAt: string;
   trigger: RunTrigger;
@@ -318,6 +320,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   const replies: NoteReply[] = [];
   let scores: Record<string, ScoreReport<unknown>> = {};
   let finalScores: Record<string, ScoreReport<unknown>> = {};
+  let directorPerGame: Record<string, string> | undefined;
   let noteText = '';
   let phase = 'lock';
   const setPhase = (p: string) => { phase = p; lock.setPhase(p); log(`phase: ${p}`); };
@@ -578,14 +581,16 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       })),
       notes: J(notesNow.map(noteForPrompt)),
       stagnation,
+      feedback: feedbackVars(c).feedback,
     }), mainDir, DIRECTOR_TIMEOUT_MS);
     const dir = parseDirector(directorText);
+    if (dir) directorPerGame = dir.perGame;
     if (directorText !== null && !dir) warn("the director's reply did not match its contract: Hal wrote the note");
     noteText = dir?.note ?? fallbackNote(st.capReached, changes);
     await writeText(join(runDir, 'note.md'), `# Hal, night of ${night} (${runId})\n\n${noteText.trim()}\n`);
     if (!reportOnly) {
       try {
-        const files = historyFiles(o.games, mainDir, night, runId, dir?.perGame ?? {}, changes).map((f) => ({ ...f, text: R.str(f.text) }));
+        const files = historyFiles(o.games, mainDir, night, runId, dir?.perGame ?? {}, changes, finalScores, d.now().toISOString()).map((f) => ({ ...f, text: R.str(f.text) }));
         const commit = await commitHistory(files);
         if (commit) log(`history notes committed: ${commit.slice(0, 12)}`);
       } catch (e) { warn(`history notes not committed: ${errMsg(e)}`); }
@@ -655,6 +660,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     }
     const report: RunReport = {
       runId, night, startedAt: startedAt.toISOString(), endedAt, trigger: o.trigger, billing: o.billing, billingEnded: st.billing, spend: st.spend, games,
+      ...(directorPerGame ? { perGame: directorPerGame } : {}),
       changes, calls, planned, notes: replies, pushed: st.pushed, warnings,
       ...(st.pushSkippedReason ? { pushSkippedReason: st.pushSkippedReason } : {}),
       ...(st.capReached ? { capReached: true } : {}),
@@ -801,11 +807,19 @@ function fallbackNote(capReached: boolean, changes: CandidateResult[]): string {
   return [`Hal wrote this note itself: ${why}.`, '', changes.length ? changes.map(line).join('\n') : 'No changes were attempted.'].join('\n');
 }
 
-function historyFiles(games: string[], mainDir: string, night: string, runId: string, perGame: Record<string, string>, changes: CandidateResult[]): { path: string; text: string }[] {
+function historyFiles(games: string[], mainDir: string, night: string, runId: string, perGame: Record<string, string>, changes: CandidateResult[], finalScores: Record<string, ScoreReport<unknown>>, at: string): { path: string; text: string }[] {
   const out: { path: string; text: string }[] = [];
   for (const g of games) {
     const mine = changes.filter((c) => c.ticket.game === g && c.verdict !== 'skipped');
     const text = perGame[g]?.trim();
+    const scoresPath = `docs/hal/history/${g}/${night}/scores.json`;
+    let runs: unknown[] = [];
+    try {
+      const prevScores = JSON.parse(readFileSync(join(mainDir, scoresPath), 'utf8')) as { runs?: unknown };
+      if (Array.isArray(prevScores.runs)) runs = prevScores.runs;
+    } catch { /* first run tonight */ }
+    const scorers = Object.fromEntries(scorersFor(g).flatMap((s) => (finalScores[s] ? [[s, { fitness: finalScores[s]!.fitness, measures: finalScores[s]!.measures }]] : [])));
+    out.push({ path: scoresPath, text: JSON.stringify({ night, runs: [...runs, { run: runId, at, scorers }] }, null, 2) + '\n' });
     if (!text && mine.length === 0) continue;
     const path = `docs/hal/history/${g}/${night}/note.md`;
     const section = [`## Run ${runId}`, '', ...(text ? [text, ''] : []), ...(mine.length ? ['Changes:', ...mine.map(line)] : [])].join('\n').trimEnd();

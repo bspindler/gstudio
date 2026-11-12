@@ -162,7 +162,7 @@ describe('full fake run', () => {
     expect(r.capReached).toBe(true);
     expect(r).toMatchObject({ night: NIGHT, trigger: 'nightly', billing: 'api', pushed: true });
     expect(r.spend.api).toBe(7); // never past 19.50 for slicing; the report still shows the $20 cap
-    expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'planned', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
+    expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'perGame', 'planned', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
     expect(r.planned).toEqual([]); // all built or tried
     expect(r.games.hyperline).toMatchObject({ before: { hyperline: 60 }, after: { hyperline: 61 } });
     // R21: the director's $1 was held through the builds, so the note still got written by the director.
@@ -174,6 +174,11 @@ describe('full fake run', () => {
     // refs/hal/main: the merge, then the history-note commit with Hal-Run; origin's main equals it.
     expect(gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN)).toMatch(new RegExp(`Hal-Run: ${r.runId}`));
     expect(gitIn(repo, 'show', `${HAL_MAIN}:docs/hal/history/hyperline/${NIGHT}/note.md`)).toMatch(/HAL-001/);
+    expect(r.perGame).toEqual({ hyperline: 'Hyperline kept its snap.' });
+    const scores = JSON.parse(gitIn(repo, 'show', `${HAL_MAIN}:docs/hal/history/hyperline/${NIGHT}/scores.json`)) as { night: string; runs: { run: string; at: string; scorers: Record<string, { fitness: number }> }[] };
+    expect(scores.night).toBe(NIGHT);
+    expect(scores.runs).toHaveLength(1);
+    expect(scores.runs[0]).toMatchObject({ run: r.runId, at: NOW.toISOString(), scorers: { hyperline: { fitness: 61 } } });
     expect(gitIn(repo, 'rev-list', '--count', `${brian}..${HAL_MAIN}`)).toBe('2');
     expect(originMain()).toBe(halHead());
     expect(brianMain()).toBe(brian);
@@ -196,6 +201,25 @@ describe('full fake run', () => {
     const r = readReport();
     expect(r.changes.map((c) => c.verdict)).toEqual(['merged', 'merged']);
     expect(r.changes[1]!.scoresBefore.hyperline!.fitness).toBe(61);
+  }, 60_000);
+});
+
+describe('history scores and director feedback', () => {
+  it('a second run the same night appends to scores.json, even with no changes', async () => {
+    expect(await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [] }) }))).toBe(0);
+    const first = readReport().runId;
+    expect(await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [], director: { note: 'n', perGame: {}, noteReplies: [] } }) }))).toBe(0);
+    const second = readReport().runId;
+    expect(second).not.toBe(first);
+    const f = JSON.parse(gitIn(repo, 'show', `${HAL_MAIN}:docs/hal/history/hyperline/${NIGHT}/scores.json`)) as { runs: { run: string }[] };
+    expect(f.runs.map((x) => x.run)).toEqual([first, second]);
+  }, 60_000);
+  it('the director prompt contains the recorded votes and undo reasons', async () => {
+    put(halDir, 'feedback.json', J({ votes: [{ run: 'r0', item: 'c1', game: 'hyperline', vote: 'down', comment: 'too floaty', at: 'x' }], undos: [{ run: 'r0', reason: 'bouncy mess', at: 'x' }] }));
+    await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [] }) }));
+    const p = calls.find((c) => c.role === 'director')!.prompt;
+    expect(p).toContain('too floaty');
+    expect(p).toContain('bouncy mess');
   }, 60_000);
 });
 
