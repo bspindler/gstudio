@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
-import { ALWAYS_DISALLOWED, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
+import { ALWAYS_DISALLOWED, NODE_MODULES_WRITE_DENY, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
 
 const KEY = 'sk-ant-test-FAKE123';
 
@@ -218,6 +218,16 @@ describe('runClaude', () => {
       expect(arg(args, '--disallowedTools')!.split(',')).toEqual(expect.arrayContaining(ALWAYS_DISALLOWED));
       expect(arg(args, '--append-system-prompt-file')).toBe('/repo/CLAUDE.md');
       expect(args.join(' ')).not.toContain(KEY);
+    });
+    it('every role is denied Edit/Write/NotebookEdit through any node_modules path (the trust root)', async () => {
+      for (const t of ['Edit', 'Write', 'NotebookEdit']) for (const p of ['./node_modules/**', '**/node_modules/**', 'node_modules/**']) expect(NODE_MODULES_WRITE_DENY).toContain(`${t}(${p})`);
+      for (const role of ['planner', 'implementer', 'director'] as const) {
+        const f = ok();
+        await runClaude({ ...base, role, billing: 'api', allowedTools: roleAllowedTools(role), denyReadPaths: ['/main/.hal.env'] }, deps(f.spawn));
+        const denied = arg(f.calls[0]!.args, '--disallowedTools')!.split(',');
+        expect(denied, role).toEqual(expect.arrayContaining(NODE_MODULES_WRITE_DENY));
+        expect(denied.filter((d) => /^(?:Read|Grep|Glob)\(.*node_modules/.test(d)), role).toEqual([]); // reading stays allowed
+      }
     });
     for (const role of ['planner', 'implementer', 'director'] as const) {
       for (const billing of ['api', 'subscription'] as const) {

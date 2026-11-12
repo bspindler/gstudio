@@ -489,6 +489,101 @@ export const secret: Rule = (diff) => {
   return out;
 };
 
+// ---- host-api (ruling R15) ----------------------------------------------
+
+/**
+ * `text` with comments (line, block and HTML comments) and string contents blanked to spaces, keeping every newline and offset, so a
+ * masked line lines up with its raw line. Quote characters stay; `${...}` inside a template literal stays code.
+ */
+export function maskCode(text: string): string {
+  const out = text.split('');
+  const blank = (a: number, b: number) => { for (let k = a; k < b; k++) if (out[k] !== '\n') out[k] = ' '; };
+  const tmpl: number[] = []; // brace depth of each open `${`
+  let i = 0;
+  const inTemplate = (): boolean => {
+    // Scans template text from i (just after a backtick or a closing `}`) to the closing backtick or the next `${`.
+    const start = i;
+    while (i < text.length) {
+      if (text[i] === '\\') { i += 2; continue; }
+      if (text[i] === '`') { blank(start, i); i++; return false; }
+      if (text[i] === '$' && text[i + 1] === '{') { blank(start, i); i += 2; tmpl.push(0); return true; }
+      i++;
+    }
+    blank(start, i);
+    return false;
+  };
+  while (i < text.length) {
+    const c = text[i]!, n = text[i + 1];
+    if (c === '/' && n === '/') { const e = text.indexOf('\n', i); const end = e < 0 ? text.length : e; blank(i, end); i = end; continue; }
+    if (c === '/' && n === '*') { const e = text.indexOf('*/', i + 2); const end = e < 0 ? text.length : e + 2; blank(i, end); i = end; continue; }
+    if (text.startsWith('<!--', i)) { const e = text.indexOf('-->', i + 4); const end = e < 0 ? text.length : e + 3; blank(i, end); i = end; continue; }
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== c && text[j] !== '\n') j += text[j] === '\\' ? 2 : 1;
+      blank(i + 1, Math.min(j, text.length));
+      i = j < text.length && text[j] === c ? j + 1 : j;
+      continue;
+    }
+    if (c === '`') { i++; inTemplate(); continue; }
+    if (tmpl.length) {
+      if (c === '{') tmpl[tmpl.length - 1]!++;
+      else if (c === '}') {
+        if (tmpl[tmpl.length - 1] === 0) { tmpl.pop(); i++; inTemplate(); continue; }
+        tmpl[tmpl.length - 1]!--;
+      }
+    }
+    i++;
+  }
+  return out.join('');
+}
+
+const HOST_CALLS: Array<[RegExp, string]> = [
+  [/\bprocess\.[A-Za-z_$]/, 'process.'],
+  [/\brequire\s*\(/, 'require('],
+  [/\bglobalThis\s*\.\s*process\b/, 'globalThis.process'],
+  [/\b(?:Deno|Bun)\.[A-Za-z_$]/, 'Deno./Bun.'],
+  [/\bfs\.[A-Za-z_$]/, 'fs.'],
+  [/\bwriteSync\b/, 'writeSync'],
+  [/\bstdout\b/, 'stdout'],
+];
+const NODE_MODULES = new Set(['fs', 'child_process', 'os', 'path', 'net', 'http', 'https', 'http2', 'worker_threads', 'dgram', 'dns', 'tls', 'cluster', 'vm', 'module', 'process', 'readline', 'v8', 'inspector']);
+// R17: game code may not reach Hal's own code (the check runner, its result channel, the scorers' source).
+const HAL_MODULE = /(?:^|\/)scripts\/|check-nonce|check-entry|(?:^|\/)packages\/core\/src\/hal(?:\/|$)/;
+const IMPORT_SPEC = [/\b(?:import|export)\b[^;]*?\bfrom\s*(['"])/g, /\bimport\s*\(\s*(['"`])/g, /\bimport\s*(['"])/g];
+
+/** The Node host APIs one line of game code reaches for (`masked` is the line through maskCode). */
+function hostUses(raw: string, masked: string): string[] {
+  const found = HOST_CALLS.filter(([re]) => re.test(masked)).map(([, name]) => name);
+  if (/\bglobalThis\s*\[/.test(masked) && /\bglobalThis\s*\[\s*(['"`])process\1\s*\]/.test(raw)) found.push('globalThis["process"]');
+  for (const re of IMPORT_SPEC) {
+    for (const m of masked.matchAll(re)) {
+      const q = m.index! + m[0].length - 1;
+      const close = raw.indexOf(raw[q]!, q + 1);
+      const spec = raw.slice(q + 1, close < 0 ? undefined : close);
+      if (spec.startsWith('node:') || NODE_MODULES.has(spec.split('/')[0]!)) found.push(`import of ${spec}`);
+      else if (HAL_MODULE.test(spec)) found.push(`import of Hal module ${spec}`);
+    }
+  }
+  return [...new Set(found)];
+}
+
+/**
+ * Added lines of game code (games/**, not prose) that use Node host APIs, or import Hal's own modules (scripts/,
+ * check-nonce, check-entry, packages/core/src/hal). Game code runs in the browser; a scorer imports it in Node.
+ */
+export const hostApi: Rule = (diff) => {
+  const out: Violation[] = [];
+  for (const f of codeIn(diff, inGames)) {
+    if (f.binary || f.after === null) continue;
+    const raw = f.after.split('\n');
+    const masked = maskCode(f.after).split('\n');
+    for (const i of addedLineIndexes(f)) {
+      for (const u of hostUses(raw[i]!, masked[i] ?? '')) out.push(hit('host-api', f.path, `uses ${u}: ${raw[i]!.trim().slice(0, 100)}`));
+    }
+  }
+  return out;
+};
+
 export const TRIPWIRE_RULES: Record<string, Rule> = {
   'protected-path': protectedPath,
   'hal-hook': halHook,
@@ -502,6 +597,7 @@ export const TRIPWIRE_RULES: Record<string, Rule> = {
   'tests-removed': testsRemoved,
   'outside-scope': outsideScope,
   secret,
+  'host-api': hostApi,
 };
 
 export function checkTripwires(diff: Diff, secrets?: string[]): Violation[] {

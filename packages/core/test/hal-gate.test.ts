@@ -87,3 +87,41 @@ describe('compareScores', () => {
     expect(GATE).toEqual({ minGain: 0.5, tolerance: 1.0 });
   });
 });
+
+describe('compareScores modes', () => {
+  it('an opts object with a target is score mode, same as the string form', () => {
+    const b = report(70, { inBand: 50, noWalls: 90 }), a = report(75, { inBand: 52, noWalls: 89.5 });
+    expect(compareScores(b, a, { target: 'inBand' })).toEqual(compareScores(b, a, 'inBand'));
+    expect(compareScores(b, report(75, { inBand: 50.2, noWalls: 90 }), { target: 'inBand' }).keep).toBe(false);
+  });
+  it('an opts object without a target defaults to polish mode: no gain needed', () => {
+    const r = compareScores(report(70, { inBand: 50, noWalls: 90 }), report(70, { inBand: 49.5, noWalls: 90 }), {});
+    expect(r.keep).toBe(true);
+    expect(r.gain).toBe(0);
+  });
+  it('no third argument stays score mode on fitness (existing callers unchanged)', () => {
+    expect(compareScores(report(70), report(70.2)).keep).toBe(false);
+    expect(compareScores(report(70), report(70.2), {}).keep).toBe(true);
+  });
+  it('polish mode discards a measure regressing past the tolerance', () => {
+    const r = compareScores(report(70, { inBand: 50, noWalls: 90 }), report(72, { inBand: 52, noWalls: 88.5 }), { mode: 'polish' });
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toContain('noWalls regressed');
+  });
+  it('polish mode discards a fitness drop past the tolerance', () => {
+    const r = compareScores(report(70, { a: 50 }), report(68, { a: 50 }), { mode: 'polish' });
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toContain('fitness regressed');
+  });
+  it('polish mode discards hard failures, missing measures and non-finite values', () => {
+    expect(compareScores(report(70, { a: 50 }), report(70, { a: 50 }, ['boom']), { mode: 'polish' }).reasons.join(' ')).toContain('hard failure: boom');
+    expect(compareScores(report(70, { a: 50 }), report(70, {}), { mode: 'polish' }).keep).toBe(false);
+    expect(compareScores(report(70, { a: 50 }), report(NaN, { a: 50 }), { mode: 'polish' }).keep).toBe(false);
+    expect(compareScores(report(70, { a: 50 }), report(70, { a: NaN }), { mode: 'polish' }).keep).toBe(false);
+    expect(compareScores(null, report(70), { mode: 'polish' }).keep).toBe(false);
+  });
+  it('polish mode ignores a target, and explicit score mode without a target uses fitness', () => {
+    expect(compareScores(report(70, { a: 50 }), report(70, { a: 50 }), { mode: 'polish', target: 'a' }).keep).toBe(true);
+    expect(compareScores(report(70, { a: 50 }), report(70.2, { a: 50 }), { mode: 'score' }).reasons.join(' ')).toContain('no real gain');
+  });
+});

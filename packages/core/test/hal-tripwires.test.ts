@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, secret, type Diff, type FileChange,
+  isProtectedPath, addedLines, secret, hostApi, TRIPWIRE_RULES, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -514,5 +514,72 @@ describe('fix round 3', () => {
     expect(edited).not.toBe(real);
     expect(halHook(diff([M(P, real, edited)])).length).toBeGreaterThan(0);
     expect(halHook(diff([M(P, real, real.replace('hal.dmg += eff;', 'hal.dmg\n  += eff;'))]))).toEqual([]); // same statement, only whitespace differs
+  });
+});
+
+describe('host-api (R15: game code is browser code)', () => {
+  const hits = (after: string, path = 'games/g/game.js', before = '') => hostApi(diff([before ? M(path, before, after) : A(path, after)])).map((v) => v.detail);
+  it('is a registered rule', () => expect(TRIPWIRE_RULES['host-api']).toBe(hostApi));
+  it.each([
+    ['process.env', 'const k = process.env.KEY;'],
+    ['process.stdout', 'process.stdout.write("HAL-RESULT x")'],
+    ['require(', "const fs = require('fs');"],
+    ['node: import', "import { writeFileSync } from 'node:fs';"],
+    ['bare fs import', 'import fs from "fs";'],
+    ['bare child_process import', "import { exec } from 'child_process';"],
+    ['side-effect import', "import 'node:worker_threads';"],
+    ['dynamic import', "const m = await import('node:net');"],
+    ['bare path dynamic import', "import(\"path\").then(() => 1);"],
+    ['export from', "export { request } from 'http';"],
+    ['globalThis.process', 'globalThis.process.exit(0);'],
+    ['globalThis["process"]', 'globalThis["process"].exit(0);'],
+    ['Deno.', 'Deno.writeTextFile("x", "y");'],
+    ['Bun.', 'Bun.write("x", "y");'],
+    ['fs.', 'fs.writeFileSync("x", "y");'],
+    ['writeSync', 'writeSync(1, "x");'],
+    ['stdout', 'out = stdout;'],
+    ['template expression', 'const s = `${process.env.KEY}`;'],
+  ])('flags %s', (_name, line) => {
+    expect(hits(`let a = 1;\n${line}\n`).length).toBeGreaterThan(0);
+  });
+  it.each([
+    ['scripts/ static', "import { takeResultChannel } from '../../scripts/hal/check-nonce.js';"],
+    ['check-entry', "import '../../scripts/hal/check-entry.ts';"],
+    ['check-nonce without scripts/', "import * as n from './check-nonce.js';"],
+    ['dynamic scripts/', "const m = await import('../../scripts/hal/candidate.js');"],
+    ['core hal source', "import { compareScores } from '../../packages/core/src/hal/gate.js';"],
+    ['export from scripts/', "export * from '../../scripts/site/x.js';"],
+    ['template dynamic import', 'import(`../../scripts/hal/check-entry.ts`);'],
+  ])('flags an import of Hal\'s own modules: %s', (_name, line) => {
+    expect(hits(`${line}\n`).join(' ')).toMatch(/Hal module/);
+  });
+  it('does not flag game-local or SDK imports, or such paths in strings and comments', () => {
+    expect(hits("import { createStudio } from '../sdk/studio-sdk.js';\nimport { L } from './levels.js';\nimport s from './scripts.js';\n")).toEqual([]);
+    expect(hits("const note = 'see ../../scripts/hal/check-entry.ts'; // import '../../scripts/hal/x.js'\n")).toEqual([]);
+  });
+  it('flags it in a game html file too', () => {
+    expect(hits('<script type="module">\nprocess.exit(1);\n</script>\n', 'games/g/index.html').length).toBeGreaterThan(0);
+  });
+  it.each([
+    ['a string', 'const msg = "check process.env and stdout and fs.readFile and require(x)";'],
+    ['a template text', 'const msg = `use require( and Deno.run`;'],
+    ['a line comment', 'let a = 1; // process.env, require(fs), stdout'],
+    ['a block comment', '/* import fs from "fs"; globalThis.process */ let b = 2;'],
+    ['an html comment', '<!-- process.exit() -->'],
+    ['similar names', 'const myprocess = 1; const subprocess_x = 2; const prefs = { a: 1 }; prefs.a = 3; const stdouts = 0; const requirement = 1;'],
+    ['a browser import', "import { createStudio } from '../sdk/studio-sdk.js';"],
+    ['a relative module named like a node one', "import path from './path.js'; import fsm from './fs.js';"],
+    ['prose', 'The process. Then more.'],
+  ])('does not flag %s', (_name, line) => {
+    expect(hits(`${line}\n`)).toEqual([]);
+  });
+  it('ignores existing lines, prose files, deletions and paths outside games/', () => {
+    expect(hits('const k = process.env.KEY;\nlet z = 1;\n', 'games/g/game.js', 'const k = process.env.KEY;\n')).toEqual([]);
+    expect(hits('process.env is a Node thing\n', 'games/g/NOTES.md')).toEqual([]);
+    expect(hostApi(diff([D('games/g/a.js', 'process.exit()\n')]))).toEqual([]);
+    expect(hostApi(diff([A('scripts/x.ts', 'process.exit(0);\n')]))).toEqual([]);
+  });
+  it('names the rule and path', () => {
+    expect(hostApi(diff([A('games/g/a.js', 'process.exit(0);\n')]))).toEqual([{ rule: 'host-api', path: 'games/g/a.js', detail: expect.stringContaining('process.') }]);
   });
 });

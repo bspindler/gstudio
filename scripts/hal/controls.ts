@@ -12,6 +12,8 @@ export type ControlCheck = { game: string; check: string; ok: boolean; detail: s
 export type ControlsOptions = {
   /** Runs in every page before the game's own scripts (tests use it to break an input path on purpose). */
   initScript?: string;
+  /** Limits the run to these games (default: all). */
+  games?: string[];
 };
 
 const DESKTOP: BrowserContextOptions = { viewport: { width: 1280, height: 800 } };
@@ -345,10 +347,11 @@ export async function runControlsCheck(opts: ControlsOptions = {}): Promise<Cont
     server = await serveGames();
     browser = await launchBrowser();
     const run = new Run(browser, server.origin, opts);
-    await run.guard('gearhold', 'keyboard (desktop)', () => gearholdKeyboard(run));
-    await run.guard('gearhold', 'touch (390x844)', () => gearholdTouch(run));
-    await run.guard('tidepool-pals', 'touch tile tap', () => tidepool(run));
-    await run.guard('hyperline', 'tap and key', () => hyperline(run));
+    const want = (g: string) => !opts.games || opts.games.includes(g);
+    if (want('gearhold')) await run.guard('gearhold', 'keyboard (desktop)', () => gearholdKeyboard(run));
+    if (want('gearhold')) await run.guard('gearhold', 'touch (390x844)', () => gearholdTouch(run));
+    if (want('tidepool-pals')) await run.guard('tidepool-pals', 'touch tile tap', () => tidepool(run));
+    if (want('hyperline')) await run.guard('hyperline', 'tap and key', () => hyperline(run));
     return run.checks;
   } finally {
     await closeAll(browser, server);

