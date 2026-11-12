@@ -12,7 +12,7 @@ import { secretReadPaths } from './env.js';
 import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
-import { acquireLock, defaultStartTime, lockLive, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
+import { acquireLock, CI_UNDO_REASON, defaultStartTime, lockLive, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
 import { parseRunArgs, realRunDeps, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
 import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
@@ -344,17 +344,49 @@ describe('no key anywhere', () => {
 });
 
 describe('push', () => {
-  it('a ci:local failure means no push, reported under warnings; refs/hal/main keeps the merge', async () => {
-    const before = originMain();
-    const ci = vi.fn(async () => ({ ok: false, detail: 'test failed' }));
+  it('ci:local fails once and passes on a re-run (flaky): pushed, with a warning naming the first failure', async () => {
+    let n = 0;
+    const ci = vi.fn(async () => (++n === 1 ? { ok: false, detail: 'failed: test\nflaky timing' } : { ok: true, detail: 'passed' }));
     await runNight(opts(), deps({ ciLocal: ci }));
     const r = readReport();
-    expect(ci).toHaveBeenCalledWith(halHead());
+    expect(r.pushed).toBe(true);
+    expect(ci).toHaveBeenCalledTimes(2);
+    expect(originMain()).toBe(halHead());
+    expect(r.warnings.join('\n')).toMatch(/failed once .* and passed when run again .*flaky timing/s);
+  }, 60_000);
+  it('origin/main fails ci:local too: not Hal\'s to fix, so not pushed, nothing undone, and the warning says it needs Brian', async () => {
+    const before = originMain();
+    const ci = vi.fn(async () => ({ ok: false, detail: 'failed: test\nbroken on main' }));
+    await runNight(opts(), deps({ ciLocal: ci }));
+    const r = readReport();
+    expect(ci.mock.calls.map((a) => (a as unknown as [string])[0])).toEqual([halHead(), halHead(), before]);
     expect(r.pushed).toBe(false);
-    expect(r.pushSkippedReason).toMatch(/ci:local/);
-    expect(r.warnings.join('\n')).toMatch(/ci:local failed.*test failed/);
+    expect(r.pushSkippedReason).toMatch(/origin\/main/);
+    expect(r.warnings.join('\n')).toMatch(/fails on origin\/main itself.*it needs you.*broken on main/s);
+    expect(r.changes[0]!.verdict).toBe('merged'); // kept on refs/hal/main, not undone
+    expect(existsSync(join(halDir, 'feedback.json')) ? feedback().undos : []).toEqual([]);
     expect(originMain()).toBe(before);
+  }, 60_000);
+  it('Hal\'s change breaks ci:local while origin/main passes: Hal undoes that change itself, records why for the planner, and pushes', async () => {
+    const before = originMain();
+    let broken = '';
+    const ci = vi.fn(async (sha: string) => {
+      // Any commit containing the merged change fails, until it is reverted.
+      const has = gitIn(repo, 'show', `${sha}:games/hyperline/game.js`).includes('1.2');
+      if (has) { broken ||= sha; return { ok: false, detail: 'failed: test\nhyperline-speed.test.ts: speed must stay under 1' }; }
+      return { ok: true, detail: 'passed' };
+    });
+    await runNight(opts(), deps({ ciLocal: ci }));
+    const r = readReport();
     expect(r.changes[0]!.verdict).toBe('merged');
+    expect(r.pushed).toBe(true);
+    expect(originMain()).toBe(halHead());
+    expect(gitIn(repo, 'log', '-1', '--format=%s', halHead())).toMatch(/^revert\(hyperline\): undo/);
+    expect(gitIn(repo, 'log', '-1', '--format=%B', halHead())).not.toContain('speed must stay under'); // player-facing text stays clean
+    expect(gitIn(repo, 'show', `${halHead()}:games/hyperline/CHANGELOG.md`)).toContain(CI_UNDO_REASON);
+    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: expect.stringMatching(/ci:local failed on this change after it merged.*speed must stay under 1/s) })]);
+    expect(r.warnings.join('\n')).toMatch(/ci:local failed on HAL-001 .* Hal undid it/);
+    expect(before).not.toBe(originMain());
   }, 60_000);
   /** Hal gets an unpushed commit writing `halText` to `halFile`; origin then moves on with OTHER.txt = 'x'. Returns Hal's commit. */
   const diverge = async (halFile: string, halText: string) => {

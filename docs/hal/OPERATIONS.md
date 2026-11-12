@@ -116,6 +116,19 @@ already in git, but that includes your undo reasons and the director's notes.
 
 ## Recovery
 
+**A failing build is Hal's to fix, not yours.** Two places catch one:
+
+- *While building a change.* If the full `npm test` or `npm run typecheck` fails on the implementer's change, Hal hands
+  the failure output back to the implementer for up to 2 fix rounds, each with its own budget slice. The implementer
+  has to fix the cause and add a test that would have caught it, and it may not weaken or delete tests (Hal counts
+  them). Every round goes through all the checks again. Only a change still failing after the last round is
+  discarded, and the report says how many rounds it had.
+- *Before pushing.* If ci:local fails on Hal's branch, Hal runs it again. A pass means a flaky test, and Hal pushes. If
+  origin/main fails ci:local as well, the problem is not Hal's, so it waits. That is the one case the report flags for
+  you. Otherwise Hal finds the first of its own commits that fails, undoes it the way a 👎 does, checks again and
+  pushes the rest. The game's changelog says only that the change "failed an automated check". The full failure goes
+  into the undo's record in `feedback.json`, so the next night's planner can retry the ticket with a fix.
+
 **origin/main moved while Hal had unpushed commits.** This happens after a `--no-push` run, or a night whose push
 failed, when someone then pushes to origin. Hal handles it itself at the start of the next run. It rebuilds its own
 commits on top of origin/main with git plumbing (no checkout, no hooks), runs ci:local on the result, and only then
