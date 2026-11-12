@@ -275,7 +275,7 @@ describe('renderReport', () => {
     const runs = Array.from({ length: 12 }, (_, i) => ({ runId: `run-2026-11-${String(12 - i).padStart(2, '0')}T08-00-00-000Z`, endedAt: `2026-11-${String(12 - i).padStart(2, '0')}T09:00:00Z` }));
     const html = renderReport(view({ runs, status: { running: true, phase: 'scoring <x>', startedAt: '2026-11-12T08:00:00Z' }, spendToday: 3.5 }));
     const run = section(html, 'Run Hal');
-    expect(run).toContain('Running: scoring &lt;x&gt; (since 2026-11-12T08:00:00Z)');
+    expect(run).toMatch(/Running: scoring &lt;x&gt; \(since Nov 12, \d{1,2}:00\s[AP]M\)/);
     expect(run).toContain('API spend today: $3.50 of $20.00');
     const fs = forms(run);
     const now = fs.find((f) => f.action === '/run')!;
@@ -286,6 +286,49 @@ describe('renderReport', () => {
     const links = [...run.matchAll(/href="\/runs\/([^"]+)"/g)].map((m) => m[1]);
     expect(links).toEqual(runs.slice(0, 10).map((r) => r.runId));
     expect(section(renderReport(view()), 'Run Hal')).toContain('Idle');
+  });
+
+  it('times are in the given zone (default the local one), not UTC', () => {
+    const runs = [{ runId: RUN, endedAt: '2026-11-12T09:30:00Z' }, { runId: 'run-b', endedAt: '2026-11-11T03:05:00Z' }];
+    const status = { running: true, phase: 'scoring', startedAt: '2026-11-12T08:00:00Z' };
+    const la = section(renderReport(view({ runs, status, timeZone: 'America/Los_Angeles' })), 'Run Hal');
+    expect(la).toMatch(/since Nov 12, 12:00\sAM\)/);
+    expect(la).toMatch(/>Nov 12, 1:30\sAM</);
+    expect(la).toMatch(/>Nov 10, 7:05\sPM</); // the previous evening there
+    expect(la).not.toContain('UTC');
+    const tokyo = section(renderReport(view({ runs, status, timeZone: 'Asia/Tokyo' })), 'Run Hal');
+    expect(tokyo).toMatch(/>Nov 12, 6:30\sPM</);
+    // no zone given: the process's local zone, same as Intl's default
+    const local = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date('2026-11-12T09:30:00Z'));
+    expect(section(renderReport(view({ runs })), 'Run Hal')).toContain(`>${local}<`);
+  });
+
+  it('a merged change of any kind other than fix gets a card, so "N merged" never counts an unshown change', () => {
+    const r = fullReport();
+    r.changes.push(change('HAL-007', ticket('T5', 'gearhold', 'content' as Ticket['kind'], 'Two new levels'), 'merged', { version: '0.2.3' }));
+    const html = renderReport(view({}, r));
+    expect(html).toContain('4 merged');
+    expect(card(html, 'HAL-007')).toContain('Two new levels');
+  });
+
+  it('stylesheet: every tap target is at least 44px tall and inputs use 16px text', () => {
+    const html = renderReport(view());
+    const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ sel: m[1]!.trim(), body: m[2]! }));
+    const tap = /summary|button|\.btn|input|select|textarea|\.run-link|\.check\b/;
+    for (const r of rules.filter((x) => tap.test(x.sel))) {
+      for (const m of r.body.matchAll(/min-height:\s*(\d+)px/g)) expect(Number(m[1]), `${r.sel} {${r.body}}`).toBeGreaterThanOrEqual(44);
+    }
+    const minH = (sel: string) => {
+      const hits = rules.filter((r) => r.sel.split(',').map((x) => x.trim()).includes(sel)).flatMap((r) => [...r.body.matchAll(/min-height:\s*(\d+)px/g)].map((m) => Number(m[1])));
+      expect(hits.length, sel).toBeGreaterThan(0);
+      return Math.max(...hits);
+    };
+    for (const sel of ['details>summary', 'button', '.btn', 'input[type=text]', 'select', '.run-link', '.check']) expect(minH(sel), sel).toBeGreaterThanOrEqual(44);
+    const inputs = rules.find((r) => r.sel.startsWith('input[type=text],select,textarea'))!;
+    expect(inputs.body).toMatch(/font:\s*16px/);
+    // every form control in the page is one of those styled kinds (no unstyled controls)
+    for (const m of html.matchAll(/<input type="([a-z]+)"/g)) expect(['hidden', 'text', 'checkbox']).toContain(m[1]);
   });
 
   it('shows the flash line and never the token', () => {

@@ -24,9 +24,10 @@ export type ReportView = {
   games: string[];
   runs: Array<{ runId: string; endedAt: string }>;       // for the "Earlier reports" list, newest first
   flash?: string;                                         // one line after a POST ("Undo started", ...)
+  /** IANA zone for the times shown; default the Mac's own zone (Brian reads the page in his). Injected by tests. */
+  timeZone?: string;
 };
 
-const CARD_KINDS: readonly string[] = ['feature', 'polish', 'tuning'];
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -39,6 +40,7 @@ const gameName = (slug: string) => slug.split('-').map(cap).join(' ');
 const normItem = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 const score = (n: number) => n.toFixed(1);
 const hidden = (name: string, value: string) => `<input type="hidden" name="${esc(name)}" value="${esc(value)}">`;
+const gameOptions = (games: string[]) => games.map((g) => `<option value="${esc(g)}">${esc(gameName(g))}</option>`).join('');
 const minOf = (xs: number[]) => (xs.length ? Math.min(...xs) : null);
 
 // ---- the director's note -------------------------------------------------------------------------------------------
@@ -242,7 +244,7 @@ const NOTE_STATUS: Record<string, [string, State['tone']]> = {
 
 function tell(v: ReportView): string {
   const run = v.report.runId;
-  const opts = v.games.map((g) => `<option value="${esc(g)}">${esc(gameName(g))}</option>`).join('');
+  const opts = gameOptions(v.games);
   const notes = v.notes.map((n) => {
     const [label, tone] = NOTE_STATUS[n.status] ?? [n.status, 'accent'];
     return `<li class="hal-note">
@@ -305,19 +307,20 @@ function warnings(r: ViewReport): string {
   return `<section><h2>Warnings</h2><div class="card warnings"><ul class="rows">${r.warnings.map((w) => `<li class="small">${esc(clip(w, 500))}</li>`).join('')}</ul></div></section>`;
 }
 
-const when = (iso: string) => {
+/** `Nov 12, 1:02 AM` in `timeZone` (default: the local zone); the raw text if it is not a date. */
+const when = (iso: string, timeZone?: string) => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone }).format(d);
 };
 
 function runHal(v: ReportView): string {
   const run = v.report.runId;
   const s = v.status;
-  const status = s.running ? `Running${s.phase ? `: ${esc(s.phase)}` : ''}${s.startedAt ? ` (since ${esc(s.startedAt)})` : ''}` : 'Idle';
-  const opts = v.games.map((g) => `<option value="${esc(g)}">${esc(gameName(g))}</option>`).join('');
+  const status = s.running ? `Running${s.phase ? `: ${esc(s.phase)}` : ''}${s.startedAt ? ` (since ${esc(when(s.startedAt, v.timeZone))})` : ''}` : 'Idle';
+  const opts = gameOptions(v.games);
   const earlier = v.runs.slice(0, 10).map((x) =>
-    `<li><a class="run-link" href="/runs/${esc(encodeURIComponent(x.runId))}"><span>${esc(when(x.endedAt))}</span>${x.runId === run ? '<span class="pill">this one</span>' : ''}</a></li>`);
+    `<li><a class="run-link" href="/runs/${esc(encodeURIComponent(x.runId))}"><span>${esc(when(x.endedAt, v.timeZone))}</span>${x.runId === run ? '<span class="pill">this one</span>' : ''}</a></li>`);
   return `<section><h2>Run Hal</h2>
 <div class="card stack">
 <p class="status"><span class="dot${s.running ? ' on' : ''}" aria-hidden="true"></span><strong>${status}</strong><br><span class="small muted">API spend today: ${usd(v.spendToday)} of ${usd(v.capUsd)}</span></p>
@@ -373,12 +376,12 @@ const REPORT_CSS = `
 .votes form>*+*{margin-top:0}
 .votes button{margin-top:auto}
 .how{margin:-4px 0 12px}
-.how>summary{min-height:36px;justify-content:flex-start;color:var(--accent);font-weight:600}
+.how>summary{justify-content:flex-start;color:var(--accent);font-weight:600}
 .how>summary::after{border-color:var(--accent)}
 .state{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;min-height:44px}
 .state .pill{font-size:14px;padding:7px 12px;white-space:normal}
 .more{flex:1 1 100%}
-.more>summary{justify-content:flex-start;color:var(--accent);font-weight:600;min-height:36px}
+.more>summary{justify-content:flex-start;color:var(--accent);font-weight:600}
 .more>summary::after{border-color:var(--accent)}
 .more-body{padding-top:6px}
 .state:has(.more:not([open])){flex-wrap:nowrap}
@@ -404,7 +407,8 @@ const REPORT_CSS = `
 export function renderReport(v: ReportView): string {
   const r = v.report;
   const merged = r.changes.filter((c) => c.verdict === 'merged');
-  const cards = merged.filter((c) => CARD_KINDS.includes(c.ticket.kind));
+  // Every merged change but a fix is a card (feature, polish, tuning, and any kind added later), so none goes unshown.
+  const cards = merged.filter((c) => c.ticket.kind !== 'fix');
   const fixed = merged.filter((c) => c.ticket.kind === 'fix');
   const gone = r.changes.filter((c) => c.verdict !== 'merged');
   const approved = new Set(v.approvals.map(normItem));
