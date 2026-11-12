@@ -2,6 +2,8 @@
 import type { Range } from './baseline.js';
 import { scoreGearhold } from './gearhold-score.js';
 import { LEVELS } from '../../../../games/gearhold/levels.js';
+import { AUTHORED } from '../../../../games/tidepool-pals/levels.js';
+import { SECTORS, SECTOR_LEN } from '../../../../games/hyperline/lib/world.js';
 import { GEARHOLD_PLAY_DEFAULTS, scoreGearholdPlay, type PlayRecord } from './gearhold-play-score.js';
 import { scoreHyperline } from './hyperline-score.js';
 import { scoreTidepool } from './tidepool-score.js';
@@ -16,9 +18,17 @@ export type Scorer = {
   score(range: Range): ScoreReport<unknown> | Promise<ScoreReport<unknown>>;
 };
 
+// The default ranges follow each game's own content, so a level or sector Hal (or Brian) adds is played and scored
+// like the rest: every Gearhold level; Tidepool's hand-made levels plus 10 generated ones (at least 1-30); Hyperline
+// up to 150 units into its last, endless sector (so `reach` stays a fraction of the whole course).
+/** Tidepool levels scored by default: the hand-made ones and 10 generated after them, at least 30. */
+export const TIDEPOOL_TO = Math.max(30, AUTHORED.length + 10);
+/** Hyperline's default `until`: 150 units into the final sector. */
+export const HYPERLINE_UNTIL = (SECTORS.length - 1) * SECTOR_LEN + 150;
+
 const tidepool: Scorer = {
   game: 'tidepool-pals',
-  defaults: { from: 1, to: 30, seeds: 20 },
+  defaults: { from: 1, to: TIDEPOOL_TO, seeds: 20 },
   validate(r) {
     for (const k of ['from', 'to', 'seeds']) if (!Number.isInteger(r[k]) || (r[k] as number) < 1) return `--${k} must be a positive integer`;
     if ((r.from as number) > (r.to as number)) return '--from must not exceed --to';
@@ -29,7 +39,7 @@ const tidepool: Scorer = {
 
 const hyperline: Scorer = {
   game: 'hyperline',
-  defaults: { seeds: 100, until: 1900 },
+  defaults: { seeds: 100, until: HYPERLINE_UNTIL },
   validate(r) {
     for (const k of ['seeds', 'until']) if (!Number.isInteger(r[k]) || (r[k] as number) < 1) return `--${k} must be a positive integer`;
     return null;
@@ -56,7 +66,7 @@ export type GearholdPlayRunner = (o: { levels: number[]; seeds: number; seedBase
 export function gearholdPlayScorer(run: GearholdPlayRunner): Scorer {
   return {
     game: 'gearhold-play',
-    defaults: { ...GEARHOLD_PLAY_DEFAULTS },
+    defaults: { ...GEARHOLD_PLAY_DEFAULTS, levels: LEVELS.length }, // every level the game has
     validate(r) {
       for (const k of ['levels', 'seeds']) if (!Number.isInteger(r[k]) || (r[k] as number) < 1) return `--${k} must be a positive integer`;
       if ((r.levels as number) > LEVELS.length) return `--levels must be at most ${LEVELS.length} (Gearhold has ${LEVELS.length} levels)`;

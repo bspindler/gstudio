@@ -2,7 +2,8 @@
 import type { ScoreReport } from './types.js';
 
 /** The one place the default play range is set; scorers and the direct runner both read it. */
-export const GEARHOLD_PLAY_DEFAULTS = { levels: 3, seeds: 50, seedBase: 0 } as const;
+/** Seeds per level. The level count is not fixed here: the scorer plays every level the game has (scorers.ts). */
+export const GEARHOLD_PLAY_DEFAULTS = { seeds: 50, seedBase: 0 } as const;
 
 export type PlayRecord = {
   level: number; /* 0-based, the game's own index */ seed: number; result: 'win' | 'dead' | 'timeout'; time: number; hpLeft: number;
