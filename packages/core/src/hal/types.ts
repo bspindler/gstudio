@@ -7,7 +7,8 @@ export type PlayResult = {
   goalFrac: number; // 0..1, mean over goals of min(got, need) / need at the end
 };
 
-export type LevelStats = { n: number; winRate: number; avgMovesLeftFrac: number; avgGoalFrac: number; difficulty: number; errors: string[] };
+/** `wins`/`closeWins`: plays won, and won with few moves left (tension.ts); optional for reports written before tension. */
+export type LevelStats = { n: number; winRate: number; avgMovesLeftFrac: number; avgGoalFrac: number; difficulty: number; errors: string[]; wins?: number; closeWins?: number };
 
 /** Each measure is 0..100, higher is better. */
 export type Measures = Record<string, number>;

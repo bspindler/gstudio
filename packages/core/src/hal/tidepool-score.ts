@@ -2,6 +2,10 @@
 import { difficulty, levelDef, validateLevel, withoutTides } from '../../../../games/tidepool-pals/levels.js';
 import { playLevel } from './tidepool-bot.js';
 import type { LevelStats, Measures, ScoreReport } from './types.js';
+import { tensionMeasure } from './tension.js';
+
+/** A close Tidepool finish: won with at most this many moves left (or a tenth of the level's moves, if more). */
+export const TIDEPOOL_CLOSE_MOVES = 2;
 
 /** Brian-reviewed thresholds; changing them changes what "good" means. */
 export const TIDEPOOL_BANDS = { early: { upTo: 5, minWin: 0.9 }, minWin: 0.25, wallDrop: 0.3 };
@@ -13,8 +17,12 @@ function statsFor(n: number, seeds: number): LevelStats {
   const def = levelDef(n);
   const plays = Array.from({ length: seeds }, (_, i) => playLevel(def, i + 1));
   const errors = [...new Set([...validateLevel(def), ...validateLevel(withoutTides(def))])];
+  const close = Math.max(TIDEPOOL_CLOSE_MOVES, Math.ceil(def.moves * 0.1));
+  const won = plays.filter((p) => p.won);
   return {
     n,
+    wins: won.length,
+    closeWins: won.filter((p) => p.movesLeft <= close).length,
     winRate: mean(plays.map((p) => (p.won ? 1 : 0))),
     avgMovesLeftFrac: mean(plays.map((p) => p.movesLeft / def.moves)),
     avgGoalFrac: mean(plays.map((p) => p.goalFrac)),
@@ -43,11 +51,14 @@ export function scoreTidepool(opts: { from: number; to: number; seeds: number })
     noWalls: round2(levels.length > 1 ? 100 * (1 - walls / (levels.length - 1)) : 100),
     goalReach: round2(lost.length ? 100 * mean(lost.map((l) => l.avgGoalFrac)) : 100),
   };
+  // Fitness stays the balance measures' mean; tension is reported and gated beside it (tension.ts).
+  const fitness = round2(mean(Object.values(measures)));
+  measures.tension = tensionMeasure(levels.map((l) => ({ wins: l.wins ?? 0, close: l.closeWins ?? 0 })));
   return {
     game: 'tidepool-pals',
     levels,
     measures,
-    fitness: round2(mean(Object.values(measures))),
+    fitness,
     hardFailures: levels.flatMap((l) => l.errors.map((e) => `level ${l.n}: ${e}`)),
   };
 }

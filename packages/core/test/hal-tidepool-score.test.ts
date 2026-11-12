@@ -30,8 +30,11 @@ describe('scoreTidepool', () => {
 
   it('measures are 0..100 and fitness is their mean', () => {
     const r = scoreTidepool({ from: 1, to: 6, seeds: 4 });
-    expect(Object.keys(r.measures)).toEqual(['inBand', 'noWalls', 'goalReach']);
-    const vals = Object.values(r.measures);
+    expect(Object.keys(r.measures)).toEqual(['inBand', 'noWalls', 'goalReach', 'tension']);
+    for (const l of r.levels) expect(l.closeWins!).toBeLessThanOrEqual(l.wins!);
+    const vals = [r.measures.inBand!, r.measures.noWalls!, r.measures.goalReach!]; // fitness: the balance measures, not tension
+    expect(r.measures.tension).toBeGreaterThanOrEqual(0);
+    expect(r.measures.tension).toBeLessThanOrEqual(100);
     for (const v of vals) {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(100);
