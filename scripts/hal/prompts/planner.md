@@ -84,6 +84,10 @@ Gearhold's list ends with one `overhead-level-<n>` shot per level: the whole lev
 ### Recent feedback (votes and undo reasons)
 {{feedback}}
 
+### Features built and waiting for Brian's OK (don't plan these again)
+New features are held until Brian plays them and taps 👍; these are waiting. Plan around them, not on top of them.
+{{held}}
+
 ### Approvals Brian has given
 {{approvals}}
 

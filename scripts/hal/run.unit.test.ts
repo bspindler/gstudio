@@ -12,7 +12,7 @@ import { secretReadPaths } from './env.js';
 import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
-import { acquireLock, CI_UNDO_REASON, defaultStartTime, lockLive, runAlert, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
+import { acquireLock, CI_UNDO_REASON, defaultStartTime, heldCommand, lockLive, runAlert, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
 import { parseRunArgs, realRunDeps, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
 import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
@@ -391,6 +391,45 @@ describe('lessons (what Hal learns across nights)', () => {
   }, 60_000);
 });
 
+describe('new features wait for Brian', () => {
+  const FEATURE = T('T9', 'Brighter trail', { kind: 'feature' });
+  const heldRefs = () => gitIn(repo, 'for-each-ref', '--format=%(refname)', 'refs/hal/held/').split('\n').filter(Boolean);
+  const showOrigin = (path: string) => { try { return gitIn(origin, 'show', `refs/heads/main:${path}`); } catch { return null; } };
+  it('a feature is built last and held; the rest of the night merges and ships; the planner sees it next time', async () => {
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [FEATURE, GOOD] }) }));
+    const r = readReport();
+    expect(r.changes.map((c) => [c.ticket.title, c.verdict])).toEqual([['Smoother jumps', 'merged'], ['Brighter trail', 'held']]);
+    expect(r.pushed).toBe(true);
+    expect(heldRefs()).toEqual([`refs/hal/held/${r.changes[1]!.pass}`]);
+    expect(showOrigin('games/hyperline/game.js')).toBe('export const speed = 1.2;'); // the tuning shipped, the feature did not
+    calls.length = 0;
+    await runNight(opts(), deps());
+    expect(calls.find((c) => c.role === 'planner')!.prompt).toMatch(new RegExp(`- ${r.changes[1]!.pass}: feature\\(hyperline\\): Brighter trail`));
+  }, 120_000);
+  it('hal ship puts it on main, runs ci:local and pushes; hal drop deletes it', async () => {
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [FEATURE] }) }));
+    const pass = readReport().changes[0]!.pass;
+    const ci = vi.fn(async () => ({ ok: true, detail: 'passed' }));
+    expect(await heldCommand('ship', pass, { push: true }, deps({ ciLocal: ci }))).toBe(0);
+    expect(heldRefs()).toEqual([]);
+    expect(showOrigin('games/hyperline/game.js')).toContain('trail');
+    expect(ci).toHaveBeenCalledWith(halHead());
+    expect(feedback().held).toEqual([expect.objectContaining({ pass, decision: 'ship', status: 'done', commit: halHead() })]);
+    expect(await heldCommand('drop', pass, { push: true }, deps())).toBe(0); // already shipped: nothing held, recorded
+  }, 120_000);
+  it('a decision made while Hal is busy is saved, and the next run applies it before building', async () => {
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [FEATURE] }) }));
+    const pass = readReport().changes[0]!.pass;
+    writeFileSync(join(halDir, 'run.lock'), J({ pid: process.pid, runId: 'other', startedAt: new Date(Date.now() + 1000).toISOString(), phase: 'plan' }));
+    expect(await heldCommand('drop', pass, { push: false }, deps())).toBe(2);
+    expect(heldRefs()).toHaveLength(1);
+    rmSync(join(halDir, 'run.lock'));
+    await runNight(opts(), deps());
+    expect(heldRefs()).toEqual([]);
+    expect(readReport().warnings.join('\n')).toMatch(new RegExp(`dropped ${pass} \\(Brian's 👎\\)`));
+  }, 120_000);
+});
+
 describe('models per role', () => {
   it('the implementer runs on implementerModel; the planner and director on model', async () => {
     await runNight(opts(), deps({ model: 'plan-model', implementerModel: 'build-model' }));
@@ -634,7 +673,7 @@ async function makePass(pass = 'HAL-001', o: { file?: string; text?: string; fro
   gitIn(repo, 'update-ref', HAL_MAIN, gitIn(dir, 'rev-parse', 'HEAD'));
   return halHead();
 }
-const feedback = () => JSON.parse(read(halDir, 'feedback.json')) as { undos: { pass?: string; status?: string; error?: string; reason: string }[] };
+const feedback = () => JSON.parse(read(halDir, 'feedback.json')) as { undos: { pass?: string; status?: string; error?: string; reason: string }[]; held?: Array<Record<string, unknown>> };
 
 describe('undo', () => {
   it('reverts the pass, writes a NEW patch version with an Undone bullet, commits Hal-Undo/Hal-Reason, records feedback', async () => {

@@ -701,3 +701,70 @@ describe('spendOf (the Run Hal card)', () => {
     expect(spendOf(day, 'r2')).toEqual({ spendToday: 2.4, subscriptionToday: 2.12, runSpend: 1.5 });
   });
 });
+
+describe('held features (ship it / drop it, and try it first)', () => {
+  const HELD_SHA = 'b'.repeat(40);
+  const heldChange = change('HAL-010', ticket('T9', 'gearhold', 'feature', 'A checkpoint at the key'), 'held', { commit: HELD_SHA, version: '0.3.0' });
+  const seedHeld = async () => {
+    await seed(RUN, true, {});
+    const p = join(halDir, 'runs', RUN, 'report.json');
+    const r = JSON.parse(await readFile(p, 'utf8'));
+    r.changes.push(heldChange);
+    await writeFile(p, JSON.stringify(r));
+  };
+  const files: Record<string, string> = { 'gearhold/index.html': '<!doctype html><script type="module">import "./levels.js";</script>', 'gearhold/levels.js': 'export const LEVELS = [];', 'sdk/studio-sdk.js': 'export {};' };
+  const mkGit = () => createServerApp({
+    halDir, token: TOKEN, games: ['tidepool-pals', 'gearhold'], now: () => new Date('2026-11-11T09:00:00Z'),
+    isAlive: () => alive, startTimeOf: () => startedAt, spawnRun: (o) => { spawned.push(o); },
+    git: async (args) => {
+      const m = /^([0-9a-f]{40}):(?:games\/|packages\/(?=sdk\/))(.+)$/.exec(args[1] ?? '');
+      if (args[0] === 'show' && m && m[1] === HELD_SHA && Object.hasOwn(files, m[2]!)) return Buffer.from(files[m[2]!]!);
+      throw new Error('no such object');
+    },
+  });
+  it('👍 on a held feature ships it (hal ship); 👎 drops it (hal drop); both recorded, a second tap does nothing', async () => {
+    await seedHeld();
+    const app = mk();
+    expect((await post(app, '/vote', form({ run: RUN, pass: 'HAL-010', comment: 'love it' }))).status).toBe(303);
+    expect(spawned.map((s) => s.args)).toEqual([['ship', 'HAL-010']]);
+    const fb = JSON.parse(await readFile(join(halDir, 'feedback.json'), 'utf8'));
+    expect(fb.held).toEqual([expect.objectContaining({ pass: 'HAL-010', decision: 'ship', status: 'pending' })]);
+    expect(fb.votes).toEqual([expect.objectContaining({ item: 'HAL-010', vote: 'up', comment: 'love it' })]);
+    fb.held[0].status = 'done';
+    await writeFile(join(halDir, 'feedback.json'), JSON.stringify(fb));
+    await post(app, '/undo', form({ run: RUN, pass: 'HAL-010' }));
+    expect(spawned).toHaveLength(1); // already decided
+  });
+  it('while Hal runs, the decision is queued for the next run instead of spawned', async () => {
+    await seedHeld();
+    await lock();
+    await post(mk(), '/undo', form({ run: RUN, pass: 'HAL-010', reason: 'not my style' }));
+    expect(spawned).toEqual([]);
+    expect(JSON.parse(await readFile(join(halDir, 'feedback.json'), 'utf8')).held).toEqual([expect.objectContaining({ decision: 'drop', status: 'pending' })]);
+  });
+  it('the preview serves the held game from its commit, under a policy that blocks requests and form posts; anything else 404s', async () => {
+    await seedHeld();
+    const app = mkGit();
+    const r = await get(app, '/preview/HAL-010/gearhold/index.html');
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    const csp = r.headers.get('content-security-policy')!;
+    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain("form-action 'none'");
+    expect(await r.text()).toContain('import "./levels.js"');
+    expect((await get(app, '/preview/HAL-010/sdk/studio-sdk.js')).headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+    for (const p of ['/preview/HAL-010/../.hal.env', '/preview/HAL-010/gearhold/.env', '/preview/HAL-010/gearhold/x.exe', '/preview/HAL-999/gearhold/index.html', '/preview/HAL-003x/gearhold/index.html', '/preview/HAL-010/gearhold/missing.js'])
+      expect((await get(app, p)).status, p).toBe(404);
+    expect((await mkGit().request(`${H}/preview/HAL-010/gearhold/index.html`)).status).toBe(404); // no token
+  });
+  it('the report shows it under "Waiting for your OK" with Try it, Ship it and Drop it', async () => {
+    await seedHeld();
+    const html = await (await get(mk(), '/')).text();
+    const i = html.indexOf('Waiting for your OK');
+    expect(i).toBeGreaterThan(-1);
+    const sec = html.slice(i, html.indexOf('</section>', i));
+    expect(sec).toContain('href="/preview/HAL-010/gearhold/index.html"');
+    expect(sec).toContain('👍 Ship it');
+    expect(sec).toContain('👎 Drop it');
+  });
+});

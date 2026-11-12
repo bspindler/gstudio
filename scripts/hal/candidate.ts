@@ -31,7 +31,7 @@ import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.j
 import type { ControlCheck } from './controls.js';
 import {
   addFileToTree, blobBytes, blobText, changedPaths, collectTreeDiff, commitTree, extendTree, linkNodeModules, trustRootDigest, newCandidateWorktree, removeWorktree, runGit, snapshotTree,
-  squashMerge, verifyNodeModules, vitestCounts, type CollectDeps, type GitRunner,
+  holdCandidate, squashMerge, verifyNodeModules, vitestCounts, type CollectDeps, type GitRunner,
 } from './git.js';
 import { loadPrompt, parseImplementerOutput, renderPrompt, type ImplementerOutput } from './prompts.js';
 import { runIsolated, sandboxAvailable, sandboxEnv, type IsolatedResult, type SandboxPolicy } from './sandbox.js';
@@ -131,6 +131,8 @@ export type CandidateCtx = {
   implementerTimeoutMs?: number;
   /** Default FIX_ROUNDS. */
   fixRounds?: number;
+  /** Keep the verified commit at refs/hal/held/<pass> instead of merging it (new features wait for Brian). */
+  hold?: boolean;
   appendSystemPromptFile?: string;
   /** Real secret values (the API key from .hal.env), kept out of every diff, env, reason and result (ruling R8). */
   secrets: string[];
@@ -158,7 +160,8 @@ export type CandidateCtx = {
 export type CandidateResult = {
   pass: string;
   ticket: Ticket;
-  verdict: 'merged' | 'discarded' | 'skipped';
+  /** `held`: a feature that passed every check, kept off refs/hal/main until Brian ships it (git.ts holdCandidate). */
+  verdict: 'merged' | 'held' | 'discarded' | 'skipped';
   reasons: string[];
   scoresBefore: Record<string, ScoreReport<unknown>>;
   scoresAfter: Record<string, ScoreReport<unknown>>;
@@ -591,6 +594,13 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     const message = `${ticket.kind}(${game}): ${oneLine(ticket.title)}\n\n${oneLine(ticket.why)}\n\n${trailers}`;
     if (secrets.some((k) => message.includes(k))) discard('commit message contains a secret');
     const verifiedCommit = await commitTree(ctx.repo, t3, wt.base, message, { git });
+    if (ctx.hold) {
+      const held = await holdCandidate(ctx.repo, ctx.pass, message, { commit: verifiedCommit, tree: t3 }, { git });
+      if (!held.ok) discard(`hold failed: ${held.error}`);
+      res.commit = (held as { commit: string }).commit;
+      res.shots = shots;
+      return finish('held', []);
+    }
     const merged = await squashMerge(ctx.repo, ctx.pass, message, { commit: verifiedCommit, tree: t3 }, { git });
     if (!merged.ok) discard(`squash merge failed: ${merged.error}`);
     res.commit = (merged as { commit: string }).commit;

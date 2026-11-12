@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkTripwires } from '@studio/core/hal';
 import {
   blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
-  addFileToTree, linkNodeModules, pushHalMain, replayHalOnto, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
+  addFileToTree, adoptHeld, dropHeld, holdCandidate, linkNodeModules, listHeld, pushHalMain, replayHalOnto, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
 } from './git.js';
 
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -324,6 +324,51 @@ describe('Hal worktrees (temp git repo)', () => {
       const m = await ensureMainWorktree(r);
       expect(m.fetched).toBe(false);
       expect(head(m.dir)).toBe(head(r, 'refs/heads/main'));
+    });
+  });
+
+  describe('held features', () => {
+    it('hold keeps a verified commit off refs/hal/main; ship replays it on top of whatever merged since; drop deletes it', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const base = head(r, HAL_MAIN);
+      const f = await candidate(r, 'HAL-7', 'games/g/feature.js', 'new\n');
+      const held = await holdCandidate(r, 'HAL-7', 'feature(g): a new mode', f.verified);
+      if (!held.ok) throw new Error(held.error);
+      expect(head(r, HAL_MAIN)).toBe(base); // nothing on main
+      expect(await listHeld(r)).toEqual([{ pass: 'HAL-7', commit: held.commit, subject: 'feature(g): a new mode' }]);
+      expect((await holdCandidate(r, 'HAL-7', 'again', f.verified)).ok).toBe(false); // create-only
+      // a tuning change merges meanwhile, then Brian ships the feature
+      const t = await candidate(r, 'HAL-8', 'games/g/a.js', 'let a = 3;\n');
+      expect((await squashMerge(r, 'HAL-8', 'tuning(g): x', t.verified)).ok).toBe(true);
+      const mid = head(r, HAL_MAIN);
+      const s2 = await adoptHeld(r, 'HAL-7');
+      if (!s2.ok) throw new Error(s2.error);
+      expect(gitIn(r, 'rev-parse', `${s2.commit}^`)).toBe(mid);
+      expect(gitIn(r, 'show', `${HAL_MAIN}:games/g/feature.js`)).toBe('new');
+      expect(gitIn(r, 'show', `${HAL_MAIN}:games/g/a.js`)).toBe('let a = 3;');
+      expect(gitIn(r, 'log', '-1', '--format=%s', HAL_MAIN)).toBe('feature(g): a new mode');
+      expect(await listHeld(r)).toEqual([]);
+      expect((await adoptHeld(r, 'HAL-7')).ok).toBe(false); // gone
+      const g = await candidate(r, 'HAL-9', 'games/g/b.js', 'x\n');
+      expect((await holdCandidate(r, 'HAL-9', 'feature(g): b', g.verified)).ok).toBe(true);
+      expect(await dropHeld(r, 'HAL-9')).toBe(true);
+      expect(await dropHeld(r, 'HAL-9')).toBe(false);
+      expect(await listHeld(r)).toEqual([]);
+    });
+    it('a held feature whose lines main changed since does not ship: conflict, nothing moves', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const f = await candidate(r, 'HAL-1', 'games/g/a.js', 'let a = 100;\n');
+      const held = await holdCandidate(r, 'HAL-1', 'feature(g): a', f.verified);
+      expect(held.ok).toBe(true);
+      const t = await candidate(r, 'HAL-2', 'games/g/a.js', 'let a = 5;\n');
+      expect((await squashMerge(r, 'HAL-2', 'tuning(g): a', t.verified)).ok).toBe(true);
+      const before = head(r, HAL_MAIN);
+      const s2 = await adoptHeld(r, 'HAL-1');
+      expect(s2).toMatchObject({ ok: false, conflict: true });
+      expect(head(r, HAL_MAIN)).toBe(before);
+      expect((await listHeld(r)).map((h) => h.pass)).toEqual(['HAL-1']);
     });
   });
 
