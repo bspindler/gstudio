@@ -40,6 +40,8 @@ export type IsolatedCheckOptions = {
   timeoutMs: number;
   /** Passed as $HAL_CHECK_NONCE (entry checks print `HAL-RESULT <nonce> <json>`). */
   nonce?: string;
+  /** Extra env for the child (never secrets: values containing one are dropped). */
+  extraEnv?: Record<string, string>;
   /** The tree has its own throwaway node_modules (ci:local after `npm ci`): not relinked from <repo>, not write-denied
    *  (it is not the trust root; vitest keeps its cache there). */
   ownNodeModules?: boolean;
@@ -65,7 +67,8 @@ export async function isolatedCheck(argv: string[], o: IsolatedCheckOptions): Pr
     } catch (e) { return none(errMsg(e)); }
   }
   const base = sandboxEnv(process.env, [...o.secrets]);
-  const env = o.nonce ? { ...base, [NONCE_ENV]: o.nonce } : base;
+  const extra = Object.fromEntries(Object.entries(o.extraEnv ?? {}).filter(([, v]) => !o.secrets.some((s) => s && v.includes(s))));
+  const env = { ...base, ...extra, ...(o.nonce ? { [NONCE_ENV]: o.nonce } : {}) };
   return runIsolated(argv, {
     cwd: o.cwd, env, timeoutMs: o.timeoutMs,
     ...(unsandboxed ? { unsandboxed: true } : {

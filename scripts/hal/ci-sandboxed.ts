@@ -4,12 +4,12 @@
 //                `protected-path`/`dependency`, so what it installs is what Brian committed. Env scrubbed of secrets.
 //   typecheck,   isolatedCheck, sandboxed: no network but loopback, <repo>/.hal.env unreadable, writes only to the ci
 //   test,        worktree and tmp, its .git write-denied, own process group. lint:infra only if the script exists and
-//   lint:infra   `az` is installed (as ci-local.ts), also sandboxed.
+//   lint:infra   `az` is installed (as ci-local.ts), also sandboxed (plus ~/.azure writable, a tmp .NET extract dir).
 // The worktree is a detached checkout of <sha> in a fresh temp dir, made with Hal's safe git (no hooks), removed after.
 // Every tail written to .data/ci is redacted. Plain `npm run ci:local` (Brian's) is unchanged.
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { childEnv } from './env.js';
 import { runGit, safeGit, type GitRunner } from './git.js';
@@ -82,10 +82,11 @@ export async function ciLocalSandboxed(sha: string, o: CiSandboxedOptions): Prom
     let t0 = Date.now();
     const ci = await runNpmCi(wt, npmCiEnv(process.env, o.secrets), timeoutMs);
     let ok = step('npm ci', ci.code === 0, t0, ci.out);
-    const sandboxed = async (name: string, argv: string[]) => {
+    const sandboxed = async (name: string, argv: string[], more: { writable?: string[]; extraEnv?: Record<string, string> } = {}) => {
       t0 = Date.now();
       const r = await isolatedCheck(argv, {
-        cwd: wt, repo: o.repo, secrets: o.secrets, writable: [wt], timeoutMs, ownNodeModules: true,
+        cwd: wt, repo: o.repo, secrets: o.secrets, writable: [wt, ...(more.writable ?? [])], timeoutMs, ownNodeModules: true,
+        ...(more.extraEnv ? { extraEnv: more.extraEnv } : {}),
         ...(o.unsandboxedForTests ? { unsandboxedForTests: true } : {}),
       });
       return step(name, r.code === 0, t0, `${r.stdout}\n${r.stderr}${r.timedOut ? '\n(timed out)' : ''}${r.error ? `\n${r.error}` : ''}`);
@@ -97,7 +98,10 @@ export async function ciLocalSandboxed(sha: string, o: CiSandboxedOptions): Prom
       const az = (o.hasAz ?? (() => spawnSync('sh', ['-c', 'command -v az']).status === 0))();
       if (!scripts['lint:infra']) step('lint:infra', true, Date.now(), '', 'no lint:infra script');
       else if (!az) step('lint:infra', true, Date.now(), '', 'az not installed');
-      else await sandboxed('lint:infra', ['npm', 'run', 'lint:infra']);
+      // az keeps its logs and bicep binary under ~/.azure, and bicep (.NET) needs an extract dir. Measured on this Mac:
+      // lint:infra passes sandboxed with exactly these. Nothing it runs is Claude-written: infra/** is protected and
+      // scripts/ is outside every candidate's scope (R18).
+      else await sandboxed('lint:infra', ['npm', 'run', 'lint:infra'], { writable: [join(homedir(), '.azure')], extraEnv: { DOTNET_BUNDLE_EXTRACT_BASE_DIR: join(tmpdir(), 'hal-dotnet') } });
     }
   } catch (e) {
     steps.push({ step: 'setup', ok: false, seconds: 0, tail: redact(errMsg(e)) });
