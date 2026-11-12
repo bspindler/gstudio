@@ -140,3 +140,19 @@ describe('POST', () => {
     expect(await readFile(join(halDir, 'stop'), 'utf8')).toBe('2026-11-11T09:00:00.000Z');
   });
 });
+
+describe('realSpawnRun (fix round 3)', () => {
+  it('starts the run with TSX_DISABLE_CACHE=1, detached, output to the log', async () => {
+    const { realSpawnRun } = await import('./server.js');
+    const { fileURLToPath } = await import('node:url');
+    const seen: { args: string[]; opts: { env?: NodeJS.ProcessEnv; detached?: boolean } }[] = [];
+    const fakeSpawn = ((_cmd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; detached?: boolean }) => {
+      seen.push({ args, opts });
+      return { on: () => {}, unref: () => {} };
+    }) as unknown as typeof import('node:child_process').spawn;
+    realSpawnRun(fileURLToPath(new URL('../../', import.meta.url)), fakeSpawn)({ args: ['run', '--report-only'], logPath: join(halDir, 'logs', 'x.log') });
+    expect(seen[0]!.opts.env!.TSX_DISABLE_CACHE).toBe('1');
+    expect(seen[0]!.opts.detached).toBe(true);
+    expect(seen[0]!.args.slice(-3)).toEqual(['scripts/hal.ts', 'run', '--report-only']);
+  });
+});

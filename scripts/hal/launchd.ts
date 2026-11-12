@@ -47,6 +47,8 @@ function plist(label: string, o: PlistOpts, program: string[], extra: string, lo
   <dict>
     <key>PATH</key>
     ${str(launchPath(o))}
+    <key>TSX_DISABLE_CACHE</key>
+    ${str('1')}
   </dict>
 ${extra}  <key>StandardOutPath</key>
   ${str(log)}

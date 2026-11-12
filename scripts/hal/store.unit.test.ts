@@ -94,3 +94,29 @@ describe('store', () => {
     expect(() => s.runDir('../x')).toThrow();
   });
 });
+
+describe('store: run-time additions (Task 7)', () => {
+  it('recordUndo updates the unfinished entry for a pass; pendingUndos lists pending/failed, newest per pass', async () => {
+    const s = createStore({ halDir: await mkdtemp(join(tmpdir(), 'hal-store-t7-')), now: () => new Date('2026-11-12T03:00:00Z') });
+    await s.recordUndo({ pass: 'HAL-001', run: 'r1', reason: 'too bouncy', status: 'failed', error: 'conflict' });
+    await s.recordUndo({ pass: 'HAL-002', run: 'r1', reason: 'meh', status: 'pending' });
+    expect((await s.pendingUndos()).map((u) => u.pass)).toEqual(['HAL-001', 'HAL-002']);
+    await s.recordUndo({ pass: 'HAL-001', run: 'r2', reason: 'too bouncy', status: 'done', commit: 'abc' });
+    const f = await s.readFeedback();
+    expect(f.undos).toHaveLength(2);
+    expect(f.undos[0]).toMatchObject({ pass: 'HAL-001', status: 'done', commit: 'abc' });
+    expect(f.undos[0]!.error).toBeUndefined();
+    expect((await s.pendingUndos()).map((u) => u.pass)).toEqual(['HAL-002']);
+    await s.recordUndo({ pass: 'HAL-002', run: 'r2', reason: 'meh', status: 'rejected', error: 'no such pass' });
+    expect(await s.pendingUndos()).toEqual([]);
+  });
+  it('sync spend: save then load round-trips, keeps 60 days', async () => {
+    const now = new Date(2026, 10, 12, 3);
+    const s = createStore({ halDir: await mkdtemp(join(tmpdir(), 'hal-store-t7-')), now: () => now });
+    const day = s.loadSpendTodaySync();
+    expect(day.calls).toEqual([]);
+    s.saveSpendDaySync({ ...day, calls: [{ run: 'r', role: 'planner', billing: 'api', usd: 1.5, at: now.toISOString() }] });
+    expect(s.loadSpendTodaySync().calls).toHaveLength(1);
+    expect((await s.loadSpendToday()).calls).toHaveLength(1);
+  });
+});

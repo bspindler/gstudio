@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { runIsolated, sandboxAvailable, sandboxEnv, sandboxProfile, type SandboxPolicy } from './sandbox.js';
+import { runIsolated, sandboxAvailable, sandboxEnv, sandboxProfile, tsxCacheDir, type SandboxPolicy } from './sandbox.js';
 
 const KEY = 'sk-ant-api03-SANDBOXTESTKEY0123456789';
 const node = (code: string) => [process.execPath, '-e', code];
@@ -16,7 +16,7 @@ describe('sandboxEnv / sandboxProfile', () => {
     const env = sandboxEnv(base, [KEY]);
     for (const k of ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'HAL_TOKEN', 'GIT_DIR', 'SNEAKY']) expect(env[k], k).toBeUndefined();
     expect(env).toMatchObject({ PATH: '/bin', HOME: '/h', KEEP: '1', CI: '1', HAL_SANDBOXED: '1' });
-    expect(env.npm_config_cache).toBe(join(tmpdir(), 'hal-npm-cache'));
+    expect(env.npm_config_cache).toBeUndefined(); // set per child by runIsolated, in its private temp dir
     expect(base.ANTHROPIC_API_KEY).toBe(KEY); // never mutated
   });
   it('denies network except loopback, writes except the given paths and /dev, and reads of the denied files; quotes paths', () => {
@@ -97,5 +97,44 @@ describe.runIf(sandboxAvailable())('runIsolated under sandbox-exec (darwin)', ()
     expect(() => process.kill(pid, 0)).toThrow(); // gone
     const t = await run('setTimeout(() => {}, 60000)', 500);
     expect(t.timedOut).toBe(true);
+  });
+});
+
+describe('sandboxProfile: paths that do not exist yet (fix round 2)', () => {
+  it('a not-yet-existing path also gets the real spelling of its nearest existing ancestor', () => {
+    const d = mkdtempSync(join(tmpdir(), 'hal-sbx-'));
+    const prof = sandboxProfile({ writable: [], denyRead: [], denyWrite: [join(d, 'node_modules', 'x')] });
+    expect(prof).toContain(JSON.stringify(join(realpathSync(d), 'node_modules', 'x')));
+    expect(prof).toContain(JSON.stringify(join(d, 'node_modules', 'x')));
+  });
+});
+
+describe('private temp dir per child (fix round 3)', () => {
+  it('TMPDIR/TMP/TEMP and the npm cache point to a fresh private dir, removed afterwards', async () => {
+    const r = await runIsolated([process.execPath, '-e', `const fs=require('fs');const t=process.env.TMPDIR;fs.writeFileSync(t+'/x','1');console.log(JSON.stringify([t,process.env.TMP,process.env.TEMP,process.env.npm_config_cache,require('os').tmpdir()]))`],
+      { cwd: tmpdir(), env: { PATH: process.env.PATH }, timeoutMs: 10_000, unsandboxed: true });
+    const [t, tmp, temp, npm, osTmp] = JSON.parse(r.stdout) as string[];
+    expect(t).not.toBe(tmpdir());
+    expect(t!.startsWith(join(tmpdir(), 'hal-child-'))).toBe(true);
+    expect([tmp, temp, osTmp]).toEqual([t, t, t]);
+    expect(npm).toBe(join(t!, 'npm-cache'));
+    expect(existsSync(t!)).toBe(false); // removed when the child ended
+  });
+  it('refuses a policy that makes the shared tmpdir writable', () => {
+    expect(() => runIsolated(['true'], { cwd: tmpdir(), env: {}, timeoutMs: 1000, policy: { writable: [tmpdir()], denyRead: [] } })).toThrow(/shared tmpdir/);
+  });
+  it.runIf(sandboxAvailable())('darwin: a sandboxed child cannot write the shared tmpdir or tsx-<uid> there, but can write its own temp dir', async () => {
+    const tsx = tsxCacheDir();
+    const probe = join(tmpdir(), `hal-shared-probe-${process.pid}`);
+    const code = `const fs=require('fs'),path=require('path');const r=[];const t=(n,f)=>{try{f();r.push(n+':ok')}catch(e){r.push(n+':'+e.code)}};
+t('tsx',()=>{fs.mkdirSync(${JSON.stringify(tsx)},{recursive:true});fs.writeFileSync(path.join(${JSON.stringify(tsx)},'hal-probe-x'),'x')});
+t('shared',()=>fs.writeFileSync(${JSON.stringify(probe)},'x'));
+t('own',()=>fs.writeFileSync(path.join(require('os').tmpdir(),'x'),'x'));
+console.log(r.join(' '))`;
+    const r = await runIsolated([process.execPath, '-e', code], { cwd: tmpdir(), env: { PATH: process.env.PATH }, timeoutMs: 10_000, policy: { writable: [], denyRead: [] } });
+    const leaked = existsSync(join(tsx, 'hal-probe-x')) || existsSync(probe);
+    rmSync(join(tsx, 'hal-probe-x'), { force: true }); rmSync(probe, { force: true });
+    expect(r.stdout.trim()).toBe('tsx:EPERM shared:EPERM own:ok');
+    expect(leaked).toBe(false);
   });
 });

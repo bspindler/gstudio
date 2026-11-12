@@ -2,8 +2,9 @@
 // It controls billing (API key vs subscription), the per-call spend cap, tool permissions and result parsing.
 // It never records spend: the caller does (see @studio/core/hal), using `costUsd`.
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { childEnv } from './env.js';
 
 export type ClaudeRole = 'planner' | 'implementer' | 'director';
@@ -24,6 +25,13 @@ export type ClaudeCall = {
    * so the repo's .hal.env cannot be derived from it. `<cwd>/.hal.env` is always denied as well.
    */
   denyReadPaths?: string[];
+  /** Extra directories the role's tools may reach (`--add-dir`), e.g. the planner's screenshot folder. */
+  addDirs?: string[];
+  /**
+   * The call's private temp dir (set by runClaude: a fresh mkdtemp, removed after the call). TMPDIR/TMP/TEMP and
+   * CLAUDE_CODE_TMPDIR point here, and it is the implementer sandbox's only temp dir: the shared tmpdir is never writable.
+   */
+  tmpDir?: string;
 };
 export type ClaudeResult = {
   ok: boolean;
@@ -49,6 +57,9 @@ export const NODE_MODULES_WRITE_DENY: string[] = ['Edit', 'Write', 'NotebookEdit
   `${t}(node_modules/**)`, `${t}(./node_modules/**)`, `${t}(**/node_modules/**)`, `${t}(node_modules)`, `${t}(**/node_modules)`,
 ]);
 
+/** Every edit tool, for `.git` at the cwd and at any depth, and anything under one. */
+export const GIT_WRITE_DENY: string[] = ['Edit', 'Write', 'NotebookEdit'].flatMap((t) => [`${t}(.git)`, `${t}(./.git)`, `${t}(**/.git)`, `${t}(**/.git/**)`]);
+
 export const ALWAYS_DISALLOWED: string[] = [
   'WebFetch', 'WebSearch', 'Bash(git push:*)', 'Bash(git remote:*)', 'Bash(curl:*)', 'Bash(wget:*)',
   'Bash(npm install:*)', 'Bash(npm i:*)', 'Bash(npx:*)', 'Bash(gh:*)',
@@ -58,7 +69,20 @@ export const ALWAYS_DISALLOWED: string[] = [
   // A worktree's node_modules entries are symlinks into <repo>/node_modules (Hal's tools, and Brian's checkout): no
   // edit may go through them. Reads stay allowed (the implementer may look at library types).
   ...NODE_MODULES_WRITE_DENY,
+  // A worktree's .git is its gitdir pointer (and a repo's .git its config and hooks): no edit tool may touch it.
+  ...GIT_WRITE_DENY,
 ];
+
+/**
+ * Absolute deny rules for `denyReadPaths`, for every role. In 2.1.322's permission matcher a rule path starting with
+ * `//` is absolute from the filesystem root (a single `/` is relative to the settings root): the bundle's path resolver
+ * does `if (e.startsWith("//")) return Md(H0(e.slice(1)))`. So `/abs/.hal.env` becomes `Read(//abs/.hal.env)`.
+ */
+export function absoluteDenyRules(paths: string[]): string[] {
+  return paths.flatMap((p) => ['Read', 'Grep', 'Edit', 'Write'].map((t) => `${t}(/${resolve(p)})`));
+}
+/** Deny paths go into one comma/space-separated --disallowedTools value: refuse any that could split a rule. */
+const unsafeRulePath = (p: string) => /[\s,()]/.test(p) || !isAbsolute(p);
 
 /** Built-in tool set per role (`--tools`); `--allowedTools` only pre-approves, it does not restrict. */
 export function roleTools(role: ClaudeRole): string {
@@ -145,7 +169,7 @@ export const SANDBOX_DENIED_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 
  *   sandbox.credentials.envVars         [{name, mode:'deny'}]: unset in sandboxed commands
  * `--setting-sources project` does not drop --settings (flag settings are a separate source).
  */
-export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyReadPaths'>): object {
+export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyReadPaths' | 'tmpDir'>): object {
   const denyRead = [...new Set([join(call.cwd, '.hal.env'), ...(call.denyReadPaths ?? [])])];
   return {
     sandbox: {
@@ -156,14 +180,15 @@ export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyR
       excludedCommands: [],
       network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
       // Worktree git metadata stays outside allowWrite on purpose: the allowed Bash is only npm test/typecheck/hal score; Hal does every git write itself, unsandboxed.
-      filesystem: { denyRead, allowWrite: [call.cwd, tmpdir()] },
+      // Never the shared tmpdir (tsx's transform cache there is loaded by Hal itself): the worktree and the call's own dir.
+      filesystem: { denyRead, allowWrite: [call.cwd, ...(call.tmpDir ? [call.tmpDir] : [])] },
       credentials: { envVars: SANDBOX_DENIED_ENV.map((name) => ({ name, mode: 'deny' })) },
     },
   };
 }
 
 export function buildArgs(call: ClaudeCall): string[] {
-  const denied = [...new Set([...ALWAYS_DISALLOWED, ...call.disallowedTools])];
+  const denied = [...new Set([...ALWAYS_DISALLOWED, ...absoluteDenyRules(call.denyReadPaths ?? []), ...call.disallowedTools])];
   const args = [
     '-p', '--output-format', 'json',
     '--max-budget-usd', String(call.maxBudgetUsd),
@@ -177,6 +202,7 @@ export function buildArgs(call: ClaudeCall): string[] {
     // The implementer's Bash runs code Claude wrote (tests); sandbox it in both billing modes.
     args.push('--settings', JSON.stringify(implementerSandboxSettings(call)));
   }
+  for (const d of call.addDirs ?? []) args.push('--add-dir', d);
   // --allowedTools/--disallowedTools are variadic: one comma-joined value each, and the prompt is sent on stdin.
   if (call.allowedTools.length > 0) args.push('--allowedTools', call.allowedTools.join(','));
   args.push('--disallowedTools', denied.join(','));
@@ -197,8 +223,17 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
   if (call.role === 'implementer' && !(call.denyReadPaths && call.denyReadPaths.length > 0)) {
     return { ok: false, text: '', costUsd: null, subtype: 'no_deny_paths', limitHit: false, timedOut: false, stderrTail: '' };
   }
+  if ((call.denyReadPaths ?? []).some(unsafeRulePath)) {
+    return { ok: false, text: '', costUsd: null, subtype: 'bad_deny_path', limitHit: false, timedOut: false, stderrTail: '' };
+  }
   // Throws `no API key in .hal.env` (no key value) before anything is spawned.
   const env = childEnv(deps.env, call.billing, deps.apiKey);
+  // A private temp dir per call. Claude Code 2.1.322 gives its sandboxed Bash TMPDIR=$CLAUDE_CODE_TMPDIR (else
+  // $CLAUDE_TMPDIR, else /tmp/claude) and keeps its own temp root there; Node and tools use TMPDIR/TMP/TEMP.
+  const tmpDir = mkdtempSync(join(tmpdir(), 'hal-claude-'));
+  call = { ...call, tmpDir };
+  Object.assign(env, { TMPDIR: tmpDir, TMP: tmpDir, TEMP: tmpDir, CLAUDE_CODE_TMPDIR: tmpDir });
+  delete env.CLAUDE_TMPDIR;
   delete env.HAL_TOKEN; // the dashboard token is never a child's business (childEnv returns a fresh copy)
   const key = call.billing === 'api' ? deps.apiKey : undefined;
   const child = deps.spawn('claude', buildArgs(call), { cwd: call.cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -232,6 +267,7 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
       if (done) return;
       done = true;
       live.delete(child);
+      try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
       clearTimeout(termTimer);
       clearTimeout(killTimer);
       clearTimeout(giveUpTimer);

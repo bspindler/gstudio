@@ -150,3 +150,14 @@ describe('serve', () => {
     expect(out.join('\n')).not.toContain('sekret-token');
   });
 });
+
+describe('TSX_DISABLE_CACHE (fix round 3)', () => {
+  const o = { execPath: '/n', repo: '/r', halDir: '/r/.data/hal', home: '/h', claudeDir: '/c' };
+  it('both plists set TSX_DISABLE_CACHE=1, so launchd never runs Hal with tsx\'s shared-tmp cache', () => {
+    for (const x of [nightlyPlist(o), serverPlist(o)]) expect(x).toMatch(/<key>TSX_DISABLE_CACHE<\/key>\s*<string>1<\/string>/);
+  });
+  it('scripts/hal.ts warns a hand-started run/undo without it (npm scripts must stay Windows-safe)', async () => {
+    const src = await readFile(new URL('../hal.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/TSX_DISABLE_CACHE !== '1'/);
+  });
+});

@@ -24,6 +24,8 @@ export type Diff = {
   repoFiles?: string[];
   /** Real secret values (e.g. the API key from the environment) the caller wants kept out of every added line. */
   secrets?: string[];
+  /** The candidate's allowed area (ruling R18): `games/<game>/**` and core tests whose basename starts with a prefix. */
+  scope?: Scope;
   /** Tests collected per test file (repo-relative path), at the base and after the change. When given, a base test file with fewer tests after (or not collected at all) is flagged. */
   testCountsByFile?: { before: Record<string, number>; after: Record<string, number> };
 };
@@ -463,9 +465,28 @@ export const testsRemoved: Rule = (diff) => {
   return out;
 };
 
+/** What a candidate may touch (ruling R18). */
+export type Scope = { game: string; testPrefixes: string[] };
+/** Existing test-name prefixes that differ from the slug (packages/core/test/tidepool-*.test.ts for tidepool-pals). */
+const EXTRA_TEST_PREFIXES: Record<string, string[]> = { 'tidepool-pals': ['tidepool-'] };
+/** `<slug>-` plus the game's existing test prefix, lower-case. */
+export function testPrefixesFor(game: string): string[] {
+  return [...new Set([`${game}-`, ...(EXTRA_TEST_PREFIXES[game] ?? [])].map((x) => x.toLowerCase()))];
+}
+const inScope = (p: string, s: Scope): boolean => {
+  const n = norm(p);
+  if (n.startsWith(`games/${s.game.toLowerCase()}/`)) return true;
+  if (!n.startsWith('packages/core/test/')) return false;
+  const base = n.slice(n.lastIndexOf('/') + 1);
+  return s.testPrefixes.some((x) => x !== '' && base.startsWith(x.toLowerCase()));
+};
+
 export const outsideScope: Rule = (diff) => {
   const out: Violation[] = [];
   for (const f of diff.files) {
+    if (diff.scope) {
+      for (const p of touched(f)) if (!inScope(p, diff.scope)) out.push(hit('outside-scope', p, `outside the ticket's scope (games/${diff.scope.game}/** and its tests)`));
+    }
     for (const p of touched(f)) {
       const bad = p === '' || p.startsWith('/') || p.startsWith('\\') || /^[a-z]:/i.test(p) || p.replace(/\\/g, '/').split('/').includes('..') || p.includes('\0') || p.replace(/\\/g, '/').split('/').includes('.git');
       if (bad) out.push(hit('outside-scope', p, 'path outside the repo'));
@@ -600,7 +621,9 @@ export const TRIPWIRE_RULES: Record<string, Rule> = {
   'host-api': hostApi,
 };
 
-export function checkTripwires(diff: Diff, secrets?: string[]): Violation[] {
-  const d = secrets ? { ...diff, secrets: [...(diff.secrets ?? []), ...secrets] } : diff;
+/** Every rule's hits. `opts.scope` limits the candidate to its game and that game's tests (R18, rule outside-scope). */
+export function checkTripwires(diff: Diff, secrets?: string[], opts: { scope?: Scope } = {}): Violation[] {
+  let d = secrets ? { ...diff, secrets: [...(diff.secrets ?? []), ...secrets] } : diff;
+  if (opts.scope) d = { ...d, scope: opts.scope };
   return Object.values(TRIPWIRE_RULES).flatMap((r) => r(d));
 }

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
-import { ALWAYS_DISALLOWED, NODE_MODULES_WRITE_DENY, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
+import { ALWAYS_DISALLOWED, NODE_MODULES_WRITE_DENY, buildArgs, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
 
 const KEY = 'sk-ant-test-FAKE123';
 
@@ -258,13 +258,13 @@ describe('runClaude', () => {
           expect(env.HAL_TOKEN).toBe('dash-token'); // caller's env untouched
           if (role !== 'implementer') return expect(args).not.toContain('--settings');
           expect(args.filter((a) => a === '--settings')).toHaveLength(1);
-          expect(JSON.parse(arg(args, '--settings')!)).toEqual(implementerSandboxSettings({ cwd: '/repo', denyReadPaths: ['/main/.hal.env'] }));
+          expect(JSON.parse(arg(args, '--settings')!)).toEqual(implementerSandboxSettings({ cwd: '/repo', denyReadPaths: ['/main/.hal.env'], tmpDir: opts.env.TMPDIR }));
           expect(arg(args, '--setting-sources')).toBe('project'); // flag settings still apply alongside it
         });
       }
     }
-    it('implementer sandbox settings: enforced, fail-closed, no network, .hal.env unreadable, writes in cwd + tmp only', () => {
-      expect(implementerSandboxSettings({ cwd: '/wt', denyReadPaths: ['/main/.hal.env', '/wt/.hal.env'] })).toEqual({
+    it('implementer sandbox settings: enforced, fail-closed, no network, .hal.env unreadable, writes in cwd + its own temp dir only', () => {
+      expect(implementerSandboxSettings({ cwd: '/wt', denyReadPaths: ['/main/.hal.env', '/wt/.hal.env'], tmpDir: '/priv/hal-claude-x' })).toEqual({
         sandbox: {
           enabled: true,
           failIfUnavailable: true,
@@ -272,7 +272,7 @@ describe('runClaude', () => {
           autoAllowBashIfSandboxed: false,
           excludedCommands: [],
           network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
-          filesystem: { denyRead: ['/wt/.hal.env', '/main/.hal.env'], allowWrite: ['/wt', tmpdir()] },
+          filesystem: { denyRead: ['/wt/.hal.env', '/main/.hal.env'], allowWrite: ['/wt', '/priv/hal-claude-x'] },
           credentials: { envVars: [
             { name: 'ANTHROPIC_API_KEY', mode: 'deny' }, { name: 'ANTHROPIC_AUTH_TOKEN', mode: 'deny' }, { name: 'HAL_TOKEN', mode: 'deny' },
           ] },
@@ -391,5 +391,68 @@ describe('runClaudeWithFallback', () => {
     const r = await runClaudeWithFallback({ ...base, billing: 'api' }, deps(f.spawn));
     expect(r.retry).toBeUndefined();
     expect(f.calls).toHaveLength(1);
+  });
+});
+
+describe('buildArgs per role: absolute deny rules and --add-dir (fix round 1)', () => {
+  const deny = ['/repo/.hal.env'];
+  const rules = ['Read(//repo/.hal.env)', 'Grep(//repo/.hal.env)', 'Edit(//repo/.hal.env)', 'Write(//repo/.hal.env)'];
+  for (const role of ['planner', 'implementer', 'director'] as const) {
+    it(`${role}: denyReadPaths become // absolute rules in --disallowedTools`, () => {
+      const a = buildArgs({ ...base, role, allowedTools: roleAllowedTools(role), denyReadPaths: deny });
+      const d = arg(a, '--disallowedTools')!.split(',');
+      for (const r of rules) expect(d).toContain(r);
+      expect(a.includes('--add-dir')).toBe(false);
+    });
+  }
+  it('implementer keeps the sandbox denyRead too', () => {
+    const a = buildArgs({ ...base, denyReadPaths: deny });
+    expect(JSON.parse(arg(a, '--settings')!).sandbox.filesystem.denyRead).toContain('/repo/.hal.env');
+  });
+  it('planner: one --add-dir per directory, before --allowedTools', () => {
+    const a = buildArgs({ ...base, role: 'planner', allowedTools: roleAllowedTools('planner'), denyReadPaths: deny, addDirs: ['/run/play/screens', '/x y'] });
+    expect(a.filter((x, i) => a[i - 1] === '--add-dir')).toEqual(['/run/play/screens', '/x y']);
+    expect(a.lastIndexOf('--add-dir')).toBeLessThan(a.indexOf('--allowedTools'));
+  });
+  it('a deny path that could split a rule (space, comma, relative) is refused without spawning', async () => {
+    for (const p of ['/My Repo/.hal.env', '/a,b/.hal.env', 'rel/.hal.env']) {
+      const f = fake(finish(json({ subtype: 'success', result: 'x', total_cost_usd: 0 })));
+      const r = await runClaude({ ...base, role: 'planner', allowedTools: roleAllowedTools('planner'), denyReadPaths: [p] }, deps(f.spawn));
+      expect(r.subtype).toBe('bad_deny_path');
+      expect(f.calls).toHaveLength(0);
+    }
+  });
+});
+
+describe('.git is never editable (fix round 2)', () => {
+  it('ALWAYS_DISALLOWED denies Edit/Write/NotebookEdit on .git at the cwd, any depth, and under it; every role gets it', () => {
+    for (const t of ['Edit', 'Write', 'NotebookEdit']) for (const p of ['.git', './.git', '**/.git', '**/.git/**']) expect(ALWAYS_DISALLOWED).toContain(`${t}(${p})`);
+    for (const role of ['planner', 'implementer', 'director'] as const) {
+      const d = arg(buildArgs({ ...base, role, allowedTools: roleAllowedTools(role) }), '--disallowedTools')!.split(',');
+      expect(d).toContain('Write(**/.git/**)');
+      expect(d).toContain('Edit(.git)');
+    }
+  });
+});
+
+describe('private temp dir per call (fix round 3)', () => {
+  it('each call gets a fresh TMPDIR/TMP/TEMP/CLAUDE_CODE_TMPDIR dir; the implementer allowWrite is [cwd, that dir], never os.tmpdir(); removed after', async () => {
+    const { existsSync } = await import('node:fs');
+    let during = false;
+    const f = fake((c) => { during = existsSync(f.calls[0]!.opts.env.TMPDIR); finish(json({ subtype: 'success', result: 'x', total_cost_usd: 0 }))(c); });
+    await runClaude({ ...base, cwd: '/wt' }, deps(f.spawn, { env: { PATH: '/bin', CLAUDE_TMPDIR: '/shared' } }));
+    const { env } = f.calls[0]!.opts;
+    expect(env.TMPDIR.startsWith(tmpdir())).toBe(true);
+    expect(env.TMPDIR).not.toBe(tmpdir());
+    expect([env.TMP, env.TEMP, env.CLAUDE_CODE_TMPDIR]).toEqual([env.TMPDIR, env.TMPDIR, env.TMPDIR]);
+    expect(env.CLAUDE_TMPDIR).toBeUndefined();
+    expect(during).toBe(true);
+    expect(existsSync(env.TMPDIR)).toBe(false);
+    const allow = JSON.parse(arg(f.calls[0]!.args, '--settings')!).sandbox.filesystem.allowWrite as string[];
+    expect(allow).toEqual(['/wt', env.TMPDIR]);
+    expect(allow).not.toContain(tmpdir());
+    const f2 = fake(finish(json({ subtype: 'success', result: 'x', total_cost_usd: 0 })));
+    await runClaude({ ...base, cwd: '/wt' }, deps(f2.spawn));
+    expect(f2.calls[0]!.opts.env.TMPDIR).not.toBe(env.TMPDIR); // per call
   });
 });

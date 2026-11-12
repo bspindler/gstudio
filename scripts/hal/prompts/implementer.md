@@ -17,8 +17,8 @@ You may use only: Read, Edit, Write, Glob, Grep, `npm test`, `npm run typecheck`
 ## Files you may touch
 
 - `games/{{game}}/**`
-- Tests for that game.
-- Nothing else. `docs/hal/history` is written by Hal, not you.
+- Test files directly for that game in `packages/core/test/`: only files whose name starts with `{{game}}-` (for tidepool-pals, the existing `tidepool-` prefix also counts), e.g. `packages/core/test/{{game}}-<topic>.test.ts`.
+- Nothing else: not another game, not `games/sdk`, `packages/sdk`, `packages/core/src`, `adapters`, `services`, `scripts` or `docs`. A change to any other path discards your work automatically (rule `outside-scope`). `docs/hal/history` is written by Hal, not you.
 - Do not edit versions or `CHANGELOG.md`. Hal does that.
 
 ## Protected: never edit, create or delete any of these

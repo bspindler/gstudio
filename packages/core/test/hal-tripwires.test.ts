@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, secret, hostApi, TRIPWIRE_RULES, type Diff, type FileChange,
+  isProtectedPath, addedLines, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -581,5 +581,32 @@ describe('host-api (R15: game code is browser code)', () => {
   });
   it('names the rule and path', () => {
     expect(hostApi(diff([A('games/g/a.js', 'process.exit(0);\n')]))).toEqual([{ rule: 'host-api', path: 'games/g/a.js', detail: expect.stringContaining('process.') }]);
+  });
+});
+
+describe('R18: candidate scope (outside-scope with scope)', () => {
+  const scope = { game: 'tidepool-pals', testPrefixes: testPrefixesFor('tidepool-pals') };
+  const scoped = (files: FileChange[]) => checkTripwires(diff(files), undefined, { scope }).filter((v) => v.rule === 'outside-scope');
+  it('test prefixes: the slug and the game\'s existing prefix', () => {
+    expect(testPrefixesFor('tidepool-pals')).toEqual(['tidepool-pals-', 'tidepool-']);
+    expect(testPrefixesFor('hyperline')).toEqual(['hyperline-']);
+    expect(testPrefixesFor('gearhold')).toEqual(['gearhold-']);
+  });
+  it.each([
+    'games/hyperline/game.js', 'games/tidepool/x.js', 'games/tidepool-pals-x/a.js', 'packages/sdk/src/a.ts', 'adapters/local/a.ts', 'services/api/a.ts',
+    'scripts/dev.ts', 'docs/notes.md', 'docs/hal/history/tidepool-pals/2026-11-11/note.md', 'packages/core/test/hyperline-sim.test.ts',
+    'packages/core/test/hal-tidepool.test.ts', 'packages/core/src/tidepool.ts', 'README.md', 'games/sdk/studio-sdk.js',
+  ])('flags %s for a tidepool-pals ticket', (p) => {
+    expect(scoped([A(p, 'x')])).toEqual([{ rule: 'outside-scope', path: p, detail: 'outside the ticket\'s scope (games/tidepool-pals/** and its tests)' }]);
+  });
+  it.each(['games/tidepool-pals/board.js', 'games/tidepool-pals/lib/a.js', 'packages/core/test/tidepool-board.test.ts', 'packages/core/test/tidepool-pals-map.test.ts', 'packages/core/test/Tidepool-New.test.ts'])(
+    'near-miss: %s is in scope', (p) => { expect(scoped([A(p, 'x')])).toEqual([]); },
+  );
+  it('a rename counts both ends; deleting a file outside scope is a hit', () => {
+    expect(scoped([{ ...A('games/tidepool-pals/a.js', 'x'), status: 'R', oldPath: 'games/hyperline/a.js' }]).map((v) => v.path)).toEqual(['games/hyperline/a.js']);
+    expect(scoped([D('games/gearhold/x.js', 'x')])).toHaveLength(1);
+  });
+  it('without a scope nothing changes (rule stays path-safety only)', () => {
+    expect(outsideScope(diff([A('packages/sdk/src/a.ts', 'x')]))).toEqual([]);
   });
 });

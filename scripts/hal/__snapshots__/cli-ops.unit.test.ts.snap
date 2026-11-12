@@ -24,6 +24,8 @@ exports[`plists > nightly: 01:00 default, caffeinate, npm run hal -- run --night
   <dict>
     <key>PATH</key>
     <string>/opt/node &amp; co/bin:/Users/a&lt;b&gt;/.local/share/claude/bin:/Users/a&lt;b&gt;/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>TSX_DISABLE_CACHE</key>
+    <string>1</string>
   </dict>
   <key>StartCalendarInterval</key>
   <dict>
@@ -64,6 +66,8 @@ exports[`plists > server: KeepAlive, serve --lan --quiet (snapshot) 1`] = `
   <dict>
     <key>PATH</key>
     <string>/opt/node &amp; co/bin:/Users/a&lt;b&gt;/.local/share/claude/bin:/Users/a&lt;b&gt;/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>TSX_DISABLE_CACHE</key>
+    <string>1</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>

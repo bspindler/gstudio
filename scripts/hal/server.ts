@@ -43,13 +43,14 @@ const defaultAlive = (pid: number) => {
 };
 
 /** The real spawn: `node tsx/cli scripts/hal.ts run ...`, detached, output to a log file, unref'd. */
-export function realSpawnRun(repo: string): SpawnRun {
+export function realSpawnRun(repo: string, spawnFn: typeof spawn = spawn): SpawnRun {
   return ({ args, logPath }) => {
     const tsx = createRequire(join(repo, 'package.json')).resolve('tsx/package.json').replace(/package\.json$/, 'dist/cli.mjs');
     mkdirSync(dirname(logPath), { recursive: true, mode: 0o700 });
     const fd = openSync(logPath, 'a', 0o600);
     try {
-      const child = spawn(process.execPath, [tsx, 'scripts/hal.ts', ...args], { cwd: repo, detached: true, stdio: ['ignore', fd, fd] });
+      // TSX_DISABLE_CACHE: Hal never loads tsx's transform cache from the shared tmpdir (anything could have written it).
+      const child = spawnFn(process.execPath, [tsx, 'scripts/hal.ts', ...args], { cwd: repo, detached: true, stdio: ['ignore', fd, fd], env: { ...process.env, TSX_DISABLE_CACHE: '1' } });
       child.on('error', () => {});
       child.unref();
     } finally {

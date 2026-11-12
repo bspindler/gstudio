@@ -1,6 +1,10 @@
 // Hal's daily API spend ledger. Pure: no clock, no randomness, no I/O. Callers inject the date.
 export type Billing = 'api' | 'subscription';
-export type SpendCall = { run: string; role: string; billing: Billing; usd: number; at: string };
+/**
+ * One Claude call. `pending` marks a reservation made before the call started (usd = the full slice); it is settled
+ * with the real cost afterwards (settleCall). A crash leaves it pending, so the whole slice stays booked.
+ */
+export type SpendCall = { run: string; role: string; billing: Billing; usd: number; at: string; pending?: boolean; id?: string };
 /** `day` is YYYY-MM-DD in local time. */
 export type SpendDay = { day: string; calls: SpendCall[] };
 
@@ -13,6 +17,7 @@ export function dayOf(date: Date): string {
   return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
 
+/** Dollars booked against the cap: every API call, pending reservations at their full slice. */
 export function apiSpent(day: SpendDay): number {
   const cents = day.calls.reduce((s, c) => (c.billing === 'api' ? s + Math.round(c.usd * 100) : s), 0);
   return cents / 100;
@@ -38,4 +43,25 @@ export function recordCall(day: SpendDay, call: Omit<SpendCall, 'usd'> & { usd?:
 export function dayFor(prev: SpendDay | undefined, now: Date): SpendDay {
   const day = dayOf(now);
   return prev && prev.day === day ? prev : { day, calls: [] };
+}
+
+/** Reserve-then-settle, step 1: appends `{..., id, usd: slice, pending: true}` before the call starts. `id` is the caller's. */
+export function reserveCall(day: SpendDay, call: Omit<SpendCall, 'usd' | 'pending'> & { id: string }): SpendDay {
+  if (!Object.hasOwn(SLICES, call.role)) throw new Error(`unknown budget role: ${call.role}`);
+  if (day.calls.some((c) => c.id === call.id)) throw new Error(`duplicate spend id: ${call.id}`);
+  return { ...day, calls: [...day.calls, { ...call, usd: sliceFor(day, call.role), pending: true }] };
+}
+
+/**
+ * Step 2: settles the pending entry `id` (in the day it was reserved; the caller loads that day) with the real cost.
+ * An unknown cost (null, NaN, negative) keeps the reserved slice. Throws if `day` has no pending entry `id`.
+ */
+export function settleCall(day: SpendDay, id: string, usd: number | null | undefined): SpendDay {
+  const i = day.calls.findIndex((c) => c.id === id && c.pending);
+  if (i < 0) throw new Error(`no pending spend entry ${id} on ${day.day}`);
+  const known = typeof usd === 'number' && Number.isFinite(usd) && usd >= 0;
+  const calls = [...day.calls];
+  const { pending: _p, ...rest } = calls[i]!;
+  calls[i] = { ...rest, usd: known ? usd : rest.usd };
+  return { ...day, calls };
 }
