@@ -1,10 +1,11 @@
 // Isolation for Claude-written code that Hal runs (ruling R13): npm test, typecheck, test listing, scorers, screens,
 // controls and shots of a candidate each run as a child process, in their own process group (killed afterwards), with
 // a scrubbed env, under macOS sandbox-exec: allow by default, but no outbound network except loopback, no reading
-// <repo>/.hal.env, no writes outside the paths given (the worktree and os.tmpdir()), and none to the denyWrite paths
+// <repo>/.hal.env, no writes outside the paths given (the worktree and the child's own private temp dir; never the
+// shared os.tmpdir(), where tsx keeps an unverified transform cache Hal itself would load), and none to the denyWrite paths
 // (the worktree's node_modules). Fails closed without sandbox-exec.
 import { spawn } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { childEnv } from './env.js';
@@ -65,7 +66,8 @@ export function sandboxEnv(base: NodeJS.ProcessEnv, secrets: string[]): NodeJS.P
     const v = env[k];
     if (SECRET_KEYS.test(k) || /^GIT_/.test(k) || (v !== undefined && keys.some((s) => v.includes(s)))) delete env[k];
   }
-  return { ...env, CI: '1', npm_config_cache: join(tmpdir(), 'hal-npm-cache'), npm_config_update_notifier: 'false', HAL_SANDBOXED: '1' };
+  // TMPDIR/TMP/TEMP and the npm cache are set per child by runIsolated (a private dir), never the shared tmpdir.
+  return { ...env, CI: '1', npm_config_update_notifier: 'false', HAL_SANDBOXED: '1' };
 }
 
 export type IsolatedResult = { code: number | null; stdout: string; stderr: string; timedOut: boolean; error?: string };
@@ -93,6 +95,10 @@ export function killLiveGroups(): void {
   for (const pid of liveGroups) { try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } }
   liveGroups.clear();
 }
+/** tsx's transform cache in the shared tmpdir (`<os.tmpdir()>/tsx-<uid>`): unverified, loaded by Hal's own tsx. */
+export const tsxCacheDir = (): string => join(tmpdir(), `tsx-${process.getuid?.() ?? 'x'}`);
+const same = (a: string, b: string) => { const r = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } }; return r(a) === r(b); };
+
 const killGroup = (pid: number | undefined) => { if (pid) try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } };
 
 /**
@@ -101,12 +107,25 @@ const killGroup = (pid: number | undefined) => { if (pid) try { process.kill(-pi
  */
 export function runIsolated(argv: string[], o: IsolatedOptions): Promise<IsolatedResult> {
   if (!o.unsandboxed && !o.policy) throw new Error('runIsolated: a sandbox policy is required');
-  const [cmd, args] = o.unsandboxed ? [argv[0]!, argv.slice(1)] : [SANDBOX_EXEC, ['-p', sandboxProfile(o.policy!), ...argv]];
+  if (o.policy?.writable.some((w) => same(w, tmpdir()))) throw new Error('runIsolated: the shared tmpdir may not be writable (each child gets its own)');
+  // The child's own temp dir: TMPDIR/TMP/TEMP and the npm cache point here, it is the only temp dir it may write, and
+  // it is removed afterwards. A child can no longer plant anything in the shared tmpdir for a later process.
+  const priv = mkdtempSync(join(tmpdir(), 'hal-child-'));
+  const env = { ...o.env, TMPDIR: priv, TMP: priv, TEMP: priv, npm_config_cache: join(priv, 'npm-cache') };
+  const policy: SandboxPolicy | undefined = o.policy && {
+    ...o.policy, writable: [...o.policy.writable, priv], denyWrite: [...(o.policy.denyWrite ?? []), tsxCacheDir()],
+  };
+  const [cmd, args] = o.unsandboxed ? [argv[0]!, argv.slice(1)] : [SANDBOX_EXEC, ['-p', sandboxProfile(policy!), ...argv]];
   return new Promise((done) => {
     let stdout = '', stderr = '', timedOut = false, finished = false;
-    const child = spawn(cmd, args, { cwd: o.cwd, env: o.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(cmd, args, { cwd: o.cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const untrack = trackGroup(child.pid);
-    const finish = (r: IsolatedResult) => { if (finished) return; finished = true; clearTimeout(timer); killGroup(child.pid); untrack(); done(r); };
+    const finish = (r: IsolatedResult) => {
+      if (finished) return;
+      finished = true; clearTimeout(timer); killGroup(child.pid); untrack();
+      try { rmSync(priv, { recursive: true, force: true }); } catch { /* best effort */ }
+      done(r);
+    };
     const timer = setTimeout(() => { timedOut = true; killGroup(child.pid); }, o.timeoutMs);
     child.stdout.on('data', (d: Buffer) => { stdout = (stdout + d.toString('utf8')).slice(-MAX_OUT); });
     child.stderr.on('data', (d: Buffer) => { stderr = (stderr + d.toString('utf8')).slice(-MAX_OUT); });

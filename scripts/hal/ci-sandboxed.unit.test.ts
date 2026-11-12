@@ -54,8 +54,8 @@ describe('ciLocalSandboxed', () => {
   }, 60_000);
   it('lint:infra runs before any merged code: a test step that rewrites the lint script and package.json changes nothing for it', async () => {
     const tamper = `const fs=require('fs');fs.writeFileSync('lint.js','process.exit(9)');fs.writeFileSync('package.json','{"scripts":{"lint:infra":"node evil.js"}}');`;
-    const sha = commit({ typecheck: 'tsc', test: 'vitest run', 'lint:infra': 'tsx lint.ts' }, { 'lint.js': `require('fs').writeFileSync(require('path').join(require('os').tmpdir(), 'hal-lint-ran-${process.pid}'), String(Date.now()));\n` });
-    const marker = join(tmpdir(), `hal-lint-ran-${process.pid}`);
+    const sha = commit({ typecheck: 'tsc', test: 'vitest run', 'lint:infra': 'tsx lint.ts' }, { 'lint.js': `require('fs').writeFileSync(${JSON.stringify(join(repo, 'lint-ran'))}, String(Date.now()));\n` });
+    const marker = join(repo, 'lint-ran'); // outside the ci worktree (the unsandboxed test mode can write it)
     rmSync(marker, { force: true });
     const r = await ciLocalSandboxed(sha, { repo, secrets: [], unsandboxedForTests: true, hasAz: () => true, azureDir: join(repo, 'no-azure'), commands: { lint: [F('lint.js')], typecheck: [N(tamper)], test: [F('lint.js')] } });
     expect(record(sha).steps.map((s: { step: string; ok: boolean }) => [s.step, s.ok])).toEqual([['npm ci', true], ['lint:infra', true], ['typecheck', true], ['test', false]]);

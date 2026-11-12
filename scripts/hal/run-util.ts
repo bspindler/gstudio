@@ -35,7 +35,7 @@ export type IsolatedCheckOptions = {
   /** The repo root: `<repo>/.hal.env` is unreadable to the check. */
   repo: string;
   secrets: readonly string[];
-  /** Directories the check may write (tmpdir is always added). */
+  /** Directories the check may write (plus its own private temp dir; never the shared tmpdir). */
   writable: string[];
   timeoutMs: number;
   /** Passed as $HAL_CHECK_NONCE (entry checks print `HAL-RESULT <nonce> <json>`). */
@@ -75,7 +75,7 @@ export async function isolatedCheck(argv: string[], o: IsolatedCheckOptions): Pr
     cwd: o.cwd, env, timeoutMs: o.timeoutMs,
     ...(unsandboxed ? { unsandboxed: true } : {
       // .git too: a rewritten gitdir pointer (or config) would make Hal's next git call in this tree run a smudge filter.
-      policy: { writable: [...o.writable, tmpdir()], denyRead: [join(o.repo, '.hal.env')], denyWrite: [...(o.ownNodeModules ? [] : [join(o.cwd, 'node_modules')]), join(o.cwd, '.git'), ...(o.denyWrite ?? [])] },
+      policy: { writable: o.writable /* + a private temp dir, added by runIsolated */, denyRead: [join(o.repo, '.hal.env')], denyWrite: [...(o.ownNodeModules ? [] : [join(o.cwd, 'node_modules')]), join(o.cwd, '.git'), ...(o.denyWrite ?? [])] },
     }),
   });
 }

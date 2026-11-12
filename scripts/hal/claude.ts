@@ -2,6 +2,7 @@
 // It controls billing (API key vs subscription), the per-call spend cap, tool permissions and result parsing.
 // It never records spend: the caller does (see @studio/core/hal), using `costUsd`.
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { childEnv } from './env.js';
@@ -26,6 +27,11 @@ export type ClaudeCall = {
   denyReadPaths?: string[];
   /** Extra directories the role's tools may reach (`--add-dir`), e.g. the planner's screenshot folder. */
   addDirs?: string[];
+  /**
+   * The call's private temp dir (set by runClaude: a fresh mkdtemp, removed after the call). TMPDIR/TMP/TEMP and
+   * CLAUDE_CODE_TMPDIR point here, and it is the implementer sandbox's only temp dir: the shared tmpdir is never writable.
+   */
+  tmpDir?: string;
 };
 export type ClaudeResult = {
   ok: boolean;
@@ -163,7 +169,7 @@ export const SANDBOX_DENIED_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 
  *   sandbox.credentials.envVars         [{name, mode:'deny'}]: unset in sandboxed commands
  * `--setting-sources project` does not drop --settings (flag settings are a separate source).
  */
-export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyReadPaths'>): object {
+export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyReadPaths' | 'tmpDir'>): object {
   const denyRead = [...new Set([join(call.cwd, '.hal.env'), ...(call.denyReadPaths ?? [])])];
   return {
     sandbox: {
@@ -174,7 +180,8 @@ export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyR
       excludedCommands: [],
       network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
       // Worktree git metadata stays outside allowWrite on purpose: the allowed Bash is only npm test/typecheck/hal score; Hal does every git write itself, unsandboxed.
-      filesystem: { denyRead, allowWrite: [call.cwd, tmpdir()] },
+      // Never the shared tmpdir (tsx's transform cache there is loaded by Hal itself): the worktree and the call's own dir.
+      filesystem: { denyRead, allowWrite: [call.cwd, ...(call.tmpDir ? [call.tmpDir] : [])] },
       credentials: { envVars: SANDBOX_DENIED_ENV.map((name) => ({ name, mode: 'deny' })) },
     },
   };
@@ -221,6 +228,12 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
   }
   // Throws `no API key in .hal.env` (no key value) before anything is spawned.
   const env = childEnv(deps.env, call.billing, deps.apiKey);
+  // A private temp dir per call. Claude Code 2.1.322 gives its sandboxed Bash TMPDIR=$CLAUDE_CODE_TMPDIR (else
+  // $CLAUDE_TMPDIR, else /tmp/claude) and keeps its own temp root there; Node and tools use TMPDIR/TMP/TEMP.
+  const tmpDir = mkdtempSync(join(tmpdir(), 'hal-claude-'));
+  call = { ...call, tmpDir };
+  Object.assign(env, { TMPDIR: tmpDir, TMP: tmpDir, TEMP: tmpDir, CLAUDE_CODE_TMPDIR: tmpDir });
+  delete env.CLAUDE_TMPDIR;
   delete env.HAL_TOKEN; // the dashboard token is never a child's business (childEnv returns a fresh copy)
   const key = call.billing === 'api' ? deps.apiKey : undefined;
   const child = deps.spawn('claude', buildArgs(call), { cwd: call.cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -254,6 +267,7 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
       if (done) return;
       done = true;
       live.delete(child);
+      try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
       clearTimeout(termTimer);
       clearTimeout(killTimer);
       clearTimeout(giveUpTimer);

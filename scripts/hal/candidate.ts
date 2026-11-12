@@ -243,7 +243,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
   const env = sandboxEnv(process.env, secrets);
   const denyRead = [join(ctx.repo, '.hal.env')];
   const isolated = (argv: string[], cwd: string, writable: string[], o: { nonce?: string; denyWrite?: string[] } = {}) => {
-    const policy: SandboxPolicy = { writable: [...writable, tmpdir()], denyRead, denyWrite: o.denyWrite ?? [] };
+    const policy: SandboxPolicy = { writable, denyRead, denyWrite: o.denyWrite ?? [] }; // + a private temp dir (runIsolated)
     const e = o.nonce ? { ...env, [NONCE_ENV]: o.nonce } : env;
     return runIsolated(argv, { cwd, env: e, timeoutMs: ctx.checkTimeoutMs ?? CHECK_TIMEOUT_MS, ...(unsandboxed ? { unsandboxed: true } : { policy }) });
   };
@@ -342,9 +342,9 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       checkGitPtr();
       return discard(`implementer call failed: ${msg(e)}`);
     }
-    checkGitPtr();
-    book(call.billing, out.first.costUsd);
+    book(call.billing, out.first.costUsd); // settle every reservation first: a tampered-.git discard must not leave one open
     if (out.retry) book('api', out.retry.costUsd);
+    checkGitPtr();
     const final = out.retry ?? out.first;
     if (!final.ok) discard(final.timedOut ? 'implementer timed out' : final.limitHit ? 'implementer hit a usage limit' : `implementer failed (${final.subtype})`);
     const parsed = parseImplementerOutput(final.text);
