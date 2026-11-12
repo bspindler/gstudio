@@ -251,6 +251,29 @@ function common(d: RunDeps): Common {
   return { R, log: (s) => out(R.str(s)), store: createStore({ halDir: d.halDir, now: d.now }), git: safeGit(raw), raw };
 }
 
+/**
+ * Applies every pending (or last-time failed) undo in feedback.json, oldest first, under the caller's lock: the run's
+ * preflight, and `hal undo` after its own pass (so several 👎s from the report page all land that morning). `skip` is
+ * a pass the caller already handled. Returns how many were done.
+ */
+async function drainUndos(d: RunDeps, c: Pick<Common, 'R' | 'store'>, runId: string, say: (s: string) => void, skip?: string): Promise<number> {
+  let done = 0;
+  for (const u of await c.store.pendingUndos()) {
+    if (u.pass === skip) continue;
+    const r = await applyUndo(u.pass, u.reason, undoCtx(d, runId));
+    const reason = c.R.str(u.reason);
+    if (r.ok) {
+      done++;
+      await c.store.recordUndo({ pass: u.pass, run: runId, reason, status: 'done', commit: r.commit, version: r.version });
+      say(`undid ${u.pass} (${reason})${r.already ? ': it was already undone' : ` as ${r.game} ${r.version}`}`);
+    } else {
+      await c.store.recordUndo({ pass: u.pass, run: runId, reason, status: r.permanent ? 'rejected' : 'failed', error: c.R.str(r.error) });
+      say(`pending undo of ${u.pass} failed${r.permanent ? '' : ' (retried next run)'}: ${r.error}`);
+    }
+  }
+  return done;
+}
+
 function undoCtx(d: RunDeps, runId: string): UndoCtx {
   return {
     repo: d.repo, runId, now: d.now, secrets: d.secrets,
@@ -437,17 +460,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       }
     }
     await ciFollowUp(d, c, warn);
-    for (const u of reportOnly ? [] : await store.pendingUndos()) { // report-only changes nothing
-      const r = await applyUndo(u.pass, u.reason, undoCtx(d, runId));
-      const reason = R.str(u.reason);
-      if (r.ok) {
-        await store.recordUndo({ pass: u.pass, run: runId, reason, status: 'done', commit: r.commit, version: r.version });
-        warn(`undid ${u.pass} (${reason})${r.already ? ': it was already undone' : ` as ${r.game} ${r.version}`}`);
-      } else {
-        await store.recordUndo({ pass: u.pass, run: runId, reason, status: r.permanent ? 'rejected' : 'failed', error: R.str(r.error) });
-        warn(`pending undo of ${u.pass} failed${r.permanent ? '' : ' (retried next run)'}: ${r.error}`);
-      }
-    }
+    if (!reportOnly) await drainUndos(d, { R, store }, runId, warn); // report-only changes nothing
 
     // 3. Play.
     setPhase('play');
@@ -856,7 +869,10 @@ function reportMarkdown(r: RunReport, note: string): string {
 
 // ---- undo -----------------------------------------------------------------------------------------------------------
 
-/** `hal undo HAL-0xx --reason "..."`: lock, applyUndo, feedback, then ci:local and push unless --no-push. 0 ok, 1 failed, 2 busy. */
+/**
+ * `hal undo HAL-0xx --reason "..."`: lock, applyUndo, feedback, then every other pending undo (drainUndos), then one
+ * ci:local and push unless --no-push. 0 ok, 1 this pass failed, 2 busy (feedback.json untouched).
+ */
 export async function undoCommand(pass: string, reason: string, o: { push: boolean }, d: RunDeps): Promise<number> {
   const c = common(d);
   const startedAt = d.now();
@@ -875,15 +891,21 @@ export async function undoCommand(pass: string, reason: string, o: { push: boole
     if (!r.ok) {
       await c.store.recordUndo({ pass, run: runId, reason: why, status: r.permanent ? 'rejected' : 'failed', error: c.R.str(r.error) });
       c.log(`undo ${pass} failed${r.permanent ? ' (rejected: not retried)' : ' (saved; the next run retries it)'}: ${r.error}`);
-      return 1;
+    } else {
+      await c.store.recordUndo({ pass, run: runId, reason: why, status: 'done', commit: r.commit, version: r.version });
+      c.log(r.already ? `${pass} was already undone (${r.commit.slice(0, 12)})` : `undid ${pass}: ${r.commit.slice(0, 12)} on ${HAL_MAIN}, ${r.game} ${r.version}`);
     }
-    await c.store.recordUndo({ pass, run: runId, reason: why, status: 'done', commit: r.commit, version: r.version });
-    c.log(r.already ? `${pass} was already undone (${r.commit.slice(0, 12)})` : `undid ${pass}: ${r.commit.slice(0, 12)} on ${HAL_MAIN}, ${r.game} ${r.version}`);
-    if (!o.push) { c.log('not pushed (--no-push)'); return 0; }
-    if (main.diverged) { c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged`); return 0; }
-    const p = await pushStep(d, c);
-    c.log(p.pushed ? 'pushed to origin main' : `not pushed: ${p.warning ?? p.reason}`);
-    return 0;
+    // R5: every other undo asked for meanwhile (e.g. more 👎s on the report page) lands now, under this lock; one push covers all.
+    const others = await drainUndos(d, c, runId, c.log, pass);
+    if (r.ok || others) {
+      if (!o.push) c.log('not pushed (--no-push)');
+      else if (main.diverged) c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged`);
+      else {
+        const p = await pushStep(d, c);
+        c.log(p.pushed ? 'pushed to origin main' : `not pushed: ${p.warning ?? p.reason}`);
+      }
+    }
+    return r.ok ? 0 : 1;
   } catch (e) {
     c.log(`undo ${pass} failed: ${errMsg(e)}`);
     return 1;

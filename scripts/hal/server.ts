@@ -10,6 +10,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { DAILY_CAP_USD, apiSpent } from '@studio/core/hal';
 import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 import { renderReport, renderRunHalOnly } from './report-page.js';
@@ -131,6 +132,8 @@ export function createServerApp(d: ServerDeps) {
     secure(c);
   });
 
+  // Forms are a few short fields; anything bigger is refused before it is parsed.
+  app.use('*', bodyLimit({ maxSize: 64 * 1024, onError: (c) => c.text('too large', 413) }));
   const store = createStore({ halDir: d.halDir, now });
 
   /** That run's report.json, or null for a bad id or a missing/unreadable report. */
@@ -139,8 +142,16 @@ export function createServerApp(d: ServerDeps) {
     let dir: string;
     try { dir = store.runDir(id); } catch { return null; }
     try {
-      const r = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as RunReport;
-      return r && r.runId === id && Array.isArray(r.changes) && Array.isArray(r.calls) && r.games && r.spend ? r : null;
+      const r = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as Partial<RunReport>;
+      if (!r || typeof r !== 'object' || r.runId !== id || !Array.isArray(r.changes)) return null;
+      // Only `changes` is required; an older report without the rest opens with them empty.
+      return {
+        ...r, runId: id, night: String(r.night ?? ''), endedAt: String(r.endedAt ?? ''), changes: r.changes,
+        calls: Array.isArray(r.calls) ? r.calls : [], warnings: Array.isArray(r.warnings) ? r.warnings : [],
+        notes: Array.isArray(r.notes) ? r.notes : [], planned: Array.isArray(r.planned) ? r.planned : [],
+        games: r.games && typeof r.games === 'object' ? r.games : {},
+        spend: { api: Number(r.spend?.api ?? 0), subscription: Number(r.spend?.subscription ?? 0) },
+      } as RunReport;
     } catch { return null; }
   };
   const readNote = async (id: string) => { try { return await readFile(join(store.runDir(id), 'note.md'), 'utf8'); } catch { return ''; } };
@@ -156,6 +167,16 @@ export function createServerApp(d: ServerDeps) {
     }
     return out.sort((x, y) => y.endedAt.localeCompare(x.endedAt));
   };
+  /** This run's feedback, plus any done undo of one of its passes recorded under another run (e.g. a CLI `hal undo`). */
+  const feedbackOf = async (r: RunReport) => {
+    const [own, all] = await Promise.all([store.feedbackFor(r.runId), store.readFeedback()]);
+    const passes = new Set(r.changes.map((x) => x.pass).filter(Boolean));
+    const elsewhere = all.undos.filter((u) => u.run !== r.runId && u.status === 'done' && !!u.pass && passes.has(u.pass));
+    return { votes: own.votes, undos: [...own.undos, ...elsewhere].sort((a, b) => String(a.at).localeCompare(String(b.at))) };
+  };
+  /** One writer at a time (the server is one process): a check and the write it guards are atomic, so a double tap records once. */
+  let chain: Promise<unknown> = Promise.resolve();
+  const serial = <T>(f: () => Promise<T>): Promise<T> => { const p = chain.then(f, f); chain = p.catch(() => {}); return p; };
   const merged = (r: RunReport, pass: unknown) =>
     typeof pass === 'string' && PASS.test(pass) ? r.changes.find((x) => x.pass === pass && x.verdict === 'merged') ?? null : null;
 
@@ -170,7 +191,7 @@ export function createServerApp(d: ServerDeps) {
     };
     if (!report) return c.html(renderRunHalOnly(base));
     const [note, feedback, notes, approvals, playUrl] = await Promise.all([
-      readNote(report.runId), store.feedbackFor(report.runId), store.readNotes(), store.readApprovals(),
+      readNote(report.runId), feedbackOf(report), store.readNotes(), store.readApprovals(),
       d.devUrl ? d.devUrl().catch(() => null) : Promise.resolve(null),
     ]);
     return c.html(renderReport({ ...base, report, note, feedback, notes, approvals: approvals.map((a) => a.item), playUrl }));
@@ -207,70 +228,84 @@ export function createServerApp(d: ServerDeps) {
 
   app.post('/vote', async (c) => {
     const b = await form(c);
-    const r = await loadRun(b.run);
-    const ch = r && merged(r, b.pass);
-    if (!r || !ch) return bad(c);
-    const comment = oneLine(b.comment, 500);
-    await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'up', ...(comment ? { comment } : {}) });
-    return back(c, r.runId, 'Kept');
+    return serial(async () => {
+      const r = await loadRun(b.run);
+      const ch = r && merged(r, b.pass);
+      if (!r || !ch) return bad(c);
+      const comment = oneLine(b.comment, 500);
+      await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'up', ...(comment ? { comment } : {}) });
+      return back(c, r.runId, 'Kept');
+    });
   });
 
   app.post('/undo', async (c) => {
     const b = await form(c);
-    const r = await loadRun(b.run);
-    const ch = r && merged(r, b.pass);
-    if (!r || !ch) return bad(c);
-    const { undos } = await store.feedbackFor(r.runId);
-    if (undos.some((u) => u.pass === ch.pass && (u.status === 'pending' || u.status === 'done'))) return back(c, r.runId, 'Undo already asked for');
-    const given = oneLine(b.reason, 500);
-    const reason = given || 'no reason given';
-    await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'down', ...(given ? { comment: given } : {}) });
-    await store.addUndo({ run: r.runId, pass: ch.pass, reason, status: 'pending' });
-    if (running()) return back(c, r.runId, 'Undo queued: the run in progress finishes first');
-    try {
-      if (!spawnRun) throw new Error('no spawn');
-      // One argv element each: the reason can never be read as a flag; the pass matched ^HAL-\d+$.
-      spawnRun({ args: ['undo', ch.pass, `--reason=${reason}`], logPath: join(d.halDir, 'logs', `undo-${stamp(now())}.log`) });
-    } catch {
-      return back(c, r.runId, 'Undo queued: the next run applies it');
-    }
-    return back(c, r.runId, 'Undo started');
+    return serial(async () => {
+      const r = await loadRun(b.run);
+      const ch = r && merged(r, b.pass);
+      if (!r || !ch) return bad(c);
+      // Already asked for on this run, or already undone by any run (a CLI `hal undo`, another report).
+      const { undos } = await store.readFeedback();
+      if (undos.some((u) => u.pass === ch.pass && u.status === 'done')) return back(c, r.runId, 'Already undone');
+      if (undos.some((u) => u.pass === ch.pass && u.run === r.runId && u.status === 'pending')) return back(c, r.runId, 'Undo already asked for');
+      const given = oneLine(b.reason, 500);
+      const reason = given || 'no reason given';
+      await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'down', ...(given ? { comment: given } : {}) });
+      await store.addUndo({ run: r.runId, pass: ch.pass, reason, status: 'pending' });
+      if (running()) return back(c, r.runId, 'Undo queued: Hal is busy, so the next run applies it');
+      try {
+        if (!spawnRun) throw new Error('no spawn');
+        // One argv element each: the reason can never be read as a flag; the pass matched ^HAL-\d+$.
+        spawnRun({ args: ['undo', ch.pass, `--reason=${reason}`], logPath: join(d.halDir, 'logs', `undo-${stamp(now())}.log`) });
+      } catch {
+        return back(c, r.runId, 'Undo queued: the next run applies it');
+      }
+      return back(c, r.runId, 'Undo started');
+    });
   });
 
   const callItem = (r: RunReport, item: unknown) => (typeof item === 'string' && item ? r.calls.find((t) => t.liability === item) ?? null : null);
   app.post('/approve', async (c) => {
     const b = await form(c);
-    const r = await loadRun(b.run);
-    const t = r && callItem(r, b.item);
-    if (!r || !t) return bad(c);
-    await store.addApproval(t.liability!);
-    return back(c, r.runId, 'Approved; Hal builds it next run');
+    return serial(async () => {
+      const r = await loadRun(b.run);
+      const t = r && callItem(r, b.item);
+      if (!r || !t) return bad(c);
+      await store.addApproval(t.liability!);
+      return back(c, r.runId, 'Approved; Hal builds it next run');
+    });
   });
   app.post('/decline', async (c) => {
     const b = await form(c);
-    const r = await loadRun(b.run);
-    const t = r && callItem(r, b.item);
-    if (!r || !t) return bad(c);
-    await store.addVote({ run: r.runId, item: t.liability!, game: t.game, vote: 'down' });
-    return back(c, r.runId, 'Left it for now');
+    return serial(async () => {
+      const r = await loadRun(b.run);
+      const t = r && callItem(r, b.item);
+      if (!r || !t) return bad(c);
+      await store.addVote({ run: r.runId, item: t.liability!, game: t.game, vote: 'down' });
+      return back(c, r.runId, 'Left it for now');
+    });
   });
 
   /** The page to go back to: the form's run when it names a real report, else `/`. */
   const backRun = async (v: unknown) => (await loadRun(v))?.runId ?? null;
   app.post('/tell', async (c) => {
     const b = await form(c);
-    const game = str(b.game);
-    if (game !== '' && !d.games.includes(game)) return bad(c);
-    const text = str(b.text).trim().slice(0, 2000).trim();
-    if (!text) return bad(c);
-    await store.addNote({ text, game: game || null });
-    return back(c, await backRun(b.run), 'Sent to Hal');
+    return serial(async () => {
+      const game = str(b.game);
+      if (game !== '' && !d.games.includes(game)) return bad(c);
+      const text = str(b.text).trim().slice(0, 2000).trim();
+      if (!text) return bad(c);
+      await store.addNote({ text, game: game || null });
+      return back(c, await backRun(b.run), 'Sent to Hal');
+    });
   });
   app.post('/notes/clear', async (c) => {
     const b = await form(c);
-    const id = str(b.id);
-    if (!/^N-\d+$/.test(id) || !(await store.clearNote(id))) return bad(c);
-    return back(c, await backRun(b.run), 'Note cleared');
+    return serial(async () => {
+      const id = str(b.id);
+      if (!/^N-\d+$/.test(id) || !(await store.clearNote(id))) return bad(c);
+      return back(c, await backRun(b.run), 'Note cleared');
+    });
   });
 
   app.post('/run', async (c) => {

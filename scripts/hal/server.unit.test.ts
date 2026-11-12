@@ -183,6 +183,19 @@ describe('report pages', () => {
       expect(await r.text()).toBe('Not Found');
     }
   });
+  it('fix 3: a report.json without calls, games or spend still opens, and votes on it work', async () => {
+    const r = reportJson() as Record<string, unknown>;
+    delete r.calls; delete r.games; delete r.spend; delete r.warnings;
+    await mkdir(join(halDir, 'runs', RUN), { recursive: true });
+    await writeFile(join(halDir, 'runs', RUN, 'report.json'), JSON.stringify(r));
+    await writeFile(join(halDir, 'latest.json'), JSON.stringify({ runId: RUN, endedAt: 'x', reportMd: 'x' }));
+    const app = mk();
+    const page = await get(app, '/');
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain('Kiln Heart is fairer');
+    expect((await post(app, '/vote', form({ run: RUN, pass: 'HAL-003' }))).status).toBe(303);
+    expect((await post(app, '/approve', form({ run: RUN, item: LIAB }))).status).toBe(400);
+  });
   it('old reports still render (no perGame, no planned, votes without comment)', async () => {
     const r = reportJson() as Record<string, unknown>;
     delete r.planned;
@@ -240,7 +253,7 @@ describe('votes and undo', () => {
     expect(r.status).toBe(303);
     expect(spawned).toEqual([]);
     expect((await fb()).undos).toEqual([expect.objectContaining({ pass: 'HAL-003', status: 'pending' })]);
-    expect(await follow(app, r)).toContain('Undo queued: the run in progress finishes first');
+    expect(await follow(app, r)).toContain('Undo queued: Hal is busy, so the next run applies it');
   });
   it('POST /undo twice: second records nothing and spawns nothing', async () => {
     await seed();
@@ -283,6 +296,45 @@ describe('votes and undo', () => {
     // Comments are capped the same way.
     await post(app, '/vote', form({ run: RUN, pass: 'HAL-003', comment: 'y'.repeat(10_000) }));
     expect(((await fb()).votes.at(-1)!.comment as string).length).toBe(500);
+  });
+  it('fix 1: two overlapping /undo POSTs (a double tap) record one pending undo, one down vote, and spawn once', async () => {
+    await seed();
+    alive = false;
+    const app = mk();
+    const rs = await Promise.all([1, 2].map(() => post(app, '/undo', form({ run: RUN, pass: 'HAL-003', reason: 'felt worse' }))));
+    expect(rs.map((r) => r.status)).toEqual([303, 303]);
+    const f = await fb();
+    expect(f.undos).toHaveLength(1);
+    expect(f.votes).toHaveLength(1);
+    expect(spawned).toHaveLength(1);
+  });
+  it('fix 1: overlapping writes of different kinds all land (votes, notes, approvals)', async () => {
+    await seed();
+    const app = mk();
+    await Promise.all([
+      post(app, '/vote', form({ run: RUN, pass: 'HAL-003' })), post(app, '/decline', form({ run: RUN, item: LIAB })),
+      post(app, '/vote', form({ run: RUN, pass: 'HAL-004' })), post(app, '/tell', form({ game: '', text: 'a' })), post(app, '/tell', form({ game: '', text: 'b' })),
+    ]);
+    expect((await fb()).votes).toHaveLength(3);
+    expect((await json('notes.json')).map((n) => n.id).sort()).toEqual(['N-001', 'N-002']);
+  });
+  it('fix 3: a pass undone by any run (e.g. a CLI hal undo) is done: no new undo, no spawn, and the card shows it', async () => {
+    await seed();
+    alive = false;
+    await writeFile(join(halDir, 'feedback.json'), JSON.stringify({ votes: [], undos: [{ run: 'undo-2026-11-12T10-00-00-000Z', pass: 'HAL-003', reason: 'cli', status: 'done', version: '0.2.2', at: 'x' }] }));
+    const app = mk();
+    const r = await post(app, '/undo', form({ run: RUN, pass: 'HAL-003', reason: 'again' }));
+    expect(r.status).toBe(303);
+    expect((await fb()).undos).toHaveLength(1);
+    expect((await fb()).votes).toEqual([]);
+    expect(spawned).toEqual([]);
+    expect(await follow(app, r)).toContain('Undone in v0.2.2');
+  });
+  it('fix 3: a POST body over 64 kB is 413 and changes nothing', async () => {
+    await seed();
+    const r = await post(mk(), '/tell', form({ game: '', text: 'x'.repeat(70 * 1024) }));
+    expect(r.status).toBe(413);
+    expect(await json('notes.json')).toEqual([]);
   });
   it('a POST for an earlier run redirects back to that run', async () => {
     await seed(OLD, false);
