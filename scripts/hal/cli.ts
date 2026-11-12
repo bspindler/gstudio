@@ -24,6 +24,11 @@ export type CliDeps = {
   runControlsCheck?: () => Promise<ControlCheck[]>;
   /** Injected clock for the stored-state commands (tell, notes, approve, spend). */
   now?: () => Date;
+  /**
+   * Inside a Hal build ($HAL_SCORE_DIR set, scripts/hal/score-broker.ts): `score` asks Hal to score the worktree with
+   * the gate's own isolated check instead of scoring here, where Claude Code's sandbox cannot launch a browser.
+   */
+  askHal?: (scorer: string) => Promise<unknown>;
 };
 
 class Exit extends Error {
@@ -67,7 +72,7 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
   }
 }
 
-async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck, now }: CliDeps): Promise<number> {
+async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck, now, askHal }: CliDeps): Promise<number> {
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
   // Game slugs, not scorer names: gearhold-play is Gearhold's second scorer, not a game (tell --game, Run now, run --game).
@@ -167,6 +172,15 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
       return 0;
     }
     case 'score': {
+      if (askHal) {
+        // Hal scores with the gate's defaults, so what the implementer sees is what the gate will judge.
+        for (const k of numericKeys) if (values[flag(k)] !== undefined) fail(`--${flag(k)}: inside a Hal build, score runs with the gate's defaults; drop the flag`);
+        if (change !== undefined || target !== undefined) fail('--change/--target do not apply to score');
+        const r = await askHal((values.game as string | undefined) ?? 'tidepool-pals') as ScoreReport<unknown>;
+        if (values.json) console.log(JSON.stringify(r, null, 2));
+        else printReport(r);
+        return r.hardFailures?.length ? fail(`score has ${r.hardFailures.length} hard failure(s)`) : 0;
+      }
       // A scorer that throws (browser unavailable, page errors, hang) is a hard failure: exit 1, nothing compared.
       const r = await scorer.score(range);
       if (values.json) console.log(JSON.stringify(r, null, 2));

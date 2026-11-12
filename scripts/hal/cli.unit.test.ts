@@ -57,6 +57,26 @@ describe('hal CLI with an async scorer', () => {
   });
 });
 
+describe('hal score inside a Hal build (askHal)', () => {
+  const report = { game: 'gearhold', levels: [{ level: 0, n: 50, winRate: 0.22 }], measures: { winnable: 33.3 }, fitness: 74.7, hardFailures: [] as string[] };
+  it('asks Hal instead of scoring here, and prints the per-level report', async () => {
+    const asked: string[] = [];
+    const runner = vi.fn(good);
+    const code = await main(['score', '--game', 'gearhold-play'], { ...deps(runner), askHal: async (s: string) => { asked.push(s); return report; } });
+    expect(code).toBe(0);
+    expect(asked).toEqual(['gearhold-play']);
+    expect(runner).not.toHaveBeenCalled(); // no browser in the implementer's sandbox
+    expect(out.join('\n')).toMatch(/winRate":0.22[\s\S]*fitness: 74.7/);
+  });
+  it('rejects range flags (the gate scores with defaults) and exits 1 on Hal\'s error or hard failures', async () => {
+    const ask = async () => report;
+    expect(await main(['score', '--game', 'gearhold-play', '--seeds', '2'], { ...deps(good), askHal: ask })).toBe(1);
+    expect(err.join('\n')).toMatch(/--seeds: inside a Hal build/);
+    expect(await main(['score', '--game', 'gearhold'], { ...deps(good), askHal: async () => { throw new Error('Hal could not score gearhold: boom'); } })).toBe(1);
+    expect(await main(['score', '--game', 'gearhold'], { ...deps(good), askHal: async () => ({ ...report, hardFailures: ['x'] }) })).toBe(1);
+  });
+});
+
 describe('hal screens', () => {
   const shot = (o: Partial<ScreensRun>): ScreensRun => ({ game: 'g', shots: ['1.png'], errors: [], reached: true, notes: [], blockedRequests: [], ...o });
   it('prints a per-game summary and exits 0 when all reached cleanly', async () => {

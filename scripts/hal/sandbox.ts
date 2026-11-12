@@ -64,7 +64,7 @@ export function sandboxEnv(base: NodeJS.ProcessEnv, secrets: string[]): NodeJS.P
   const env = childEnv(base, 'subscription');
   for (const k of Object.keys(env)) {
     const v = env[k];
-    if (SECRET_KEYS.test(k) || /^GIT_/.test(k) || (v !== undefined && keys.some((s) => v.includes(s)))) delete env[k];
+    if (SECRET_KEYS.test(k) || k === 'HAL_SCORE_DIR' || /^GIT_/.test(k) || (v !== undefined && keys.some((s) => v.includes(s)))) delete env[k];
   }
   // TMPDIR/TMP/TEMP and the npm cache are set per child by runIsolated (a private dir), never the shared tmpdir.
   return { ...env, CI: '1', npm_config_update_notifier: 'false', HAL_SANDBOXED: '1' };

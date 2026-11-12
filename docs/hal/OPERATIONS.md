@@ -51,6 +51,20 @@ npm run hal -- serve               # the morning report on this Mac (--lan for y
 API spend is capped at $20 a day. Hal stops slicing at $19.50, so one call that overruns its slice still stays under
 the cap, and it always keeps $1 back for the night's note.
 
+## How a build scores itself
+
+The implementer's shell runs in Claude Code's sandbox. That sandbox can't launch a browser, and its temp folder is
+the one every Claude Code session on this Mac shares. So inside a build, `npm run hal -- score --game <scorer>`
+doesn't score there. It asks Hal through a private request folder (`$HAL_SCORE_DIR`). Hal scores a snapshot of the
+worktree as it is at that moment, with the same sandboxed check its gate runs afterwards, and hands back the per-level
+results. That includes the browser-played `gearhold-play`, which takes about 30 seconds. Hal serves at most 12 scores
+per build, always with the gate's defaults, and only for the ticket's own game. It refuses when the build has changed
+Hal's scorer code (`scripts/hal/**`, `packages/core/src/hal/**`, `package.json`). None of this replaces the gate: Hal
+scores the final tree again on its own.
+
+`npm run hal` is `node --import tsx`, not the `tsx` command, because the tsx command opens a socket in the temp
+folder, and the sandbox allows none.
+
 ## The morning report
 
 The bookmark from `npm run hal -- setup` opens the morning report. `npm run hal -- serve` serves it (add `--lan` so

@@ -332,6 +332,15 @@ describe('runClaude', () => {
       });
       expect(SANDBOX_DENIED_ENV).toEqual(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'HAL_TOKEN']);
     });
+    it('the score broker dir is writable in the implementer sandbox and named in $HAL_SCORE_DIR (implementer only)', async () => {
+      const s = implementerSandboxSettings({ cwd: '/wt', denyReadPaths: ['/main/.hal.env'], tmpDir: '/priv/t', scoreDir: '/priv/hal-ask-x' }) as { sandbox: { filesystem: { allowWrite: string[] } } };
+      expect(s.sandbox.filesystem.allowWrite).toEqual(['/wt', '/priv/t', '/priv/hal-ask-x']);
+      for (const role of ['planner', 'implementer', 'director'] as const) {
+        const f = ok();
+        await runClaude({ ...base, role, allowedTools: roleAllowedTools(role), denyReadPaths: ['/main/.hal.env'], scoreDir: '/priv/hal-ask-x' }, deps(f.spawn, { env: { ...baseEnv, HAL_SCORE_DIR: '/stale' } }));
+        expect(f.calls[0]!.opts.env.HAL_SCORE_DIR).toBe(role === 'implementer' ? '/priv/hal-ask-x' : undefined);
+      }
+    });
     it('without denyReadPaths the cwd .hal.env is still denied', () => {
       const s = implementerSandboxSettings({ cwd: '/wt' }) as { sandbox: { filesystem: { denyRead: string[] } } };
       expect(s.sandbox.filesystem.denyRead).toEqual(['/wt/.hal.env']);

@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { childEnv } from './env.js';
+import { SCORE_DIR_ENV } from './score-broker.js';
 
 export type ClaudeRole = 'planner' | 'implementer' | 'director';
 export type ClaudeCall = {
@@ -32,6 +33,11 @@ export type ClaudeCall = {
    * CLAUDE_CODE_TMPDIR point here, and it is the implementer sandbox's only temp dir: the shared tmpdir is never writable.
    */
   tmpDir?: string;
+  /**
+   * Implementer only: the score broker's request dir (scripts/hal/score-broker.ts), writable in the sandbox and passed
+   * as $HAL_SCORE_DIR, so `npm run hal -- score` asks Hal to score instead of launching a browser in the sandbox.
+   */
+  scoreDir?: string;
 };
 export type ClaudeResult = {
   ok: boolean;
@@ -170,11 +176,11 @@ export const SANDBOX_DENIED_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 
  *   sandbox.network.strictAllowlist     true: hosts not allowed are denied deterministically, never prompted
  *   sandbox.network.allowLocalBinding   true (macOS): tests may listen on 127.0.0.1 (loopback only)
  *   sandbox.filesystem.denyRead         .hal.env paths
- *   sandbox.filesystem.allowWrite       cwd (the worktree) and the temp dir
+ *   sandbox.filesystem.allowWrite       cwd (the worktree), the temp dir and the score broker's request dir
  *   sandbox.credentials.envVars         [{name, mode:'deny'}]: unset in sandboxed commands
  * `--setting-sources project` does not drop --settings (flag settings are a separate source).
  */
-export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyReadPaths' | 'tmpDir'>): object {
+export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyReadPaths' | 'tmpDir' | 'scoreDir'>): object {
   const denyRead = [...new Set([join(call.cwd, '.hal.env'), ...(call.denyReadPaths ?? [])])];
   return {
     sandbox: {
@@ -186,7 +192,7 @@ export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyR
       network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
       // Worktree git metadata stays outside allowWrite on purpose: the allowed Bash is only npm test/typecheck/hal score; Hal does every git write itself, unsandboxed.
       // Never the shared tmpdir (tsx's transform cache there is loaded by Hal itself): the worktree and the call's own dir.
-      filesystem: { denyRead, allowWrite: [call.cwd, ...(call.tmpDir ? [call.tmpDir] : [])] },
+      filesystem: { denyRead, allowWrite: [call.cwd, ...(call.tmpDir ? [call.tmpDir] : []), ...(call.scoreDir ? [call.scoreDir] : [])] },
       credentials: { envVars: SANDBOX_DENIED_ENV.map((name) => ({ name, mode: 'deny' })) },
     },
   };
@@ -231,8 +237,10 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
   }
   // Throws `no API key in .hal.env` (no key value) before anything is spawned.
   const env = childEnv(deps.env, call.billing, deps.apiKey);
-  // A private temp dir per call. Claude Code 2.1.322 gives its sandboxed Bash TMPDIR=$CLAUDE_CODE_TMPDIR (else
-  // $CLAUDE_TMPDIR, else /tmp/claude) and keeps its own temp root there; Node and tools use TMPDIR/TMP/TEMP.
+  // A private temp dir per call, for Claude Code itself and its unsandboxed tools. Observed with 2.1.322 (2026-11-12):
+  // its sandboxed Bash still gets TMPDIR=/tmp/claude-<uid>, shared with every other Claude Code session, whatever is
+  // set here. So nothing Hal trusts may live there, and nothing in the sandbox can bind a Unix socket there (the
+  // sandbox allows none), which is why `npm run hal` is `node --import tsx` and never the tsx CLI (its IPC socket).
   const tmpDir = mkdtempSync(join(tmpdir(), 'hal-claude-'));
   call = { ...call, tmpDir };
   Object.assign(env, { TMPDIR: tmpDir, TMP: tmpDir, TEMP: tmpDir, CLAUDE_CODE_TMPDIR: tmpDir });
@@ -249,6 +257,8 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
   // R23: the implementer's own `npm test` runs inside Claude Code's sandbox, where Hal's nested sandbox tests cannot
   // run (macOS cannot nest sandbox-exec): they skip on HAL_SANDBOXED=1. Hal runs the full suite itself afterwards.
   if (call.role === 'implementer') env.HAL_SANDBOXED = '1';
+  if (call.role === 'implementer' && call.scoreDir) env[SCORE_DIR_ENV] = call.scoreDir;
+  else delete env[SCORE_DIR_ENV];
   const key = call.billing === 'api' ? deps.apiKey : undefined;
   const child = deps.spawn('claude', buildArgs(call), { cwd: call.cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   live.add(child);
