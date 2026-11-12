@@ -50,7 +50,7 @@ No real-money gambling or prizes. No bots mimicking humans. No real charges. No 
 
 1. Read the relevant files in `games/{{game}}/`.
 2. Write or extend a test first when the game has a test seam, then make the change.
-3. Run the tests: `npm test -- <path>` for the focused ones, then `npm test` and `npm run typecheck`. Both must be clean.
+3. Run the focused tests for this game, `npm test -- <path>` (its own test files, e.g. `npm test -- packages/core/test/{{game}}-<topic>.test.ts`), and `npm run typecheck`. Both must be clean. Do not run the whole suite with a bare `npm test`: your Bash runs in a sandbox where some of Hal's own tests cannot run. Hal runs the full suite itself, sandboxed, after you finish.
 4. Run `npm run hal -- score --game {{game}}` and check that the ticket's target measure moved the right way and no other measure got worse.
 5. Stop when it works. Do not refactor, rename or tidy unrelated code.
 

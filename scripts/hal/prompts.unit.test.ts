@@ -54,6 +54,21 @@ describe('prompt contents', () => {
     expect(p).toMatch(/CHANGELOG\.md/);
     expect(p).toContain('docs/hal/history');
   });
+  it('R23: the implementer runs focused tests and typecheck only; Hal runs the full suite', () => {
+    const p = loadPrompt('implementer');
+    const how = p.slice(p.indexOf('## How to work'), p.indexOf('## Output contract'));
+    expect(how).toContain('`npm test -- <path>`');
+    expect(how).toContain('`npm run typecheck`');
+    expect(how).toMatch(/Hal runs the full suite itself, sandboxed/);
+    expect(how).not.toMatch(/then `npm test` and/);
+  });
+  it('planner and director see every uncleared note with its status and last reply', () => {
+    for (const r of ['planner', 'director'] as const) {
+      const p = loadPrompt(r);
+      expect(p, r).toContain('`status`');
+      expect(p, r).toContain('`lastReply`');
+    }
+  });
   it('director returns the documented JSON shape', () => {
     const p = loadPrompt('director');
     expect(p).toContain('"noteReplies"');

@@ -6,7 +6,7 @@
 //   npm run hal -- undo HAL-0xx --reason "<text>" [--no-push]
 import { spawn } from 'node:child_process';
 import { ciLocalSandboxed } from './ci-sandboxed.js';
-import { lstatSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,6 @@ export const isRunCommand = (c: string | undefined): c is RunCommand => !!c && (
 
 export const DEFAULT_MAX_TICKETS = 6;
 export const DEFAULT_MODEL = 'opus';
-export const CI_LOCAL_TIMEOUT_MS = 90 * 60_000;
 const KINDS: readonly TicketKind[] = ['fix', 'tuning', 'polish', 'feature'];
 
 export type RunCmdDeps = {
@@ -103,6 +102,8 @@ export function realRunDeps(repo: string, halDir: string): RunDeps {
   const claudeDeps: ClaudeDeps = { spawn: (cmd, args, o) => spawn(cmd, args, o), env: process.env, now: Date.now, ...(apiKey ? { apiKey } : {}) };
   return {
     repo, halDir, now: () => new Date(), model: env.HAL_MODEL?.trim() || DEFAULT_MODEL, secrets, hasApiKey: !!apiKey,
+    // R24: every role, both billings, gets the repo's CLAUDE.md the same way (--bare skips auto-discovery).
+    ...(existsSync(join(repo, 'CLAUDE.md')) ? { appendSystemPromptFile: join(repo, 'CLAUDE.md') } : {}),
     // One spawn per call; run.ts reserves spend first and does the subscription -> API fallback itself.
     claude: (call) => runClaude(call, claudeDeps),
     play: realPlay(repo, secrets),

@@ -20,7 +20,7 @@ import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  applyRelease, bumpedTonight, checkTripwires, testPrefixesFor, compareScores, formatTrailers, nightOf, planVersion, topEntry, TRIPWIRE_RULES,
+  applyRelease, bumpedTonight, checkTripwires, testPrefixesFor, compareScores, formatTrailers, halReleasedTonight, nightOf, planVersion, TRIPWIRE_RULES,
   type Billing, type Diff, type FileChange, type ScoreReport, type Ticket,
 } from '@studio/core/hal';
 import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
@@ -120,7 +120,10 @@ export type CandidateCtx = {
   /** Real secret values (the API key from .hal.env), kept out of every diff, env, reason and result (ruling R8). */
   secrets: string[];
   budget: CandidateBudget;
-  /** runClaudeWithFallback bound to its deps: `(call, apiSlice) => runClaudeWithFallback(call, deps, apiSlice)`. */
+  /**
+   * The run's Claude port (run.ts): one reserved spawn, and on a subscription usage limit one reserved retry on the API
+   * with `apiSliceUsd`. Both results are returned so both get settled.
+   */
   claude: (call: ClaudeCall, apiSliceUsd: number) => Promise<{ first: ClaudeResult; retry?: ClaudeResult }>;
   /** Hal's main worktree (ensureMainWorktree), at refs/hal/main: the before shot is taken here. */
   mainDir: string;
@@ -213,6 +216,16 @@ function scriptsOf(packageJson: string): Record<string, string> {
   try { return (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts ?? {}; } catch { return {}; }
 }
 
+/** Messages and committer dates of the newest 500 commits at `rev` (for R20's "Hal released this tonight" test). */
+export async function halCommits(repo: string, rev: string, git: GitRunner = runGit): Promise<Array<{ message: string; date: Date | null }>> {
+  const out = await git(['log', '-n', '500', '--format=%cI%x00%B%x1e', rev], repo);
+  return out.split('\x1e').map((rec) => rec.replace(/^\s+/, '')).filter((rec) => rec.includes('\0')).map((rec) => {
+    const i = rec.indexOf('\0');
+    const d = new Date(rec.slice(0, i).trim());
+    return { message: rec.slice(i + 1), date: Number.isFinite(d.getTime()) ? d : null };
+  });
+}
+
 /** Runs one ticket through the whole pipeline. Never throws: every failure is a `discarded` result. */
 export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<CandidateResult> {
   const git = ctx.git ?? runGit;
@@ -254,7 +267,8 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
   try {
     const wt = await newCandidateWorktree(ctx.repo, ctx.pass, { git });
     if (ctx.baseline.sha !== wt.base) discard(`stale baseline: scores are for ${ctx.baseline.sha.slice(0, 12)}, the candidate starts at ${wt.base.slice(0, 12)}`);
-    const night = nightOf(ctx.now(), ctx.tzOffsetMinutes ?? -ctx.now().getTimezoneOffset());
+    const tz = ctx.tzOffsetMinutes ?? -ctx.now().getTimezoneOffset();
+    const night = nightOf(ctx.now(), tz);
     const baseTree = (await git(['rev-parse', `${wt.base}^{tree}`], ctx.repo)).trim();
     const tree = { git, tmpRoot: privDir };
 
@@ -374,9 +388,11 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       for (const k of ['yaml', 'html', 'changelog'] as const) cur[k] = await blobText(wt.dir, t1, files[k], { git });
       const current = /^version:[ \t]*(\S+)[ \t]*$/m.exec(cur.yaml)?.[1];
       if (!current) throw new Error('game.yaml has no version');
-      const top = topEntry(cur.changelog);
-      const version = planVersion({ current, topEntryDate: top?.date ?? null, night, kind: ticket.kind, alreadyBumpedTonight: bumpedTonight(cur.changelog, night) });
-      next = applyRelease(cur, { slug: game, version, night, entry: { kind: ticket.kind, text: parsed!.changelog } });
+      // R20: share tonight's version only with Hal's own release of it tonight (trailers on refs/hal/main), never with
+      // a version Brian released himself tonight, even though its CHANGELOG heading is dated tonight.
+      const shared = halReleasedTonight(await halCommits(ctx.repo, wt.base, git), game, current, night, tz) ? bumpedTonight(cur.changelog, night) : null;
+      const version = planVersion({ current, kind: ticket.kind, alreadyBumpedTonight: shared });
+      next = applyRelease(cur, { slug: game, version, night, entry: { kind: ticket.kind, text: parsed!.changelog }, shareTonight: shared !== null });
       res.version = version;
     } catch (e) { return discard(`release failed: ${msg(e)}`); }
     for (const k of ['yaml', 'html', 'changelog'] as const) await writeFile(join(wt.dir, files[k]), next[k]);

@@ -6,12 +6,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createServerApp, tokenOk, type SpawnRun } from './server.js';
 
 const TOKEN = 'tok-' + 'a'.repeat(40);
-let halDir: string, spawned: Parameters<SpawnRun>[0][], alive: boolean;
+let halDir: string, spawned: Parameters<SpawnRun>[0][], alive: boolean, startedAt: Date | null;
 const mk = () => createServerApp({
   halDir, token: TOKEN, games: ['tidepool-pals', 'gearhold'], now: () => new Date('2026-11-11T09:00:00Z'),
-  isAlive: () => alive, spawnRun: (o) => { spawned.push(o); }, devUrl: async () => 'http://10.0.0.5:5174/',
+  isAlive: () => alive, startTimeOf: () => startedAt, spawnRun: (o) => { spawned.push(o); }, devUrl: async () => 'http://10.0.0.5:5174/',
 });
-beforeEach(async () => { halDir = await mkdtemp(join(tmpdir(), 'hal-srv-')); spawned = []; alive = true; });
+beforeEach(async () => { halDir = await mkdtemp(join(tmpdir(), 'hal-srv-')); spawned = []; alive = true; startedAt = null; });
 const H = 'http://10.0.0.5:5180';
 const post = (app: ReturnType<typeof mk>, path: string, body = '', headers: Record<string, string> = {}) =>
   app.request(`${H}${path}`, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `hal_token=${TOKEN}`, origin: H, ...headers } });
@@ -126,6 +126,16 @@ describe('POST', () => {
     expect(await r.text()).toBe('busy');
     expect(spawned).toEqual([]);
     alive = false;
+    expect((await post(mk(), '/run')).status).toBe(303);
+  });
+  it('pid reuse: a live pid that started after the lock was written is not the run (same guard as the CLI lock)', async () => {
+    await lock(); // startedAt 2026-11-11T08:00:00Z
+    const get = async () => (await mk().request(`${H}/`, { headers: { cookie: `hal_token=${TOKEN}` } })).text();
+    startedAt = new Date('2026-11-11T07:59:59Z'); // the run itself
+    expect(await get()).toContain('Running: scoring');
+    expect((await post(mk(), '/run')).status).toBe(409);
+    startedAt = new Date('2026-11-11T08:30:00Z'); // another process reusing the pid
+    expect(await get()).toContain('Idle');
     expect((await post(mk(), '/run')).status).toBe(303);
   });
   it('a spawn failure is a plain 500 that does not leak the token', async () => {

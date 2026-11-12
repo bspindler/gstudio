@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { DAILY_CAP_USD, apiSpent } from '@studio/core/hal';
 import { Hono, type Context } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
+import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 import { createStore } from './store.js';
 
 export const SERVER_PORT = 5180;
@@ -26,6 +27,8 @@ export type ServerDeps = {
   now?: () => Date;
   /** Liveness of the lock's pid. Default: process.kill(pid, 0). */
   isAlive?: (pid: number) => boolean;
+  /** The lock pid's start time, for the pid-reuse guard (same as the CLI lock). Default `ps -o lstart=`; null = unknown. */
+  startTimeOf?: (pid: number) => Date | null;
   spawnRun?: SpawnRun;
   /** The dev server's games URL when it is up, else null. */
   devUrl?: () => Promise<string | null>;
@@ -38,9 +41,6 @@ export function tokenOk(given: string | undefined, token: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-const defaultAlive = (pid: number) => {
-  try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; }
-};
 
 /** The real spawn: `node tsx/cli scripts/hal.ts run ...`, detached, output to a log file, unref'd. */
 export function realSpawnRun(repo: string, spawnFn: typeof spawn = spawn): SpawnRun {
@@ -88,9 +88,11 @@ const notFound = () => new Response('Not Found', { status: 404, headers: { 'cont
 export function createServerApp(d: ServerDeps) {
   const now = d.now ?? (() => new Date());
   const alive = d.isAlive ?? defaultAlive;
+  const startTimeOf = d.startTimeOf ?? defaultStartTime;
   const spawnRun = d.spawnRun;
   const app = new Hono();
-  const running = () => { const l = readLock(d.halDir); return l && alive(l.pid) ? l : null; };
+  // The same test as the run's own lock: a live pid that started after the lock was written is a reused pid.
+  const running = () => { const l = readLock(d.halDir); return l && lockLive(l, alive, startTimeOf) ? l : null; };
 
   app.use('*', async (c, next) => {
     const url = new URL(c.req.url);

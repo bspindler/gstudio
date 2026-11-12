@@ -42,6 +42,7 @@ const node = (code: string) => [process.execPath, '-e', code];
 const result = (v: unknown, extra = '') => node(`${extra};console.log('noise');console.log('HAL-RESULT ' + process.env.HAL_CHECK_NONCE + ' ' + ${J(J(v))})`);
 const writeJpeg = (out: string, buf: Buffer) => `const fs=require('fs'),p=require('path');fs.mkdirSync(p.dirname(${J(out)}),{recursive:true});fs.writeFileSync(${J(out)},Buffer.from(${J(buf.toString('hex'))},'hex'))`;
 
+const RUN = 'run-2026-11-12T03-00-00-000Z'; // night 2026-11-11 at tz offset 0, like now()
 const ticket = (over: Partial<Ticket> = {}): Ticket => ({ id: 't1', game: 'hyperline', kind: 'tuning', title: 'Smoother jumps', why: 'Players miss the second jump.', ...over });
 const BEFORE = { hyperline: report('hyperline', 60, { flow: 60, fair: 70 }), gearhold: report('gearhold', 50, { walk: 50 }), 'gearhold-play': report('gearhold-play', 40, { clear: 40 }) };
 
@@ -97,7 +98,7 @@ describe('runCandidate (temp git repo)', () => {
   function ctx(over: Partial<CandidateCtx> & { cmds?: Partial<CheckCommands> } = {}, edit: (cwd: string) => void = (cwd) => put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n')): Ctx {
     const { cmds, ...rest } = over;
     return {
-      repo, pass: 'HAL-1', run: 'run-2026-11-11', now: () => new Date('2026-11-12T03:00:00Z'), tzOffsetMinutes: 0,
+      repo, pass: 'HAL-1', run: RUN, now: () => new Date('2026-11-12T03:00:00Z'), tzOffsetMinutes: 0,
       model: 'test-model', billing: 'api', secrets: [KEY],
       budget: { slice: vi.fn(() => 3), record: vi.fn() },
       claude: async (call) => { calls.push(call); edit(call.cwd); return { first: ok(OUT) }; },
@@ -142,7 +143,7 @@ describe('runCandidate (temp git repo)', () => {
     const msg = gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN);
     expect(msg.split('\n')[0]).toBe('tuning(hyperline): Smoother jumps');
     expect(msg).toContain('Players miss the second jump.');
-    expect(parseTrailers(msg)).toEqual({ pass: 'HAL-1', game: 'hyperline', kind: 'tuning', why: 'Players miss the second jump.', scoreBefore: 60, scoreAfter: 61, version: '0.3.2', run: 'run-2026-11-11' });
+    expect(parseTrailers(msg)).toEqual({ pass: 'HAL-1', game: 'hyperline', kind: 'tuning', why: 'Players miss the second jump.', scoreBefore: 60, scoreAfter: 61, version: '0.3.2', run: RUN });
 
     const at = (f: string) => gitIn(repo, 'show', `${HAL_MAIN}:games/hyperline/${f}`);
     expect(at('game.yaml')).toMatch(/^version: 0\.3\.2$/m);
@@ -175,6 +176,34 @@ describe('runCandidate (temp git repo)', () => {
     expect(r.verdict).toBe('merged');
     expect(r.version).toBe('0.3.2');
     expect(gitIn(repo, 'show', `${HAL_MAIN}:games/hyperline/CHANGELOG.md`)).toMatch(/## 0\.3\.2 \(2026-11-11\)\n- Jumps feel smoother\.\n- Jumps feel smoother\.\n/);
+    worktreesGone('HAL-2');
+  });
+
+  it("R20: a version Brian released tonight is never shared: Hal bumps to a new heading above it, then shares its own", async () => {
+    // Brian's own tidepool release tonight, on main and refs/hal/main, with no Hal commit for it.
+    const tp = 'tidepool-pals';
+    for (const [p, t] of Object.entries(GAME(tp, '0.4.1'))) put(repo, p, t);
+    put(repo, `games/${tp}/CHANGELOG.md`, `# ${tp} changelog\n\nNewest first.\n\n## 0.4.1 (2026-11-11)\n- Brian's own fix.\n\n## 0.4.0 (2026-11-01)\n- Older.\n`);
+    gitIn(repo, 'add', '-A');
+    gitIn(repo, 'commit', '-q', '-m', 'tidepool 0.4.1');
+    gitIn(repo, 'update-ref', HAL_MAIN, gitIn(repo, 'rev-parse', 'HEAD'));
+    await ensureMainWorktree(repo);
+    const tpScores = { [tp]: report(tp, 50, { fun: 50 }) };
+    const tpCtx = (pass: string, speed: string) => ctx({ pass, baseline: { sha: halHead(), scores: tpScores }, cmds: { score: (_d, s) => result(report(s, 51, { fun: 51 })) } },
+      (cwd) => put(cwd, `games/${tp}/game.js`, `export const speed = ${speed};\n`));
+    const a = await runCandidate(ticket({ game: tp, kind: 'fix', title: 'Fix crab hitbox' }), tpCtx('HAL-1', '2'));
+    expect(a.reasons).toEqual([]);
+    expect(a.version).toBe('0.4.2');
+    const cl1 = gitIn(repo, 'show', `${HAL_MAIN}:games/${tp}/CHANGELOG.md`);
+    expect(cl1).toContain("## 0.4.2 (2026-11-11)\n- Jumps feel smoother.\n\n## 0.4.1 (2026-11-11)\n- Brian's own fix.\n");
+    // A second Hal fix the same night shares Hal's 0.4.2 (its trailers are on refs/hal/main now).
+    await ensureMainWorktree(repo);
+    const b = await runCandidate(ticket({ id: 't2', game: tp, kind: 'fix', title: 'Fix shell timing' }), tpCtx('HAL-2', '3'));
+    expect(b.reasons).toEqual([]);
+    expect(b.version).toBe('0.4.2');
+    const cl2 = gitIn(repo, 'show', `${HAL_MAIN}:games/${tp}/CHANGELOG.md`);
+    expect(cl2).toContain("## 0.4.2 (2026-11-11)\n- Jumps feel smoother.\n- Jumps feel smoother.\n\n## 0.4.1 (2026-11-11)\n- Brian's own fix.\n");
+    expect(gitIn(repo, 'show', `${HAL_MAIN}:games/${tp}/game.yaml`)).toMatch(/^version: 0\.4\.2$/m);
     worktreesGone('HAL-2');
   });
 

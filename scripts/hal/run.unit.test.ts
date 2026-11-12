@@ -12,7 +12,7 @@ import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
 import { acquireLock, defaultStartTime, lockLive, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
-import { parseRunArgs, runRunCommand } from './cli-run.js';
+import { parseRunArgs, realRunDeps, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
 import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
 
@@ -146,9 +146,11 @@ const opts = (over: Partial<RunOptions> = {}): RunOptions => ({
 
 describe('full fake run', () => {
   it('merges a good ticket, discards a tripwire, skips one on budget; report.json has all three; pushes to origin', async () => {
-    seedSpend(12.5); // 7.50 left: planner 1.50, two implementer slices of 3.00, then nothing
+    // 7.50 left of the $20 cap, 7.00 to slice (R21's 0.50 margin): planner 1.50, then the director's 1.00 is held, so
+    // the implementers get 3.00 and 1.50, the third ticket nothing, and the director its 1.00 at the end.
+    seedSpend(12.5);
     const brian = brianMain();
-    const code = await runNight(opts(), deps({ claude: fakeClaude({ tickets: [GOOD, TRIP, THIRD], costs: { planner: 1.5, 'Smoother jumps': 3, 'Phone home': null } }) }));
+    const code = await runNight(opts(), deps({ claude: fakeClaude({ tickets: [GOOD, TRIP, THIRD], costs: { planner: 1.5, 'Smoother jumps': 3, 'Phone home': null, director: null } }) }));
     expect(code).toBe(0);
     const r = readReport();
     expect(r.changes.map((c) => [c.ticket.id, c.verdict])).toEqual([['T1', 'merged'], ['T2', 'discarded'], ['T3', 'skipped']]);
@@ -158,13 +160,14 @@ describe('full fake run', () => {
     expect(r.changes[2]!.reasons).toEqual(['budget']);
     expect(r.capReached).toBe(true);
     expect(r).toMatchObject({ night: NIGHT, trigger: 'nightly', billing: 'api', pushed: true });
-    expect(r.spend.api).toBe(7.5);
+    expect(r.spend.api).toBe(7); // never past 19.50 for slicing; the report still shows the $20 cap
     expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
     expect(r.games.hyperline).toMatchObject({ before: { hyperline: 60 }, after: { hyperline: 61 } });
-    // The director had no budget left: the note is Hal's own summary, still written and committed.
-    expect(calls.map((c) => c.role)).toEqual(['planner', 'implementer', 'implementer']);
+    // R21: the director's $1 was held through the builds, so the note still got written by the director.
+    expect(calls.map((c) => [c.role, c.maxBudgetUsd])).toEqual([['planner', 1.5], ['implementer', 3], ['implementer', 1.5], ['director', 1]]);
     const runDir = join(halDir, 'runs', r.runId);
-    expect(read(runDir, 'note.md')).toMatch(/cap/i);
+    expect(read(runDir, 'note.md')).toMatch(/A good night for Hyperline/);
+    expect(read(runDir, 'report.md')).toContain('the daily API cap is $20.00');
     expect(read(runDir, 'report.md')).toMatch(/HAL-001/);
     // refs/hal/main: the merge, then the history-note commit with Hal-Run; origin's main equals it.
     expect(gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN)).toMatch(new RegExp(`Hal-Run: ${r.runId}`));
@@ -176,7 +179,7 @@ describe('full fake run', () => {
     expect(gitIn(repo, 'status', '--porcelain')).toBe('?? BRIAN.txt');
     // Ledger: the two attempts, with their costs (unknown cost = the whole slice).
     const ledger = JSON.parse(read(halDir, 'ledger.json')) as { passes: { id: string; kept: boolean; costUsd: number }[] };
-    expect(ledger.passes.map((p) => [p.id, p.kept, p.costUsd])).toEqual([['HAL-001', true, 3], ['HAL-002', false, 3]]);
+    expect(ledger.passes.map((p) => [p.id, p.kept, p.costUsd])).toEqual([['HAL-001', true, 3], ['HAL-002', false, 1.5]]);
     expect(existsSync(join(halDir, 'run.lock'))).toBe(false);
     expect(readdirSync(join(halDir, 'wt'))).toEqual(['main']);
   }, 60_000);
@@ -324,7 +327,7 @@ describe('push', () => {
     expect(originMain()).toBe(before);
     expect(r.changes[0]!.verdict).toBe('merged');
   }, 60_000);
-  it('diverged refs/hal/main and origin/main: the run continues, push is off and the report says why', async () => {
+  it('R22: diverged refs/hal/main and origin/main: the run is forced report-only, nothing built or pushed, recovery steps in a warning', async () => {
     await ensureMainWorktree(repo);
     // Hal is ahead with an unpushed commit, and origin moved on independently.
     const tree = gitIn(repo, 'rev-parse', `${HAL_MAIN}^{tree}`);
@@ -336,11 +339,18 @@ describe('push', () => {
     put(other, 'OTHER.txt', 'x\n'); gitIn(other, 'add', '-A'); gitIn(other, 'commit', '-q', '-m', 'other'); gitIn(other, 'push', '-q', 'origin', 'main');
     const before = originMain();
     const ci = vi.fn(async () => ({ ok: true, detail: '' }));
+    put(halDir, 'feedback.json', J({ votes: [], undos: [{ pass: 'HAL-001', reason: 'pending', at: NOW.toISOString(), status: 'pending' }] }));
     expect(await runNight(opts(), deps({ ciLocal: ci }))).toBe(0);
     const r = readReport();
     expect(r.pushed).toBe(false);
     expect(r.pushSkippedReason).toMatch(/diverged/);
-    expect(r.changes[0]!.verdict).toBe('merged'); // the run continued
+    expect(r.changes).toEqual([]); // nothing built
+    expect(calls.map((c) => c.role)).toEqual(['planner', 'director']);
+    expect(halHead()).toBe(halOnly); // no merge, no history commit, no undo
+    const w = r.warnings.join('\n');
+    expect(w).toMatch(/diverged: this run is report-only/);
+    expect(w).toContain(`git log origin/main..${HAL_MAIN}`);
+    expect(w).toContain(`git update-ref ${HAL_MAIN} origin/main`);
     expect(ci).not.toHaveBeenCalled();
     expect(originMain()).toBe(before);
   }, 60_000);
@@ -680,4 +690,69 @@ describe('fix round 1', () => {
     expect(await undoCommand('HAL-404', 'nope', { push: false }, deps())).toBe(1);
     expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-404', status: 'rejected' })]);
   });
+});
+
+describe('final review fixes', () => {
+  it('notes stay: a note the director marked queued in run 1 is in run 2\'s planner and director prompts, with its status and reply', async () => {
+    put(halDir, 'notes.json', J([
+      { id: 'N-001', at: NOW.toISOString(), game: null, text: 'more neon please', status: 'open' },
+      { id: 'N-002', at: NOW.toISOString(), game: 'tidepool-pals', text: 'not in scope', status: 'open' },
+    ]));
+    const director = { note: 'n', perGame: {}, noteReplies: [{ id: 'N-001', status: 'queued', reply: 'Neon is next week.' }] };
+    await runNight(opts({ reportOnly: true }), deps({ claude: fakeClaude({ tickets: [], director }) }));
+    expect(JSON.parse(read(halDir, 'notes.json'))[0]).toMatchObject({ id: 'N-001', status: 'queued', reply: 'Neon is next week.' });
+    calls = [];
+    await runNight(opts({ reportOnly: true }), deps({ claude: fakeClaude({ tickets: [] }) }));
+    const [planner, dir] = [calls.find((c) => c.role === 'planner')!, calls.find((c) => c.role === 'director')!];
+    for (const p of [planner.prompt, dir.prompt]) {
+      expect(p).toContain('more neon please');
+      expect(p).toContain('"status": "queued"');
+      expect(p).toContain('"lastReply": "Neon is next week."');
+      expect(p).not.toContain('not in scope'); // another game's note stays out of a hyperline-only run
+    }
+  }, 60_000);
+
+  it('one bad planner ticket is a warning; the good ones are still built', async () => {
+    const bad = T('TX', 'Ship to pong', { game: 'pong' });
+    expect(await runNight(opts(), deps({ claude: fakeClaude({ tickets: [bad, GOOD] }) }))).toBe(0);
+    const r = readReport();
+    expect(r.changes.map((c) => [c.ticket.id, c.verdict])).toEqual([['T1', 'merged']]);
+    expect(r.warnings.join('\n')).toMatch(/planner ticket 1 \(TX: Ship to pong\) was rejected: unknown game pong/);
+  }, 60_000);
+
+  it('pass ids continue after the highest Hal-Pass on refs/hal/main, even with a fresh .data/hal', async () => {
+    await ensureMainWorktree(repo);
+    const tree = gitIn(repo, 'rev-parse', `${HAL_MAIN}^{tree}`);
+    const trailers = formatTrailers({ pass: 'HAL-003', game: 'hyperline', kind: 'fix', why: 'w', scoreBefore: 1, scoreAfter: 2, version: '0.3.1', run: 'run-old' });
+    const c = execFileSync('git', ['commit-tree', tree, '-p', halHead(), '-m', `fix(hyperline): old\n\nw\n\n${trailers}`], { cwd: repo, encoding: 'utf8' }).trim();
+    gitIn(repo, 'update-ref', HAL_MAIN, c);
+    gitIn(repo, 'push', '-q', 'origin', `${c}:refs/heads/main`); // pushed: not diverged
+    expect(existsSync(join(halDir, 'ledger.json'))).toBe(false);
+    expect(await runNight(opts(), deps())).toBe(0);
+    const r = readReport();
+    expect(r.changes.map((x) => x.pass)).toEqual(['HAL-004']);
+    expect(JSON.parse(read(halDir, 'ledger.json')).passes.map((p: { id: string }) => p.id)).toEqual(['HAL-004']);
+    expect(parseTrailers(gitIn(repo, 'log', '-1', '--format=%B', `${HAL_MAIN}^`))?.pass).toBe('HAL-004');
+  }, 60_000);
+
+  it('R24: appendSystemPromptFile reaches every role (planner, implementer, director)', async () => {
+    const md = join(repo, 'CLAUDE.md');
+    await runNight(opts(), deps({ appendSystemPromptFile: md }));
+    expect(calls.map((c) => c.role)).toEqual(['planner', 'implementer', 'director']);
+    for (const c of calls) expect(c.appendSystemPromptFile, c.role).toBe(md);
+  }, 60_000);
+
+  it('R24: realRunDeps points appendSystemPromptFile at <repo>/CLAUDE.md when it exists', () => {
+    expect(realRunDeps(repo, halDir).appendSystemPromptFile).toBeUndefined();
+    put(repo, 'CLAUDE.md', '# rules\n');
+    expect(realRunDeps(repo, halDir).appendSystemPromptFile).toBe(join(repo, 'CLAUDE.md'));
+  });
+
+  it('R21: the director\'s $1 is held through the builds: tight money skips a build rather than the note', async () => {
+    seedSpend(15); // 4.50 to slice: planner 1.50, then 3.00 - 1.00 held = 2.00 for the one implementer, director 1.00
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [GOOD, THIRD], costs: { planner: 1.5, 'Smoother jumps': null, director: null } }) }));
+    expect(calls.map((c) => [c.role, c.maxBudgetUsd])).toEqual([['planner', 1.5], ['implementer', 2], ['director', 1]]);
+    expect(readReport().changes.map((c) => c.verdict)).toEqual(['merged', 'skipped']);
+    expect(readReport().spend.api).toBe(4.5);
+  }, 60_000);
 });

@@ -21,24 +21,49 @@ function bump(v: string, by: BumpKind): string {
 export interface PlanVersionInput {
   /** The game's version now (game.yaml). */
   current: string;
-  /** Date of the newest CHANGELOG heading, or null if there is none. */
-  topEntryDate: string | null;
-  /** Tonight's date, from nightOf(). */
-  night: string;
   kind: ChangeKind;
-  /** Bump level already used tonight (see bumpedTonight). Required when topEntryDate === night: null there throws. */
+  /**
+   * The bump level Hal itself already used tonight AT `current`, or null if Hal has not released this game at `current`
+   * tonight (ruling R20). The caller derives it from git: a commit on refs/hal/main tonight whose trailers are
+   * Hal-Game=<game> and Hal-Version=<current> (see halReleasedTonight); then bumpedTonight tells patch from minor.
+   * A CHANGELOG heading dated tonight is not enough: it may be Brian's own release.
+   */
   alreadyBumpedTonight: BumpKind | null;
 }
 
-/** Same night shares one version, except a feature after patch-only changes upgrades to the next minor. */
+/**
+ * Hal's releases on the same night share one version, except a feature after patch-only changes upgrades to the next
+ * minor. Anything else (a new night, or a version Brian released himself tonight) bumps from `current`.
+ */
 export function planVersion(i: PlanVersionInput): string {
   parseSemver(i.current);
-  if (i.topEntryDate === i.night) {
-    if (i.alreadyBumpedTonight === null) throw new Error('release: alreadyBumpedTonight is required when tonight already has a CHANGELOG entry (use bumpedTonight)');
+  if (i.alreadyBumpedTonight !== null) {
     if (bumpKind(i.kind) === 'minor' && i.alreadyBumpedTonight !== 'minor') return bump(i.current, 'minor');
     return i.current;
   }
   return bump(i.current, bumpKind(i.kind));
+}
+
+/** A Hal-Run id (`run-<iso stamp>` / `undo-<iso stamp>`, colons and dot as dashes) back to its Date, or null. */
+export function runIdDate(run: string): Date | null {
+  const m = /^(?:run|undo)-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z(?:-\d+)?$/.exec(run);
+  if (!m) return null;
+  const d = new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
+/**
+ * R20: whether refs/hal/main has a Hal commit tonight for `game` at `version`. `commits` are the messages and committer
+ * dates of the commits to search (newest first; any order works). A commit counts when its trailers parse, name the
+ * game and the version, and its Hal-Run or its commit date falls on `night` (nightOf).
+ */
+export function halReleasedTonight(commits: Array<{ message: string; date: Date | null }>, game: string, version: string, night: string, tzOffsetMinutes: number): boolean {
+  return commits.some((c) => {
+    const t = parseTrailers(c.message);
+    if (!t || t.game !== game || t.version !== version) return false;
+    const ran = runIdDate(t.run);
+    return (ran !== null && nightOf(ran, tzOffsetMinutes) === night) || (c.date !== null && Number.isFinite(c.date.getTime()) && nightOf(c.date, tzOffsetMinutes) === night);
+  });
 }
 
 export interface ReleaseFiles {
@@ -51,6 +76,12 @@ export interface ReleaseInput {
   version: string;
   night: string;
   entry: { kind: ChangeKind; text: string };
+  /**
+   * Add the bullet under tonight's top heading (renaming it on a minor upgrade) instead of a new heading. Only for a
+   * version Hal shares with its own earlier release tonight (planVersion with alreadyBumpedTonight set); default false,
+   * so a heading Brian wrote tonight is never merged into.
+   */
+  shareTonight?: boolean;
 }
 
 const oneLine = (s: string) => s.replace(/\s*[\r\n]+\s*/g, ' ').trim();
@@ -63,7 +94,11 @@ export function topEntry(changelog: string): { version: string; date: string } |
   return m ? { version: m[1]!, date: m[2]! } : null;
 }
 
-/** What tonight's top entry bumped: compares its version with the previous heading. null if the top entry is not tonight's. */
+/**
+ * What tonight's top entry bumped: compares its version with the previous heading. null if the top entry is not tonight's.
+ * Only meaningful once halReleasedTonight says that top entry is Hal's own: it then tells patch from minor among Hal's
+ * bumps tonight. A heading dated tonight alone may be Brian's release, which Hal never shares.
+ */
 export function bumpedTonight(changelog: string, night: string): BumpKind | null {
   const heads = [...changelog.matchAll(new RegExp(HEADING.source, 'gm'))];
   const top = heads[0];
@@ -77,7 +112,7 @@ export function bumpedTonight(changelog: string, night: string): BumpKind | null
 
 /** Edits game.yaml, index.html and CHANGELOG.md. Throws if any file lacks the expected shape. */
 export function applyRelease(files: ReleaseFiles, r: ReleaseInput): ReleaseFiles {
-  return apply(files, r, false);
+  return apply(files, r, r.shareTonight !== true);
 }
 
 function apply(files: ReleaseFiles, r: ReleaseInput, forceNewHeading: boolean): ReleaseFiles {
@@ -102,7 +137,8 @@ function apply(files: ReleaseFiles, r: ReleaseInput, forceNewHeading: boolean): 
   const nextRel = rest.search(/^## /m);
   const sectionEnd = nextRel === -1 ? files.changelog.length : idx + top[0].length + nextRel;
   let changelog: string;
-  if (top[2] === r.night && !forceNewHeading) {
+  if (!forceNewHeading && top[2] !== r.night) throw new Error(`release: no heading dated ${r.night} to share (top is ${top[1]} (${top[2]}))`);
+  if (!forceNewHeading) {
     // Tonight already has an entry: add a bullet, and rename the heading if the version was upgraded.
     const [ca, cb, cc] = parseSemver(top[1]!);
     const [na, nb, nc] = parseSemver(r.version);
