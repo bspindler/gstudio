@@ -76,6 +76,13 @@ function forms(html: string): Array<{ action: string; fields: Record<string, str
   }));
 }
 /** The text of the section whose <h2> contains `title`, up to the next <section. */
+/** The page's only script is Hal's own /hal.js: one external tag, nothing inline. */
+function onlyHalScript(html: string) {
+  expect(html.match(/<script/gi)).toEqual(['<script']);
+  expect(html).toContain('<script src="/hal.js" defer></script>');
+}
+/** The panel's Earlier reports card. */
+const recentPart = (html: string) => { const i = html.indexOf('Earlier reports'); expect(i, 'Earlier reports').toBeGreaterThan(-1); return html.slice(i, html.indexOf('</section>', i)); };
 function section(html: string, title: string): string {
   const h = html.search(new RegExp(`<h2[^>]*>[^<]*${title}`));
   if (h < 0) throw new Error(`no section ${title}`);
@@ -94,13 +101,15 @@ describe('renderReport', () => {
     const r = fullReport();
     r.planned = [ticket('T7', 'gearhold', 'feature', 'A boss rush mode')];
     const html = renderReport(view({}, r));
-    const order = ['Good morning. Here&#39;s what changed.', 'Director&#39;s note', 'Play', 'Where each game stands', 'Changes', 'Your calls',
-      'Tell Hal', 'What got fixed (1)', 'Tried and dropped (1)', 'Planned, not built (1)', 'Warnings', 'Run Hal', 'Earlier reports'];
-    const at = order.map((t) => html.indexOf(t));
+    // The header, then the panel (Run Hal first, so it leads on a phone), then the report.
+    const order = ['Good morning. Here&#39;s what changed.', 'Run Hal', 'Tell Hal', 'Earlier reports', 'Director&#39;s note', 'Play', 'Your calls', 'Changes',
+      'Where each game stands', 'What got fixed (1)', 'Tried and dropped (1)', 'Planned, not built (1)', 'Warnings'];
+    const body = html.slice(html.indexOf('<body'));
+    const at = order.map((t) => body.indexOf(t));
     order.forEach((t, i) => expect(at[i], t).toBeGreaterThan(-1));
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(html).toContain('Thursday, Nov 12 · overnight run');
-    expect(html).toContain('3 merged · 1 tried and dropped · 1 need you');
+    expect(html).toMatch(/>3 merged<\/span> <span[^>]*>1 tried and dropped<\/span> <span[^>]*>1 need you</);
     expect(html).toContain('— Hal · $1.23 API, $0.50 subscription');
   });
 
@@ -253,7 +262,7 @@ describe('renderReport', () => {
       notes: [{ id: 'N-1"><script>', at: 'x', game: null, text: '<script>note</script>', status: 'asked', reply: '<script>reply</script>' }],
       flash: '<script>flash</script>',
     }, r));
-    expect(html).not.toMatch(/<script/i);
+    onlyHalScript(html); // every injected <script> is escaped; the one tag is Hal's own
     expect(html).not.toContain('<img src=x');
     expect(html).not.toContain('<b>');
     for (const s of ['alert(1)', 'reason', 'item', 'pergame', 'warn', 'director', 'note', 'reply', 'flash']) expect(html).toContain(`&lt;script&gt;${s === 'alert(1)' ? 'alert(1)' : s}`);
@@ -261,15 +270,17 @@ describe('renderReport', () => {
     expect(html).toMatch(/<ul>\s*<li>a <strong>list<\/strong> item<\/li>/);
   });
 
-  it('no <script, no http(s):// URL other than playUrl, viewport meta present, no inline style width over 520px', () => {
+  it('only Hal\'s own script, no http(s):// URL other than playUrl, viewport meta present, nothing wider than a phone below 840px', () => {
     const html = renderReport(view());
-    expect(html).not.toMatch(/<script/i);
+    onlyHalScript(html);
     const urls = [...html.matchAll(/https?:\/\/[^\s"'<>)]*/g)].map((m) => m[0]);
     expect(urls.length).toBeGreaterThan(0);
     for (const u of urls) expect(u).toBe('http://10.0.0.5:5174/');
     expect(html).toMatch(/<meta name="viewport" content="width=device-width,initial-scale=1[^"]*">/);
-    expect(html).toMatch(/max-width:\s*520px/);
-    for (const m of html.matchAll(/(?:^|[^-])(?:min-)?width:\s*(\d+(?:\.\d+)?)px/g)) expect(Number(m[1]), m[0]).toBeLessThanOrEqual(520);
+    expect(html).toContain('@media (min-width:840px)'); // two columns only on an expanded window
+    // Outside media conditions, no width or min-width wider than a phone (max-width caps are fine).
+    const rules = html.replace(/@media\s*\([^)]*\)/g, '');
+    for (const m of rules.matchAll(/(?:^|[^-\w])(?:min-)?width:\s*(\d+(?:\.\d+)?)px/g)) expect(Number(m[1]), m[0]).toBeLessThanOrEqual(520);
     expect(html).toContain('href="http://10.0.0.5:5174/"');
     // no play URL: the hint instead of a link
     const none = renderReport(view({ playUrl: null }));
@@ -277,36 +288,48 @@ describe('renderReport', () => {
     expect(none).toContain('npm run dev:lan');
   });
 
-  it('Run Hal keeps the status line, spend, Run now and Stop forms, and links the 10 newest earlier reports', () => {
+  it('Run Hal shows the live-status hooks, spend, Run now or Stop (whichever applies), and the 5 newest reports plus All reports', () => {
     const runs = Array.from({ length: 12 }, (_, i) => ({ runId: `run-2026-11-${String(12 - i).padStart(2, '0')}T08-00-00-000Z`, endedAt: `2026-11-${String(12 - i).padStart(2, '0')}T09:00:00Z` }));
-    const html = renderReport(view({ runs, status: { running: true, phase: 'scoring <x>', startedAt: '2026-11-12T08:00:00Z' }, spendToday: 3.5, timeZone: 'UTC' }));
+    const html = renderReport(view({ runs, status: { running: true, phase: 'build HAL-003 (2/4) <x>', startedAt: '2026-11-12T08:00:00Z' }, spendToday: 3.5, timeZone: 'UTC', latestRunId: RUN }));
     const run = section(html, 'Run Hal');
-    expect(run).toMatch(/Running: scoring &lt;x&gt; \(since Nov 12, 8:00\sAM\)/);
-    expect(run).toContain('API spend today: $3.50 of $20.00');
+    expect(run).toContain('data-hal-status data-running="1"');
+    expect(run).toContain(`data-latest="${RUN}"`);
+    expect(run).toMatch(/<strong data-state>Running<\/strong> <span data-phase>build HAL-003 \(2\/4\) &lt;x&gt;<\/span>/);
+    expect(run).toMatch(/since Nov 12, 8:00\sAM/);
+    expect(run).toMatch(/<progress data-progress max="1" value="0\.375"/); // build 2 of 4
+    expect(run).toContain('$3.50 of $20.00 API today');
     const fs = forms(run);
     const now = fs.find((f) => f.action === '/run')!;
     expect(now.body).toMatch(/<select name="game"/);
     expect(now.body).toContain('<option value="">All games</option>');
     expect(now.body).toMatch(/<input type="checkbox" name="reportOnly" value="1"/);
-    expect(fs.find((f) => f.action === '/stop')).toBeDefined();
-    const links = [...run.matchAll(/href="\/runs\/([^"]+)"/g)].map((m) => m[1]);
-    expect(links).toEqual(runs.slice(0, 10).map((r) => r.runId));
-    expect(section(renderReport(view()), 'Run Hal')).toContain('Idle');
+    expect(run).toMatch(/<form method="post" action="\/run" class="stack" data-run-form hidden>/); // running: Run now hidden
+    expect(run).toMatch(/<form method="post" action="\/stop" data-stop-form>/);
+    const recent = recentPart(html);
+    const links = [...recent.matchAll(/href="\/runs\/([^"]+)"/g)].map((m) => m[1]);
+    expect(links).toEqual(runs.slice(0, 5).map((r) => r.runId));
+    expect(recent).toContain('href="/runs">All reports</a>');
+    const idle = section(renderReport(view()), 'Run Hal');
+    expect(idle).toContain('<strong data-state>Idle</strong>');
+    expect(idle).toMatch(/<progress data-progress max="1" hidden/);
+    expect(idle).toMatch(/action="\/run" class="stack" data-run-form>/);
+    expect(idle).toMatch(/action="\/stop" data-stop-form hidden>/);
   });
 
   it('times are in the given zone (default the local one), not UTC', () => {
     const runs = [{ runId: RUN, endedAt: '2026-11-12T09:30:00Z' }, { runId: 'run-b', endedAt: '2026-11-11T03:05:00Z' }];
     const status = { running: true, phase: 'scoring', startedAt: '2026-11-12T08:00:00Z' };
-    const la = section(renderReport(view({ runs, status, timeZone: 'America/Los_Angeles' })), 'Run Hal');
-    expect(la).toMatch(/since Nov 12, 12:00\sAM\)/);
+    const laHtml = renderReport(view({ runs, status, timeZone: 'America/Los_Angeles' }));
+    expect(section(laHtml, 'Run Hal')).toMatch(/since Nov 12, 12:00\sAM</);
+    const la = recentPart(laHtml);
     expect(la).toMatch(/>Nov 12, 1:30\sAM</);
     expect(la).toMatch(/>Nov 10, 7:05\sPM</); // the previous evening there
-    expect(la).not.toContain('UTC');
-    const tokyo = section(renderReport(view({ runs, status, timeZone: 'Asia/Tokyo' })), 'Run Hal');
+    expect(laHtml).not.toContain('UTC');
+    const tokyo = recentPart(renderReport(view({ runs, status, timeZone: 'Asia/Tokyo' })));
     expect(tokyo).toMatch(/>Nov 12, 6:30\sPM</);
     // no zone given: the process's local zone, same as Intl's default
     const local = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date('2026-11-12T09:30:00Z'));
-    expect(section(renderReport(view({ runs })), 'Run Hal')).toContain(`>${local}<`);
+    expect(recentPart(renderReport(view({ runs })))).toContain(`>${local}<`);
   });
 
   it('a merged change of any kind other than fix gets a card, so "N merged" never counts an unshown change', () => {

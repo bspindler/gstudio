@@ -13,7 +13,8 @@ import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
-import { renderReport, renderRunHalOnly } from './report-page.js';
+import { LIST_HEAD, renderReport, renderRunHalOnly, renderRunsIndex } from './report-page.js';
+import { phaseProgress, STATUS_JS, type StatusJson } from './status-client.js';
 import type { RunReport } from './run.js';
 import { GIT_TIMEOUT_MS, gitEnv } from './git.js';
 import { createStore } from './store.js';
@@ -21,7 +22,10 @@ import { createStore } from './store.js';
 export const SERVER_PORT = 5180;
 const COOKIE = 'hal_token';
 const FLASH = 'hal_flash';
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'";
+/** Scripts and fetches only from this server (/hal.js polling /status.json); nothing inline, nothing third party. */
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; script-src 'self'; connect-src 'self'";
+/** Reports on one page of /runs. */
+export const RUNS_PER_PAGE = 25;
 /** A history image Hal committed: the only paths /shot will read out of git. */
 const SHOT_PATH = /^docs\/hal\/history\/([a-z0-9-]+)\/\d{4}-\d{2}-\d{2}\/(HAL-\d+)-(before|after)\.jpg$/;
 const PASS = /^HAL-\d+$/;
@@ -156,13 +160,13 @@ export function createServerApp(d: ServerDeps) {
     } catch { return null; }
   };
   const readNote = async (id: string) => { try { return await readFile(join(store.runDir(id), 'note.md'), 'utf8'); } catch { return ''; } };
-  /** Up to 10 earlier reports, newest first (run ids sort by their start stamp). */
+  /** Run dirs, newest first (run ids sort by their start stamp). */
+  const runNames = async () => { try { return (await readdir(join(d.halDir, 'runs'))).sort().reverse(); } catch { return []; } };
+  /** The panel's newest LIST_HEAD reports, newest first; /runs has the rest. */
   const recentRuns = async () => {
-    let names: string[];
-    try { names = (await readdir(join(d.halDir, 'runs'))).sort().reverse(); } catch { return []; }
     const out: Array<{ runId: string; endedAt: string }> = [];
-    for (const n of names) {
-      if (out.length >= 10) break;
+    for (const n of await runNames()) {
+      if (out.length >= LIST_HEAD) break;
       const r = await loadRun(n);
       if (r) out.push({ runId: r.runId, endedAt: String(r.endedAt) });
     }
@@ -197,7 +201,7 @@ export function createServerApp(d: ServerDeps) {
     const base = {
       status: lock ? { running: true, phase: lock.phase, startedAt: lock.startedAt } : { running: false },
       spendToday: apiSpent(await store.loadSpendToday()), capUsd: DAILY_CAP_USD,
-      games: d.games, runs: await recentRuns(), ...(flash ? { flash: flash.slice(0, 300) } : {}),
+      games: d.games, runs: await recentRuns(), latestRunId: latestRunId(d.halDir), ...(flash ? { flash: flash.slice(0, 300) } : {}),
     };
     if (!report) return c.html(renderRunHalOnly(base));
     const [note, feedback, notes, approvals, playUrl, behind] = await Promise.all([
@@ -208,6 +212,32 @@ export function createServerApp(d: ServerDeps) {
   };
 
   app.get('/', async (c) => page(c, await loadRun(latestRunId(d.halDir))));
+  /** Every report, RUNS_PER_PAGE to a page (only that page's report.json files are read). */
+  app.get('/runs', async (c) => {
+    const names = await runNames();
+    const pages = Math.max(1, Math.ceil(names.length / RUNS_PER_PAGE));
+    const asked = Number(c.req.query('page') ?? '1');
+    const pageNo = Number.isInteger(asked) && asked >= 1 ? Math.min(asked, pages) : 1;
+    const runs: Array<{ runId: string; endedAt: string; trigger?: string; merged: number; dropped: number }> = [];
+    for (const n of names.slice((pageNo - 1) * RUNS_PER_PAGE, pageNo * RUNS_PER_PAGE)) {
+      const r = await loadRun(n);
+      if (!r) continue;
+      const merged = r.changes.filter((x) => x.verdict === 'merged').length;
+      runs.push({ runId: r.runId, endedAt: String(r.endedAt), ...(r.trigger ? { trigger: r.trigger } : {}), merged, dropped: r.changes.length - merged });
+    }
+    return c.html(renderRunsIndex({ runs, page: pageNo, pages }));
+  });
+  /** The Run Hal panel's live state, for /hal.js. */
+  app.get('/status.json', async (c) => {
+    const lock = running();
+    const body: StatusJson = {
+      running: !!lock, ...(lock?.phase ? { phase: lock.phase } : {}), ...(lock?.startedAt ? { startedAt: lock.startedAt } : {}),
+      progress: lock ? phaseProgress(lock.phase) : null, latestRunId: latestRunId(d.halDir),
+      spendToday: apiSpent(await store.loadSpendToday()), capUsd: DAILY_CAP_USD,
+    };
+    return c.json(body, 200, { 'x-content-type-options': 'nosniff' });
+  });
+  app.get('/hal.js', (c) => c.body(STATUS_JS, 200, { 'content-type': 'text/javascript; charset=utf-8', 'x-content-type-options': 'nosniff' }));
   app.get('/runs/:id', async (c) => {
     const r = await loadRun(c.req.param('id'));
     return r ? page(c, r) : notFound();

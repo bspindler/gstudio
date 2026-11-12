@@ -54,7 +54,7 @@ describe('token gate', () => {
   });
 });
 
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'";
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; script-src 'self'; connect-src 'self'";
 const get = (app: ReturnType<typeof mk>, path: string, cookie = '') =>
   app.request(`${H}${path}`, { headers: { cookie: `hal_token=${TOKEN}${cookie ? `; ${cookie}` : ''}` } });
 
@@ -71,7 +71,9 @@ describe('GET / with no report yet', () => {
     expect(html).toContain('action="/stop"');
     expect(html).not.toContain('Director');
     expect(html).not.toContain(TOKEN);
-    expect(html).not.toMatch(/<script|https?:\/\/(?!10\.0\.0\.5)/);
+    expect(html).not.toMatch(/https?:\/\/(?!10\.0\.0\.5)/);
+    expect(html.match(/<script/g)).toEqual(['<script']); // only Hal's own /hal.js
+    expect(html).toContain('<script src="/hal.js" defer></script>');
     expect(r.headers.get('cache-control')).toBe('no-store');
     // same-origin, not no-referrer: no-referrer makes browsers send "Origin: null" on same-origin form POSTs, which we reject, so Run now/Stop would always 403.
     expect(r.headers.get('referrer-policy')).toBe('same-origin');
@@ -80,7 +82,7 @@ describe('GET / with no report yet', () => {
   it('shows the phase when locked by a live pid, idle when the pid is dead', async () => {
     await lock();
     const page = async () => (await get(mk(), '/')).text();
-    expect(await page()).toContain('Running: scoring');
+    expect(await page()).toContain('<strong data-state>Running</strong> <span data-phase>scoring');
     alive = false;
     expect(await page()).toContain('Idle');
   });
@@ -163,7 +165,7 @@ describe('report pages', () => {
     expect(html).toContain(`/shot?run=${RUN}&amp;pass=HAL-003&amp;which=before`);
     expect(html).toContain('Run Hal');
     expect(html).not.toContain(TOKEN);
-    expect(html).not.toMatch(/<script/);
+    expect(html.match(/<script/g)).toEqual(['<script']); // only Hal's own /hal.js
   });
   it('GET /runs/:id renders that run; Earlier reports lists both, newest first', async () => {
     await seed(OLD, false);
@@ -566,7 +568,7 @@ describe('POST', () => {
     await lock(); // startedAt 2026-11-11T08:00:00Z
     const get = async () => (await mk().request(`${H}/`, { headers: { cookie: `hal_token=${TOKEN}` } })).text();
     startedAt = new Date('2026-11-11T07:59:59Z'); // the run itself
-    expect(await get()).toContain('Running: scoring');
+    expect(await get()).toContain('<strong data-state>Running</strong> <span data-phase>scoring');
     expect((await post(mk(), '/run')).status).toBe(303);
     expect(spawned).toEqual([]);
     startedAt = new Date('2026-11-11T08:30:00Z'); // another process reusing the pid
@@ -613,5 +615,55 @@ describe('realGit', () => {
     g('init', '-q'); g('add', 'a.jpg'); g('commit', '-q', '-m', 'x');
     expect(await realGit(repo)(['show', 'HEAD:a.jpg'])).toEqual(bytes);
     await expect(realGit(repo)(['show', 'HEAD:nope.jpg'])).rejects.toThrow();
+  });
+});
+
+describe('live status and all reports', () => {
+  it('GET /status.json: idle, then running with phase and progress; latestRunId; token required', async () => {
+    await seed();
+    const app = mk();
+    expect((await app.request(`${H}/status.json`)).status).toBe(404); // no token, same bare 404 as every route
+    const idle = await get(app, '/status.json');
+    expect(idle.headers.get('content-type')).toMatch(/^application\/json/);
+    expect(idle.headers.get('cache-control')).toBe('no-store');
+    expect(await idle.json()).toEqual({ running: false, progress: null, latestRunId: RUN, spendToday: 0, capUsd: 20 });
+    await writeFile(join(halDir, 'run.lock'), JSON.stringify({ pid: 99999, runId: 'r1', startedAt: '2026-11-11T08:00:00Z', phase: 'build HAL-004 (3/4)' }));
+    const s = await (await get(app, '/status.json')).json() as Record<string, unknown>;
+    expect(s).toMatchObject({ running: true, phase: 'build HAL-004 (3/4)', startedAt: '2026-11-11T08:00:00Z', latestRunId: RUN });
+    expect(s.progress).toBeCloseTo(0.2 + 0.7 * 2 / 4);
+    alive = false; // a dead pid is not a run
+    expect(await (await get(app, '/status.json')).json()).toMatchObject({ running: false, progress: null });
+  });
+  it('GET /hal.js: Hal\'s status script, as JavaScript, token required; the page loads it under script-src \'self\'', async () => {
+    const app = mk();
+    expect((await app.request(`${H}/hal.js`)).status).toBe(404);
+    const r = await get(app, '/hal.js');
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+    expect(r.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(r.headers.get('content-security-policy')).toContain("script-src 'self'");
+    const js = await r.text();
+    expect(js).toContain("fetch('/status.json'");
+    expect(js).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|eval\(|new Function|document\.write/); // text only, never HTML
+  });
+  it('GET /runs: every report, newest first, 25 to a page, with Newer/Older links; a bad page number clamps', async () => {
+    for (let i = 1; i <= 30; i++) {
+      const id = `run-2026-10-${String(i).padStart(2, '0')}T08-00-00-000Z`;
+      await seed(id, i === 30, { endedAt: `2026-10-${String(i).padStart(2, '0')}T09:00:00Z` });
+    }
+    const app = mk();
+    const one = await (await get(app, '/runs')).text();
+    const ids = (html: string) => [...html.matchAll(/href="\/runs\/(run-[^"]+)"/g)].map((m) => m[1]);
+    expect(ids(one)).toHaveLength(25);
+    expect(ids(one)[0]).toBe('run-2026-10-30T08-00-00-000Z');
+    expect(one).toContain('Page 1 of 2');
+    expect(one).toContain('href="/runs?page=2">Older</a>');
+    expect(one).not.toContain('Newer');
+    const two = await (await get(app, '/runs?page=2')).text();
+    expect(ids(two)).toEqual(['05', '04', '03', '02', '01'].map((d) => `run-2026-10-${d}T08-00-00-000Z`));
+    expect(two).toContain('href="/runs?page=1">Newer</a>');
+    for (const bad of ['0', '-1', 'x', '99', '1.5']) expect((await get(app, `/runs?page=${bad}`)).status, bad).toBe(200);
+    expect(await (await get(app, '/runs?page=99')).text()).toContain('Page 2 of 2');
+    expect(one.match(/<script/g)).toBeNull(); // the index needs no script
   });
 });
