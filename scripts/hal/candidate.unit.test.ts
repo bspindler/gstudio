@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTrailers, type ScoreReport, type Ticket } from '@studio/core/hal';
+import { secretReadPaths } from './env.js';
 import { defaultCommands, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseResult, runCandidate, scriptArgv, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
 import type { ClaudeCall, ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
@@ -157,7 +158,7 @@ describe('runCandidate (temp git repo)', () => {
     expect(jpegSize(execFileSync('git', ['show', `${HAL_MAIN}:${r.shots!.after}`], { cwd: repo }))).toEqual({ width: 390, height: 844 });
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ role: 'implementer', cwd: join(repo, '.data/hal/wt/HAL-1'), model: 'test-model', billing: 'api', maxBudgetUsd: 3, timeoutMs: IMPLEMENTER_TIMEOUT_MS, denyReadPaths: [join(repo, '.hal.env')] });
+    expect(calls[0]).toMatchObject({ role: 'implementer', cwd: join(repo, '.data/hal/wt/HAL-1'), model: 'test-model', billing: 'api', maxBudgetUsd: 3, timeoutMs: IMPLEMENTER_TIMEOUT_MS, denyReadPaths: secretReadPaths(repo) });
     expect(IMPLEMENTER_TIMEOUT_MS).toBe(20 * 60_000);
     expect(calls[0]!.prompt).toContain('Smoother jumps');
     expect(calls[0]!.prompt).not.toContain(KEY);
@@ -430,6 +431,19 @@ describe('runCandidate (temp git repo)', () => {
       typecheck: () => [node(`process.exit(require('fs').existsSync('dist/x.js') ? 1 : 0)`)],
     } });
     expect((await runCandidate(ticket(), c)).verdict).toBe('merged');
+  });
+
+  it('the parts of one script share ignored output (tsc -b emits dist/, tsc -p reads it); the next script does not', async () => {
+    const c = ctx({ cmds: {
+      typecheck: () => [
+        node(`require('fs').mkdirSync('dist', { recursive: true }); require('fs').writeFileSync('dist/x.d.ts', 'export {}')`),
+        node(`process.exit(require('fs').existsSync('dist/x.d.ts') ? 0 : 1)`),
+      ],
+      score: (_d, s) => { const b = BEFORE[s as keyof typeof BEFORE]; return result({ ...b, fitness: b.fitness + 1 }, `if (require('fs').existsSync('dist/x.d.ts')) process.exit(3)`); },
+    } });
+    const r = await runCandidate(ticket(), c);
+    expect(r.reasons).toEqual([]);
+    expect(r.verdict).toBe('merged');
   });
 
   it('the last check (the after shot) touching the tree is caught too', async () => {

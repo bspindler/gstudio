@@ -17,7 +17,7 @@ export const sandboxAvailable = (): boolean => process.platform === 'darwin' && 
 export type SandboxPolicy = {
   /** Directories (and everything under them) the child may write. /dev is always writable. */
   writable: string[];
-  /** Files the child may not read. */
+  /** Files or folders (and everything under them) the child may not read. */
   denyRead: string[];
   /** Directories under a writable one that stay read-only (the worktree's node_modules). */
   denyWrite?: string[];
@@ -43,7 +43,7 @@ function variants(p: string): string[] {
 /** SBPL for sandbox-exec -p. Later rules win, so each deny is followed by its narrow allow. */
 export function sandboxProfile(p: SandboxPolicy): string {
   const writable = p.writable.flatMap(variants).map((d) => `(subpath ${q(d)})`).join(' ');
-  const denyRead = p.denyRead.flatMap(variants).map((f) => `(literal ${q(f)})`).join(' ');
+  const denyRead = p.denyRead.flatMap(variants).map((f) => `(subpath ${q(f)})`).join(' ');
   const denyWrite = (p.denyWrite ?? []).flatMap(variants).map((d) => `(subpath ${q(d)})`).join(' ');
   return [
     '(version 1)',

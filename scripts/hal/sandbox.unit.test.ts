@@ -26,7 +26,7 @@ describe('sandboxEnv / sandboxProfile', () => {
     expect(p).toContain('(allow network-outbound (remote ip "localhost:*"))');
     expect(p).toContain('(deny file-write*)');
     expect(p).toContain('(subpath "/w/a \\"b\\"")');
-    expect(p).toContain('(deny file-read* (literal "/r/.hal.env"))');
+    expect(p).toContain('(deny file-read* (subpath "/r/.hal.env"))'); // subpath: a denied folder covers its files
     expect(p.indexOf('(deny file-write*)')).toBeLessThan(p.indexOf('(allow file-write*')); // later rules win
     expect(p.indexOf('(allow file-write*')).toBeLessThan(p.indexOf('(deny file-write* (subpath "/w/a \\"b\\"/node_modules")'));
   });

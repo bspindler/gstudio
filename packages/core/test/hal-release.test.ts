@@ -167,7 +167,9 @@ describe.each(slugs)('applyRelease on %s', (slug) => {
   it('bumpedTonight reads the real changelog', () => {
     const top = /^## \S+ \((\d{4}-\d{2}-\d{2})\)/m.exec(files.changelog)![1]!;
     expect(bumpedTonight(files.changelog, '2099-01-01')).toBeNull();
-    expect(bumpedTonight(files.changelog, top)).toBe(slug === 'gearhold' ? 'minor' : 'patch');
+    // Derived from the file, not hardcoded per game: Hal's own releases change the top entry.
+    const [v1, v2] = [...files.changelog.matchAll(/^## (\d+)\.(\d+)\.\d+ \(/gm)].map((m) => `${m[1]}.${m[2]}`);
+    expect(bumpedTonight(files.changelog, top)).toBe(v2 === undefined || v1 !== v2 ? 'minor' : 'patch');
   });
 
   it('throws on malformed files', () => {

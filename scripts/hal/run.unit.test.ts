@@ -8,6 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dayOf, formatTrailers, parseTrailers, type ScoreReport, type SpendDay, type Ticket } from '@studio/core/hal';
+import { secretReadPaths } from './env.js';
 import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
@@ -581,13 +582,13 @@ describe('fix round 1', () => {
     expect(spendCalls()[0]).toMatchObject({ role: 'planner', usd: 1.5 }); // settled as unknown: the slice stays
     expect(spendCalls()[0]!.pending).toBeUndefined();
   });
-  it('planner gets --add-dir for its screenshots; planner and director get <repo>/.hal.env as a deny path', async () => {
+  it('planner gets --add-dir for its screenshots; planner and director get <repo>/.hal.env and the home secrets as deny paths', async () => {
     await runNight(opts({ reportOnly: true }), deps());
     const r = readReport();
     const [planner, director] = calls;
     expect(planner!.addDirs).toEqual([join(halDir, 'runs', r.runId, 'play', 'screens')]);
     expect(existsSync(planner!.addDirs![0]!)).toBe(true);
-    for (const c of [planner!, director!]) expect(c.denyReadPaths).toEqual([join(repo, '.hal.env')]);
+    for (const c of [planner!, director!]) expect(c.denyReadPaths).toEqual(secretReadPaths(repo));
   });
   it('--report-only does not apply pending undos (and pushes nothing)', async () => {
     await makePass();

@@ -23,6 +23,7 @@ import {
   applyRelease, bumpedTonight, checkTripwires, testPrefixesFor, compareScores, formatTrailers, halReleasedTonight, nightOf, planVersion, TRIPWIRE_RULES,
   type Billing, type Diff, type FileChange, type ScoreReport, type Ticket,
 } from '@studio/core/hal';
+import { secretReadPaths } from './env.js';
 import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
@@ -254,7 +255,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
   const shotDir = join(privDir, 'shots');
   // Every piece of candidate code runs through here: isolated child, scrubbed env, sandboxed, group killed afterwards.
   const env = sandboxEnv(process.env, secrets);
-  const denyRead = [join(ctx.repo, '.hal.env')];
+  const denyRead = secretReadPaths(ctx.repo);
   const isolated = (argv: string[], cwd: string, writable: string[], o: { nonce?: string; denyWrite?: string[] } = {}) => {
     const policy: SandboxPolicy = { writable, denyRead, denyWrite: o.denyWrite ?? [] }; // + a private temp dir (runIsolated)
     const e = o.nonce ? { ...env, [NONCE_ENV]: o.nonce } : env;
@@ -416,8 +417,12 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
         ...(await cmd('typecheck'))(wt.dir).map((a): [string, string[]] => ['npm run typecheck', a]),
       ];
     } catch (e) { return discard(`checks unavailable: ${msg(e)}`); }
+    // Guard (prune ignored files, compare the tree) before each script, not between the `&&` parts of one: the
+    // typecheck script is `tsc -b <packages> && tsc -p scripts`, and the second part needs the first part's dist/.
+    let prev = '';
     for (const [name, argv] of steps) {
-      await guard(t2);
+      if (name !== prev) await guard(t2);
+      prev = name;
       const r = await inTree(wt.dir, argv, [wt.dir]);
       if (r.code !== 0) discard(`${name} failed${r.timedOut ? ' (timed out)' : r.error ? ` to run: ${r.error}` : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`);
     }

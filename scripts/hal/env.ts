@@ -1,6 +1,22 @@
 // .hal.env (git-ignored) and the environment handed to Hal's headless Claude children.
 import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
+
+/**
+ * Credentials and shell profiles in the home folder that no Hal role, and no Claude-written code Hal runs, may read.
+ * Denied next to <repo>/.hal.env everywhere: Claude's Read/Grep rules, the implementer's Bash sandbox and Hal's own
+ * sandbox-exec profile (as subpaths, so a folder covers everything in it). The first live probe showed the planner
+ * could read any file outside the repo, because a bare `Read` in --allowedTools pre-approves every path.
+ */
+export const HOME_SECRET_NAMES = [
+  '.ssh', '.aws', '.azure', '.docker', '.kube', '.gnupg', '.config/gh', '.netrc', '.git-credentials', '.npmrc',
+  '.zshrc', '.zprofile', '.zshenv', '.bashrc', '.bash_profile', '.profile', '.claude', '.claude.json', 'Library/Keychains',
+];
+/** `<repo>/.hal.env` plus HOME_SECRET_NAMES under `home`: every path Hal denies reading. */
+export function secretReadPaths(repo: string, home: string = homedir()): string[] {
+  return [join(repo, '.hal.env'), ...HOME_SECRET_NAMES.map((n) => join(home, n))];
+}
 
 /** Parse KEY=VALUE lines. `#` comments, optional `export`, optional single/double quotes, no interpolation. Errors name the line, never the value. */
 export function parseHalEnv(text: string): Record<string, string> {

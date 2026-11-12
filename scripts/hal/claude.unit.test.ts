@@ -366,11 +366,12 @@ describe('runClaude', () => {
   });
 
   describe('role tools (ruling R2)', () => {
-    it('planner is read-only', () => expect(roleAllowedTools('planner')).toEqual(['Read', 'Glob', 'Grep']));
+    it('planner pre-approves nothing (a bare Read would approve paths outside the repo)', () => expect(roleAllowedTools('planner')).toEqual([]));
     it('director has none', () => expect(roleAllowedTools('director')).toEqual([]));
     it('implementer has npm test, no vitest/npx', () => {
       const t = roleAllowedTools('implementer');
-      expect(t).toEqual(['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)']);
+      expect(t).toEqual(['Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)']);
+      for (const bare of ['Read', 'Edit', 'Write', 'Glob', 'Grep']) expect(t).not.toContain(bare);
       expect(t.join(' ')).not.toMatch(/npx|vitest/);
     });
     it('always-disallowed list', () => {
@@ -406,7 +407,7 @@ describe('runClaude', () => {
 
 describe('buildArgs per role: absolute deny rules and --add-dir (fix round 1)', () => {
   const deny = ['/repo/.hal.env'];
-  const rules = ['Read(//repo/.hal.env)', 'Grep(//repo/.hal.env)', 'Edit(//repo/.hal.env)', 'Write(//repo/.hal.env)'];
+  const rules = ['Read', 'Grep', 'Edit', 'Write'].flatMap((t) => [`${t}(//repo/.hal.env)`, `${t}(//repo/.hal.env/**)`]); // /** covers a denied folder
   for (const role of ['planner', 'implementer', 'director'] as const) {
     it(`${role}: denyReadPaths become // absolute rules in --disallowedTools`, () => {
       const a = buildArgs({ ...base, role, allowedTools: roleAllowedTools(role), denyReadPaths: deny });
@@ -419,10 +420,11 @@ describe('buildArgs per role: absolute deny rules and --add-dir (fix round 1)', 
     const a = buildArgs({ ...base, denyReadPaths: deny });
     expect(JSON.parse(arg(a, '--settings')!).sandbox.filesystem.denyRead).toContain('/repo/.hal.env');
   });
-  it('planner: one --add-dir per directory, before --allowedTools', () => {
+  it('planner: one --add-dir per directory, before --disallowedTools; no --allowedTools at all', () => {
     const a = buildArgs({ ...base, role: 'planner', allowedTools: roleAllowedTools('planner'), denyReadPaths: deny, addDirs: ['/run/play/screens', '/x y'] });
     expect(a.filter((x, i) => a[i - 1] === '--add-dir')).toEqual(['/run/play/screens', '/x y']);
-    expect(a.lastIndexOf('--add-dir')).toBeLessThan(a.indexOf('--allowedTools'));
+    expect(a.lastIndexOf('--add-dir')).toBeLessThan(a.indexOf('--disallowedTools'));
+    expect(a).not.toContain('--allowedTools');
   });
   it('a deny path that could split a rule (space, comma, relative) is refused without spawning', async () => {
     for (const p of ['/My Repo/.hal.env', '/a,b/.hal.env', 'rel/.hal.env']) {

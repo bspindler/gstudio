@@ -79,7 +79,7 @@ export const ALWAYS_DISALLOWED: string[] = [
  * does `if (e.startsWith("//")) return Md(H0(e.slice(1)))`. So `/abs/.hal.env` becomes `Read(//abs/.hal.env)`.
  */
 export function absoluteDenyRules(paths: string[]): string[] {
-  return paths.flatMap((p) => ['Read', 'Grep', 'Edit', 'Write'].map((t) => `${t}(/${resolve(p)})`));
+  return paths.flatMap((p) => ['Read', 'Grep', 'Edit', 'Write'].flatMap((t) => [`${t}(/${resolve(p)})`, `${t}(/${resolve(p)}/**)`]));
 }
 /** Deny paths go into one comma/space-separated --disallowedTools value: refuse any that could split a rule. */
 const unsafeRulePath = (p: string) => /[\s,()]/.test(p) || !isAbsolute(p);
@@ -93,12 +93,17 @@ export function roleTools(role: ClaudeRole): string {
   }
 }
 
-/** Deny beats allow in Claude Code, so the implementer runs focused tests via `npm test`, never `npx vitest`. */
+/**
+ * Pre-approved tool rules. Never a bare `Read`/`Edit`/`Write`/`Glob`/`Grep`: a bare rule approves every path, outside the
+ * repo too (live probe, 2.1.322). Without one, reads in the cwd and --add-dir folders are allowed by default, edits in
+ * the cwd by acceptEdits, and anything else asks, which a -p run refuses. Deny beats allow in Claude Code, so the
+ * implementer runs focused tests via `npm test`, never `npx vitest`.
+ */
 export function roleAllowedTools(role: ClaudeRole): string[] {
   switch (role) {
-    case 'planner': return ['Read', 'Glob', 'Grep'];
+    case 'planner': return [];
     case 'implementer':
-      return ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)'];
+      return ['Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)'];
     case 'director': return [];
   }
 }
