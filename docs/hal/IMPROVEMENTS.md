@@ -57,9 +57,12 @@ needs a human-driven session. The "recursive" fixes on day one were made outside
 ## 6. Operations are fragile
 
 - **Two writers, one file:** the page and a running Hal can write `notes.json` / `feedback.json` at the same moment
-  and lose a message. (Fix: a lock around every read-modify-write.)
+  and lose a message. (Fix: a lock around every read-modify-write.) **Done 2026-11-12:** every read-modify-write of
+  notes, feedback and approvals holds an O_EXCL lock file; a dead holder's lock is taken over. Without it, a test of
+  31 concurrent replies kept 2.
 - **No overnight alert:** a broken night only shows when someone opens the report. (Fix: a notification when a run
-  fails or doesn't push.)
+  fails or doesn't push.) **Done 2026-11-12:** a macOS notification when a run fails, doesn't push for a reason the
+  operator didn't choose, or a warning says it needs him; a run he started also says when it's done.
 - **One Mac:** it must be awake, its home network address can change, and a `gh` account switch broke pushes once.
 - **Unpushed local work runs too:** Hal runs whatever is in the operator's checkout, including edits never pushed.
 - **Pushing mid-run:** pushing to `main` while Hal runs forces a replay and caused two failed pushes on day one.

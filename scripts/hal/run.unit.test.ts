@@ -12,7 +12,7 @@ import { secretReadPaths } from './env.js';
 import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
-import { acquireLock, CI_UNDO_REASON, defaultStartTime, lockLive, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
+import { acquireLock, CI_UNDO_REASON, defaultStartTime, lockLive, runAlert, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
 import { parseRunArgs, realRunDeps, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
 import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
@@ -342,6 +342,26 @@ describe('no key anywhere', () => {
     const r = redactor([KEY]);
     expect(r.deep({ a: [`x${KEY}`], [`k${KEY}`]: { b: KEY } })).toEqual({ a: ['x[REDACTED]'], 'k[REDACTED]': { b: '[REDACTED]' } });
   });
+});
+
+describe('end-of-run alert', () => {
+  const base = { code: 0, phase: 'report', trigger: 'nightly' as const, pushed: true, warnings: [] as string[], changes: [{ verdict: 'merged' }, { verdict: 'discarded' }] };
+  it('a failed run, a push that did not happen for a reason Brian did not choose, or "needs you" always alert', () => {
+    expect(runAlert({ ...base, code: 1, phase: 'build HAL-003 (2/4)' })).toEqual({ title: 'Hal: the run failed', body: 'It stopped in build HAL-003 (2/4). 1 merged, 1 dropped. Open the report for details.' });
+    expect(runAlert({ ...base, pushed: false, pushSkippedReason: 'push failed' })?.title).toBe('Hal: nothing was pushed');
+    expect(runAlert({ ...base, warnings: ['ci:local fails on origin/main itself ... it needs you.'] })?.title).toBe('Hal needs you');
+  });
+  it('a clean nightly run, and pushes Brian turned off, stay quiet; a clean run he started says it is done', () => {
+    expect(runAlert(base)).toBeNull();
+    for (const why of ['--no-push', '--report-only', 'nothing new to push']) expect(runAlert({ ...base, pushed: false, pushSkippedReason: why })).toBeNull();
+    expect(runAlert({ ...base, trigger: 'manual' })).toEqual({ title: 'Hal: run done', body: '1 merged, 1 dropped, pushed.' });
+  });
+  it('runNight calls notify with the alert', async () => {
+    const notify = vi.fn();
+    await runNight(opts({ trigger: 'manual' }), deps({ notify }));
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify.mock.calls[0]![0]).toBe('Hal: run done');
+  }, 60_000);
 });
 
 describe('models per role', () => {

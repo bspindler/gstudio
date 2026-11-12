@@ -84,6 +84,8 @@ export type ProcLike = {
 };
 
 export type RunDeps = {
+  /** Shows a desktop notification at the end of a run (runAlert decides when). Default: none (tests, CLI). */
+  notify?: (title: string, body: string) => void;
   /** Brian's checkout (holds .git and .data/hal); never written except under .data. */
   repo: string;
   halDir: string;
@@ -803,7 +805,27 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     code = 1;
     log(`report not written: ${errMsg(e)}`);
   }
+  const alert = runAlert({ code, phase, trigger: o.trigger, pushed: st.pushed, pushSkippedReason: st.pushSkippedReason, warnings, changes });
+  if (alert && d.notify) { try { d.notify(alert.title, alert.body); } catch { /* a notification is a convenience */ } }
   return code;
+}
+
+/** Push outcomes Brian chose or that need nothing from him. */
+const QUIET_PUSH = ['--no-push', '--report-only', 'nothing new to push'];
+
+/**
+ * The end-of-run notification, or null. Something to look at always notifies: the run failed, or it did not push for
+ * a reason Brian didn't choose, or a warning says it needs him. A clean run notifies only when he started it (he is
+ * waiting); a clean nightly run stays quiet.
+ */
+export function runAlert(r: { code: number; phase: string; trigger: 'nightly' | 'manual'; pushed: boolean; pushSkippedReason?: string | undefined; warnings: string[]; changes: Array<{ verdict: string }> }): { title: string; body: string } | null {
+  const merged = r.changes.filter((c) => c.verdict === 'merged').length, dropped = r.changes.length - merged;
+  const tally = `${merged} merged, ${dropped} dropped`;
+  if (r.code !== 0) return { title: 'Hal: the run failed', body: `It stopped in ${r.phase}. ${tally}. Open the report for details.` };
+  if (!r.pushed && r.pushSkippedReason && !QUIET_PUSH.includes(r.pushSkippedReason)) return { title: "Hal: nothing was pushed", body: `${r.pushSkippedReason}. ${tally}; the commits wait on Hal's branch.` };
+  const needs = r.warnings.find((w) => /needs you/i.test(w));
+  if (needs) return { title: 'Hal needs you', body: needs.length > 180 ? `${needs.slice(0, 179)}…` : needs };
+  return r.trigger === 'manual' ? { title: 'Hal: run done', body: `${tally}${r.pushed ? ', pushed' : ''}.` } : null;
 }
 
 /** Last run's pushed Hal commits (Hal-Run trailer) against .data/ci/<sha>.json; failures are reported, never auto-undone. */

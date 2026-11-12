@@ -1,7 +1,9 @@
 // Hal's local state under .data/hal/: notes, feedback, approvals, spend, runs/<runId>/. Every write is atomic
-// (temp file in the same directory, then rename). The clock is injected so tests and ids are deterministic.
+// (temp file in the same directory, then rename), and every read-modify-write of notes, feedback and approvals holds
+// that file's lock (withFileLock): the report server and a running Hal are separate processes that both write them.
+// The clock is injected so tests and ids are deterministic.
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dayFor, type Approval, type SpendDay } from '@studio/core/hal';
@@ -94,12 +96,45 @@ async function readJson<T>(path: string, fallback: T, valid: (v: unknown) => boo
   return v as T;
 }
 
+/** Whether a pid is alive (EPERM: alive, someone else's). */
+const pidAlive = (pid: number) => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; } };
+
+/**
+ * Runs `fn` holding `lockPath`, a lock file made with O_EXCL (only one process can create it). A lock left by a dead
+ * process, or older than `staleMs`, is taken over. Waits up to `timeoutMs` for a live holder, then throws, so a
+ * write is never made unlocked.
+ */
+export async function withFileLock<T>(lockPath: string, fn: () => Promise<T>, o: { timeoutMs?: number; staleMs?: number } = {}): Promise<T> {
+  const timeoutMs = o.timeoutMs ?? 10_000, staleMs = o.staleMs ?? 30_000, start = Date.now();
+  await mkdir(dirname(lockPath), { recursive: true });
+  for (;;) {
+    try {
+      const fh = await open(lockPath, 'wx');
+      try { await fh.writeFile(`${process.pid} ${new Date().toISOString()}\n`); } finally { await fh.close(); }
+      break;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    }
+    try {
+      const [st, text] = await Promise.all([stat(lockPath), readFile(lockPath, 'utf8')]);
+      const pid = Number(text.split(' ')[0]);
+      const dead = Number.isInteger(pid) && pid > 0 && pid !== process.pid && !pidAlive(pid);
+      if (dead || Date.now() - st.mtimeMs > staleMs) { await rm(lockPath, { force: true }); continue; }
+    } catch { continue; } // it went away between the two calls: try again
+    if (Date.now() - start > timeoutMs) throw new Error(`timed out after ${timeoutMs} ms waiting for ${lockPath}`);
+    await new Promise((r) => setTimeout(r, 15 + Math.random() * 35));
+  }
+  try { return await fn(); } finally { await rm(lockPath, { force: true }).catch(() => {}); }
+}
+
 const isArr = (v: unknown) => Array.isArray(v);
 const isFeedback = (v: unknown) => !!v && isArr((v as Feedback).votes) && isArr((v as Feedback).undos);
 const normItem = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 export function createStore({ halDir = defaultHalDir(), now = () => new Date() }: { halDir?: string; now?: () => Date } = {}) {
   const p = (f: string) => join(halDir, f);
+  /** Holds `<file>.lock` around a read-modify-write of `file`. */
+  const locked = <T>(file: string, fn: () => Promise<T>) => withFileLock(p(`${file}.lock`), fn);
   const readNotes = () => readJson<Note[]>(p('notes.json'), [], isArr);
   const readApprovals = () => readJson<Approval[]>(p('approvals.json'), [], isArr);
   const readFeedback = () => readJson<Feedback>(p('feedback.json'), { votes: [], undos: [] }, isFeedback);
@@ -109,54 +144,64 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
     halDir, readNotes, readApprovals, readFeedback, readSpend,
 
     async addNote({ text, game, ref }: { text: string; game: string | null; ref?: Note['ref'] }): Promise<Note> {
-      const notes = await readNotes();
-      const max = notes.reduce((m, n) => Math.max(m, Number(/^N-(\d+)$/.exec(n.id)?.[1] ?? 0)), 0);
-      const at = now().toISOString();
-      const note: Note = { id: `N-${String(max + 1).padStart(3, '0')}`, at, game, text, status: 'open', thread: [{ from: 'brian', text, at }], ...(ref ? { ref } : {}) };
-      await writeJsonAtomic(p('notes.json'), [...notes, note]);
-      return note;
+      return locked('notes.json', async () => {
+        const notes = await readNotes();
+        const max = notes.reduce((m, n) => Math.max(m, Number(/^N-(\d+)$/.exec(n.id)?.[1] ?? 0)), 0);
+        const at = now().toISOString();
+        const note: Note = { id: `N-${String(max + 1).padStart(3, '0')}`, at, game, text, status: 'open', thread: [{ from: 'brian', text, at }], ...(ref ? { ref } : {}) };
+        await writeJsonAtomic(p('notes.json'), [...notes, note]);
+        return note;
+      });
     },
     /** Removes the note. False if there is no such id. */
     async clearNote(id: string): Promise<boolean> {
-      const notes = await readNotes();
-      if (!notes.some((n) => n.id === id)) return false;
-      await writeJsonAtomic(p('notes.json'), notes.filter((n) => n.id !== id));
-      return true;
+      return locked('notes.json', async () => {
+        const notes = await readNotes();
+        if (!notes.some((n) => n.id === id)) return false;
+        await writeJsonAtomic(p('notes.json'), notes.filter((n) => n.id !== id));
+        return true;
+      });
     },
     /** Brian replies in a thread: the message is added and the note is open again (Hal answers it next run). */
     async addReply(id: string, text: string): Promise<boolean> {
-      const notes = await readNotes();
-      if (!notes.some((n) => n.id === id)) return false;
-      const at = now().toISOString();
-      await writeJsonAtomic(p('notes.json'), notes.map((n) => (n.id === id ? { ...n, status: 'open' as const, thread: [...threadOf(n), { from: 'brian' as const, text, at }] } : n)));
-      return true;
+      return locked('notes.json', async () => {
+        const notes = await readNotes();
+        if (!notes.some((n) => n.id === id)) return false;
+        const at = now().toISOString();
+        await writeJsonAtomic(p('notes.json'), notes.map((n) => (n.id === id ? { ...n, status: 'open' as const, thread: [...threadOf(n), { from: 'brian' as const, text, at }] } : n)));
+        return true;
+      });
     },
     /**
      * Hal's answer (the director, once per run): sets the status and adds `reply` to the thread, unless it repeats Hal's
      * last message word for word with nothing from Brian since (a director restating itself is not a new message).
      */
     async setNote(id: string, patch: { status: NoteStatus; reply?: string; run?: string }): Promise<boolean> {
-      const notes = await readNotes();
-      if (!notes.some((n) => n.id === id)) return false;
-      await writeJsonAtomic(p('notes.json'), notes.map((n) => {
-        if (n.id !== id) return n;
-        const thread = threadOf(n);
-        const last = thread.at(-1);
-        const repeat = last?.from === 'hal' && last.text === patch.reply;
-        const msg: NoteMessage | null = patch.reply && !repeat ? { from: 'hal', text: patch.reply, at: now().toISOString(), ...(patch.run ? { run: patch.run } : {}) } : null;
-        return { ...n, status: patch.status, ...(patch.reply ? { reply: patch.reply } : {}), thread: msg ? [...thread, msg] : thread };
-      }));
-      return true;
+      return locked('notes.json', async () => {
+        const notes = await readNotes();
+        if (!notes.some((n) => n.id === id)) return false;
+        await writeJsonAtomic(p('notes.json'), notes.map((n) => {
+          if (n.id !== id) return n;
+          const thread = threadOf(n);
+          const last = thread.at(-1);
+          const repeat = last?.from === 'hal' && last.text === patch.reply;
+          const msg: NoteMessage | null = patch.reply && !repeat ? { from: 'hal', text: patch.reply, at: now().toISOString(), ...(patch.run ? { run: patch.run } : {}) } : null;
+          return { ...n, status: patch.status, ...(patch.reply ? { reply: patch.reply } : {}), thread: msg ? [...thread, msg] : thread };
+        }));
+        return true;
+      });
     },
 
     /** Idempotent per item (case and spacing ignored). */
     async addApproval(item: string): Promise<Approval> {
-      const list = await readApprovals();
-      const have = list.find((a) => normItem(a.item) === normItem(item));
-      if (have) return have;
-      const a: Approval = { item: item.trim(), at: now().toISOString(), by: 'brian' };
-      await writeJsonAtomic(p('approvals.json'), [...list, a]);
-      return a;
+      return locked('approvals.json', async () => {
+        const list = await readApprovals();
+        const have = list.find((a) => normItem(a.item) === normItem(item));
+        if (have) return have;
+        const a: Approval = { item: item.trim(), at: now().toISOString(), by: 'brian' };
+        await writeJsonAtomic(p('approvals.json'), [...list, a]);
+        return a;
+      });
     },
 
     /** Votes and undo reasons for one run, newest last. */
@@ -165,28 +210,34 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
       return { votes: f.votes.filter((v) => v.run === run), undos: f.undos.filter((u) => u.run === run) };
     },
     async addVote(v: Omit<Vote, 'at'>): Promise<void> {
-      const f = await readFeedback();
-      await writeJsonAtomic(p('feedback.json'), { ...f, votes: [...f.votes, { ...v, at: now().toISOString() }] });
+      return locked('feedback.json', async () => {
+        const f = await readFeedback();
+        await writeJsonAtomic(p('feedback.json'), { ...f, votes: [...f.votes, { ...v, at: now().toISOString() }] });
+      });
     },
     async addUndo(u: Omit<Undo, 'at'>): Promise<void> {
-      const f = await readFeedback();
-      await writeJsonAtomic(p('feedback.json'), { ...f, undos: [...f.undos, { ...u, at: now().toISOString() }] });
+      return locked('feedback.json', async () => {
+        const f = await readFeedback();
+        await writeJsonAtomic(p('feedback.json'), { ...f, undos: [...f.undos, { ...u, at: now().toISOString() }] });
+      });
     },
     /**
      * Re-reads feedback.json and updates the newest unfinished entry for `u.pass` (pending/failed), or appends one.
      * `u.run` is the applying run's id: an existing entry keeps its own `run` (the report that asked) and gets `undoRun`.
      */
     async recordUndo(u: Omit<Undo, 'at' | 'undoRun'> & { pass: string; status: UndoStatus }): Promise<void> {
-      const f = await readFeedback();
-      const undos = [...f.undos];
-      let i = -1;
-      for (let j = undos.length - 1; j >= 0; j--) if (undos[j]!.pass === u.pass && (undos[j]!.status === 'pending' || undos[j]!.status === 'failed')) { i = j; break; }
-      const prev = i >= 0 ? undos[i]! : undefined;
-      const merged: Undo = { ...(prev ?? {}), ...u, at: now().toISOString() };
-      if (prev && typeof prev.run === 'string' && prev.run !== u.run) { merged.run = prev.run; merged.undoRun = u.run; }
-      if (u.status === 'done') delete merged.error;
-      if (i >= 0) undos[i] = merged; else undos.push(merged);
-      await writeJsonAtomic(p('feedback.json'), { ...f, undos });
+      return locked('feedback.json', async () => {
+        const f = await readFeedback();
+        const undos = [...f.undos];
+        let i = -1;
+        for (let j = undos.length - 1; j >= 0; j--) if (undos[j]!.pass === u.pass && (undos[j]!.status === 'pending' || undos[j]!.status === 'failed')) { i = j; break; }
+        const prev = i >= 0 ? undos[i]! : undefined;
+        const merged: Undo = { ...(prev ?? {}), ...u, at: now().toISOString() };
+        if (prev && typeof prev.run === 'string' && prev.run !== u.run) { merged.run = prev.run; merged.undoRun = u.run; }
+        if (u.status === 'done') delete merged.error;
+        if (i >= 0) undos[i] = merged; else undos.push(merged);
+        await writeJsonAtomic(p('feedback.json'), { ...f, undos });
+      });
     },
     /** Undos still to do (pending, or failed last time), newest request per pass. */
     async pendingUndos(): Promise<Array<Undo & { pass: string }>> {
