@@ -70,3 +70,7 @@ Changes:
 - HAL-027 tuning(gearhold): Move Terrace of Dials' gear key to the far southwest room to lengthen it: **discarded** (implementer output does not match the contract)
 - HAL-028 tuning(gearhold): Guard Terrace of Dials' exit room with a pair of drones that arrive late: **discarded** (implementer output does not match the contract)
 - HAL-030 feature(gearhold): Add Gearhold level 4 built around one new clockwork hazard: **discarded** (implementer output does not match the contract)
+
+## Run run-2026-11-12T20-59-42-131Z
+
+**Gearhold:** the run tried it but built nothing. The level 4 ticket (a clock-hand sweeper room after Kiln Heart) was rejected for an over-long title before any build. Gearhold's identity, a clockwork dungeon of dials and timed threats, is untouched. It is stagnated, so I'm holding further Gearhold work until you choose between fixing the contract first and giving it a specific direction.
