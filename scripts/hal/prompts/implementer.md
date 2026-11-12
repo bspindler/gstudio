@@ -58,6 +58,6 @@ No real-money gambling or prizes. No bots mimicking humans. No real charges. No 
 
 Finish with one line of JSON and nothing after it:
 
-`{"changelog": "<one-line changelog bullet, player-facing>", "summary": "<what changed and why>", "blocked": "<reason, only if you could not do it>"}`
+`{"changelog": "<one-line changelog bullet, player-facing>", "summary": "<what changed and why>"}`
 
-`changelog` and `summary` are single-line, non-empty strings. If you include `blocked`, Hal discards your work. Hal works out the changed files from git, so do not list them.
+`changelog` and `summary` are single-line, non-empty strings. Only if you could not do the ticket, add `"blocked": "<reason>"`; Hal then discards your work. Leave `blocked` out otherwise. Hal works out the changed files from git, so do not list them.

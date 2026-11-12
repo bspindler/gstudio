@@ -43,6 +43,15 @@ describe('hal ledger', () => {
     expect(l.streak.other).toBe(1);
   });
 
+  it("a discard that was Hal's own fault (halFault) is recorded but does not count toward stagnation", () => {
+    let l = recordPass(emptyLedger(), pass({ kept: false }));
+    l = recordPass(l, pass({ kept: false, halFault: true }));
+    expect(l.streak['tidepool-pals']).toBe(1);
+    expect(l.passes).toHaveLength(2);
+    expect(parseLedger(JSON.stringify(l)).passes[1]!.halFault).toBe(true);
+    expect(() => parseLedger(JSON.stringify({ ...l, passes: [{ ...l.passes[0], halFault: 'yes' }] }))).toThrow(/bad passes/);
+  });
+
   it('stagnates at 5 discards in a row by default', () => {
     let l = emptyLedger();
     for (let i = 0; i < 4; i++) l = recordPass(l, pass({ kept: false }));

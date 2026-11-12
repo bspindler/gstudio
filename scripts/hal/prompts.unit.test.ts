@@ -118,4 +118,11 @@ describe('implementer contract', () => {
     expect(parseImplementerOutput('{"blocked":"needs package.json"}')).toEqual({ changelog: '', summary: '', blocked: 'needs package.json' });
     expect(parseImplementerOutput('{"blocked":""}')).toBeNull();
   });
+  it('an empty or null blocked means not blocked (the contract example lists it, so models echo it back empty)', () => {
+    const done = { changelog: 'Longer first level', summary: 'Moved the key' };
+    expect(parseImplementerOutput('{"changelog": "Longer first level", "summary": "Moved the key", "blocked": ""}')).toEqual(done);
+    expect(parseImplementerOutput('{"changelog": "Longer first level", "summary": "Moved the key", "blocked": "  "}')).toEqual(done);
+    expect(parseImplementerOutput('{"changelog": "Longer first level", "summary": "Moved the key", "blocked": null}')).toEqual(done);
+    expect(parseImplementerOutput('{"summary": "Moved the key", "blocked": ""}')).toBeNull();
+  });
 });

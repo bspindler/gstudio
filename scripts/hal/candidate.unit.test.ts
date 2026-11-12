@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTrailers, type ScoreReport, type Ticket } from '@studio/core/hal';
 import { secretReadPaths } from './env.js';
-import { defaultCommands, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseResult, runCandidate, scriptArgv, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
+import { defaultCommands, isHalFault, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseResult, runCandidate, scriptArgv, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
 import type { ClaudeCall, ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
 import { sandboxAvailable } from './sandbox.js';
@@ -766,5 +766,15 @@ describe('default commands', () => {
     const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '..', '..', 'package.json'), 'utf8')) as { scripts: Record<string, string> };
     expect(() => defaultCommands(tools, pkg.scripts).test('/wt')).not.toThrow();
     expect(defaultCommands(tools, pkg.scripts).typecheck('/wt').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('isHalFault', () => {
+  it("names discards that are Hal's, not the idea's", () => {
+    expect(isHalFault(['implementer output does not match the contract (its reply ended: "x")'])).toBe(true);
+    expect(isHalFault(['implementer hit a usage limit'])).toBe(true);
+    expect(isHalFault(['implementer call failed: spawn ENOENT'])).toBe(true);
+    expect(isHalFault(['gearhold-play: no real gain: 0.00 < 0.5'])).toBe(false);
+    expect(isHalFault(['implementer blocked: the level is already long'])).toBe(false);
   });
 });

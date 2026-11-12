@@ -32,7 +32,7 @@ import {
   parseTrailers, type Billing, type Ledger, type Measures, type ScoreReport, type Ticket, type TicketKind,
 } from '@studio/core/hal';
 import { secretReadPaths } from './env.js';
-import { runCandidate, scorersFor, type CandidateCtx, type CandidateResult } from './candidate.js';
+import { isHalFault, runCandidate, scorersFor, type CandidateCtx, type CandidateResult } from './candidate.js';
 import { killLiveClaudeChildren, roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
@@ -751,6 +751,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
             fitness: Number.isFinite(after?.fitness) ? after!.fitness : Number.isFinite(before?.fitness) ? before!.fitness : 0,
             baseline: Number.isFinite(before?.fitness) ? before!.fitness : null, measures: after?.measures ?? {},
             kept: r.verdict === 'merged' || r.verdict === 'held', reasons: r.reasons, costUsd: r.costUsd,
+            ...(r.verdict === 'discarded' && isHalFault(r.reasons) ? { halFault: true } : {}),
           }, pass);
           await writeJsonAtomic(ledgerPath, R.deep(ledger));
           if (r.verdict === 'merged') {

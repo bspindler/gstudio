@@ -46,6 +46,8 @@ export function parseImplementerOutput(text: string): ImplementerOutput | null {
   if (!found) return null;
   const o = found as Record<string, unknown>;
   const line = (x: unknown): x is string => typeof x === 'string' && x.trim() !== '' && !/[\r\n]/.test(x);
-  if (o.blocked !== undefined) return line(o.blocked) ? { changelog: line(o.changelog) ? o.changelog : '', summary: line(o.summary) ? o.summary : '', blocked: o.blocked } : null;
+  // An empty or null `blocked` is "not blocked": models echo the contract example's field back empty (HAL-021..030).
+  const isBlank = (x: unknown) => x === null || (typeof x === 'string' && x.trim() === '');
+  if (o.blocked !== undefined && !isBlank(o.blocked)) return line(o.blocked) ? { changelog: line(o.changelog) ? o.changelog : '', summary: line(o.summary) ? o.summary : '', blocked: o.blocked } : null;
   return line(o.changelog) && line(o.summary) ? { changelog: o.changelog, summary: o.summary } : null;
 }

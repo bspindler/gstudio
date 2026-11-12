@@ -230,6 +230,13 @@ class Discard extends Error {
   constructor(readonly reasons: string[]) { super(reasons.join('; ')); }
 }
 const discard = (...reasons: string[]): never => { throw new Discard(reasons); };
+
+/**
+ * Discards that say nothing about the ticket's idea: Hal could not read the reply, or the call itself failed or hit a
+ * usage limit. The ledger records them but does not count them toward a game's stagnation streak.
+ */
+export const HAL_FAULT = [/^implementer output does not match the contract/, /^implementer call failed/, /^implementer hit a usage limit/];
+export const isHalFault = (reasons: string[]): boolean => reasons.some((r) => HAL_FAULT.some((x) => x.test(r)));
 const msg = (e: unknown) => String((e as Error)?.message ?? e).trim();
 const oneLine = (s: string) => s.replace(/\s*[\r\n]+\s*/g, ' ').trim();
 const GAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
