@@ -161,7 +161,8 @@ describe('full fake run', () => {
     expect(r.capReached).toBe(true);
     expect(r).toMatchObject({ night: NIGHT, trigger: 'nightly', billing: 'api', pushed: true });
     expect(r.spend.api).toBe(7); // never past 19.50 for slicing; the report still shows the $20 cap
-    expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
+    expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'planned', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
+    expect(r.planned).toEqual([]); // all built or tried
     expect(r.games.hyperline).toMatchObject({ before: { hyperline: 60 }, after: { hyperline: 61 } });
     // R21: the director's $1 was held through the builds, so the note still got written by the director.
     expect(calls.map((c) => [c.role, c.maxBudgetUsd])).toEqual([['planner', 1.5], ['implementer', 3], ['implementer', 1.5], ['director', 1]]);
@@ -267,7 +268,10 @@ describe('report-only', () => {
     expect(gitIn(repo, 'rev-list', '--count', `${brianMain()}..${before()}`)).toBe('0');
     const r = readReport();
     expect(r.changes).toEqual([]);
+    expect(r.planned.map((t) => t.id)).toEqual(expect.arrayContaining([GOOD.id]));
+    expect(read(join(halDir, 'runs', r.runId), 'report.md')).toMatch(/## Planned, not built\n\n- T1 /);
     expect(calls.map((c) => c.role)).toEqual(['planner', 'director']);
+    expect(calls[1]!.prompt).toMatch(/report-only/);
     expect(r.pushed).toBe(false);
     expect(r.pushSkippedReason).toBe('--report-only');
     expect(existsSync(join(halDir, 'runs', r.runId, 'play', 'scores.json'))).toBe(true);
