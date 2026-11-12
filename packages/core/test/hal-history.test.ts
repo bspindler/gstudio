@@ -75,6 +75,14 @@ describe('buildHistory', () => {
     expect((buildHistory('gearhold', c, [`${base}-before.jpg`, `${base}-after.jpg`], TZ)[0]!.entries[0] as { shots: unknown }).shots).toEqual({ before: `${base}-before.jpg`, after: `${base}-after.jpg` });
     expect((buildHistory('gearhold', c, [], TZ)[0]!.entries[0] as { shots: unknown }).shots).toEqual({});
   });
+
+  it('shots attach from any night folder of this game, never from another game', () => {
+    const c = [change(1, '2026-11-10T14:00:00Z')];
+    const other = 'docs/hal/history/gearhold/2026-11-09/HAL-001';
+    const h = buildHistory('gearhold', c, [`${other}-before.jpg`, 'docs/hal/history/tidepool/2026-11-10/HAL-001-after.jpg'], TZ);
+    expect(h[0]!.night).toBe('2026-11-10');
+    expect((h[0]!.entries[0] as { shots: unknown }).shots).toEqual({ before: `${other}-before.jpg` });
+  });
 });
 
 describe('filterHistory', () => {

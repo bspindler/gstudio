@@ -29,7 +29,16 @@ function isDirectorsNote(message: string): boolean {
  */
 export function buildHistory(game: string, commits: CommitRecord[], files: string[], tzOffsetMinutes: number): HistoryNight[] {
   const sorted = [...commits].sort((a, b) => time(b) - time(a));
-  const fileSet = new Set(files);
+  // Shots by pass id, whatever night folder they sit in: the pipeline names the folder from its own clock at build time,
+  // which can differ from nightOf(commit date) near the cutoff. Pass ids are unique.
+  const shotFiles = new Map<string, string>();
+  const shotRe = /^([^/]+)\/\d{4}-\d{2}-\d{2}\/([^/]+)-(before|after)\.jpg$/;
+  const root = `docs/hal/history/${game}/`;
+  for (const f of files) {
+    if (!f.startsWith(root)) continue;
+    const m = shotRe.exec(`${game}/${f.slice(root.length)}`);
+    if (m) shotFiles.set(`${m[2]}-${m[3]}`, f);
+  }
 
   // Pass 1: undos by target pass, and git reverts (full or 7+ char sha prefix) by the commit they revert.
   const undone = new Map<string, Extract<ChangeStatus, { kind: 'undone' }>>();
@@ -42,6 +51,7 @@ export function buildHistory(game: string, commits: CommitRecord[], files: strin
     }
     for (const m of c.message.matchAll(/This reverts commit ([0-9a-f]{7,40})\b/gi)) reverts.push({ target: m[1]!.toLowerCase(), commit: c.sha, date: c.date });
   }
+  // Undo: newest wins (first seen in a newest-first walk); revert: oldest wins (pop of the same list). Either way the change is out.
   const revertOf = (sha: string) => reverts.filter((r) => sha.toLowerCase().startsWith(r.target)).pop(); // oldest revert (list is newest first)
 
   // Pass 2: entries.
@@ -61,10 +71,11 @@ export function buildHistory(game: string, commits: CommitRecord[], files: strin
       const title = subject.startsWith(prefix) ? subject.slice(prefix.length) : subject;
       const rv = revertOf(c.sha);
       const status: ChangeStatus = undone.get(t.pass) ?? (rv ? { kind: 'reverted', commit: rv.commit, date: rv.date } : { kind: 'kept' });
-      const dir = `docs/hal/history/${game}/${night}/${t.pass}`;
       const shots: { before?: string; after?: string } = {};
-      if (fileSet.has(`${dir}-before.jpg`)) shots.before = `${dir}-before.jpg`;
-      if (fileSet.has(`${dir}-after.jpg`)) shots.after = `${dir}-after.jpg`;
+      const before = shotFiles.get(`${t.pass}-before`);
+      const after = shotFiles.get(`${t.pass}-after`);
+      if (before) shots.before = before;
+      if (after) shots.after = after;
       push({ type: 'hal', sha: c.sha, pass: t.pass, game: t.game, kind: t.kind, title, why: t.why, version: t.version, run: t.run, night, scoreBefore: t.scoreBefore, scoreAfter: t.scoreAfter, status, shots });
     } else {
       if (isDirectorsNote(c.message)) continue;
