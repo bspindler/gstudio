@@ -390,9 +390,10 @@ const REPORT_CSS = `
   .app>.flash{grid-area:flash}
   .head{grid-area:head}
   .main{grid-area:main;min-width:0}
-  .side{display:block;grid-area:side;position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;
-    padding-bottom:8px;scrollbar-width:thin}
-  .runhal{margin-top:0}
+  /* One scrollbar: the panel scrolls with the page; only Run Hal stays pinned at the top of its column, and the rest of
+     the panel slides under it (it is opaque). The column spans the whole page height, so the pin holds to the bottom. */
+  .side{display:block;grid-area:side;align-self:stretch}
+  .runhal{position:sticky;top:0;z-index:2;margin:-24px 0 0;padding:24px 0 12px;background:var(--bg)}
   .changes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;align-items:start}
   .changes-grid>.card{margin:0}
 }
