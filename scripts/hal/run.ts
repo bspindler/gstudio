@@ -90,7 +90,10 @@ export type RunDeps = {
   now: () => Date;
   /** Minutes east of UTC for nightOf; default from now(). */
   tzOffsetMinutes?: number;
+  /** Planner and director. */
   model: string;
+  /** The implementer (default: `model`). */
+  implementerModel?: string;
   /** The real secret values (API key, HAL_TOKEN): redacted from everything Hal writes, logs or prompts. */
   secrets: string[];
   /** Whether .hal.env has an API key; API-billed calls are not attempted without one. */
@@ -641,7 +644,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
           const pass = nextPassId(ledger, gitPass);
           setPhase(`build ${pass} (${i + 1}/${build.length})`);
           const ctx: CandidateCtx = {
-            repo, pass, run: runId, now: d.now, tzOffsetMinutes: tz, model: d.model, billing: st.billing, secrets: [...d.secrets],
+            repo, pass, run: runId, now: d.now, tzOffsetMinutes: tz, model: d.implementerModel ?? d.model, billing: st.billing, secrets: [...d.secrets],
             budget: { slice: () => budget.slice('implementer'), record: (_r, b, u) => budget.record('implementer', b, u) },
             claude, mainDir, baseline, ...(d.git ? { git: d.git } : {}),
             ...(d.appendSystemPromptFile ? { appendSystemPromptFile: d.appendSystemPromptFile } : {}), ...(d.candidateCtx ?? {}),

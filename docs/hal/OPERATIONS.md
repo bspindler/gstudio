@@ -28,9 +28,12 @@ npm run hal -- install      # nightly run at 01:00 (--at HH:MM to change) and th
 npm run hal -- uninstall    # removes both launchd jobs
 ```
 
-`install --dry-run` shows what it would write. The nightly run always bills API credits, so it needs
-`ANTHROPIC_API_KEY=...` in `.hal.env`; without it the nightly run makes no Claude calls. Runs you start use your
-subscription first. The key never goes anywhere else.
+`install --dry-run` shows what it would write. Every run, the nightly one included, bills your Claude subscription
+first and falls back to API credits only when the subscription hits a usage limit; `--billing api` forces credits.
+The fallback needs `ANTHROPIC_API_KEY=...` in `.hal.env`. The key never goes anywhere else.
+
+**Models.** The implementer, which builds the tickets and is almost all of a run's cost, runs on Sonnet. The planner
+and director run on Opus. Set `HAL_IMPLEMENTER_MODEL` or `HAL_MODEL` in `.hal.env` to change either one.
 
 ## Everyday commands
 
