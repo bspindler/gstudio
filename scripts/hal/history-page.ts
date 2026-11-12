@@ -10,7 +10,7 @@ export type HistoryView = {
 };
 
 const HISTORY_CSS = `
-.top{display:flex;align-items:center;min-height:44px}
+.top a{display:inline-flex;align-items:center;min-height:44px}
 .hero{margin:4px 0 0}.hero .label{margin-bottom:4px}
 form.filter{margin:20px 0 0}
 .filter .grid2{margin-top:10px}
@@ -42,7 +42,7 @@ details.note-fold>summary{font-weight:600}
 .empty{text-align:center;padding:24px 0}
 `;
 
-const KINDS = ['fix', 'tuning', 'polish', 'feature'] as const;
+export const KINDS = ['fix', 'tuning', 'polish', 'feature'] as const;
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -59,7 +59,7 @@ const shotUrl = (game: string, path: string | undefined): string | null => {
 
 function entryHtml(game: string, e: HistoryEntry, focused: boolean): string {
   if (e.type === 'brian') {
-    return `<article class="card entry"><div class="head"><span class="pill">Yours</span><span class="small muted">${esc(e.date.slice(0, 10))}</span></div><h3>${esc(e.title)}</h3></article>`;
+    return `<article class="card entry"><div class="head"><span class="pill">Yours</span><span class="small muted">${esc(nightTitle(e.night))}</span></div><h3>${esc(e.title)}</h3></article>`;
   }
   const st = e.status;
   const status =

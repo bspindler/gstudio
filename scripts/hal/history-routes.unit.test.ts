@@ -118,6 +118,50 @@ describe('history routes', () => {
   });
 });
 
+describe('tip choice and git failures', () => {
+  const mk = () => {
+    const r = mkdtempSync(join(tmpdir(), 'hal-tip-'));
+    const g = (...a: string[]) => git(r, {}, ...a);
+    g('init', '-q', '-b', 'main');
+    put(r, 'games/hyperline/a.js', '1');
+    g('add', '-A'); g('commit', '-q', '-m', 'init');
+    return { r, g };
+  };
+  const img = (r: string, n: string) => { const s = new Hono(); mountHistory(s, { repo: r, games: [{ slug: 'hyperline', title: 'H' }] }); return s.request(`/_history/hyperline/img/2026-11-10/${n}`); };
+  const addImg = (r: string, g: (...a: string[]) => string, n: string) => { put(r, `docs/hal/history/hyperline/2026-11-10/${n}`, JPG); g('add', '-A'); g('commit', '-q', '-m', `img ${n}`); };
+  it('ref ahead of HEAD: its tree is used', async () => {
+    const { r, g } = mk();
+    g('checkout', '-q', '-b', 'side'); addImg(r, g, 'HAL-001-before.jpg'); g('update-ref', 'refs/hal/main', 'HEAD'); g('checkout', '-q', 'main');
+    expect((await img(r, 'HAL-001-before.jpg')).status).toBe(200);
+    rmSync(r, { recursive: true, force: true });
+  });
+  it('ref behind HEAD: HEAD tree is used', async () => {
+    const { r, g } = mk();
+    g('update-ref', 'refs/hal/main', 'HEAD'); addImg(r, g, 'HAL-001-before.jpg');
+    expect((await img(r, 'HAL-001-before.jpg')).status).toBe(200);
+    rmSync(r, { recursive: true, force: true });
+  });
+  it('ref diverged: HEAD tree is used', async () => {
+    const { r, g } = mk();
+    g('checkout', '-q', '-b', 'side'); addImg(r, g, 'HAL-002-before.jpg'); g('update-ref', 'refs/hal/main', 'HEAD'); g('checkout', '-q', 'main');
+    addImg(r, g, 'HAL-001-before.jpg');
+    expect((await img(r, 'HAL-001-before.jpg')).status).toBe(200);
+    expect((await img(r, 'HAL-002-before.jpg')).status).toBe(404);
+    rmSync(r, { recursive: true, force: true });
+  });
+  it('a non-repo directory gives a small 500 with the CSP, not a crash', async () => {
+    const r = mkdtempSync(join(tmpdir(), 'hal-nogit-'));
+    const s = new Hono(); mountHistory(s, { repo: r, games: [{ slug: 'hyperline', title: 'H' }] });
+    for (const p of ['/_history/hyperline', '/_history/hyperline/HAL-001', '/_history/hyperline/img/2026-11-10/HAL-001-before.jpg']) {
+      const res = await s.request(p);
+      expect(res.status, p).toBe(500);
+      expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
+      expect(res.headers.get('cache-control')).toBe('no-store');
+    }
+    rmSync(r, { recursive: true, force: true });
+  });
+});
+
 describe('not part of the Pages build or a flagless shelf', () => {
   it('pagesIndexHtml output has no "_history"', () => {
     const html = pagesIndexHtml([{ slug: 'hyperline', title: 'Hyperline' } as never]);

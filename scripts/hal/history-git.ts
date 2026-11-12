@@ -16,10 +16,10 @@ const git = async (repo: string, args: string[]): Promise<Buffer> =>
   (await exec('git', args, { cwd: repo, env: gitEnv(), encoding: 'buffer', maxBuffer: MAX })).stdout;
 const ok = (repo: string, args: string[]) => git(repo, args).then(() => true, () => false);
 
-/** `refs/hal/main` if it exists and contains HEAD, else HEAD. */
-export async function historyTip(repo: string): Promise<string> {
-  if (!(await ok(repo, ['rev-parse', '--verify', '-q', HAL_MAIN]))) return 'HEAD';
-  return (await ok(repo, ['merge-base', '--is-ancestor', 'HEAD', HAL_MAIN])) ? HAL_MAIN : 'HEAD';
+/** Whether refs/hal/main exists, and the tip to read: it if it contains HEAD, else HEAD. Probed once per call. */
+export async function refState(repo: string): Promise<{ hasHalMain: boolean; tip: string }> {
+  if (!(await ok(repo, ['rev-parse', '--verify', '-q', HAL_MAIN]))) return { hasHalMain: false, tip: 'HEAD' };
+  return { hasHalMain: true, tip: (await ok(repo, ['merge-base', '--is-ancestor', 'HEAD', HAL_MAIN])) ? HAL_MAIN : 'HEAD' };
 }
 
 const num = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
@@ -48,7 +48,7 @@ function parseScores(night: string, text: string): ScoreRun[] {
 }
 
 export async function readGameHistory(repo: string, game: string, tzOffsetMinutes = -new Date().getTimezoneOffset()): Promise<GameHistory> {
-  const hasHalMain = await ok(repo, ['rev-parse', '--verify', '-q', HAL_MAIN]);
+  const { hasHalMain, tip } = await refState(repo);
   const revs = hasHalMain ? ['HEAD', HAL_MAIN] : ['HEAD'];
   const log = (await git(repo, ['log', '--format=%H%x00%an%x00%aI%x00%B%x1e', ...revs, '--', `games/${game}`, `docs/hal/history/${game}`])).toString('utf8');
   const commits: CommitRecord[] = [];
@@ -57,7 +57,6 @@ export async function readGameHistory(repo: string, game: string, tzOffsetMinute
     if (!sha || !/^[0-9a-f]{40}$/.test(sha)) continue;
     commits.push({ sha, author: author ?? '', date: date ?? '', message: rest.join('\0').trim() });
   }
-  const tip = await historyTip(repo);
   const dir = `docs/hal/history/${game}`;
   const files = (await git(repo, ['ls-tree', '-r', '--name-only', tip, '--', dir])).toString('utf8').split('\n').filter(Boolean);
   const nights = buildHistory(game, commits, files, tzOffsetMinutes);
@@ -82,13 +81,9 @@ export async function readGameHistory(repo: string, game: string, tzOffsetMinute
 /** The committed bytes of one history image at the tip, or null (missing, a symlink, or not a regular file). */
 export async function readHistoryImage(repo: string, game: string, night: string, file: string): Promise<Buffer | null> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(night) || !/^HAL-\d+-(before|after)\.jpg$/.test(file)) return null;
-  const tip = await historyTip(repo);
+  const { tip } = await refState(repo);
   const path = `docs/hal/history/${game}/${night}/${file}`;
-  try {
-    const entry = (await git(repo, ['ls-tree', tip, '--', path])).toString('utf8');
-    if (!entry.startsWith('100644 blob ') && !entry.startsWith('100755 blob ')) return null; // a symlink is mode 120000
-    return await git(repo, ['show', `${tip}:${path}`]);
-  } catch {
-    return null;
-  }
+  const entry = (await git(repo, ['ls-tree', tip, '--', path])).toString('utf8'); // a git failure throws (the route answers 500)
+  if (!entry.startsWith('100644 blob ') && !entry.startsWith('100755 blob ')) return null; // missing, or a symlink (mode 120000)
+  return await git(repo, ['show', `${tip}:${path}`]);
 }

@@ -4,10 +4,11 @@ import type { Hono } from 'hono';
 import type { HistoryFilter } from '@studio/core/hal';
 import { filterHistory } from '@studio/core/hal';
 import { readGameHistory, readHistoryImage } from './history-git.js';
-import { renderHistory } from './history-page.js';
+import { KINDS as HAL_KINDS, renderHistory } from './history-page.js';
 
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'";
-const KINDS = ['fix', 'tuning', 'polish', 'feature', 'brian'] as const;
+const KINDS = [...HAL_KINDS, 'brian'] as const;
+const fail = (c: Context) => c.html('<!doctype html><meta charset="utf-8"><title>History unavailable</title><p>History could not be read from git.</p>', 500, { 'Content-Security-Policy': CSP, 'Cache-Control': 'no-store' });
 
 export function mountHistory(site: Hono, o: { repo: string; games: Array<{ slug: string; title: string }> }): void {
   const find = (slug: string) => o.games.find((g) => g.slug === slug);
@@ -26,13 +27,14 @@ export function mountHistory(site: Hono, o: { repo: string; games: Array<{ slug:
     const nights = focus ? h.nights : filterHistory(h.nights, filter);
     return c.html(renderHistory({ game: game.slug, title: game.title, nights, notes: h.notes, scores: h.scores, filter, ...(focus ? { focus } : {}) }), 200, { 'Content-Security-Policy': CSP, 'Cache-Control': 'no-store' });
   };
-  site.get('/_history/:game', (c) => page(c, c.req.param('game')));
-  site.get('/_history/:game/img/:night/:file', async (c) => {
-    const { game, night, file } = c.req.param();
+  const safe = (fn: (c: Context) => Promise<Response> | Response) => async (c: Context) => { try { return await fn(c); } catch { return fail(c); } };
+  site.get('/_history/:game', safe((c) => page(c, c.req.param('game')!)));
+  site.get('/_history/:game/img/:night/:file', safe(async (c) => {
+    const game = c.req.param('game')!, night = c.req.param('night')!, file = c.req.param('file')!;
     if (!find(game)) return notFound(c);
     const bytes = await readHistoryImage(o.repo, game, night, file);
     if (!bytes) return notFound(c);
     return new Response(new Uint8Array(bytes), { headers: { 'Content-Type': 'image/jpeg', 'Content-Security-Policy': CSP, 'Cache-Control': 'max-age=86400', 'X-Content-Type-Options': 'nosniff' } });
-  });
-  site.get('/_history/:game/:pass', (c) => (/^HAL-\d+$/.test(c.req.param('pass')) ? page(c, c.req.param('game'), c.req.param('pass')) : notFound(c)));
+  }));
+  site.get('/_history/:game/:pass', safe((c) => (/^HAL-\d+$/.test(c.req.param('pass')!) ? page(c, c.req.param('game')!, c.req.param('pass')!) : notFound(c))));
 }
