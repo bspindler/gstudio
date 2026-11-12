@@ -417,8 +417,12 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
         ...(await cmd('typecheck'))(wt.dir).map((a): [string, string[]] => ['npm run typecheck', a]),
       ];
     } catch (e) { return discard(`checks unavailable: ${msg(e)}`); }
+    // Guard (prune ignored files, compare the tree) before each script, not between the `&&` parts of one: the
+    // typecheck script is `tsc -b <packages> && tsc -p scripts`, and the second part needs the first part's dist/.
+    let prev = '';
     for (const [name, argv] of steps) {
-      await guard(t2);
+      if (name !== prev) await guard(t2);
+      prev = name;
       const r = await inTree(wt.dir, argv, [wt.dir]);
       if (r.code !== 0) discard(`${name} failed${r.timedOut ? ' (timed out)' : r.error ? ` to run: ${r.error}` : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`);
     }

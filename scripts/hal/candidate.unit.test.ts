@@ -433,6 +433,19 @@ describe('runCandidate (temp git repo)', () => {
     expect((await runCandidate(ticket(), c)).verdict).toBe('merged');
   });
 
+  it('the parts of one script share ignored output (tsc -b emits dist/, tsc -p reads it); the next script does not', async () => {
+    const c = ctx({ cmds: {
+      typecheck: () => [
+        node(`require('fs').mkdirSync('dist', { recursive: true }); require('fs').writeFileSync('dist/x.d.ts', 'export {}')`),
+        node(`process.exit(require('fs').existsSync('dist/x.d.ts') ? 0 : 1)`),
+      ],
+      score: (_d, s) => { const b = BEFORE[s as keyof typeof BEFORE]; return result({ ...b, fitness: b.fitness + 1 }, `if (require('fs').existsSync('dist/x.d.ts')) process.exit(3)`); },
+    } });
+    const r = await runCandidate(ticket(), c);
+    expect(r.reasons).toEqual([]);
+    expect(r.verdict).toBe('merged');
+  });
+
   it('the last check (the after shot) touching the tree is caught too', async () => {
     const old = halHead();
     let n = 0;
