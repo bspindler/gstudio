@@ -442,6 +442,14 @@ describe('runCandidate (temp git repo)', () => {
     });
   });
 
+  it('a feature on a game already at 100 merges when it holds the line, even with a target that cannot rise (Hyperline, HAL-005)', async () => {
+    const full = report('hyperline', 100, { inBand: 100, noSpikes: 100, reach: 100 });
+    const c = ctx({ baseline: { sha: halHead(), scores: { hyperline: full } }, cmds: { score: () => result(full) } });
+    const r = await runCandidate(ticket({ kind: 'feature', title: 'Add a SLOT GATES sector', target: 'noSpikes' }), c);
+    expect(r.reasons).toEqual([]);
+    expect(r.verdict).toBe('merged');
+    worktreesGone();
+  });
   it('a score regression past the tolerance is discarded; a target picks score mode', async () => {
     const old = halHead();
     expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { score: () => result(report('hyperline', 60, { flow: 60, fair: 65 })) } })), old, /hyperline: fair regressed/);

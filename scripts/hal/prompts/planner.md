@@ -39,6 +39,7 @@ If a good idea falls under anti-goal 1, still propose it, but put the exact item
 - One idea per ticket. If a ticket needs "and", split it.
 - Keep each game's identity. Say in `why` what personality the change preserves.
 - Prefer the measure's band over a bigger number. A score of 100 means every measure is in its healthy band; pushing a measure past its band is not an improvement.
+- A game at 100 is healthy, not finished. Keep planning features and polish for it: new content, feel, juice, clarity, accessibility, all in the game's own identity. Leave `target` out of those tickets, or name only a measure below 100. A measure at 100 cannot rise, so the gate judges such a change by "stays in band, nothing regresses, no hard failures", and Brian judges its value in the morning review.
 - Rank tickets that act on Brian's direction first, and set `fromNote`. Then fixes that screens, controls or console errors prove, then tuning and polish by evidence, then features.
 - Do not propose changes to Hal itself, its scores, tripwires or baselines, to policy, compliance or gateway code, to versions or `CHANGELOG.md`, or to `package.json`. Those are protected. A ticket whose own description edits them is rejected.
 - Do not repeat a line of work flagged as stagnated below. Ask Brian for direction in a ticket's `why` only if you must; otherwise pick something else.

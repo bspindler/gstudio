@@ -84,7 +84,7 @@ describe('compareScores', () => {
     expect(missingBefore.reasons.join(' ')).toContain('inBand');
   });
   it('exposes the gate constants', () => {
-    expect(GATE).toEqual({ minGain: 0.5, tolerance: 1.0 });
+    expect(GATE).toEqual({ minGain: 0.5, tolerance: 1.0, ceiling: 100 });
   });
 });
 
@@ -123,5 +123,36 @@ describe('compareScores modes', () => {
   it('polish mode ignores a target, and explicit score mode without a target uses fitness', () => {
     expect(compareScores(report(70, { a: 50 }), report(70, { a: 50 }), { mode: 'polish', target: 'a' }).keep).toBe(true);
     expect(compareScores(report(70, { a: 50 }), report(70.2, { a: 50 }), { mode: 'score' }).reasons.join(' ')).toContain('no real gain');
+  });
+});
+
+describe('compareScores at the ceiling (a healthy game keeps improving)', () => {
+  const full = { inBand: 100, noSpikes: 100, reach: 100 };
+  it('a target already at 100 cannot rise, so it is judged holding the line: kept when nothing regresses', () => {
+    const r = compareScores(report(100, full), report(100, full), { mode: 'score', target: 'noSpikes' });
+    expect(r).toMatchObject({ keep: true, atCeiling: true });
+  });
+  it('fitness at 100 with no target (legacy score mode) is judged the same way', () => {
+    expect(compareScores(report(100, full), report(100, full))).toMatchObject({ keep: true, atCeiling: true });
+  });
+  it('just under the ceiling, where a minGain rise no longer fits, counts as at the ceiling too', () => {
+    const r = compareScores(report(99.8, { m: 99.8 }), report(99.8, { m: 99.8 }), { mode: 'score', target: 'm' });
+    expect(r).toMatchObject({ keep: true, atCeiling: true });
+  });
+  it('at the ceiling, a regression past the tolerance still discards (the target, another measure, or fitness)', () => {
+    expect(compareScores(report(100, full), report(100, { ...full, noSpikes: 98 }), { mode: 'score', target: 'noSpikes' }).keep).toBe(false);
+    expect(compareScores(report(100, full), report(100, { ...full, reach: 97 }), { mode: 'score', target: 'noSpikes' }).keep).toBe(false);
+    const f = compareScores(report(100, full), report(98, full), { mode: 'score', target: 'noSpikes' });
+    expect(f.keep).toBe(false);
+    expect(f.reasons.join(' ')).toContain('fitness regressed');
+  });
+  it('at the ceiling, hard failures still discard', () => {
+    expect(compareScores(report(100, full), report(100, full, ['sector 9: unwinnable']), { mode: 'score', target: 'noSpikes' }).keep).toBe(false);
+  });
+  it('below the ceiling the gain rule is unchanged', () => {
+    const r = compareScores(report(90, { m: 90 }), report(90.2, { m: 90.2 }), { mode: 'score', target: 'm' });
+    expect(r.keep).toBe(false);
+    expect(r.atCeiling).toBeUndefined();
+    expect(r.reasons.join(' ')).toContain('no real gain');
   });
 });
