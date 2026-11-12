@@ -85,7 +85,13 @@ export function createAudio() {
       tone(988 * 2 ** (semis / 24), 0.12, { type: 'sine', vol: 0.16 });
       tone(1976 * 2 ** (semis / 24), 0.08, { type: 'sine', vol: 0.05 });
     },
-    near() { hiss(0.28, { vol: 0.22, f0: 600, f1: 5000, q: 2.5 }); tone(1320, 0.1, { type: 'triangle', vol: 0.06 }); },
+    near() {
+      hiss(0.28, { vol: 0.22, f0: 600, f1: 5000, q: 2.5 }); tone(1320, 0.1, { type: 'triangle', vol: 0.06 });
+      const c = ensure(); if (!c) return;
+      // A bright two-note synth blip on top of the whoosh.
+      tone(1568, 0.07, { type: 'square', vol: 0.05, at: c.currentTime });
+      tone(2349, 0.11, { type: 'square', vol: 0.05, at: c.currentTime + 0.06 });
+    },
     flip() { tone(300, 0.25, { type: 'sine', to: 900, vol: 0.14 }); },
     death() {
       hiss(0.5, { vol: 0.45, f0: 3000, f1: 80, type: 'lowpass', q: 0.8 });

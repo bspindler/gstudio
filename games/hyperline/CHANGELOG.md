@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.4.0 (2026-11-12)
 - New sector SLOT GATES: neon gates with a gap you thread mid-jump, on the way up or down; HYPERCORE now follows it.
 - Endless: start a run from any sector you've already reached with the free sector picker on the ready screen; these practice starts never touch your BEST, ghost or missions.
+- Near misses now flash a quick neon cyan edge spark and play a bright synth blip.
 
 ## 0.3.1 (2026-11-11)
 - **Fonts ship with the game.** Monoton and Chakra Petch now load from the game's own `fonts/` folder (SIL OFL), so players' phones no longer contact Google Fonts. The look is unchanged.

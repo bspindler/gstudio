@@ -479,5 +479,12 @@ export function drawScene(c, W, H, st) {
     }
     c.stroke();
   }
+  if (st.nearFlash > 0) {
+    // Neon edge spark: a cyan vignette that fades fast, no full-screen strobe.
+    const a = Math.min(0.5, st.nearFlash), r = Math.max(W, H) * 0.75;
+    const g = c.createRadialGradient(W / 2, H / 2, r * 0.45, W / 2, H / 2, r);
+    g.addColorStop(0, 'rgba(34,240,255,0)'); g.addColorStop(1, `rgba(34,240,255,${a})`);
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+  }
   if (st.flash > 0) { c.fillStyle = `rgba(255,255,255,${Math.min(0.6, st.flash)})`; c.fillRect(0, 0, W, H); }
 }
