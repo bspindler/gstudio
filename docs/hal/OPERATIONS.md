@@ -14,7 +14,7 @@ in its own worktree, writes a note, and pushes what passed. This page is how to 
 ## One-time setup
 
 Add this to your shell profile (for example `~/.zprofile`). Hal must not load tsx's shared cache from the temp folder.
-The nightly job and the Run-now page already set it; hand-started runs warn without it.
+The nightly job and the report server already set it; hand-started runs warn without it.
 
 ```sh
 export TSX_DISABLE_CACHE=1
@@ -23,8 +23,8 @@ export TSX_DISABLE_CACHE=1
 Then:
 
 ```sh
-npm run hal -- setup        # makes .hal.env with HAL_TOKEN, prints the Run-now bookmark for your phone
-npm run hal -- install      # nightly run at 01:00 (--at HH:MM to change) and the Run-now server, via launchd
+npm run hal -- setup        # makes .hal.env with HAL_TOKEN, prints the morning-report bookmark for your phone
+npm run hal -- install      # nightly run at 01:00 (--at HH:MM to change) and the report server, via launchd
 npm run hal -- uninstall    # removes both launchd jobs
 ```
 
@@ -45,19 +45,50 @@ npm run hal -- notes               # your notes, with Hal's status and reply
 npm run hal -- notes --clear N-003 # only this removes a note; until then Hal keeps seeing it
 npm run hal -- approve "<item exactly as the report names it>"   # say yes to a liability item
 npm run hal -- spend               # API spend today and the last 7 days
-npm run hal -- serve               # the Run-now page on this Mac (--lan for your phone)
+npm run hal -- serve               # the morning report on this Mac (--lan for your phone)
 ```
 
 API spend is capped at $20 a day. Hal stops slicing at $19.50, so one call that overruns its slice still stays under
 the cap, and it always keeps $1 back for the night's note.
 
-## Where reports live
+## The morning report
+
+The bookmark from `npm run hal -- setup` opens the morning report. `npm run hal -- serve` serves it (add `--lan` so
+your phone can reach it). `install` keeps it running. The page shows the newest report. Earlier reports links to past
+ones.
+
+Each change has two buttons:
+
+- **Keep** records a 👍, with an optional comment.
+- **Undo** records a 👎 with your reason and starts `hal undo` right away. That reverts the change as a new version
+  and pushes it (one `ci:local`, one push). Any other pending undos are applied in the same go. If Hal is busy, the
+  page says "Undo queued: Hal is busy, so the next run applies it", and the next run does it.
+
+Each liability item under Your calls has two buttons:
+
+- **Approve** says yes. Hal builds it on its next run.
+- **Leave it** says no.
+
+**Tell Hal** sends a note aimed at one game or the whole studio. Hal reads your notes every run, ranks them above its
+own ideas, and replies in the director's note. A note stays until you clear it, with Clear on the page or
+`hal notes --clear`.
+
+The next run's planner and director also read your votes and comments.
+
+### History
+
+On the shelf (`npm run dev`), each game has a History button. It shows, night by night, what changed and why, with
+the pictures. Each change shows its status: kept, undone (with your reason), or reverted later by you. It also shows
+your own commits, scores over time, search and filter, and a permalink for each change. It is built from git
+(`docs/hal/history/` plus commit trailers), so it survives a wiped `.data/`.
+
+### Where the files live
 
 - `.data/hal/runs/<run id>/report.md`: the night's report (changes, your calls, replies to your notes, warnings).
   `report.json` beside it is the same data.
-- `.data/hal/latest.json` points at the newest report. The Run-now page shows it too.
-- `.data/hal/runs/<run id>/note.md`: the director's note. The per-game notes and before/after pictures are committed
-  under `docs/hal/history/<game>/<night>/`.
+- `.data/hal/latest.json` points at the newest report. The morning report page shows it too.
+- `.data/hal/runs/<run id>/note.md`: the director's note. The per-game notes, `scores.json` and before/after pictures
+  are committed under `docs/hal/history/<game>/<night>/`.
 - `.data/hal/logs/nightly.log` and `server.log`: the launchd jobs' output.
 
 ## Recovery
