@@ -69,6 +69,20 @@ describe('store', () => {
     });
   });
 
+  it('feedbackFor filters by run, newest last, and a vote comment round-trips', async () => {
+    const s = mk();
+    await s.addVote({ run: 'r1', item: 'a', vote: 'up', comment: 'love it' });
+    await s.addVote({ run: 'r2', item: 'b', vote: 'down' });
+    await s.addVote({ run: 'r1', item: 'c', vote: 'down' });
+    await s.addUndo({ run: 'r2', reason: 'nope' });
+    await s.addUndo({ run: 'r1', reason: 'meh' });
+    const f = await s.feedbackFor('r1');
+    expect(f.votes.map((v) => v.item)).toEqual(['a', 'c']);
+    expect(f.votes[0]!.comment).toBe('love it');
+    expect(f.undos.map((u) => u.reason)).toEqual(['meh']);
+    expect(await s.feedbackFor('zzz')).toEqual({ votes: [], undos: [] });
+  });
+
   it('spend: loadSpendToday is empty for a new day, save keeps one SpendDay per day', async () => {
     const s = mk();
     expect(await s.loadSpendToday()).toEqual({ day: '2026-11-11', calls: [] });
