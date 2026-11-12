@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkTripwires } from '@studio/core/hal';
 import {
   blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
-  linkNodeModules, pushHalMain, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
+  addFileToTree, linkNodeModules, pushHalMain, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
 } from './git.js';
 
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
@@ -412,6 +412,44 @@ describe('Hal worktrees (temp git repo)', () => {
       }
       expect(readFileSync(join(r, 'node_modules/vitest/vitest.mjs'), 'utf8')).toBe('real\n'); // the real ones untouched
       await removeWorktree(r, 'HAL-40');
+    });
+  });
+
+  describe('trust root and private files', () => {
+    it('trustRootDigest changes when a package.json, a .bin link or a tool entry changes, and only then', async () => {
+      const r = fresh();
+      put(r, 'node_modules/a/package.json', '{"name":"a"}\n');
+      put(r, 'node_modules/a/index.js', 'x\n');
+      put(r, 'node_modules/@s/b/package.json', '{"name":"@s/b"}\n');
+      put(r, 'node_modules/vitest/vitest.mjs', 'v\n');
+      mkdirSync(join(r, 'node_modules/.bin'), { recursive: true });
+      symlinkSync('../vitest/vitest.mjs', join(r, 'node_modules/.bin/vitest'));
+      const d0 = await trustRootDigest(r);
+      expect(await trustRootDigest(r)).toBe(d0);
+      const changes: Array<() => void> = [
+        () => put(r, 'node_modules/a/package.json', '{"name":"a","main":"evil.js"}\n'),
+        () => put(r, 'node_modules/@s/b/package.json', '{"name":"evil"}\n'),
+        () => put(r, 'node_modules/vitest/vitest.mjs', 'stub\n'),
+        () => { unlinkSync(join(r, 'node_modules/.bin/vitest')); symlinkSync('/bin/true', join(r, 'node_modules/.bin/vitest')); },
+        () => put(r, 'node_modules/new/package.json', '{}\n'),
+      ];
+      let prev = d0;
+      for (const [i, ch] of changes.entries()) { ch(); const d = await trustRootDigest(r); expect(d, `change ${i}`).not.toBe(prev); prev = d; }
+    });
+    it('addFileToTree hashes a private file straight into the tree and refuses a symlink', async () => {
+      const r = fresh();
+      await ensureMainWorktree(r);
+      const wt = await newCandidateWorktree(r, 'HAL-42');
+      const priv = join(r, '.data/hal/tmp/HAL-42');
+      put(priv, 'shot.jpg', 'JPEGBYTES');
+      const base = head(r, 'HEAD^{tree}');
+      const t = await addFileToTree(wt.dir, base, 'docs/x/shot.jpg', join(priv, 'shot.jpg'), { tmpRoot: priv });
+      expect(await changedPaths(wt.dir, base, t)).toEqual(['docs/x/shot.jpg']);
+      expect(await blobText(wt.dir, t, 'docs/x/shot.jpg')).toBe('JPEGBYTES');
+      expect(existsSync(join(wt.dir, 'docs/x/shot.jpg'))).toBe(false); // never written to the worktree
+      symlinkSync(join(priv, 'shot.jpg'), join(priv, 'link.jpg'));
+      await expect(addFileToTree(wt.dir, base, 'docs/x/l.jpg', join(priv, 'link.jpg'))).rejects.toThrow(/not a regular file/);
+      await removeWorktree(r, 'HAL-42');
     });
   });
 

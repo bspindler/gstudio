@@ -373,6 +373,41 @@ describe('runCandidate (temp git repo)', () => {
     expectDiscarded(await runCandidate(ticket(), c), old, /tampered between checks/);
   });
 
+  it('a symlink planted where the before shot goes is never followed: the tree check catches it, the target stays untouched', async () => {
+    const old = halHead();
+    const target = join(repo, 'planted-target.jpg');
+    const dest = join(repo, '.data/hal/wt/HAL-1/docs/hal/history/hyperline/2026-11-11/HAL-1-before.jpg');
+    let n = 0;
+    const c = ctx({ cmds: { shoot: (_d, _g, out) => result({ ok: true }, `${writeJpeg(out, fakeJpeg(390, 844))};${n++ === 1 ? `require('fs').symlinkSync(${J(target)}, ${J(dest)})` : ''}`) } });
+    expectDiscarded(await runCandidate(ticket(), c), old, /tampered between checks/);
+    expect(existsSync(target)).toBe(false);
+  });
+
+  it('a before shot that is a symlink (not a regular file in Hal\'s private dir) is refused', async () => {
+    const old = halHead();
+    const real = join(repo, 'real.jpg');
+    writeFileSync(real, fakeJpeg(390, 844));
+    let n = 0;
+    const c = ctx({ cmds: { shoot: (_d, _g, out) => (n++ === 0 ? result({ ok: true }, `require('fs').symlinkSync(${J(real)}, ${J(out)})`) : result({ ok: true }, writeJpeg(out, fakeJpeg(390, 844)))) } });
+    expectDiscarded(await runCandidate(ticket(), c), old, /not a regular file/);
+  });
+
+  it('a write through the worktree\'s node_modules into the trust root is caught: trust root modified, with a warning', async () => {
+    const old = halHead();
+    put(repo, 'node_modules/somepkg/package.json', '{"name":"somepkg"}\n');
+    put(repo, 'node_modules/vitest/vitest.mjs', '// real\n');
+    const viaImplementer = await runCandidate(ticket(), ctx({}, (cwd) => {
+      put(cwd, 'games/hyperline/game.js', 'export const speed = 6;\n');
+      writeFileSync(join(cwd, 'node_modules/vitest/vitest.mjs'), 'process.exit(0) // stub\n'); // follows the symlink
+    }));
+    expectDiscarded(viaImplementer, old, /^trust root modified$/);
+    expect(viaImplementer.warnings?.join(' ')).toMatch(/trust root modified: .*node_modules changed during HAL-1; reinstall/);
+    put(repo, 'node_modules/vitest/vitest.mjs', '// real\n');
+    // A check doing it (possible only unsandboxed, as here) is caught at the next guard.
+    const viaCheck = await runCandidate(ticket(), ctx({ cmds: { test: () => [node(`require('fs').writeFileSync('node_modules/somepkg/package.json', '{"name":"evil"}')`)] } }));
+    expectDiscarded(viaCheck, old, /^trust root modified$/);
+  });
+
   it('forged results are rejected: a second result line, or a line without this check\'s nonce', async () => {
     const old = halHead();
     const two = (_d: string, s: string) => node(`console.log('HAL-RESULT ' + process.env.HAL_CHECK_NONCE + ' ' + ${J(J(BEFORE.hyperline))}); console.log('HAL-RESULT ' + process.env.HAL_CHECK_NONCE + ' ' + ${J(J({ ...BEFORE.hyperline, fitness: 99 }))}); void ${J(s)}`);

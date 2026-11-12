@@ -1,5 +1,6 @@
 // Hal's git helpers. Everything goes through an injectable runner so tests (and later helpers) can share one seam.
 import { execFile, execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -368,6 +369,31 @@ export async function verifyNodeModules(dir: string, repo: string): Promise<void
   }
 }
 
+/**
+ * A digest of the trust root <repo>/node_modules: every installed package's package.json, the .bin links, and the entry
+ * files of the tools Hal runs checks with (vitest, tsc, tsx). Compared across a pass to catch writes through a
+ * worktree's node_modules symlinks.
+ */
+export async function trustRootDigest(repo: string): Promise<string> {
+  const nm = join(resolve(repo), 'node_modules');
+  const h = createHash('sha256');
+  const file = async (rel: string) => {
+    const buf = await readFile(join(nm, rel)).catch(() => null);
+    h.update(`${rel}\0${buf ? createHash('sha256').update(buf).digest('hex') : 'missing'}\n`);
+  };
+  let names: string[];
+  try { names = (await readdir(nm)).sort(); } catch { return 'no node_modules'; }
+  for (const name of names) {
+    if (name === '.bin') {
+      for (const b of (await readdir(join(nm, name))).sort()) h.update(`bin ${b} -> ${await readlink(join(nm, name, b)).catch(() => 'not a link')}\n`);
+    } else if (name.startsWith('@')) {
+      for (const pkg of (await readdir(join(nm, name)).catch(() => [] as string[])).sort()) await file(`${name}/${pkg}/package.json`);
+    } else if (!name.startsWith('.')) await file(`${name}/package.json`);
+  }
+  for (const f of ['vitest/vitest.mjs', 'typescript/bin/tsc', 'tsx/dist/cli.mjs']) await file(f);
+  return h.digest('hex');
+}
+
 export type MainWorktree = {
   dir: string;
   /** refs/hal/main's commit, which the worktree now has checked out (detached). */
@@ -630,6 +656,18 @@ export async function snapshotTree(dir: string, base: string, deps: TreeDeps & {
 export async function extendTree(dir: string, tree: string, paths: string[], deps: TreeDeps = {}): Promise<string> {
   const git = safeGit(deps.git ?? runGit);
   return writeTree(git, dir, await hashPaths(git, dir, paths), tree, deps.tmpRoot);
+}
+
+/**
+ * `tree` with `path` set to the bytes of `file`, a regular file outside the worktree (Hal's private dir), hashed straight
+ * into the object store: it never passes through the worktree disk, so nothing planted there (a symlink) is followed.
+ */
+export async function addFileToTree(dir: string, tree: string, path: string, file: string, deps: TreeDeps = {}): Promise<string> {
+  const git = safeGit(deps.git ?? runGit);
+  const st = await lstat(file);
+  if (!st.isFile()) throw new Error(`addFileToTree: not a regular file: ${file}`);
+  const sha = (await git(['hash-object', '-w', '--no-filters', '--stdin'], dir, { input: await readFile(file) })).trim();
+  return writeTree(git, dir, new Map([[path, { mode: '100644', sha }]]), tree, deps.tmpRoot);
 }
 
 /** Paths that differ between two tree-ish objects (no rename detection), sorted. */

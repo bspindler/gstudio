@@ -2,16 +2,21 @@
 // Hal runs it in a candidate worktree under sandbox-exec (scripts/hal/sandbox.ts), never in its own process: the
 // scorers, screens and controls execute the candidate's game code. scripts/hal/** is protected, so this file is main's.
 //   check-entry.ts score <scorer> | screens <game> | controls <game> | shoot <game> <out.jpg>
-// The result line is `HAL-RESULT <nonce> <json>`: the nonce comes in $HAL_CHECK_NONCE, which check-nonce.ts reads and
-// deletes before anything else is imported. Everything that can load game code is imported dynamically, after it.
-import { NONCE } from './check-nonce.js';
+// The result line is `HAL-RESULT <nonce> <json>`: the nonce comes in $HAL_CHECK_NONCE. check-nonce.ts is imported
+// first: it deletes the nonce from the env and captures JSON.stringify and stdout.write before anything else loads;
+// everything that can load game code is imported dynamically, after the channel has been taken.
+//
+// Residual (ruling R17, accepted): game code runs in this process when a scorer imports it, so in principle it could
+// forge a score through intrinsics (patching Array/Object prototypes the scorer relies on, or recovering the nonce
+// from the process's original exec environment). The score gate is a quality gate, not the safety boundary: the
+// tripwires (host-api flags Node host APIs and any import of scripts/ or Hal's own modules) and the sandbox are, and
+// Brian reviews every merge each morning.
+import { takeResultChannel } from './check-nonce.js';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-export const RESULT_PREFIX = 'HAL-RESULT ';
-const write = process.stdout.write.bind(process.stdout); // captured before game code loads
-const out = (v: unknown) => { write(`\n${RESULT_PREFIX}${NONCE} ${JSON.stringify(v)}\n`); };
+const out = takeResultChannel();
 
 async function main(op: string | undefined, a: string | undefined, b: string | undefined): Promise<void> {
   if (!a) throw new Error('usage: check-entry.ts <score|screens|controls|shoot> <name> [out]');

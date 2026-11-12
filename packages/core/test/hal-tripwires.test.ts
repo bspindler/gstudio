@@ -542,6 +542,21 @@ describe('host-api (R15: game code is browser code)', () => {
   ])('flags %s', (_name, line) => {
     expect(hits(`let a = 1;\n${line}\n`).length).toBeGreaterThan(0);
   });
+  it.each([
+    ['scripts/ static', "import { takeResultChannel } from '../../scripts/hal/check-nonce.js';"],
+    ['check-entry', "import '../../scripts/hal/check-entry.ts';"],
+    ['check-nonce without scripts/', "import * as n from './check-nonce.js';"],
+    ['dynamic scripts/', "const m = await import('../../scripts/hal/candidate.js');"],
+    ['core hal source', "import { compareScores } from '../../packages/core/src/hal/gate.js';"],
+    ['export from scripts/', "export * from '../../scripts/site/x.js';"],
+    ['template dynamic import', 'import(`../../scripts/hal/check-entry.ts`);'],
+  ])('flags an import of Hal\'s own modules: %s', (_name, line) => {
+    expect(hits(`${line}\n`).join(' ')).toMatch(/Hal module/);
+  });
+  it('does not flag game-local or SDK imports, or such paths in strings and comments', () => {
+    expect(hits("import { createStudio } from '../sdk/studio-sdk.js';\nimport { L } from './levels.js';\nimport s from './scripts.js';\n")).toEqual([]);
+    expect(hits("const note = 'see ../../scripts/hal/check-entry.ts'; // import '../../scripts/hal/x.js'\n")).toEqual([]);
+  });
   it('flags it in a game html file too', () => {
     expect(hits('<script type="module">\nprocess.exit(1);\n</script>\n', 'games/g/index.html').length).toBeGreaterThan(0);
   });

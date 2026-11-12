@@ -547,6 +547,8 @@ const HOST_CALLS: Array<[RegExp, string]> = [
   [/\bstdout\b/, 'stdout'],
 ];
 const NODE_MODULES = new Set(['fs', 'child_process', 'os', 'path', 'net', 'http', 'https', 'http2', 'worker_threads', 'dgram', 'dns', 'tls', 'cluster', 'vm', 'module', 'process', 'readline', 'v8', 'inspector']);
+// R17: game code may not reach Hal's own code (the check runner, its result channel, the scorers' source).
+const HAL_MODULE = /(?:^|\/)scripts\/|check-nonce|check-entry|(?:^|\/)packages\/core\/src\/hal(?:\/|$)/;
 const IMPORT_SPEC = [/\b(?:import|export)\b[^;]*?\bfrom\s*(['"])/g, /\bimport\s*\(\s*(['"`])/g, /\bimport\s*(['"])/g];
 
 /** The Node host APIs one line of game code reaches for (`masked` is the line through maskCode). */
@@ -559,12 +561,16 @@ function hostUses(raw: string, masked: string): string[] {
       const close = raw.indexOf(raw[q]!, q + 1);
       const spec = raw.slice(q + 1, close < 0 ? undefined : close);
       if (spec.startsWith('node:') || NODE_MODULES.has(spec.split('/')[0]!)) found.push(`import of ${spec}`);
+      else if (HAL_MODULE.test(spec)) found.push(`import of Hal module ${spec}`);
     }
   }
   return [...new Set(found)];
 }
 
-/** Added lines of game code (games/**, not prose) that use Node host APIs. Game code runs in the browser; a scorer imports it in Node. */
+/**
+ * Added lines of game code (games/**, not prose) that use Node host APIs, or import Hal's own modules (scripts/,
+ * check-nonce, check-entry, packages/core/src/hal). Game code runs in the browser; a scorer imports it in Node.
+ */
 export const hostApi: Rule = (diff) => {
   const out: Violation[] = [];
   for (const f of codeIn(diff, inGames)) {
