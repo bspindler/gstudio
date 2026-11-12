@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.3.1 (2026-11-12)
+- Sound now plays on iPhone even when the ring/silent switch is set to silent. Use the in-game sound setting to turn it off.
+
 ## 0.3.0 (2026-11-12)
 - Each level now opens looking down the citadel's longest open hall instead of into a wall corner.
 - Kiln Heart is a little less crowded: the tick crawler guarding the gear key has been scrapped, so you reach the kilnwarden with more fight left in you.
