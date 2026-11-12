@@ -24,3 +24,19 @@ Level 24 is still a wall. Easing it enough would make level 25 the wall instead,
 
 Changes:
 - HAL-014 tuning(tidepool-pals): Ease the Tidepool Pals levels that still wall players beyond levels 11–28: **merged** (0.4.2)
+
+## Run run-2026-11-12T15-54-46-170Z
+
+**Tidepool Pals:** cozy reef restoration with a gentle, kind curve.
+
+**Merged (0.5.0):**
+- Returning players get *Continue · Level N* on the map and in the pool card. Nothing new is stored.
+- Board eases on level 14 (lighter litter) and level 28 (the pal starts closer to open water). Win rates are now 65% and 50%. Fitness went from 85.1 to 88.8.
+
+**Left alone:** levels 11 and 19, the side-exit rescues, didn't respond to in-scope changes. Easing level 24 would only turn 25 into a wall. Those may need a mechanic look rather than more tuning.
+
+**Next:** the top-bar dead space you flagged.
+
+Changes:
+- HAL-017 feature(tidepool-pals): Tidepool Pals opens on the reef map with Continue at your next level: **merged** (0.5.0)
+- HAL-019 tuning(tidepool-pals): Ease the Tidepool Pals levels the scorer still finds walling: **merged** (0.5.0)

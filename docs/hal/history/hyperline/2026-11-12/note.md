@@ -21,3 +21,12 @@ Tonight added **SLOT GATES**, gates with a gap you thread mid-jump on the way up
 
 Changes:
 - HAL-009 feature(hyperline): Add a SLOT GATES sector built around one new obstacle interaction: **merged** (0.4.0)
+
+## Run run-2026-11-12T15-54-46-170Z
+
+**Hyperline:** neon, one-more-run Endless with ghosts and BEST distance.
+
+**Merged (0.4.0):** a free start-sector picker for sectors you've already reached, so you can practise SLOT GATES or HYPERCORE without replaying the run up to them. Practice runs never touch BEST, ghosts, missions or the Apex unlock, so the competitive core is intact. The score held at 100. This is in-band work under your N-002.
+
+Changes:
+- HAL-016 feature(hyperline): Hyperline: start an endless run from any sector you've already reached: **merged** (0.4.0)
