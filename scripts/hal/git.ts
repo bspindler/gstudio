@@ -1,5 +1,5 @@
 // Hal's git helpers. Everything goes through an injectable runner so tests (and later helpers) can share one seam.
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -8,13 +8,47 @@ import { parseTrailers, type Diff, type FileChange } from '@studio/core/hal';
 
 const exec = promisify(execFile);
 
-/** Runs `git <args>` in `cwd` and resolves to stdout (utf8); rejects on a non-zero exit. */
-export type GitRunner = (args: string[], cwd: string) => Promise<string>;
+export type GitOpts = { env?: NodeJS.ProcessEnv; input?: string | Buffer };
+/** Runs `git <args>` in `cwd` and resolves to stdout (utf8); rejects on a non-zero exit. `opts.env` replaces the env; `opts.input` is stdin. */
+export type GitRunner = (args: string[], cwd: string, opts?: GitOpts) => Promise<string>;
 
-export const runGit: GitRunner = async (args, cwd) => {
-  const { stdout } = await exec('git', args, { cwd, encoding: 'utf8', maxBuffer: 512 * 1024 * 1024 });
-  return stdout;
-};
+/** Raw bytes of `git <args>` stdout. Rejects on a non-zero exit with "Command failed: git ..." and the stderr. */
+export function gitBytes(args: string[], cwd: string, opts: GitOpts = {}): Promise<Buffer> {
+  return new Promise((resolveP, reject) => {
+    const child = spawn('git', args, { cwd, env: opts.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const out: Buffer[] = [], err: Buffer[] = [];
+    child.stdout.on('data', (d: Buffer) => out.push(d));
+    child.stderr.on('data', (d: Buffer) => err.push(d));
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolveP(Buffer.concat(out));
+      else reject(new Error(`Command failed: git ${args.join(' ')}\n${Buffer.concat(err).toString('utf8')}`));
+    });
+    child.stdin.on('error', () => { /* EPIPE if git exits early */ });
+    child.stdin.end(opts.input ?? '');
+  });
+}
+
+export const runGit: GitRunner = async (args, cwd, opts) => (await gitBytes(args, cwd, opts)).toString('utf8');
+
+/** Config for every git call Hal makes in a worktree: no hooks, no fsmonitor daemon. */
+export const SAFE_GIT = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false'];
+
+/** The env Hal's own git calls get: no Claude credentials, no Hal token, no inherited GIT_* overrides. */
+export function gitEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(base)) {
+    if (/^GIT_/.test(k) || /^(?:ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|CLAUDE_CODE_OAUTH_TOKEN|HAL_TOKEN)$/.test(k)) continue;
+    env[k] = v;
+  }
+  return env;
+}
+
+/** Wraps a runner so every call carries SAFE_GIT and the scrubbed env (plus any `opts.env` additions, e.g. GIT_INDEX_FILE). */
+export function safeGit(git: GitRunner = runGit): GitRunner {
+  return (args, cwd, opts) => git([...SAFE_GIT, ...args], cwd, { ...opts, env: { ...gitEnv(), ...(opts?.env ?? {}) } });
+}
+const safeBytes = (args: string[], cwd: string, opts: GitOpts = {}) => gitBytes([...SAFE_GIT, ...args], cwd, { ...opts, env: { ...gitEnv(), ...(opts.env ?? {}) } });
 
 // ---- level counts --------------------------------------------------------
 
@@ -72,8 +106,13 @@ function levelCounts(read: (file: string) => string | null): Record<string, numb
 // ---- test counts ---------------------------------------------------------
 
 /** Counts tests with `npx vitest list --json` in `dir` (the repo's default workspace). Slow, so collectDiff takes it as a dependency. */
-export async function vitestCount(dir: string): Promise<{ total: number; byFile: Record<string, number> }> {
-  const { stdout } = await exec('npx', ['vitest', 'list', '--json'], { cwd: dir, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, CI: '1' } });
+/** Runs `vitest list --json` in `dir` and resolves to its stdout. Hal passes a sandboxed one for candidates (the listing runs their test files). */
+export type ListTests = (dir: string) => Promise<string>;
+export const npxVitestList: ListTests = async (dir) =>
+  (await exec('npx', ['vitest', 'list', '--json'], { cwd: dir, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, env: { ...process.env, CI: '1' } })).stdout;
+
+export async function vitestCount(dir: string, list: ListTests = npxVitestList): Promise<{ total: number; byFile: Record<string, number> }> {
+  const stdout = await list(dir);
   const start = stdout.indexOf('[');
   const parsed: unknown = JSON.parse(stdout.slice(start));
   if (!Array.isArray(parsed)) throw new Error('vitest list --json did not return an array');
@@ -87,15 +126,15 @@ export async function vitestCount(dir: string): Promise<{ total: number; byFile:
 }
 
 /** Default test counter: the candidate worktree as it is, and the base exported with `git archive` into a temp dir that borrows the worktree's node_modules. */
-export async function vitestCounts(worktree: string, base: string): Promise<TestCounts> {
+export async function vitestCounts(worktree: string, base: string, list: ListTests = npxVitestList): Promise<TestCounts> {
   const tmp = await mkdtemp(join(tmpdir(), 'hal-base-'));
   try {
     // No shell pipe: a failing `git archive` throws instead of leaving an empty tree to count as zero tests.
     const tar = execFileSync('git', ['archive', '--format=tar', base], { cwd: worktree, maxBuffer: 1024 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
     execFileSync('tar', ['-x', '-C', tmp], { input: tar, stdio: ['pipe', 'pipe', 'pipe'] });
     await symlink(join(worktree, 'node_modules'), join(tmp, 'node_modules'), 'dir');
-    const before = await vitestCount(tmp);
-    const after = await vitestCount(worktree);
+    const before = await vitestCount(tmp, list);
+    const after = await vitestCount(worktree, list);
     return { before: before.total, after: after.total, beforeByFile: before.byFile, afterByFile: after.byFile };
   } finally {
     await rm(tmp, { recursive: true, force: true });
@@ -116,6 +155,13 @@ const extOf = (p: string) => (p.includes('.') ? p.slice(p.lastIndexOf('.') + 1).
 
 const STATUS: Record<string, FileChange['status']> = { A: 'A', M: 'M', D: 'D', R: 'R', C: 'A', T: 'M' };
 const looksBinary = (buf: Buffer) => buf.subarray(0, 8000).includes(0);
+
+/** collectDiff's rules for a file's bytes: text formats are always decoded (NUL or UTF-16 BOM flags them suspect), others are binary if git or a NUL says so. */
+function decode(buf: Buffer, isText: boolean, gitBinary: boolean): { after: string | null; binary: boolean; suspect: boolean } {
+  const binary = gitBinary || (!isText && looksBinary(buf));
+  const suspect = isText && (buf.includes(0) || (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))));
+  return { after: binary ? null : buf.toString('utf8'), binary, suspect };
+}
 
 /** Parses `git diff --name-status -z -M` output into [status, path, oldPath?] rows. */
 function parseNameStatus(out: string): { status: FileChange['status']; path: string; oldPath?: string }[] {
@@ -178,10 +224,8 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
       const st = await lstat(abs);
       if (st.isSymbolicLink()) { symlinked = true; after = await readlink(abs); }
       else if (st.isFile()) {
-        const buf = await readFile(abs);
-        if (!isText && looksBinary(buf)) binary = true;
-        if (isText && (buf.includes(0) || (buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff))))) suspect = true;
-        after = binary ? null : buf.toString('utf8');
+        const d = decode(await readFile(abs), isText, binary);
+        binary = d.binary; suspect = d.suspect; after = d.after;
       } else throw new Error(`collectDiff: not a regular file or symlink: ${r.path}`);
     }
     let before: string | null = null;
@@ -219,14 +263,13 @@ export async function collectDiff(worktree: string, base: string, deps: CollectD
 
 // ---- worktrees and merges ------------------------------------------------
 //
-// Layout: Hal works only under <repo>/.data/hal/wt/ (gitignored). `main/` is Hal's own worktree of main, `<pass>/` a
-// candidate on branch `hal/<pass>`. Brian's checkout (the repo root, or any other worktree) is never written to.
-//
-// Hal's main worktree is always DETACHED at main's commit: git refuses to check out one branch in two worktrees, and
-// Brian's checkout may well be on main. So refs/heads/main moves in exactly one way: `update-ref` with a compare-and-swap
-// on the old value, after a squash commit whose tree has been verified to be the checked candidate tree. A crash at any
-// point before that leaves main where it was; ensureMainWorktree resets the leftovers on the next run.
+// Hal never writes Brian's branches (ruling R12). Hal's line of history is refs/hal/main; its worktree at
+// <repo>/.data/hal/wt/main is detached at that ref, and candidates (<repo>/.data/hal/wt/<pass>, branch hal/<pass>) start
+// from it. refs/hal/main moves only by compare-and-swap `update-ref`, to a commit whose tree is the verified candidate
+// tree; pushHalMain publishes it to origin's main fast-forward only. refs/heads/main, Brian's checkout, its HEAD, index
+// and files are never written. A crash at any point leaves refs/hal/main at its old commit.
 
+export const HAL_MAIN = 'refs/hal/main';
 export type GitDeps = { git?: GitRunner };
 
 const PASS_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -238,19 +281,14 @@ export const mainWorktreeDir = (repo: string) => join(worktreesDir(repo), 'main'
 export const candidateDir = (repo: string, passId: string) => { checkPass(passId); return join(worktreesDir(repo), passId); };
 export const candidateBranch = (passId: string) => { checkPass(passId); return `hal/${passId}`; };
 
-const MAIN = 'refs/heads/main';
 const rev = async (git: GitRunner, ref: string, cwd: string) => (await git(['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], cwd)).trim();
+const revOrNull = async (git: GitRunner, ref: string, cwd: string) => { try { return await rev(git, ref, cwd); } catch { return null; } };
 const ok = async (p: Promise<unknown>) => { try { await p; return true; } catch { return false; } };
 const errText = (e: unknown) => String((e as Error)?.message ?? e).trim();
 
-/** Worktree paths (real paths) with each one's checked-out branch, from `git worktree list --porcelain`. */
-async function worktreeList(git: GitRunner, repo: string): Promise<{ path: string; branch: string | null }[]> {
+async function worktreePaths(git: GitRunner, repo: string): Promise<string[]> {
   const out = await git(['worktree', 'list', '--porcelain'], repo);
-  return out.split(/\n\n+/).filter((b) => b.trim()).map((b) => {
-    const path = /^worktree (.*)$/m.exec(b)?.[1] ?? '';
-    const branch = /^branch (.*)$/m.exec(b)?.[1] ?? null;
-    return { path, branch };
-  });
+  return [...out.matchAll(/^worktree (.*)$/gm)].map((m) => m[1]!);
 }
 const realOr = async (p: string) => { try { return await realpath(p); } catch { return resolve(p); } };
 
@@ -286,68 +324,69 @@ export async function linkNodeModules(dir: string, repo: string): Promise<void> 
 
 export type MainWorktree = {
   dir: string;
-  /** main's commit, which the worktree now has checked out (detached). */
+  /** refs/hal/main's commit, which the worktree now has checked out (detached). */
   head: string;
-  /** Whether `git fetch origin main` worked. A failed fetch is not an error. */
+  /** Whether `git fetch origin main` worked. A failed fetch (or no origin) is not an error. */
   fetched: boolean;
-  /** Whether main was fast-forwarded to origin/main. */
+  /** Whether refs/hal/main was fast-forwarded to origin/main. */
   fastForwarded: boolean;
-  /** Other worktrees (e.g. Brian's checkout) that have main checked out. Their files are never touched, but their HEAD moves with main. */
-  mainCheckedOutAt: string[];
+  /** refs/hal/main and origin/main have both moved on (Hal has unpushed commits and origin moved): left as is; skip the push and report it. */
+  diverged: boolean;
 };
 
 /**
- * Creates (or repairs) Hal's worktree of main at <repo>/.data/hal/wt/main, detached at main, with every leftover
- * (staged, modified, untracked) discarded. Fast-forwards main from origin/main first when a fetch works; never rewinds
- * or forks main. Brian's checkout is never written to.
+ * Creates (or repairs) Hal's worktree at <repo>/.data/hal/wt/main, detached at refs/hal/main, with every leftover
+ * (staged, modified, untracked) discarded. refs/hal/main is created from origin/main after a successful fetch, else
+ * from local main; an existing one is fast-forwarded to origin/main when it is an ancestor of it, and never rewound.
  */
 export async function ensureMainWorktree(repo: string, deps: GitDeps = {}): Promise<MainWorktree> {
-  const git = deps.git ?? runGit;
+  const git = safeGit(deps.git ?? runGit);
   const root = resolve(repo);
   const dir = mainWorktreeDir(root);
   await git(['worktree', 'prune'], root);
 
-  let fetched = false, fastForwarded = false;
+  let fetched = false, fastForwarded = false, diverged = false;
   if (await ok(git(['remote', 'get-url', 'origin'], root))) {
     fetched = await ok(git(['fetch', '--quiet', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main'], root));
-    if (fetched) {
-      const local = await rev(git, MAIN, root);
-      const remote = await rev(git, 'refs/remotes/origin/main', root);
-      if (local !== remote && (await ok(git(['merge-base', '--is-ancestor', local, remote], root)))) {
-        await git(['update-ref', '-m', 'hal: fast-forward main from origin/main', MAIN, remote, local], root);
-        fastForwarded = true;
-      }
-    }
+  }
+  const remote = fetched ? await rev(git, 'refs/remotes/origin/main', root) : null;
+  const hal = await revOrNull(git, HAL_MAIN, root);
+  if (hal === null) {
+    const from = remote ?? (await rev(git, 'refs/heads/main', root));
+    await git(['update-ref', '-m', 'hal: create refs/hal/main', HAL_MAIN, from, ''], root);
+  } else if (remote !== null && remote !== hal) {
+    if (await ok(git(['merge-base', '--is-ancestor', hal, remote], root))) {
+      await git(['update-ref', '-m', 'hal: fast-forward from origin/main', HAL_MAIN, remote, hal], root);
+      fastForwarded = true;
+    } else if (!(await ok(git(['merge-base', '--is-ancestor', remote, hal], root)))) diverged = true;
   }
 
   const real = await realOr(dir);
-  const list = await worktreeList(git, root);
-  if (!list.some((w) => w.path === real || w.path === dir)) {
+  if (!(await worktreePaths(git, root)).some((w) => w === real || w === dir)) {
     await rm(dir, { recursive: true, force: true }); // a stray directory that is not a registered worktree
     await mkdir(dirname(dir), { recursive: true });
-    await git(['worktree', 'add', '--detach', '--force', dir, MAIN], root);
+    await git(['worktree', 'add', '--detach', '--force', dir, HAL_MAIN], root);
   }
   await git(['reset', '--hard', '--quiet'], dir);
   await git(['clean', '-fdq'], dir);
-  await git(['checkout', '--detach', '--force', '--quiet', MAIN], dir);
+  await git(['checkout', '--detach', '--force', '--quiet', HAL_MAIN], dir);
   const head = await rev(git, 'HEAD', dir);
-  const main = await rev(git, MAIN, root);
-  if (head !== main) throw new Error(`main worktree is at ${head}, not main (${main})`);
+  const want = await rev(git, HAL_MAIN, root);
+  if (head !== want) throw new Error(`main worktree is at ${head}, not ${HAL_MAIN} (${want})`);
   await linkNodeModules(dir, root);
-  const mainCheckedOutAt = (await worktreeList(git, root)).filter((w) => w.branch === MAIN).map((w) => w.path);
-  return { dir, head, fetched, fastForwarded, mainCheckedOutAt };
+  return { dir, head, fetched, fastForwarded, diverged };
 }
 
 export type CandidateWorktree = { dir: string; branch: string; base: string };
 
-/** Creates branch hal/<pass> at main's commit, checked out at <repo>/.data/hal/wt/<pass>. Clears a stale one of the same pass first. */
+/** Creates branch hal/<pass> at refs/hal/main, checked out at <repo>/.data/hal/wt/<pass>. Clears a stale one of the same pass first. */
 export async function newCandidateWorktree(repo: string, passId: string, deps: GitDeps = {}): Promise<CandidateWorktree> {
-  const git = deps.git ?? runGit;
+  const git = safeGit(deps.git ?? runGit);
   const root = resolve(repo);
   const dir = candidateDir(root, passId);
   const branch = candidateBranch(passId);
   await removeWorktree(root, passId, deps);
-  const base = await rev(git, MAIN, root);
+  const base = await rev(git, HAL_MAIN, root);
   await mkdir(dirname(dir), { recursive: true });
   await git(['worktree', 'add', '--quiet', '-b', branch, dir, base], root);
   await linkNodeModules(dir, root);
@@ -356,7 +395,7 @@ export async function newCandidateWorktree(repo: string, passId: string, deps: G
 
 /** Removes the candidate worktree and deletes its branch. Never throws: it runs in `finally`. */
 export async function removeWorktree(repo: string, passId: string, deps: GitDeps = {}): Promise<void> {
-  const git = deps.git ?? runGit;
+  const git = safeGit(deps.git ?? runGit);
   const root = resolve(repo);
   let dir: string, branch: string;
   try { dir = candidateDir(root, passId); branch = candidateBranch(passId); } catch { return; }
@@ -366,50 +405,73 @@ export async function removeWorktree(repo: string, passId: string, deps: GitDeps
   await ok(git(['branch', '-D', '--quiet', branch], root));
 }
 
+/** Makes the verified candidate commit: exactly `tree` on top of `base`. Runs no hooks. */
+export async function commitTree(repo: string, tree: string, parent: string, message: string, deps: GitDeps = {}): Promise<string> {
+  const git = safeGit(deps.git ?? runGit);
+  return (await git(['commit-tree', '--no-gpg-sign', tree, '-p', parent, '-F', '-'], resolve(repo), { input: message.endsWith('\n') ? message : `${message}\n` })).trim();
+}
+
 export type SquashResult = { ok: true; commit: string } | { ok: false; error: string };
+/** The commit and tree that passed every check (from runCandidate). */
+export type Verified = { commit: string; tree: string };
 
 /**
- * Squash-merges hal/<pass> into main as one commit with `message`, in Hal's main worktree (ensureMainWorktree first).
- * main only moves if the new commit's parent is the recorded pre-merge HEAD and its tree is exactly the candidate's tree,
- * and then only by a compare-and-swap `update-ref`. On any failure the main worktree is reset to the recorded pre-merge
- * HEAD (not ORIG_HEAD) and cleaned, and `{ ok: false }` is returned; main itself is never left moved or half-merged.
+ * Squashes the verified candidate onto refs/hal/main as one commit with `message`: `commit-tree` of exactly
+ * `verified.tree` with the recorded pre-merge HEAD as its only parent (no merge machinery, no hooks). Refuses unless
+ * `verified.commit` has that tree and sits directly on the pre-merge HEAD (main moved since the candidate branched),
+ * checks the new commit's tree, then moves refs/hal/main by CAS from the recorded HEAD. Branch refs are never read, so
+ * moving hal/<pass> after verification changes nothing. Then the main worktree is moved to the new commit. On any
+ * failure, refs/hal/main and the main worktree stay at the pre-merge HEAD and `{ ok: false }` is returned.
  */
-export async function squashMerge(repo: string, passId: string, message: string, deps: GitDeps = {}): Promise<SquashResult> {
-  const git = deps.git ?? runGit;
+export async function squashMerge(repo: string, passId: string, message: string, verified: Verified, deps: GitDeps = {}): Promise<SquashResult> {
+  const git = safeGit(deps.git ?? runGit);
   const root = resolve(repo);
   const dir = mainWorktreeDir(root);
   let pre: string;
   try {
-    const branch = candidateBranch(passId);
+    checkPass(passId);
     pre = await rev(git, 'HEAD', dir);
-    const main = await rev(git, MAIN, root);
-    if (pre !== main) return { ok: false, error: `main worktree is at ${pre}, not main (${main}); run ensureMainWorktree first` };
+    const hal = await rev(git, HAL_MAIN, root);
+    if (pre !== hal) return { ok: false, error: `main worktree is at ${pre}, not ${HAL_MAIN} (${hal}); run ensureMainWorktree first` };
     if ((await git(['status', '--porcelain', '--untracked-files=all'], dir)).trim() !== '') return { ok: false, error: 'main worktree is not clean' };
-    const candTree = (await git(['rev-parse', `refs/heads/${branch}^{tree}`], root)).trim();
-    try {
-      await git(['merge', '--squash', '--quiet', `refs/heads/${branch}`], dir);
-      await git(['commit', '--quiet', '--cleanup=whitespace', '-m', message], dir);
-      const commit = await rev(git, 'HEAD', dir);
-      if ((await rev(git, 'HEAD^', dir)) !== pre) throw new Error('squash commit does not sit on the pre-merge HEAD');
-      const tree = (await git(['rev-parse', 'HEAD^{tree}'], dir)).trim();
-      if (tree !== candTree) throw new Error(`merged tree ${tree} is not the checked candidate tree ${candTree} (main moved since the candidate branched)`);
-      await git(['update-ref', '-m', `hal: squash ${passId}`, MAIN, commit, pre], root);
-      return { ok: true, commit };
-    } catch (e) {
-      const error = errText(e);
-      await ok(git(['reset', '--hard', '--quiet', pre], dir));
-      await ok(git(['clean', '-fdq'], dir));
-      return { ok: false, error };
-    }
+    const vTree = (await git(['rev-parse', `${verified.commit}^{tree}`], root)).trim();
+    if (vTree !== verified.tree) return { ok: false, error: `verified commit's tree ${vTree} is not the verified tree ${verified.tree}` };
+    const parents = (await git(['rev-list', '--parents', '-n', '1', verified.commit], root)).trim().split(' ').slice(1);
+    if (parents.length !== 1 || parents[0] !== pre) return { ok: false, error: `the candidate does not sit on ${HAL_MAIN} (${pre}); main moved since it branched` };
+  } catch (e) {
+    return { ok: false, error: errText(e) };
+  }
+  try {
+    const commit = await commitTree(root, verified.tree, pre, message, deps);
+    if ((await git(['rev-parse', `${commit}^{tree}`], root)).trim() !== verified.tree) throw new Error('squash commit tree is not the verified tree');
+    await git(['update-ref', '-m', `hal: squash ${passId}`, HAL_MAIN, commit, pre], root);
+    // refs/hal/main has moved to a verified commit; a failure below only leaves Hal's worktree behind (ensureMainWorktree repairs it).
+    await ok(git(['checkout', '--detach', '--force', '--quiet', commit], dir));
+    return { ok: true, commit };
+  } catch (e) {
+    const error = errText(e);
+    await ok(git(['reset', '--hard', '--quiet', pre], dir));
+    await ok(git(['clean', '-fdq'], dir));
+    return { ok: false, error };
+  }
+}
+
+export type PushResult = { ok: true } | { ok: false; error: string };
+/** Publishes refs/hal/main as origin's main, fast-forward only (no force). A rejection is `{ ok: false }`. */
+export async function pushHalMain(repo: string, deps: GitDeps = {}): Promise<PushResult> {
+  const git = deps.git ?? runGit; // Brian's own credentials and env: no scrubbing here
+  try {
+    await git(['push', '--quiet', '--porcelain', 'origin', `${HAL_MAIN}:refs/heads/main`], resolve(repo));
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: errText(e) };
   }
 }
 
-/** The commit on main that merged `passId` (by its Hal-Pass trailer; undo commits are skipped), or null. Task 7 does the undo. */
+/** The commit on refs/hal/main that merged `passId` (by its Hal-Pass trailer; undo commits are skipped), or null. Task 7 does the undo. */
 export async function revertPass(repo: string, passId: string, deps: GitDeps = {}): Promise<string | null> {
-  const git = deps.git ?? runGit;
-  const out = await git(['log', '--format=%H%x00%B%x1e', MAIN], resolve(repo));
+  const git = safeGit(deps.git ?? runGit);
+  const out = await git(['log', '--format=%H%x00%B%x1e', HAL_MAIN], resolve(repo));
   for (const rec of out.split('\x1e')) {
     const i = rec.indexOf('\0');
     if (i < 0) continue;
@@ -417,4 +479,165 @@ export async function revertPass(repo: string, passId: string, deps: GitDeps = {
     if (t && t.pass === passId && t.undo === undefined) return rec.slice(0, i).trim();
   }
   return null;
+}
+
+// ---- candidate trees ------------------------------------------------------
+//
+// Hal never trusts a worktree's index (assume-unchanged, skip-worktree, fsmonitor) or its filters (clean/smudge, eol):
+// the candidate is hashed from the bytes on disk into a private index with `hash-object --no-filters`, and the tripwires,
+// the release edits and the commit all work on that tree object.
+
+export type TreeDeps = { git?: GitRunner };
+type TreeEntry = { mode: string; sha: string };
+
+/** `ls-tree -r` of a tree-ish as path -> {mode, sha}. */
+async function lsTree(git: GitRunner, treeish: string, cwd: string): Promise<Map<string, TreeEntry>> {
+  const out = await git(['ls-tree', '-r', '-z', '--full-tree', treeish], cwd);
+  const m = new Map<string, TreeEntry>();
+  for (const rec of out.split('\0')) {
+    if (!rec) continue;
+    const tab = rec.indexOf('\t');
+    const [mode, , sha] = rec.slice(0, tab).split(' ');
+    m.set(rec.slice(tab + 1), { mode: mode!, sha: sha! });
+  }
+  return m;
+}
+
+/** Walks `dir` (not following symlinks), skipping the top-level .git and node_modules. Repo-relative posix paths of every non-directory. */
+async function walk(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  const go = async (rel: string) => {
+    for (const ent of await readdir(join(dir, rel), { withFileTypes: true })) {
+      const p = rel ? `${rel}/${ent.name}` : ent.name;
+      if (!rel && (ent.name === '.git' || ent.name === 'node_modules')) continue;
+      if (ent.isDirectory()) await go(p);
+      else out.push(p);
+    }
+  };
+  await go('');
+  return out;
+}
+
+/** Hashes the given worktree paths from disk (no filters) into entries; symlinks become mode 120000 blobs of their target. */
+async function hashPaths(git: GitRunner, dir: string, paths: string[]): Promise<Map<string, TreeEntry>> {
+  const out = new Map<string, TreeEntry>();
+  const files: { p: string; mode: string }[] = [];
+  for (const p of paths) {
+    if (/[\n\r\0]/.test(p)) throw new Error(`candidate path has a control character: ${JSON.stringify(p)}`);
+    const st = await lstat(join(dir, p));
+    if (st.isSymbolicLink()) {
+      const sha = (await git(['hash-object', '-w', '--no-filters', '--stdin'], dir, { input: await readlink(join(dir, p)) })).trim();
+      out.set(p, { mode: '120000', sha });
+    } else if (st.isFile()) files.push({ p, mode: st.mode & 0o100 ? '100755' : '100644' });
+    else throw new Error(`candidate path is not a file or symlink: ${p}`);
+  }
+  if (files.length) {
+    const shas = (await git(['hash-object', '-w', '--no-filters', '--stdin-paths'], dir, { input: files.map((f) => f.p).join('\n') + '\n' })).trim().split('\n');
+    if (shas.length !== files.length) throw new Error('hash-object returned the wrong number of hashes');
+    files.forEach((f, i) => out.set(f.p, { mode: f.mode, sha: shas[i]! }));
+  }
+  return out;
+}
+
+/** Writes `entries` into a fresh private index (optionally starting from `fromTree`) and returns the tree. */
+async function writeTree(git: GitRunner, dir: string, entries: Map<string, TreeEntry>, fromTree?: string): Promise<string> {
+  const tmp = await mkdtemp(join(tmpdir(), 'hal-index-'));
+  const env = { GIT_INDEX_FILE: join(tmp, 'index') };
+  try {
+    if (fromTree) await git(['read-tree', fromTree], dir, { env });
+    else await git(['read-tree', '--empty'], dir, { env });
+    const info = [...entries].map(([p, e]) => `${e.mode} ${e.sha}\t${p}\0`).join('');
+    if (info) await git(['update-index', '-z', '--index-info'], dir, { env, input: info });
+    return (await git(['write-tree'], dir, { env })).trim();
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The candidate tree, from the bytes on disk: every path tracked at `base` that still exists, plus every untracked path
+ * that the ignore rules (.gitignore, info/exclude, core.excludesFile) do not exclude. With `prune`, every other file in
+ * the worktree (ignored ones; not .git or node_modules) is deleted, so the disk holds exactly the tree the checks judge.
+ */
+export async function snapshotTree(dir: string, base: string, deps: TreeDeps & { prune?: boolean } = {}): Promise<string> {
+  const git = safeGit(deps.git ?? runGit);
+  if (deps.prune && !resolve(dir).includes(`${sep}.data${sep}hal${sep}wt${sep}`)) throw new Error(`snapshotTree: refusing to prune outside a Hal worktree: ${dir}`);
+  const tracked = await lsTree(git, base, dir);
+  const tmp = await mkdtemp(join(tmpdir(), 'hal-index-'));
+  let others: Set<string>;
+  try {
+    const env = { GIT_INDEX_FILE: join(tmp, 'index') };
+    await git(['read-tree', base], dir, { env });
+    others = new Set((await git(['ls-files', '--others', '--exclude-standard', '-z'], dir, { env })).split('\0').filter(Boolean));
+  } finally { await rm(tmp, { recursive: true, force: true }); }
+  const keep: string[] = [];
+  for (const p of await walk(dir)) {
+    if (tracked.has(p) || others.has(p)) keep.push(p);
+    else if (deps.prune) await rm(join(dir, p), { force: true });
+  }
+  return writeTree(git, dir, await hashPaths(git, dir, keep));
+}
+
+/** `tree` with `paths` re-hashed from disk (no filters). Hal's own edits (release files, history images) go in this way. */
+export async function extendTree(dir: string, tree: string, paths: string[], deps: TreeDeps = {}): Promise<string> {
+  const git = safeGit(deps.git ?? runGit);
+  return writeTree(git, dir, await hashPaths(git, dir, paths), tree);
+}
+
+/** Paths that differ between two tree-ish objects (no rename detection), sorted. */
+export async function changedPaths(dir: string, a: string, b: string, deps: TreeDeps = {}): Promise<string[]> {
+  const git = safeGit(deps.git ?? runGit);
+  return (await git(['diff-tree', '-r', '-z', '--name-only', '--no-renames', a, b], dir)).split('\0').filter(Boolean).sort();
+}
+
+/** A blob's text at `treeish:path`, from the object store. */
+export async function blobText(dir: string, treeish: string, path: string, deps: TreeDeps = {}): Promise<string> {
+  return safeGit(deps.git ?? runGit)(['cat-file', 'blob', `${treeish}:${path}`], dir);
+}
+
+/**
+ * collectDiff over git objects: the Diff of `tree` against `base`, with contents from `git cat-file` (never the disk or
+ * the index). Test counts come from `deps.countTests` run in `dir`, which must hold exactly `tree` (snapshotTree prune).
+ * Fails closed like collectDiff: any unreadable object throws.
+ */
+export async function collectTreeDiff(dir: string, base: string, tree: string, deps: CollectDeps = {}): Promise<Diff> {
+  const git = safeGit(deps.git ?? runGit);
+  const root = resolve(dir);
+  const [nameStatus, numstat] = await Promise.all([
+    git(['diff-tree', '-r', '-z', '-M', '--name-status', '--no-ext-diff', '--no-textconv', base, tree], root),
+    git(['diff-tree', '-r', '-z', '-M', '--numstat', '--no-ext-diff', '--no-textconv', base, tree], root),
+  ]);
+  const rows = parseNameStatus(nameStatus);
+  const binaryPaths = parseBinary(numstat);
+  const after = await lsTree(git, tree, root);
+  const blob = (sha: string) => safeBytes(['cat-file', 'blob', sha], root);
+  const files: FileChange[] = [];
+  for (const r of rows) {
+    if (r.path.split('/').includes('..') || r.path.startsWith('/')) throw new Error(`collectTreeDiff: bad path ${r.path}`);
+    const isText = TEXT_EXT.has(extOf(r.path));
+    let a: string | null = null, binary = !isText && binaryPaths.has(r.path), suspect = false, symlinked = false;
+    if (r.status !== 'D') {
+      const e = after.get(r.path);
+      if (!e) throw new Error(`collectTreeDiff: ${r.path} missing from the tree`);
+      if (e.mode === '120000') { symlinked = true; binary = false; a = (await blob(e.sha)).toString('utf8'); }
+      else if (e.mode === '100644' || e.mode === '100755') { const d = decode(await blob(e.sha), isText, binary); a = d.after; binary = d.binary; suspect = d.suspect; }
+      else throw new Error(`collectTreeDiff: not a regular file or symlink: ${r.path} (mode ${e.mode})`);
+    }
+    let before: string | null = null;
+    if (r.status !== 'A' && !binary) before = await git(['cat-file', 'blob', `${base}:${r.oldPath ?? r.path}`], root);
+    files.push({ path: r.path, status: r.status, before, after: a, binary, ...(r.oldPath !== undefined ? { oldPath: r.oldPath } : {}), ...(symlinked ? { symlink: true } : {}), ...(suspect ? { suspectEncoding: true } : {}) });
+  }
+  const baseTree = await lsTree(git, base, root);
+  const text = async (m: Map<string, TreeEntry>, f: string) => { const e = m.get(f); return e && e.mode !== '120000' ? (await blob(e.sha)).toString('utf8') : null; };
+  const beforeTexts = new Map<string, string | null>(), afterTexts = new Map<string, string | null>();
+  for (const s of LEVEL_SOURCES) { beforeTexts.set(s.file, await text(baseTree, s.file)); afterTexts.set(s.file, await text(after, s.file)); }
+  const tests = await (deps.countTests ?? vitestCounts)(root, base);
+  return {
+    files,
+    testCountBefore: tests.before,
+    testCountAfter: tests.after,
+    ...(tests.beforeByFile && tests.afterByFile ? { testCountsByFile: { before: tests.beforeByFile, after: tests.afterByFile } } : {}),
+    levelCounts: { before: levelCounts((f) => beforeTexts.get(f) ?? null), after: levelCounts((f) => afterTexts.get(f) ?? null) },
+    repoFiles: [...after.keys()],
+  };
 }

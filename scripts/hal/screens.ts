@@ -103,7 +103,8 @@ const FLOWS: Record<string, FlowFn> = {
 };
 
 /** Runs every game's flow in a fresh phone-size page; returns the shots and console errors per game. */
-export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: string } = {}): Promise<ScreensResult[]> {
+/** `games` limits the run to those games (default: all). */
+export async function runScreens({ outDir = DEFAULT_SCREENS_DIR, games }: { outDir?: string; games?: string[] } = {}): Promise<ScreensResult[]> {
   // The per-game folders under outDir are deleted first, so never aim this at the repo root or the games' own sources.
   const inGames = relative(join(repo, 'games'), resolve(outDir));
   if (resolve(outDir) === resolve(repo) || (inGames !== '..' && !inGames.startsWith('..' + sep) && !isAbsolute(inGames)))
@@ -113,7 +114,7 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: st
     server = await serveGames();
     browser = await launchBrowser();
     const results: ScreensResult[] = [];
-    for (const [game, flowFn] of Object.entries(FLOWS)) {
+    for (const [game, flowFn] of Object.entries(FLOWS).filter(([g]) => !games || games.includes(g))) {
       const dir = join(outDir, game);
       await rm(dir, { recursive: true, force: true });
       await mkdir(dir, { recursive: true });
