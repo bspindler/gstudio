@@ -15,7 +15,7 @@
 // and verified ("tampered between checks" otherwise); the checks cannot write node_modules, and the tools that run them
 // (vitest, tsc, tsx) are resolved by Hal under <repo>/node_modules, never from the worktree.
 import { randomBytes } from 'node:crypto';
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,7 +26,7 @@ import {
 import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
-  blobBytes, blobText, changedPaths, collectTreeDiff, commitTree, extendTree, linkNodeModules, newCandidateWorktree, removeWorktree, runGit, snapshotTree,
+  addFileToTree, blobBytes, blobText, changedPaths, collectTreeDiff, commitTree, extendTree, linkNodeModules, trustRootDigest, newCandidateWorktree, removeWorktree, runGit, snapshotTree,
   squashMerge, verifyNodeModules, vitestCounts, type CollectDeps, type GitRunner,
 } from './git.js';
 import { loadPrompt, parseImplementerOutput, renderPrompt } from './prompts.js';
@@ -156,6 +156,8 @@ export type CandidateResult = {
   changelog?: string;
   /** The implementer's one-line summary. */
   summary?: string;
+  /** Things Brian must act on even though the pass just discarded (e.g. a modified trust root). */
+  warnings?: string[];
 };
 
 /** The scorers that judge a game: Gearhold has a static and a browser-played one. */
@@ -267,8 +269,16 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       return defaults[k];
     };
 
-    /** Before each isolated check: the disk must still be exactly `expected`, and node_modules is rebuilt and verified. */
+    // <repo>/node_modules is the trust root (Hal's tools, Brian's checkout): nothing in the pass may change it.
+    const trustRoot = await trustRootDigest(ctx.repo);
+    const checkTrustRoot = async () => {
+      if ((await trustRootDigest(ctx.repo)) === trustRoot) return;
+      (res.warnings ??= []).push(`trust root modified: ${join(ctx.repo, 'node_modules')} changed during ${ctx.pass}; reinstall it (npm ci) before the next run`);
+      discard('trust root modified');
+    };
+    /** Before each isolated check: the trust root unchanged, the disk exactly `expected`, node_modules rebuilt and verified. */
     const guard = async (expected: string) => {
+      await checkTrustRoot();
       if ((await snapshotTree(wt.dir, wt.base, { ...tree, prune: true })) !== expected) discard('tampered between checks');
       await linkNodeModules(wt.dir, ctx.repo);
       try { await verifyNodeModules(wt.dir, ctx.repo); } catch (e) { discard(`tampered between checks: ${msg(e)}`); }
@@ -330,6 +340,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     res.changelog = parsed!.changelog;
     res.summary = parsed!.summary;
 
+    await checkTrustRoot(); // the implementer's edit tools could have written through node_modules symlinks
     // 3. The candidate tree from the bytes on disk (index flags and filters cannot hide anything), disk pruned to it.
     const t1 = await snapshotTree(wt.dir, wt.base, { ...tree, prune: true });
     if (t1 === baseTree) discard('no edits');
@@ -423,10 +434,12 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     const shots = { before: `${hist}/${ctx.pass}-before.jpg`, after: `${hist}/${ctx.pass}-after.jpg` };
     await mkdir(join(wt.dir, hist), { recursive: true });
     await shoot(wt.dir, join(wt.dir, shots.after), [wt.dir], 'after');
-    await copyFile(beforeTmp, join(wt.dir, shots.before));
-    const t3 = await extendTree(wt.dir, t2, [shots.before, shots.after], tree);
+    await checkTrustRoot();
+    const afterTree = await extendTree(wt.dir, t2, [shots.after], tree);
+    if ((await snapshotTree(wt.dir, wt.base, tree)) !== afterTree) discard('tampered between checks');
+    // The before shot goes from Hal's private file straight into the object store, never through the worktree.
+    const t3 = await addFileToTree(wt.dir, afterTree, shots.before, beforeTmp, tree);
     if ((await changedPaths(wt.dir, t2, t3, tree)).join('\n') !== [shots.after, shots.before].sort().join('\n')) discard('history images did not land as the only new paths');
-    if ((await snapshotTree(wt.dir, wt.base, tree)) !== t3) discard('tampered between checks');
     for (const [label, p] of [['before', shots.before], ['after', shots.after]] as const) checkJpeg(await blobBytes(wt.dir, t3, p).catch(() => null), label);
 
     // 8. Commit exactly T3 on the base, then squash onto refs/hal/main.

@@ -44,12 +44,20 @@ export type ClaudeDeps = {
   apiKey?: string;
 };
 
+/** Every edit tool, for every form of a node_modules path the permission syntax matches (cwd-relative and any depth). */
+export const NODE_MODULES_WRITE_DENY: string[] = ['Edit', 'Write', 'NotebookEdit'].flatMap((t) => [
+  `${t}(node_modules/**)`, `${t}(./node_modules/**)`, `${t}(**/node_modules/**)`, `${t}(node_modules)`, `${t}(**/node_modules)`,
+]);
+
 export const ALWAYS_DISALLOWED: string[] = [
   'WebFetch', 'WebSearch', 'Bash(git push:*)', 'Bash(git remote:*)', 'Bash(curl:*)', 'Bash(wget:*)',
   'Bash(npm install:*)', 'Bash(npm i:*)', 'Bash(npx:*)', 'Bash(gh:*)',
   // The API key lives in .hal.env; no role may read or change it. Rules are gitignore-style: bare/`./` are
   // relative to the cwd, `**/` matches at any depth (CLI 2.1.322 uses `//` for absolute and `~/` for home).
   ...['Read', 'Edit', 'Write', 'Grep'].flatMap((t) => [`${t}(.hal.env)`, `${t}(./.hal.env)`, `${t}(**/.hal.env)`]),
+  // A worktree's node_modules entries are symlinks into <repo>/node_modules (Hal's tools, and Brian's checkout): no
+  // edit may go through them. Reads stay allowed (the implementer may look at library types).
+  ...NODE_MODULES_WRITE_DENY,
 ];
 
 /** Built-in tool set per role (`--tools`); `--allowedTools` only pre-approves, it does not restrict. */
