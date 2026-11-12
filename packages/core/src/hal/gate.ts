@@ -2,14 +2,18 @@
 // Hard failures always discard; they are never traded against score.
 import type { Measures, ScoreReport } from './types.js';
 
-export const GATE = { minGain: 0.5, tolerance: 1.0 } as const; // score points
+/** Score points. Scores and measures run 0-100, and 100 means every band is healthy (`ceiling`). */
+export const GATE = { minGain: 0.5, tolerance: 1.0, ceiling: 100 } as const;
 
-export type GateResult = { keep: boolean; gain: number; reasons: string[] };
+/** `atCeiling`: score mode, but the target was already within minGain of the ceiling, so it was judged holding the line. */
+export type GateResult = { keep: boolean; gain: number; reasons: string[]; atCeiling?: true };
 
 /**
  * Gate modes. `score`: a gain of at least GATE.minGain on the target measure (or on fitness when there is no target),
  * with nothing else regressing past GATE.tolerance. `polish`: no gain needed; keep unless a measure (or fitness)
  * regresses past GATE.tolerance. Hard failures and non-finite values always discard, in both modes.
+ * A score-mode target already within minGain of GATE.ceiling has nothing left to gain (a healthy game is not a finished
+ * one), so it is judged like polish: kept unless something, fitness included, regresses past the tolerance.
  */
 export type GateMode = 'score' | 'polish';
 export type GateOptions = { mode?: GateMode; target?: string };
@@ -35,6 +39,7 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
   }
 
   let gain = 0;
+  let atCeiling = false;
   if (mode === 'polish') {
     // No gain needed, but fitness counts as a measure: a fall past the tolerance discards.
     if (!finite(before.fitness)) reasons.push(`before fitness is not a finite number: ${String(before.fitness)}`);
@@ -49,7 +54,11 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
       reasons.push(`target ${target ? `measure "${target}"` : 'fitness'} is missing or not finite in a report`);
     } else {
       gain = a - b;
-      if (gain < GATE.minGain) reasons.push(`no real gain: ${gain.toFixed(2)} < ${GATE.minGain}`);
+      if (b > GATE.ceiling - GATE.minGain) {
+        atCeiling = true;
+        const fb = before.fitness, fa = after.fitness;
+        if (finite(fb) && finite(fa) && fb - fa > GATE.tolerance) reasons.push(`fitness regressed ${(fb - fa).toFixed(2)} (> ${GATE.tolerance})`);
+      } else if (gain < GATE.minGain) reasons.push(`no real gain: ${gain.toFixed(2)} < ${GATE.minGain}`);
     }
   }
 
@@ -61,5 +70,5 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
     }
   }
 
-  return { keep: reasons.length === 0, gain, reasons };
+  return { keep: reasons.length === 0, gain, reasons, ...(atCeiling ? { atCeiling: true as const } : {}) };
 }
