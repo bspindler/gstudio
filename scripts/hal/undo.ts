@@ -5,14 +5,16 @@
 //      resolved to HEAD (they are rewritten in step 3); any other conflict fails the undo
 //   3. CHANGELOG.md and the history images are kept as they are at HEAD; undoEntry writes a NEW patch version and an
 //      `Undone: <title> (<pass>): <reason>` bullet (versions never go backwards)
-//   4. npm test, isolated and sandboxed like a candidate's checks; the tree must not change while it runs
+//   4. npm test (package.json's script, Hal's tools), each step isolated and sandboxed like a candidate's checks, with
+//      node_modules relinked and verified and the tree required unchanged before each step and after the last
 //   5. commit-tree of that exact tree (trailers incl. Hal-Undo, Hal-Reason) and a compare-and-swap of refs/hal/main
 // On any failure the main worktree is reset to refs/hal/main, which has not moved.
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { formatTrailers, nightOf, parseTrailers, undoEntry } from '@studio/core/hal';
 import { blobText, commitTree, HAL_MAIN, mainWorktreeDir, revertPass, runGit, safeGit, snapshotTree, type GitRunner } from './git.js';
-import { errMsg, isolatedCheck, redactor, tail } from './run-util.js';
+import { defaultCommands, resolveTools } from './candidate.js';
+import { errMsg, isolatedCheck, redactor, scriptsOf, tail } from './run-util.js';
 import { sandboxAvailable } from './sandbox.js';
 
 export const UNDO_TEST_TIMEOUT_MS = 20 * 60_000;
@@ -24,8 +26,9 @@ export type UndoCtx = {
   tzOffsetMinutes?: number;
   secrets: readonly string[];
   git?: GitRunner;
-  /** argv of the test run in the main worktree; default `npm test`. Always isolated. */
-  testCommand?: (dir: string) => string[];
+  /** The test run in the main worktree, as a sequence of argv that must all exit 0; default package.json's `test`
+   *  script with Hal's tools from <repo>/node_modules (defaultCommands). Always isolated, each step guarded. */
+  testCommand?: (dir: string) => string[][];
   timeoutMs?: number;
   /** TESTS ONLY. */
   unsandboxedForTests?: boolean;
@@ -111,16 +114,29 @@ export async function applyUndo(pass: string, reason: string, ctx: UndoCtx): Pro
     for (const k of ['yaml', 'html', 'changelog'] as const) await writeFile(join(dir, files[k]), next[k]);
     const version = /^version:[ \t]*(\S+)/m.exec(next.yaml)![1]!;
 
-    const tree = await snapshotTree(dir, head, { git: raw });
+    const tmpRoot = join(repo, '.data', 'hal', 'tmp', 'undo'); // Hal's private index files: not writable by the checks
+    await rm(tmpRoot, { recursive: true, force: true });
+    await mkdir(tmpRoot, { recursive: true });
+    const snap = () => snapshotTree(dir, head, { git: raw, tmpRoot });
+    const tree = await snap();
     const headTree = (await git(['rev-parse', `${head}^{tree}`], repo)).trim();
     if (tree === headTree) return fail('the revert changed nothing');
 
-    const r = await isolatedCheck((ctx.testCommand ?? (() => ['npm', 'test']))(dir), {
-      cwd: dir, repo, secrets: ctx.secrets, writable: [dir], timeoutMs: ctx.timeoutMs ?? UNDO_TEST_TIMEOUT_MS, unsandboxedForTests: ctx.unsandboxedForTests,
-    });
-    if (r.error === 'no sandbox') return fail('no sandbox: refusing to run npm test unsandboxed');
-    if (r.code !== 0) return fail(`npm test failed${r.timedOut ? ' (timed out)' : r.error ? ` to run: ${r.error}` : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`);
-    if ((await snapshotTree(dir, head, { git: raw })) !== tree) return fail('the worktree changed while the tests ran');
+    let steps: string[][];
+    try {
+      steps = ctx.testCommand ? ctx.testCommand(dir) : defaultCommands(resolveTools(repo), scriptsOf(await blobText(repo, head, 'package.json', { git: raw }))).test(dir);
+    } catch (e) { return fail(`npm test: ${errMsg(e)}`); }
+    for (const argv of steps) {
+      if ((await snap()) !== tree) return fail('the worktree changed while the tests ran');
+      const r = await isolatedCheck(argv, {
+        cwd: dir, repo, secrets: ctx.secrets, writable: [dir], timeoutMs: ctx.timeoutMs ?? UNDO_TEST_TIMEOUT_MS,
+        ...(ctx.unsandboxedForTests ? { unsandboxedForTests: true } : {}),
+      });
+      if (r.error === 'no sandbox') return fail('no sandbox: refusing to run npm test unsandboxed');
+      if (r.code !== 0) return fail(`npm test failed${r.timedOut ? ' (timed out)' : r.error ? ` to run: ${r.error}` : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`);
+    }
+    if ((await snap()) !== tree) return fail('the worktree changed while the tests ran');
+    await rm(tmpRoot, { recursive: true, force: true });
 
     const trailers = formatTrailers({
       pass, game, kind: 'fix', why, scoreBefore: t.scoreAfter, scoreAfter: t.scoreBefore, version, run: ctx.runId, undo: pass, reason: why,

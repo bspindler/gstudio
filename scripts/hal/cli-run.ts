@@ -10,12 +10,12 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { Billing, ScoreReport, TicketKind } from '@studio/core/hal';
-import { CHECK_TIMEOUT_MS, DEFAULT_COMMANDS, RESULT_PREFIX } from './candidate.js';
+import { CHECK_TIMEOUT_MS, defaultCommands, resolveTools } from './candidate.js';
 import { runClaude, runClaudeWithFallback, type ClaudeDeps } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import { childEnv, loadHalEnv } from './env.js';
 import { runNight, STOP_FILE, undoCommand, type CiLocal, type PlayPort, type RunDeps, type RunOptions } from './run.js';
-import { errMsg, isolatedCheck, redactor, tail } from './run-util.js';
+import { entryCheck, errMsg, redactor, tail } from './run-util.js';
 import type { ScreensResult } from './screens.js';
 
 export const RUN_COMMANDS = ['run', 'stop', 'undo'] as const;
@@ -106,20 +106,17 @@ export function realRunDeps(repo: string, halDir: string): RunDeps {
   };
 }
 
-/** Main's own checks, through scripts/hal/check-entry.ts in Hal's main worktree, isolated and sandboxed (writes: tmp only). */
+/**
+ * Main's own checks: scripts/hal/check-entry.ts in Hal's main worktree, with Hal's tools from <repo>/node_modules,
+ * through entryCheck (node_modules relinked and verified, sandboxed, writes to tmp only, nonce'd result).
+ */
 export function realPlay(repo: string, secrets: string[]): PlayPort {
-  const run = async <T>(argv: string[], dir: string): Promise<T> => {
-    const r = await isolatedCheck(argv, { cwd: dir, repo, secrets, writable: [], timeoutMs: CHECK_TIMEOUT_MS });
-    if (r.error) throw new Error(r.error);
-    if (r.code !== 0) throw new Error(`${r.timedOut ? 'timed out' : `exit ${r.code}`}: ${tail(r.stderr || r.stdout, 800)}`);
-    const line = r.stdout.split('\n').reverse().find((l) => l.startsWith(RESULT_PREFIX));
-    if (!line) throw new Error('no result printed');
-    return JSON.parse(line.slice(RESULT_PREFIX.length)) as T;
-  };
+  const cmds = () => defaultCommands(resolveTools(repo), {});
+  const run = <T>(argv: string[], dir: string) => entryCheck<T>(argv, { cwd: dir, repo, secrets, writable: [], timeoutMs: CHECK_TIMEOUT_MS });
   return {
-    score: (dir, scorer) => run<ScoreReport<unknown>>(DEFAULT_COMMANDS.score(dir, scorer), dir),
+    score: (dir, scorer) => run<ScoreReport<unknown>>(cmds().score(dir, scorer), dir),
     async screens(dir, game, outDir) {
-      const r = await run<ScreensResult>(DEFAULT_COMMANDS.screens(dir, game), dir);
+      const r = await run<ScreensResult>(cmds().screens(dir, game), dir);
       await mkdir(outDir, { recursive: true });
       const shots: string[] = [];
       for (const s of r.shots ?? []) {
@@ -128,7 +125,7 @@ export function realPlay(repo: string, secrets: string[]): PlayPort {
       }
       return { ...r, shots };
     },
-    controls: (dir, game) => run<ControlCheck[]>(DEFAULT_COMMANDS.controls(dir, game), dir),
+    controls: (dir, game) => run<ControlCheck[]>(cmds().controls(dir, game), dir),
   };
 }
 

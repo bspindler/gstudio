@@ -97,8 +97,8 @@ export type RunDeps = {
   candidate?: (t: Ticket, ctx: CandidateCtx) => Promise<CandidateResult>;
   /** Extra candidate ctx (tests: argv fakes, unsandboxedForTests, countTests). */
   candidateCtx?: Partial<Pick<CandidateCtx, 'commands' | 'unsandboxedForTests' | 'countTests' | 'checkTimeoutMs' | 'implementerTimeoutMs' | 'appendSystemPromptFile'>>;
-  /** argv of the undo's test run; default npm test. Always isolated. */
-  undoTest?: (dir: string) => string[];
+  /** The undo's test run (sequence of argv); default package.json's test script with Hal's tools. Always isolated. */
+  undoTest?: (dir: string) => string[][];
   /** TESTS ONLY: the undo's tests run without sandbox-exec. */
   unsandboxedForTests?: boolean;
   pid?: number;

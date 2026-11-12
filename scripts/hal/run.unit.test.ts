@@ -4,7 +4,7 @@
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dayOf, formatTrailers, parseTrailers, type ScoreReport, type SpendDay, type Ticket } from '@studio/core/hal';
@@ -14,6 +14,7 @@ import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
 import { acquireLock, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
 import { parseRunArgs, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
+import { sandboxAvailable } from './sandbox.js';
 
 const KEY = 'sk-ant-test-FAKE0123456789';
 const NOW = new Date('2026-11-12T03:00:00Z'); // night 2026-11-11 at tz offset 0
@@ -23,7 +24,7 @@ const put = (root: string, rel: string, data: string | Buffer) => { mkdirSync(di
 const read = (root: string, rel: string) => readFileSync(join(root, rel), 'utf8');
 const J = (v: unknown) => JSON.stringify(v);
 const node = (code: string) => [process.execPath, '-e', code];
-const result = (v: unknown, extra = '') => node(`${extra};console.log('HAL-RESULT ' + ${J(J(v))})`);
+const result = (v: unknown, extra = '') => node(`${extra};console.log('HAL-RESULT ' + process.env.HAL_CHECK_NONCE + ' ' + ${J(J(v))})`);
 const fakeJpeg = (w: number, h: number) => Buffer.concat([
   Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x4a, 0x46]),
   Buffer.from([0xff, 0xc0, 0x00, 0x0b, 0x08, h >> 8, h & 0xff, w >> 8, w & 0xff, 0x01, 0x01, 0x11, 0x00]),
@@ -48,8 +49,8 @@ const TRIP = T('T2', 'Phone home');
 const THIRD = T('T3', 'Brighter trail', { kind: 'polish' });
 
 const passing: CheckCommands = {
-  test: () => node('console.log("green")'),
-  typecheck: () => node(''),
+  test: () => [node('console.log("green")')],
+  typecheck: () => [node('')],
   score: (_d, s) => result({ ...BEFORE[s]!, fitness: BEFORE[s]!.fitness + 1 }),
   screens: (_d, game) => result({ game, shots: [], errors: [], reached: true, notes: [], blockedRequests: [] }),
   controls: (_d, game) => result([{ game, check: 'tap', ok: true, detail: '' }]),
@@ -133,7 +134,7 @@ function deps(over: Partial<RunDeps> = {}): RunDeps {
     repo, halDir, now: () => NOW, tzOffsetMinutes: 0, model: 'test-model', secrets: [KEY], hasApiKey: true,
     claude: fakeClaude(), play: fakePlay(), ciLocal: async () => ({ ok: true, detail: 'ok' }),
     candidateCtx: { commands: passing, unsandboxedForTests: true, countTests: async () => ({ before: 3, after: 3 }) },
-    undoTest: () => node(''), unsandboxedForTests: true,
+    undoTest: () => [node('')], unsandboxedForTests: true,
     log: (l) => { logs.push(l); },
     proc: Object.assign(new EventEmitter(), { exit: vi.fn() }),
     ...over,
@@ -462,7 +463,7 @@ describe('undo', () => {
   it('failing tests change nothing', async () => {
     await makePass();
     const head = halHead();
-    expect(await undoCommand('HAL-001', 'r', { push: false }, deps({ undoTest: () => node('process.exit(3)') }))).toBe(1);
+    expect(await undoCommand('HAL-001', 'r', { push: false }, deps({ undoTest: () => [node(''), node('process.exit(3)')] }))).toBe(1);
     expect(halHead()).toBe(head);
     expect(feedback().undos[0]).toMatchObject({ status: 'failed', error: expect.stringMatching(/npm test failed/) });
   });
@@ -476,6 +477,33 @@ describe('undo', () => {
     } finally { Object.defineProperty(process, 'platform', plat); }
     expect(halHead()).toBe(head);
     expect(feedback().undos[0]!.error).toMatch(/no sandbox/);
+  });
+  it('a test step that edits the tree fails the undo before the next step (tamper guard)', async () => {
+    await makePass();
+    const head = halHead();
+    const tamper = node(`require('fs').writeFileSync('games/hyperline/game.js', 'export const speed = 9;\\n')`);
+    expect(await undoCommand('HAL-001', 'r', { push: false }, deps({ undoTest: () => [tamper, node('')] }))).toBe(1);
+    expect(halHead()).toBe(head);
+    expect(feedback().undos[0]!.error).toMatch(/changed while the tests ran/);
+  });
+  it.runIf(sandboxAvailable())('darwin: the undo tests really run sandboxed (.hal.env unreadable, no writes outside, no key in env)', async () => {
+    await makePass();
+    put(repo, '.hal.env', `ANTHROPIC_API_KEY=${KEY}\n`);
+    const outside = join(homedir(), `.hal-undo-sandbox-probe-${process.pid}`); // tmpdir (and so the temp repo) is writable by design
+    const probe = node(`const fs=require('fs');const r=[];
+      try{fs.readFileSync(${J(join(repo, '.hal.env'))});r.push('read:ok')}catch(e){r.push('read:'+e.code)}
+      try{fs.writeFileSync(${J(outside)},'x');r.push('write:ok')}catch(e){r.push('write:'+e.code)}
+      r.push('key:'+(Object.values(process.env).some(v=>String(v).includes(${J(KEY)}))?'yes':'none'));
+      console.log(r.join(' '));process.exit(r.join(' ')==='read:EPERM write:EPERM key:none'?0:7)`);
+    const prev = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = KEY;
+    try {
+      const code = await undoCommand('HAL-001', 'r', { push: false }, deps({ unsandboxedForTests: false, undoTest: () => [probe] }));
+      expect(code, existsSync(join(halDir, 'feedback.json')) ? read(halDir, 'feedback.json') : '').toBe(0);
+    } finally { if (prev === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prev; }
+    const leaked = existsSync(outside);
+    rmSync(outside, { force: true });
+    expect(leaked).toBe(false);
   });
   it('an unknown pass exits 1; a busy lock exits 2', async () => {
     expect(await undoCommand('HAL-404', 'r', { push: false }, deps())).toBe(1);
