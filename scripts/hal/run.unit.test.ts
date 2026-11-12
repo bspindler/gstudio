@@ -11,7 +11,7 @@ import { dayOf, formatTrailers, parseTrailers, type ScoreReport, type SpendDay, 
 import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
-import { acquireLock, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
+import { acquireLock, defaultStartTime, lockLive, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
 import { parseRunArgs, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
 import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
@@ -632,7 +632,7 @@ describe('fix round 1', () => {
   });
   it('lock: a live pid that started after the lock was taken is a reused pid: the lock is taken over', async () => {
     put(halDir, 'run.lock', J({ pid: process.pid, runId: 'ancient', startedAt: '2000-01-01T00:00:00.000Z' }));
-    expect(await runNight(opts({ reportOnly: true }), deps())).toBe(0);
+    expect(await runNight(opts({ reportOnly: true }), deps({ startTimeOf: () => new Date() }))).toBe(0);
     put(halDir, 'run.lock', J({ pid: process.pid, runId: 'unknown-start', startedAt: '2000-01-01T00:00:00.000Z' }));
     expect(await runNight(opts({ reportOnly: true }), deps({ startTimeOf: () => null }))).toBe(2); // start unknown: alive
   });
@@ -644,6 +644,14 @@ describe('fix round 1', () => {
     const r = await p;
     expect(r.code).not.toBe(0);
     expect(Date.now() - t0).toBeLessThan(5_000);
+  });
+  it('defaultStartTime reads ps lstart (null where ps is unavailable, e.g. inside a sandbox)', () => {
+    const t = defaultStartTime(process.pid);
+    if (process.env.HAL_SANDBOXED === '1' && t === null) return;
+    expect(t).toBeInstanceOf(Date);
+    expect(t!.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(lockLive({ pid: process.pid, runId: 'x', startedAt: '2000-01-01T00:00:00.000Z' })).toBe(false);
+    expect(lockLive({ pid: process.pid, runId: 'x', startedAt: new Date().toISOString() })).toBe(true);
   });
   it('an undo of a pass that was never merged is recorded as rejected (not retried)', async () => {
     expect(await undoCommand('HAL-404', 'nope', { push: false }, deps())).toBe(1);
