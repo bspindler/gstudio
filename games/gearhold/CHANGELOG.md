@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.2.2 (2026-11-12)
 - Each level now opens looking down the citadel's longest open hall instead of into a wall corner.
+- Kiln Heart is a little less crowded: the tick crawler guarding the gear key has been scrapped, so you reach the kilnwarden with more fight left in you.
 
 ## 0.2.1 (2026-11-11)
 - Terrace of Dials: a repair crystal now sits within reach of the main path, so the first level offers a little fair healing.
