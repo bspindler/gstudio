@@ -7,7 +7,7 @@ export type PromptRole = 'planner' | 'implementer' | 'director';
 /** The inputs each template takes. Callers must supply every one. */
 export const ROLE_PLACEHOLDERS: Record<PromptRole, readonly string[]> = {
   planner: ['games', 'scores', 'ledger', 'screens', 'controls', 'consoleErrors', 'changelogs', 'notes', 'feedback', 'approvals', 'stagnation', 'budget'],
-  implementer: ['game', 'ticket'],
+  implementer: ['game', 'scorers', 'ticket'],
   director: ['results', 'notes', 'stagnation', 'feedback'],
 };
 

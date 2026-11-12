@@ -12,6 +12,7 @@ import { defaultCommands, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseR
 import type { ClaudeCall, ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
 import { sandboxAvailable } from './sandbox.js';
+import { askHalToScore } from './score-broker.js';
 
 const KEY = 'sk-ant-api03-FAKEKEYFAKEKEYFAKEKEY0123456789';
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
@@ -591,6 +592,64 @@ describe('runCandidate (temp git repo)', () => {
     } finally {
       rmSync(escape, { force: true }); if (prev === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prev; }
   }, 60_000);
+
+  describe('score broker (the implementer asks Hal to score mid-build)', () => {
+    const fastAsk = { pollMs: 10, timeoutMs: 20_000 };
+    it('scores a snapshot of the worktree as it is at that moment, with the gate\'s score command, and cleans up', async () => {
+      const seen: string[] = [];
+      let asked: unknown, scoreDir = '';
+      const c = ctx({
+        cmds: { score: (d, s) => { seen.push(`${s}:${readFileSync(join(d, 'games/hyperline/game.js'), 'utf8').trim()}`); return passing.score(d, s); } },
+        claude: async (call) => {
+          calls.push(call);
+          scoreDir = call.scoreDir!;
+          put(call.cwd, 'games/hyperline/game.js', 'export const speed = 1.1;\n');
+          asked = await askHalToScore(scoreDir, 'hyperline', fastAsk);
+          put(call.cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n');
+          return { first: ok(OUT) };
+        },
+      });
+      const r = await runCandidate(ticket(), c);
+      expect(r.verdict).toBe('merged');
+      expect((asked as ScoreReport<unknown>).fitness).toBe(BEFORE.hyperline.fitness + 1);
+      // The mid-build score saw 1.1; the gate's own score (step 6) then saw the final 1.2.
+      expect(seen).toEqual(['hyperline:export const speed = 1.1;', 'hyperline:export const speed = 1.2;']);
+      expect(r.scoreRequests).toBe(1);
+      expect(scoreDir).not.toBe('');
+      expect(existsSync(scoreDir)).toBe(false);
+      expect(existsSync(join(repo, '.data/hal/tmp/HAL-1'))).toBe(false);
+      worktreesGone();
+    });
+
+    it('refuses to score when the scorer code differs from main', async () => {
+      let err = '';
+      const c = ctx({
+        claude: async (call) => {
+          calls.push(call);
+          put(call.cwd, 'scripts/hal/gearhold-play.ts', 'export const cheat = 1;\n');
+          try { await askHalToScore(call.scoreDir!, 'hyperline', fastAsk); } catch (e) { err = String((e as Error).message); }
+          return { first: ok(OUT) };
+        },
+      });
+      const r = await runCandidate(ticket(), c);
+      expect(err).toMatch(/scripts\/hal differs from main/);
+      expect(r.verdict).toBe('discarded'); // and the tripwires still reject the edit itself
+    });
+
+    it('only scores the ticket game\'s own scorers', async () => {
+      let err = '';
+      const c = ctx({
+        claude: async (call) => {
+          calls.push(call);
+          put(call.cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n');
+          try { await askHalToScore(call.scoreDir!, 'gearhold-play', fastAsk); } catch (e) { err = String((e as Error).message); }
+          return { first: ok(OUT) };
+        },
+      });
+      await runCandidate(ticket(), c);
+      expect(err).toMatch(/unknown scorer "gearhold-play".*hyperline/);
+    });
+  });
 });
 
 describe('default commands', () => {

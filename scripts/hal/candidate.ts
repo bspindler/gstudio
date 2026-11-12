@@ -15,7 +15,9 @@
 // and verified ("tampered between checks" otherwise); the checks cannot write node_modules, and the tools that run them
 // (vitest, tsc, tsx) are resolved by Hal under <repo>/node_modules, never from the worktree.
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -33,12 +35,15 @@ import {
 import { loadPrompt, parseImplementerOutput, renderPrompt } from './prompts.js';
 import { runIsolated, sandboxAvailable, sandboxEnv, type IsolatedResult, type SandboxPolicy } from './sandbox.js';
 import type { ScreensResult } from './screens.js';
+import { startScoreBroker } from './score-broker.js';
 
 export const IMPLEMENTER_TIMEOUT_MS = 20 * 60_000;
 export const CHECK_TIMEOUT_MS = 20 * 60_000;
 export const RESULT_PREFIX = 'HAL-RESULT ';
 export const NONCE_ENV = 'HAL_CHECK_NONCE';
 const TAIL_CHARS = 1500;
+/** Paths a mid-build score must find unchanged from the base: Hal scores only with main's scorer code. */
+export const SCORER_PATHS = ['scripts/hal', 'scripts/hal.ts', 'package.json', 'packages/core/src/hal'];
 
 /** The run's budget, owned by Task 7 under the run lock. `slice` is dollars this role may spend now (0 = stop). */
 export type CandidateBudget = {
@@ -150,6 +155,8 @@ export type CandidateResult = {
   scoresAfter: Record<string, ScoreReport<unknown>>;
   /** Dollars spent on Claude by this pass (unknown API costs count as the whole slice). */
   costUsd: number;
+  /** Scores Hal ran for the implementer while it worked (the score broker). */
+  scoreRequests?: number;
   /** The squash commit on refs/hal/main. */
   commit?: string;
   /** Repo-relative paths of the history images in the commit. */
@@ -330,9 +337,35 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     // 2. Implementer. The ticket is data: rendered into the template, never anything from the env.
     const ticketData: Record<string, string> = { id: ticket.id, game, kind: ticket.kind, title: ticket.title, why: ticket.why };
     for (const k of ['target', 'liability', 'fromNote'] as const) if (ticket[k] !== undefined) ticketData[k] = ticket[k]!;
-    const prompt = renderPrompt(loadPrompt('implementer'), { game, ticket: JSON.stringify(ticketData, null, 2) });
+    const prompt = renderPrompt(loadPrompt('implementer'), { game, scorers: scorersFor(game).map((x) => `\`${x}\``).join(', '), ticket: JSON.stringify(ticketData, null, 2) });
+    // The score broker (scripts/hal/score-broker.ts): the implementer's `npm run hal -- score` asks Hal, which scores a
+    // snapshot of the worktree as it is at that moment, with the same isolated check the gate runs in step 6. The
+    // request dir is a fresh one outside privDir: the only place outside the worktree the implementer may write.
+    const askDir = await mkdtemp(join(tmpdir(), 'hal-ask-'));
+    const snapDir = join(privDir, 'snap');
+    const treeEntry = (t: string, p: string) => git(['rev-parse', '--verify', '-q', `${t}:${p}`], ctx.repo).then((o) => o.trim(), () => '');
+    const scoreNow = async (scorer: string): Promise<unknown> => {
+      const snap = await snapshotTree(wt.dir, wt.base, tree); // no prune: the implementer's tree is left alone
+      for (const p of SCORER_PATHS) {
+        if ((await treeEntry(snap, p)) !== (await treeEntry(wt.base, p))) throw new Error(`${p} differs from main; Hal scores only with main's scorer code, so put it back first`);
+      }
+      await rm(snapDir, { recursive: true, force: true });
+      await mkdir(snapDir, { recursive: true });
+      try {
+        const tar = join(privDir, 'snap.tar');
+        await git(['archive', '--format=tar', '-o', tar, snap], ctx.repo);
+        await promisify(execFile)('/usr/bin/tar', ['-xf', tar, '-C', snapDir]);
+        await rm(tar, { force: true });
+        await linkNodeModules(snapDir, ctx.repo);
+        await verifyNodeModules(snapDir, ctx.repo);
+        const nonce = newNonce();
+        const r = await inTree(snapDir, (await cmd('score'))(snapDir, scorer), [snapDir], nonce);
+        if (r.code !== 0) throw new Error(`score ${scorer} ${r.timedOut ? 'timed out' : r.error ?? `exited ${r.code}`}: ${tail(r.stderr || r.stdout)}`);
+        return parseResult(r.stdout, nonce);
+      } finally { await rm(snapDir, { recursive: true, force: true }); }
+    };
     const call: ClaudeCall = {
-      role: 'implementer', prompt, cwd: wt.dir, billing: ctx.billing, maxBudgetUsd: slice, model: ctx.model,
+      role: 'implementer', prompt, cwd: wt.dir, scoreDir: askDir, billing: ctx.billing, maxBudgetUsd: slice, model: ctx.model,
       allowedTools: roleAllowedTools('implementer'), disallowedTools: [], timeoutMs: ctx.implementerTimeoutMs ?? IMPLEMENTER_TIMEOUT_MS,
       denyReadPaths: denyRead,
       ...(ctx.appendSystemPromptFile ? { appendSystemPromptFile: ctx.appendSystemPromptFile } : {}),
@@ -351,7 +384,14 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       discard('tampered .git');
     };
     let out: Awaited<ReturnType<CandidateCtx['claude']>>;
-    try { out = await ctx.claude(call, slice); } catch (e) {
+    const broker = startScoreBroker({ dir: askDir, scorers: scorersFor(game), score: scoreNow });
+    const stopBroker = async () => {
+      await broker.stop();
+      res.scoreRequests = broker.served();
+      await rm(askDir, { recursive: true, force: true }).catch(() => {});
+    };
+    try { out = await ctx.claude(call, slice); await stopBroker(); } catch (e) {
+      await stopBroker();
       // We cannot know whether anything was spawned, so book the call as unknown cost (the full slice on the API).
       book(call.billing, null);
       checkGitPtr();

@@ -51,7 +51,7 @@ No real-money gambling or prizes. No bots mimicking humans. No real charges. No 
 1. Read the relevant files in `games/{{game}}/`.
 2. Write or extend a test first when the game has a test seam, then make the change.
 3. Run the focused tests for this game, `npm test -- <path>` (its own test files, e.g. `npm test -- packages/core/test/{{game}}-<topic>.test.ts`), and `npm run typecheck`. Both must be clean. Do not run the whole suite with a bare `npm test`: your Bash runs in a sandbox where some of Hal's own tests cannot run. Hal runs the full suite itself, sandboxed, after you finish.
-4. Run `npm run hal -- score --game {{game}}` and check that the ticket's target measure moved the right way and no other measure got worse.
+4. Score it: run `npm run hal -- score --game <scorer>` for each of this game's scorers ({{scorers}}). Inside this build, Hal runs the score for you, outside your sandbox, on your files as they are at that moment, with the same check and defaults its gate uses after you finish. So browser-played scorers such as `gearhold-play` work too. It takes up to a minute and prints per-level results (win rate, win times and so on): use them to aim your change, then score again to check that the ticket's target measure moved the right way and no other measure got worse. Range flags (`--levels`, `--seeds`, ...) are refused here. Hal scores at most 12 times per build, so score when you have something to measure. If a score fails, read its message: a timeout means run the same command again.
 5. Stop when it works. Do not refactor, rename or tidy unrelated code.
 
 ## Output contract
