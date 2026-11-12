@@ -23,6 +23,14 @@ export function threadOf(n: Note): NoteMessage[] {
   if (Array.isArray(n.thread) && n.thread.length) return n.thread;
   return [{ from: 'brian', text: n.text, at: n.at }, ...(n.reply ? [{ from: 'hal' as const, text: n.reply, at: n.at }] : [])];
 }
+/**
+ * Something Hal has learned, kept across nights (lessons.json): short, specific, about one game or the whole studio.
+ * The director adds and retires them; the planner and director read every active one.
+ */
+export type Lesson = { id: string; game: string | null; text: string; at: string; run: string };
+/** Lessons kept at most; past this the oldest are dropped (the director is asked to retire stale ones first). */
+export const MAX_LESSONS = 40;
+
 /** When the thread last moved: its newest message. */
 export const lastAt = (n: Note): string => threadOf(n).at(-1)?.at ?? n.at;
 export type Vote = { run: string; item: string; game?: string; vote: 'up' | 'down'; at: string; /** Brian's words, capped at 500 characters by the caller. */ comment?: string };
@@ -139,9 +147,24 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
   const readApprovals = () => readJson<Approval[]>(p('approvals.json'), [], isArr);
   const readFeedback = () => readJson<Feedback>(p('feedback.json'), { votes: [], undos: [] }, isFeedback);
   const readSpend = () => readJson<SpendDay[]>(p('spend.json'), [], isArr);
+  const readLessons = () => readJson<Lesson[]>(p('lessons.json'), [], isArr);
 
   return {
-    halDir, readNotes, readApprovals, readFeedback, readSpend,
+    halDir, readNotes, readApprovals, readFeedback, readSpend, readLessons,
+    /** The director's changes to the lessons: retire by id, then add (new ids), keeping the newest MAX_LESSONS. */
+    async applyLessons(change: { add: Array<{ game: string | null; text: string }>; retire: string[] }, run: string): Promise<{ added: Lesson[]; retired: string[] }> {
+      return locked('lessons.json', async () => {
+        const list = await readLessons();
+        const retired = change.retire.filter((id) => list.some((l) => l.id === id));
+        let max = list.reduce((m, l) => Math.max(m, Number(/^L-(\d+)$/.exec(l.id)?.[1] ?? 0)), 0);
+        const have = new Set(list.map((l) => l.text.toLowerCase()));
+        const at = now().toISOString();
+        const added = change.add.filter((a) => !have.has(a.text.toLowerCase())).map((a) => ({ id: `L-${String(++max).padStart(3, '0')}`, game: a.game, text: a.text, at, run }));
+        const next = [...list.filter((l) => !retired.includes(l.id)), ...added].slice(-MAX_LESSONS);
+        if (added.length || retired.length) await writeJsonAtomic(p('lessons.json'), next);
+        return { added, retired };
+      });
+    },
 
     async addNote({ text, game, ref }: { text: string; game: string | null; ref?: Note['ref'] }): Promise<Note> {
       return locked('notes.json', async () => {

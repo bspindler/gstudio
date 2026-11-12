@@ -243,6 +243,19 @@ describe('renderReport', () => {
     expect(reply).toContain(`href="/runs/${RUN}">Re: the Director&#39;s note of 2026-11-11</a>`);
   });
 
+  it('What Hal has learned: newest first, tonight\'s marked, escaped', () => {
+    const html = renderReport(view({ lessons: [
+      { id: 'L-001', game: 'gearhold', text: 'Moving a crystal fixed supplied', at: 'x', run: 'run-old' },
+      { id: 'L-002', game: null, text: '<b>Bands</b> are not finish lines', at: 'x', run: RUN },
+    ] }));
+    const sec = section(html, 'What Hal has learned');
+    expect(sec).toContain('What Hal has learned (2)');
+    expect(sec.indexOf('L-002')).toBeLessThan(sec.indexOf('L-001'));
+    expect(sec.slice(sec.indexOf('L-002'), sec.indexOf('L-001'))).toContain('New tonight');
+    expect(sec).toContain('&lt;b&gt;Bands&lt;/b&gt;');
+    expect(renderReport(view())).not.toContain('What Hal has learned');
+  });
+
   it('the Director\'s note has a reply box that starts a thread tied to this report', () => {
     const note = section(renderReport(view()), 'Director&#39;s note');
     const f = forms(note).find((x) => x.action === '/tell')!;

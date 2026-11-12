@@ -9,7 +9,7 @@ import type { CandidateResult } from './candidate.js';
 import { esc, noteHtml, pageHead } from './page-style.js';
 import { phaseProgress, spendLine } from './status-client.js';
 import type { RunReport } from './run.js';
-import { lastAt, threadOf, type Note, type Undo, type Vote } from './store.js';
+import { lastAt, threadOf, type Lesson, type Note, type Undo, type Vote } from './store.js';
 
 // perGame and Vote.comment land with Task 2; typed here as optional so this compiles before and after it.
 type ViewReport = RunReport & { perGame?: Record<string, string> };
@@ -21,6 +21,8 @@ export type ReportView = {
   report: ViewReport; note: string;
   feedback: { votes: ViewVote[]; undos: ViewUndo[] };   // this run's (store.feedbackFor)
   notes: Note[];                                          // every thread Brian has not cleared, for Tell Hal
+  /** What Hal has learned across nights (lessons.json), oldest first. */
+  lessons?: Lesson[];
   approvals: string[];                                    // approved liability items
   status: { running: boolean; phase?: string; startedAt?: string };
   /** latest.json's run when the page was rendered: /hal.js offers the new report once a newer one exists. */
@@ -309,6 +311,14 @@ function planned(list: Ticket[], open: boolean): string {
   return `<section><details class="fold"${open ? ' open' : ''}><summary><h2>Planned, not built (${list.length})</h2></summary>${capped(items)}</details></section>`;
 }
 
+/** What Hal has learned: newest first, the ones this run added marked, the rest folded after LIST_HEAD. */
+function lessons(v: ReportView): string {
+  const list = [...(v.lessons ?? [])].reverse();
+  if (!list.length) return '';
+  const items = list.map((l) => `<li><div class="note-top"><span class="label">${esc(l.game ? gameName(l.game) : 'The whole studio')} · ${esc(l.id)}</span>${l.run === v.report.runId ? pill('New tonight', 'good') : ''}</div><p class="small">${esc(clip(l.text, 300))}</p></li>`);
+  return `<section><h2>What Hal has learned (${list.length})</h2><div class="card">${capped(items)}<p class="small muted lessons-hint">Hal reads these before it plans. Tell Hal if one is wrong.</p></div></section>`;
+}
+
 function warnings(r: ViewReport): string {
   if (!r.warnings.length) return '';
   return `<section><h2>Warnings</h2><div class="card warnings">${capped(r.warnings.map((w) => `<li class="small">${esc(clip(w, 500))}</li>`))}</div></section>`;
@@ -462,6 +472,7 @@ const REPORT_CSS = `
 .bar.warn>span{background:var(--warn)}
 .num{flex:none;font-variant-numeric:tabular-nums}
 .why{margin:6px 0 0}
+.lessons-hint{margin-top:12px}
 .why p{margin:4px 0 0}
 .why ul,.why ol{margin:4px 0 0;padding-left:20px}
 .change h3,.call h3{margin:6px 0 8px;font-size:17px}
@@ -532,7 +543,7 @@ export function renderReport(v: ReportView): string {
   const approved = new Set(v.approvals.map(normItem));
   const needYou = r.calls.filter((t) => !approved.has(normItem(t.liability ?? '')) && !isDeclined(v, t.liability ?? '')).length;
   const plan = r.planned ?? [];
-  const main = [director(v), play(v), calls(v), changes(v, cards), standings(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
+  const main = [director(v), play(v), calls(v), changes(v, cards), standings(v), lessons(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
   const side = `${runHal(v, r.runId)}\n<div class="side-rest">${tell(v)}\n${recent(v, r.runId)}</div>`;
   return shell(`Hal · ${r.night}`, header(v, merged.length, gone.length, needYou), main, side, v.flash);
 }
