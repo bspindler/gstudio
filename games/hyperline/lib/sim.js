@@ -109,6 +109,9 @@ export function step(r, c, jump) {
     } else if (o.t === 'bar') {
       if (x1 - 0.08 > o.x && x0 + 0.08 < o.x + o.w && r.y + PS > o.y && r.y < o.y + BAR_H) die = die || 'bar';
       if (!o.done && x0 > o.x + o.w) { o.done = true; if (!die) ev.push({ t: 'bar' }); }
+    } else if (o.t === 'gate') {
+      if (x1 - 0.08 > o.x && x0 + 0.08 < o.x + o.w && (r.y < o.y - 0.04 || r.y + PS > o.h + 0.04)) die = die || 'gate';
+      if (!o.done && x0 > o.x + o.w) { o.done = true; if (!die) ev.push({ t: 'gate' }); }
     } else if (o.t === 'chip') {
       if (!o.got && !o.miss) {
         if (Math.abs(cx - o.x) < 0.6 && Math.abs(r.y + PS / 2 - o.y) < 0.6) { o.got = true; ev.push({ t: 'chip', x: o.x, y: o.y }); }

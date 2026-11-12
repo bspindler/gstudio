@@ -402,6 +402,15 @@ export function drawScene(c, W, H, st) {
         for (let x = Math.ceil(o.x) + 0.5; x < o.x + o.w; x += 3) { seg(c, cam, [x, 0.4, 0], [x, 1.2, 0]); seg(c, cam, [x - 0.25, 0.9, 0], [x, 1.2, 0]); seg(c, cam, [x + 0.25, 0.9, 0], [x, 1.2, 0]); }
         c.globalAlpha = fade * (0.5 + 0.3 * Math.sin(t * 6)); neon(c, pal.rail, 2);
       } }); break;
+      case 'gate': dr.push({ z: depth(o.x + o.w, o.y, 0), f: () => {
+        c.globalAlpha = fade;
+        box(c, cam, o.x, o.x + o.w, 0, o.y, -1.2, 1.2, pal.block, 0.8, 2);
+        box(c, cam, o.x, o.x + o.w, o.h, o.h + 1.4, -1.2, 1.2, pal.block, 0.8, 2);
+        c.beginPath();
+        for (const zz of [-1.2, 1.2]) seg(c, cam, [o.x, o.y, zz], [o.x, o.h, zz]);
+        seg(c, cam, [o.x, o.y, -1.2], [o.x, o.y, 1.2]); seg(c, cam, [o.x, o.h, -1.2], [o.x, o.h, 1.2]);
+        c.globalAlpha = fade * (0.6 + 0.3 * Math.sin(t * 7)); neon(c, pal.neon, 3);
+      } }); break;
       case 'chip': if (!o.got) dr.push({ z: depth(o.x, o.y, 0), f: () => {
         c.globalAlpha = fade;
         mesh(c, cam, MESHES.octa, [o.x, o.y, 0], [0.34, 0.5, 0.34], [0, t * 3 + o.x, 0], '#FFE45C', '#FF9F1C');

@@ -232,7 +232,7 @@ import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } fr
 import { drawScene, drawSkinThumb, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.3.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.4.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -448,6 +448,7 @@ function simStep() {
         spawn(e.x, e.y, 8, '#22F0FF', 4, 0.35, 0.08); break;
       case 'pad': G.stats = applyEvent(G.stats, e); audio.pad(); spawn(cxw, r.y, 14, '#7CFF6B', 5, 0.45, 0.1, 4); break;
       case 'bar': G.stats = applyEvent(G.stats, e); break;
+      case 'gate': pop('THREADED', cxw, cyw + 0.9, '#FFE45C', 15); spawn(cxw, cyw, 8, '#FFE45C', 4, 0.35, 0.08); break;
       case 'flipIn': audio.flip(); break;
       case 'flipOut': audio.flip(); G.stats = applyEvent(G.stats, e); break;
       case 'die': die(); return;

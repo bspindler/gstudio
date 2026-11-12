@@ -11,9 +11,10 @@
 //   pad   {x, w}          launches the runner at PAD_V
 //   mover {x, w, base, amp, k, ph}  platform bobbing at base + amp*sin(runnerX*k + ph)
 //   flip  {x, w}          gravity points up; the runner rides the ceiling track at CEIL_Y
+//   gate  {x, w, y, h}    slot gate: solid below y and above h; pass through the gap between
 
 import { mulberry32 } from './rng.js';
-import { AIR, BAR_Y, CEIL_Y, GRAV, JV, PAD_AIR, PAD_V, PS, sectorAt, speedAt, STEP } from './world.js';
+import { AIR, BAR_Y, CEIL_Y, GATE_HI, GATE_LO, GATE_W, GRAV, JV, PAD_AIR, PAD_V, PS, sectorAt, speedAt, STEP } from './world.js';
 
 const SW = 0.8; // spike width
 const range = (x) => speedAt(x) * AIR;
@@ -149,12 +150,20 @@ export const PATTERNS = [
       }
       return { o, len: 0.5 + L + 0.32 * v + 1.5 };
     } },
+
+  // Sector 6: slot gates. Jump so the rise or the fall of the arc threads the gap; the apex is too tall.
+  { id: 'gate', sector: 6, weight: (s) => (s === 6 ? 2.6 : 1.1),
+    build(x) {
+      const gx = x + 1;
+      const o = [{ t: 'gate', x: gx, w: GATE_W, y: GATE_LO, h: GATE_HI }, { t: 'chip', x: gx + GATE_W / 2, y: (GATE_LO + GATE_HI) / 2 }];
+      return { o, len: 1 + GATE_W + 1 };
+    } },
 ];
 
 const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate' };
 
 export function createCourse(seed) {
   return { seed: seed >>> 0, rng: mulberry32(seed), objs: [], nextX: 24, introduced: [], last: '', count: 0 };

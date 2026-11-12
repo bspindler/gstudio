@@ -2,6 +2,13 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.2.2 (2026-11-12)
+- Each level now opens looking down the citadel's longest open hall instead of into a wall corner.
+- Kiln Heart is a little less crowded: the tick crawler guarding the gear key has been scrapped, so you reach the kilnwarden with more fight left in you.
+
+## 0.2.1 (2026-11-11)
+- Terrace of Dials: a repair crystal now sits within reach of the main path, so the first level offers a little fair healing.
+
 ## 0.2.0 (2026-11-11)
 - **A new world, the clockwork citadel,** in real-time WebGL 3D, with lighting, bloom, high-resolution art, particles and a new HUD.
 - **A new hand cannon:** a heavy 3D revolver held in a partly cyborg hand, pointing into the scene.

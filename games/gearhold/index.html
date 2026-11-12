@@ -157,11 +157,12 @@ import { LEVELS, WALLS } from './levels.js';
 import { createRenderer, M4 } from './render3d.js';
 import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildScenery, buildArmillary } from './models.js';
 import { buildGuns, gunTriangles } from './gun3d.js';
+import { spawnYaw } from './spawn.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false }; // plain counters, read only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.2.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.2.2', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -295,7 +296,7 @@ function loadLevel(i) {
   }
   foes = enemies.filter((e) => !e.prop).length;
   const sx = Math.floor(P.x), sy = Math.floor(P.y);
-  P.a = [[1, 0, 0], [0, 1, Math.PI / 2], [-1, 0, Math.PI], [0, -1, -Math.PI / 2]].find(([dx, dy]) => !solid(sx + dx, sy + dy))?.[2] ?? 0;
+  P.a = spawnYaw(map, sx, sy, WALLS + 'DK');
   kills = 0; levelTime = 0; noiseRadius = 0;
   if (R3) buildGfx();
 }

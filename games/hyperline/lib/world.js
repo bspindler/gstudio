@@ -12,6 +12,11 @@ export const PAD_V = 26;
 export const CEIL_Y = 3.6;
 /** Low ceilings: the slab's underside is BAR_Y, and it is BAR_H tall, taller than any jump. */
 export const BAR_Y = 1.05, BAR_H = 3;
+/**
+ * Slot gates: a post from the track up to GATE_LO and a slab from GATE_HI up, GATE_W wide. The
+ * gap fits the runner on the rise or the fall of a jump, but a jump's apex is too tall for it.
+ */
+export const GATE_LO = 0.75, GATE_HI = 3.15, GATE_W = 0.5;
 /** Fall below this and the run ends. */
 export const VOID_Y = -2.5;
 /** Time in the air for a normal jump and for a pad launch. */
@@ -47,6 +52,8 @@ export const SECTORS = [
     pal: { sky: ['#020D08', '#06281A', '#0E4A2E'], sun: ['#E6FF6B', '#22FFA8'], grid: '#7CFF6B', rail: '#22F0FF', neon: '#FF2BD6', block: '#7CFF6B' } },
   { name: 'FLIP CITY', hint: 'Gravity flips: you ride the ceiling. Jump drops you down.',
     pal: { sky: ['#12020A', '#3A0820', '#6E0F2E'], sun: ['#FFE45C', '#FF2B5E'], grid: '#FF2B5E', rail: '#FFE45C', neon: '#22F0FF', block: '#FF8A3D' } },
+  { name: 'SLOT GATES', hint: 'Slot gates: jump through the gap. Too early or too late and you clip it.',
+    pal: { sky: ['#01060F', '#061A33', '#0A3A5C'], sun: ['#FFE45C', '#22F0FF'], grid: '#22A8FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#22F0FF' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];

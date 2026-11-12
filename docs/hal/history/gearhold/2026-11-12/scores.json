@@ -1,0 +1,53 @@
+{
+  "night": "2026-11-12",
+  "runs": [
+    {
+      "run": "run-2026-11-12T12-44-45-040Z",
+      "at": "2026-11-12T13:11:42.433Z",
+      "scorers": {
+        "gearhold": {
+          "fitness": 100,
+          "measures": {
+            "safeStarts": 100,
+            "supplied": 100,
+            "rising": 100,
+            "challenge": 100
+          }
+        },
+        "gearhold-play": {
+          "fitness": 83.05,
+          "measures": {
+            "winnable": 66.67,
+            "fairDamage": 98.84,
+            "pace": 66.67,
+            "feel": 100
+          }
+        }
+      }
+    },
+    {
+      "run": "run-2026-11-12T14-07-27-199Z",
+      "at": "2026-11-12T14:35:47.377Z",
+      "scorers": {
+        "gearhold": {
+          "fitness": 100,
+          "measures": {
+            "safeStarts": 100,
+            "supplied": 100,
+            "rising": 100,
+            "challenge": 100
+          }
+        },
+        "gearhold-play": {
+          "fitness": 83.05,
+          "measures": {
+            "winnable": 66.67,
+            "fairDamage": 98.84,
+            "pace": 66.67,
+            "feel": 100
+          }
+        }
+      }
+    }
+  ]
+}
