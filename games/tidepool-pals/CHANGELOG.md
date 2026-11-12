@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.4.2 (2026-11-12)
 - Gave a few of the trickiest tide pools a little more room: levels 11, 14, 15, 19, 25, 26 and 28 now have extra moves.
 - Rebalanced goals on a few tricky early levels: level 5 asks for a few more Sunstars, level 14 needs 3 of its 4 nets untangled, and level 15 needs either one of its two stranded pals rescued.
+- Level 21's reef floor has a little less litter to clear, so it's gentler after level 20.
 
 ## 0.4.1 (2026-11-11)
 - **Fonts ship with the game.** Bagel Fat One and Nunito now load from the game's own `fonts/` folder (SIL OFL), so players' phones no longer contact Google Fonts. The look is unchanged.

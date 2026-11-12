@@ -125,6 +125,8 @@ const ROCKS = [
 const TIDE_DIRS = ['up', 'left', 'right'];
 /** Extra moves for generated levels that hard-stopped players (measured by the play scorer). */
 export const MOVE_BONUS = { 25: 14, 26: 16, 28: 16 };
+/** Lighter boards for generated levels that walled players: [row, replacement row] pairs, moves untouched. */
+export const BOARD_EASE = { 21: [[6, '.......']] };
 
 export function generateLevel(n) {
   const rng = mulberry32(hashSeed('tidepool:' + n));
@@ -224,6 +226,8 @@ export function generateLevel(n) {
   def.moves = Math.max(16, Math.min(40, Math.round(workload(def) * holesFactor * slack) + 5));
   // 9. A few generated levels proved to wall players: they get extra moves, nothing else changes.
   if (MOVE_BONUS[n]) def.moves = Math.min(45, def.moves + MOVE_BONUS[n]);
+  // 10. Others get a lighter board instead (fewer obstacles), with the moves they already had.
+  for (const [r, row] of BOARD_EASE[n] ?? []) def.layout[r] = row;
   return def;
 }
 
