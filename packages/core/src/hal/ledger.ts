@@ -5,6 +5,8 @@ export type Pass = {
   id: string; ts: string; game: string; change: string; target?: string;
   fitness: number; baseline: number | null; measures: Measures;
   kept: boolean; reasons: string[]; costUsd: number;
+  /** Discarded for Hal's own reason (its harness, not the idea): recorded, but not counted toward stagnation. */
+  halFault?: boolean;
 };
 export type Ledger = { version: 1; passes: Pass[]; best: Record<string, number>; streak: Record<string, number> };
 
@@ -22,7 +24,8 @@ function validPass(p: unknown): boolean {
     && typeof p.change === 'string' && (p.target === undefined || typeof p.target === 'string')
     && typeof p.fitness === 'number' && (p.baseline === null || typeof p.baseline === 'number')
     && isNumRecord(p.measures) && typeof p.kept === 'boolean'
-    && Array.isArray(p.reasons) && p.reasons.every((r) => typeof r === 'string') && typeof p.costUsd === 'number';
+    && Array.isArray(p.reasons) && p.reasons.every((r) => typeof r === 'string') && typeof p.costUsd === 'number'
+    && (p.halFault === undefined || typeof p.halFault === 'boolean');
 }
 
 export function parseLedger(json: string): Ledger {
@@ -54,7 +57,7 @@ export function recordPass(l: Ledger, p: Omit<Pass, 'id'>, id: string = nextPass
   const pass: Pass = { ...p, id };
   const best = { ...l.best };
   if (p.kept && (best[p.game] === undefined || p.fitness > best[p.game]!)) best[p.game] = p.fitness;
-  const streak = { ...l.streak, [p.game]: p.kept ? 0 : (l.streak[p.game] ?? 0) + 1 };
+  const streak = { ...l.streak, [p.game]: p.kept ? 0 : (l.streak[p.game] ?? 0) + (p.halFault ? 0 : 1) };
   return { version: 1, passes: [...l.passes, pass].slice(-MAX_PASSES), best, streak };
 }
 
