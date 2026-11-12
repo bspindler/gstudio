@@ -28,8 +28,9 @@ npm run hal -- install      # nightly run at 01:00 (--at HH:MM to change) and th
 npm run hal -- uninstall    # removes both launchd jobs
 ```
 
-`install --dry-run` shows what it would write. Put `ANTHROPIC_API_KEY=...` in `.hal.env` if the nightly run should use
-API credits. It never goes anywhere else.
+`install --dry-run` shows what it would write. The nightly run always bills API credits, so it needs
+`ANTHROPIC_API_KEY=...` in `.hal.env`; without it the nightly run makes no Claude calls. Runs you start use your
+subscription first. The key never goes anywhere else.
 
 ## Everyday commands
 
