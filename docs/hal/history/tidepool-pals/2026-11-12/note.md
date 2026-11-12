@@ -52,3 +52,14 @@ Changes:
 Changes:
 - HAL-020 polish(tidepool-pals): Close the empty band between the goal bar and the board on tall phones: **merged** (0.5.0)
 - HAL-024 tuning(tidepool-pals): Ease goal counts on the Tidepool levels where the scorer falls short of goals: **discarded** (0.5.0) (tidepool-pals: no real gain: 0.45 < 0.5; tidepool-pals: tension regressed 2.55 (> 1))
+
+## Run run-2026-11-12T20-22-43-996Z
+
+**Tidepool Pals** is the calm, cozy reef match game. Tonight's work kept that identity.
+- **HAL-026 (merged):** the board fills the tall-phone dead space, and the tiles, art and underwater look are unchanged. It has not been verified on a real device.
+- **HAL-029 (merged):** levels 3, 4, 6, 7, 10 and 17 each lose 2 moves. This was a gentle tightening that left the walled levels alone. Tension went from 39.2 to 40.4, but the overall score did not move from 88.85.
+- **Next:** move trims are a small lever. Tension needs a different idea, not more trimming, and it must not make the game feel stressful.
+
+Changes:
+- HAL-026 fix(tidepool-pals): Scale the Tidepool board to fill the empty height between goal bar and tab bar: **merged** (0.5.0)
+- HAL-029 tuning(tidepool-pals): Trim 1-2 moves on the Tidepool levels the scorer wins with the most moves left: **merged** (0.5.0)

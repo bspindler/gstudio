@@ -40,3 +40,12 @@ Changes:
 
 Changes:
 - HAL-025 polish(hyperline): Hyperline near-miss spark: a neon flash and synth blip when you just clear a hit: **merged** (0.4.0)
+
+## Run run-2026-11-12T20-22-43-996Z
+
+**Hyperline** is the neon-and-synth timing runner.
+- **HAL-031 (blocked):** SWEEP COLUMNS adds sideways-sliding pillars that you jump on timing. The idea fits the game, and the build scored 100 with noSpikes and reach intact. It was blocked only by the protected scorer test that hardcodes the run length.
+- It will be rebuilt as soon as that test reads `HYPERLINE_UNTIL`.
+
+Changes:
+- HAL-031 feature(hyperline): Add a new Hyperline sector of sliding neon pillars that cross the lane: **discarded** (0.4.0) (implementer blocked: hal-scorers.test.ts:27 hardcodes the Hyperline scorer default as until=1900, but HYPERLINE_UNTIL is derived from SECTORS.length, so any new sector changes it to 2150. The test and scorers.ts are protected paths, so the test needs to use HYPERLINE_UNTIL or be guarded by the secto)

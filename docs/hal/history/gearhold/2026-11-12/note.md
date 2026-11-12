@@ -59,3 +59,14 @@ Changes:
 - HAL-021 tuning(gearhold): Put a repair crystal on the final approach of the level the play-bot can't win: **discarded** (implementer output does not match the contract)
 - HAL-022 tuning(gearhold): Station one existing enemy by the exit arch on the easiest Gearhold level: **discarded** (0.3.0) (gearhold-play: no real gain: 0.00 < 0.5)
 - HAL-023 tuning(gearhold): Trim backtracking on the Gearhold level that misses its pace band: **discarded** (implementer blocked: The ticket targets the wrong level and direction: level 1 (Terrace of Dials) is too fast at 15.4s, not a slow level 3. A new ticket should lengthen level 1.)
+
+## Run run-2026-11-12T20-22-43-996Z
+
+**Gearhold** is about exploring a clockwork citadel: brass halls, a gear key and an exit arch.
+- **Discarded:** the key relocation (HAL-027), late-arriving exit drones (HAL-028) and level 4 (HAL-030). All three failed the implementer contract, and none was rejected on design or score.
+- Gearhold is **stagnated** (seven attempts with nothing kept). Hal is pausing Gearhold work until Brian gives direction.
+
+Changes:
+- HAL-027 tuning(gearhold): Move Terrace of Dials' gear key to the far southwest room to lengthen it: **discarded** (implementer output does not match the contract)
+- HAL-028 tuning(gearhold): Guard Terrace of Dials' exit room with a pair of drones that arrive late: **discarded** (implementer output does not match the contract)
+- HAL-030 feature(gearhold): Add Gearhold level 4 built around one new clockwork hazard: **discarded** (implementer output does not match the contract)
