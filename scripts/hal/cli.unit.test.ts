@@ -6,6 +6,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gearholdPlayScorer, SCORERS, type PlayRecord, type Scorer } from '@studio/core/hal';
 import { main } from './cli.js';
+import { LEVELS } from '../../games/gearhold/levels.js';
 import type { ControlCheck } from './controls.js';
 import type { ScreensResult as ScreensRun } from './screens.js';
 
@@ -27,7 +28,7 @@ describe('hal CLI with an async scorer', () => {
   it('baseline then a no-op check is DISCARD (exit 2); a deterministic fake gives the same fitness (real determinism: hal-browser project)', async () => {
     expect(await main(['baseline', '--game', 'gearhold-play', '--seeds', '2'], deps(good))).toBe(0);
     const base = JSON.parse(await readFile(join(halDir, 'baseline', 'gearhold-play.json'), 'utf8'));
-    expect(base.range).toEqual({ levels: 3, seeds: 2, seedBase: 0 });
+    expect(base.range).toEqual({ levels: LEVELS.length, seeds: 2, seedBase: 0 }); // every Gearhold level, however many
     for (let i = 0; i < 2; i++) expect(await main(['check', '--game', 'gearhold-play', '--seeds', '2', '--change', 'no-op'], deps(good))).toBe(2);
     expect(out.filter((l) => l.startsWith('DISCARD'))).toHaveLength(2);
     const ledger = JSON.parse(await readFile(join(halDir, 'ledger.json'), 'utf8'));
