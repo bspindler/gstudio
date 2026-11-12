@@ -9,6 +9,8 @@ import {
 } from '@studio/core/hal';
 // Type-only imports are erased, so the CLI still never loads Playwright.
 import { isOpsCommand, runOpsCommand } from './cli-ops.js';
+import { isRunCommand, runRunCommand } from './cli-run.js';
+import { scorersFor } from './candidate.js';
 import { isStoreCommand, runStoreCommand } from './cli-store.js';
 import type { ControlCheck } from './controls.js';
 import type { ScreensResult } from './screens.js';
@@ -51,6 +53,9 @@ function printReport(r: ScoreReport<unknown>) {
   if (r.hardFailures.length) console.log(`hard failures: ${r.hardFailures.join('; ')}`);
 }
 
+/** Game slugs among scorer names: a scorer that is another game's second scorer (gearhold-play) is not a game. */
+const gameSlugs = (names: string[]) => names.filter((n) => !names.some((g) => g !== n && scorersFor(g).includes(n)));
+
 /** Runs the CLI and returns its exit code. */
 export async function main(argv: string[], deps: CliDeps): Promise<number> {
   try {
@@ -67,6 +72,7 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
   const [command, ...rest] = argv;
   if (isStoreCommand(command)) return runStoreCommand(command, rest, { halDir, now, games: Object.keys(scorers) });
   if (isOpsCommand(command)) return runOpsCommand(command, rest, { halDir, games: Object.keys(scorers) });
+  if (isRunCommand(command)) return runRunCommand(command, rest, { halDir, games: gameSlugs(Object.keys(scorers)), ...(now ? { now } : {}) });
   // Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
   // Flag names are kebab-case (seedBase -> --seed-base).
   const flag = (k: string) => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
@@ -202,6 +208,6 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
       return res.keep ? 0 : 2;
     }
     default:
-      return fail('usage: npm run hal -- <score|baseline|check|status|screens|controls> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
+      return fail('usage: npm run hal -- <score|baseline|check|status|screens|controls|run|stop|undo|tell|notes|approve|spend|serve|setup|install|uninstall> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
   }
 }
