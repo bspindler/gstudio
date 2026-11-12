@@ -1,6 +1,7 @@
 // Phone-size screenshots and console errors for all three games (390x844 @2x, touch).
 // Gearhold uses the ?hal hook; Tidepool Pals and Hyperline are pressed through their own start buttons.
-// Output: <outDir>/<game>/<n>.png (1-based) and <outDir>/<game>/errors.json. Local builds only (127.0.0.1).
+// Output: <outDir>/<game>/<n>.png (1-based; a labeled shot is <n>-<label>.png) and <outDir>/<game>/errors.json.
+// Gearhold adds an overhead layout shot of every level. Local builds only (127.0.0.1).
 //   A browser that can't launch throws "browser unavailable: ...".
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -10,7 +11,7 @@ import { closeAll, launchBrowser, newHalContext, repo, serveGames, type HalConte
 export const DEFAULT_SCREENS_DIR = join(repo, '.data', 'hal', 'screens');
 export type ScreensResult = { game: string; shots: string[]; errors: string[]; reached: boolean; notes: string[]; blockedRequests: string[] };
 
-type Shoot = () => Promise<void>;
+type Shoot = (label?: string) => Promise<void>;
 type Flow = { reached: boolean; notes: string[] };
 type FlowFn = (page: Page, origin: string, shoot: Shoot, flow: Flow) => Promise<void>;
 const SETTLE = 250; // short settle before a screenshot
@@ -39,6 +40,13 @@ const FLOWS: Record<string, FlowFn> = {
     await shoot();
     await page.evaluate(() => { const h = (globalThis as any).__hal; for (let i = 0; i < 300; i++) h.step(1 / 60, {}); h.render(); });
     await shoot();
+    // Layout: each level from straight above at its start (walls, crystals, enemies, keys, doors, exit), for the planner.
+    const levels = await page.evaluate(() => Number((globalThis as any).__hal.levels?.() ?? 0));
+    for (let i = 0; i < levels; i++) {
+      await page.evaluate((n) => { const h = (globalThis as any).__hal; h.start(n); h.overhead(true); h.render(); }, i);
+      await shoot(`overhead-level-${i + 1}`);
+    }
+    await page.evaluate(() => (globalThis as any).__hal.overhead?.(false));
   },
   async 'tidepool-pals'(page, origin, shoot, flow) {
     await step('load map', async () => {
@@ -125,8 +133,8 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR, games }: { outD
         const page = await hal.context.newPage();
         page.on('pageerror', (e) => errors.push(`pageerror: ${String(e)}`));
         page.on('crash', () => errors.push('page crashed'));
-        const shoot: Shoot = async () => {
-          const file = join(dir, `${shots.length + 1}.png`);
+        const shoot: Shoot = async (label) => {
+          const file = join(dir, `${shots.length + 1}${label ? `-${label.replace(/[^a-z0-9-]/gi, '')}` : ''}.png`);
           await page.screenshot({ path: file });
           shots.push(file);
         };

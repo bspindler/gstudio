@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { gearholdPlayScorer, SCORERS, scorerFor } from '../src/hal/scorers.js';
+import { gearholdPlayScorer, HYPERLINE_UNTIL, SCORERS, scorerFor, TIDEPOOL_TO } from '../src/hal/scorers.js';
+import { LEVELS } from '../../../games/gearhold/levels.js';
+import { AUTHORED } from '../../../games/tidepool-pals/levels.js';
+import { SECTORS, SECTOR_LEN } from '../../../games/hyperline/lib/world.js';
 
 describe('hal scorers', () => {
   it('registers tidepool with its defaults', () => {
@@ -37,14 +40,14 @@ describe('hal scorers', () => {
   });
   describe('gearhold-play (injected browser runner)', () => {
     const rec = (level: number, seed: number) => ({ level, seed, result: 'win' as const, time: 60, hpLeft: 50, kills: 3, foes: 3, shotsFired: 10, hits: 5, damageTaken: 10, damageUnseen: 0, cause: '' });
-    it('is not in the core registry (core cannot import Playwright) and has 3 levels x 50 seeds', () => {
+    it('is not in the core registry (core cannot import Playwright) and plays every Gearhold level x 50 seeds', () => {
       expect(Object.keys(SCORERS)).not.toContain('gearhold-play');
       const s = gearholdPlayScorer(async () => ({ records: [], errors: [] }));
-      expect(s.defaults).toEqual({ levels: 3, seeds: 50, seedBase: 0 });
-      expect(s.validate({ levels: 3, seeds: 50, seedBase: 0 })).toBeNull();
+      expect(s.defaults).toEqual({ levels: LEVELS.length, seeds: 50, seedBase: 0 }); // follows the game: a new level is played too
+      expect(s.validate({ levels: LEVELS.length, seeds: 50, seedBase: 0 })).toBeNull();
       expect(s.validate({ levels: 0, seeds: 50, seedBase: 0 })).toBe('--levels must be a positive integer');
       expect(s.validate({ levels: 3, seeds: 1.5, seedBase: 0 })).toBe('--seeds must be a positive integer');
-      expect(s.validate({ levels: 99, seeds: 1, seedBase: 0 })).toMatch(/^--levels must be at most 3/);
+      expect(s.validate({ levels: 99, seeds: 1, seedBase: 0 })).toBe(`--levels must be at most ${LEVELS.length} (Gearhold has ${LEVELS.length} levels)`);
     });
     it('awaits the runner with levels 0..n-1 and scores its records', async () => {
       const calls: unknown[] = [];
@@ -75,5 +78,22 @@ describe('hal scorers', () => {
       expect(scorerFor('gearhold-play', { ...SCORERS, 'gearhold-play': s })).toBe(s);
       expect(() => scorerFor('gearhold-play')).toThrow(/unknown game/);
     });
+  });
+});
+
+describe('default ranges follow each game\'s content (new levels and sectors get scored)', () => {
+  it('Tidepool: the hand-made levels plus 10 generated ones, at least 1-30', () => {
+    expect(TIDEPOOL_TO).toBe(Math.max(30, AUTHORED.length + 10));
+    expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: TIDEPOOL_TO, seeds: 20 });
+  });
+  it('Hyperline: 150 units into the last (endless) sector, so every sector is run and reach is a fraction of the whole course', () => {
+    expect(HYPERLINE_UNTIL).toBe((SECTORS.length - 1) * SECTOR_LEN + 150);
+    expect(scorerFor('hyperline').defaults).toEqual({ seeds: 100, until: HYPERLINE_UNTIL });
+    expect(Math.floor((HYPERLINE_UNTIL - 1) / SECTOR_LEN)).toBe(SECTORS.length - 1); // the last sector is reached
+  });
+  it('today\'s numbers are unchanged (3 Gearhold levels, Tidepool 1-30, Hyperline 1900 with 8 sectors), so tonight\'s baselines still compare', () => {
+    if (LEVELS.length === 3) expect(gearholdPlayScorer(async () => ({ records: [], errors: [] })).defaults.levels).toBe(3);
+    if (AUTHORED.length <= 20) expect(TIDEPOOL_TO).toBe(30);
+    if (SECTORS.length === 8) expect(HYPERLINE_UNTIL).toBe(1900);
   });
 });

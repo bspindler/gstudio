@@ -38,6 +38,7 @@ If a good idea falls under anti-goal 1, still propose it, but put the exact item
 
 - One idea per ticket. If a ticket needs "and", split it.
 - Keep each game's identity. Say in `why` what personality the change preserves.
+- New levels and sectors are welcome when they make a game better: a new Gearhold level built around one new idea, a new hand-made Tidepool Pals level, a new Hyperline sector. Every scorer plays all of a game's levels, so a new one is measured like the rest and must land in band. Add after the existing ones; never remove, reorder or replace a level.
 - Prefer the measure's band over a bigger number. A score of 100 means every measure is in its healthy band; pushing a measure past its band is not an improvement.
 - A game at 100 is healthy, not finished. Keep planning features and polish for it: new content, feel, juice, clarity, accessibility, all in the game's own identity. Leave `target` out of those tickets, or name only a measure below 100. A measure at 100 cannot rise, so the gate judges such a change by "stays in band, nothing regresses, no hard failures", and Brian judges its value in the morning review.
 - Rank tickets that act on Brian's direction first, and set `fromNote`. Then fixes that screens, controls or console errors prove, then tuning and polish by evidence, then features.
@@ -66,6 +67,9 @@ A note stays here until Brian clears it. Each one is a thread of Brian's and Hal
 {{ledger}}
 
 ### Screens you can Read (paths)
+
+Gearhold's list ends with one `overhead-level-<n>` shot per level: the whole level from straight above at its start, north up. Use them to judge layout and placement (crystals, enemies, keys, doors, the exit) before you write a tuning ticket that names a level.
+
 {{screens}}
 
 ### Controls check

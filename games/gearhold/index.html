@@ -160,7 +160,7 @@ import { buildGuns, gunTriangles } from './gun3d.js';
 import { spawnYaw } from './spawn.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
-const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false }; // plain counters, read only by the hook
+const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
 const studio = createStudio({ game: 'gearhold', version: '0.2.2', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
@@ -416,12 +416,26 @@ function adaptQuality(dtMs) {
 // ---------- rendering ----------
 const I4 = M4.ident();
 function camera() {
+  if (hal.overhead) return overheadCamera(); // test robot only (__hal.overhead); never true in play
   const pitch = Math.atan(viewLook());
   const eye = [P.x, EYE + Math.sin(P.bob * 2) * 0.014 * P.bobAmp, P.y];
   const c = Math.cos(pitch), fwd = [Math.cos(P.a) * c, Math.sin(pitch), Math.sin(P.a) * c];
   const asp = view.width / view.height, plane = Math.max(0.5, Math.min(1, 0.5 * asp));
   const vfov = Math.min(1.35, 2 * Math.atan(plane / asp));
   return { eye, view: M4.lookAt(eye, [eye[0] + fwd[0], eye[1] + fwd[1], eye[2] + fwd[2]], [0, 1, 0]), proj: M4.persp(vfov, asp, 0.03, 600) };
+}
+/**
+ * Straight down on the whole map, framed to fit, for Hal's per-level layout shots; draws what play draws. North is up,
+ * except that a map wider than tall in a portrait view is turned so east is up and it fills the screen.
+ */
+function overheadCamera() {
+  const asp = view.width / view.height, vfov = 0.9;
+  const turned = mw > mh && asp < 1;
+  const [across, along] = turned ? [mh, mw] : [mw, mh]; // screen width, screen height in cells
+  const half = Math.max(along / 2, across / 2 / asp) * 1.06; // fit both sides, with a margin
+  const h = half / Math.tan(vfov / 2) + 4;
+  const eye = [mw / 2, h, mh / 2];
+  return { eye, view: M4.lookAt(eye, [mw / 2, 0, mh / 2], turned ? [1, 0, 0] : [0, 0, -1]), proj: M4.persp(vfov, asp, 0.5, h + 200) };
 }
 function machineDraws(e, t, out) {
   const yaw = Math.PI / 2 - e.face;
@@ -468,7 +482,7 @@ function machineDraws(e, t, out) {
 function render(now) {
   if (!R3 || !G) return;
   const t = now / 1000, cam = camera();
-  R3.begin({ eye: cam.eye, view: cam.view, proj: cam.proj, mood, lights: frameLights(cam.eye), center: [mw / 2, 0, mh / 2], radius: Math.max(mw, mh) * 0.72 });
+  R3.begin({ eye: cam.eye, view: cam.view, proj: cam.proj, mood: hal.overhead ? { ...mood, fog: 0 } : mood, lights: frameLights(cam.eye), center: [mw / 2, 0, mh / 2], radius: Math.max(mw, mh) * 0.72 });
   const draws = [{ mesh: G.level, model: I4 }];
   for (const d of G.doors) draws.push({ mesh: DOOR_MESH[d.axis + d.kind], model: M4.trs(d.x, -doorOpen[d.y * mw + d.x] * 1.74, d.y) });
   for (const [x, y] of G.lamps) draws.push({ mesh: G.lantern, model: M4.trs(x + 0.5, 1.75 + Math.sin(t * 1.3 + x) * 0.05, y + 0.5, t * 0.6 + x), noShadow: true });
@@ -507,7 +521,7 @@ function render(now) {
 
 // The gun: a 3D model held low and right, angled slightly inward, its bore aimed down the crosshair.
 function drawViewmodel() {
-  if (mode !== 'play' && mode !== 'paused') return null;
+  if ((mode !== 'play' && mode !== 'paused') || hal.overhead) return null; // no gun in Hal's overhead layout shots
   const amp = P.bobAmp, rc = P.recoil * P.recoil;
   const pos = [
     0.13 + Math.sin(P.bob) * 0.007 * amp + P.swayX * 0.22,
@@ -1145,6 +1159,13 @@ if (HAL) {
       return state();
     },
     render() { Math.random = nativeRandom; try { render(performance.now()); } finally { Math.random = rng; } },
+    // Layout shots: the camera looks straight down on the whole level (on) or is the player's again (off).
+    // Rendering only; update() and the robot's inputs are unchanged.
+    overhead(on = true) {
+      hal.overhead = !!on;
+      for (const id of ['hands', 'hud', 'vignette', 'hurt', 'glow', 'msg', 'touchui']) { const n = $(id); if (n) n.style.visibility = hal.overhead ? 'hidden' : ''; }
+    },
+    levels() { return LEVELS.length; },
   };
 }
 // ---- end hal hook ----
