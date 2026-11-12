@@ -448,6 +448,25 @@ describe('calls and Tell Hal', () => {
     expect((await fb()).votes).toEqual([expect.objectContaining({ run: RUN, item: LIAB, game: 'gearhold', vote: 'down' })]);
     expect(await json('approvals.json')).toEqual([]);
   });
+  it('POST /notes/reply adds Brian\'s message to the thread and reopens it; bad id or empty text is 400', async () => {
+    await seed();
+    const app = mk();
+    await writeFile(join(halDir, 'notes.json'), JSON.stringify([{ id: 'N-001', at: '2026-11-11T08:00:00Z', game: null, text: 'louder?', status: 'asked', reply: 'How loud?' }]));
+    for (const b of [{ id: 'N-001', text: '  ' }, { id: 'N-9', text: 'x' }, { id: 'nope', text: 'x' }]) expect((await post(app, '/notes/reply', form({ run: RUN, ...b }))).status, JSON.stringify(b)).toBe(400);
+    const r = await post(app, '/notes/reply', form({ run: RUN, id: 'N-001', text: 'Twice as loud' }));
+    expect(r.status).toBe(303);
+    const [n] = JSON.parse(await readFile(join(halDir, 'notes.json'), 'utf8'));
+    expect(n.status).toBe('open');
+    expect(n.thread.map((m: { from: string; text: string }) => `${m.from}:${m.text}`)).toEqual(['brian:louder?', 'hal:How loud?', 'brian:Twice as loud']);
+  });
+  it('POST /tell with ref (a reply to the Director\'s note) ties the new thread to that report; an unknown ref is 400', async () => {
+    await seed();
+    const app = mk();
+    expect((await post(app, '/tell', form({ run: RUN, ref: 'run-nope', text: 'x' }))).status).toBe(400);
+    expect((await post(app, '/tell', form({ run: RUN, ref: RUN, text: 'Judge by band, yes' }))).status).toBe(303);
+    const [n] = JSON.parse(await readFile(join(halDir, 'notes.json'), 'utf8'));
+    expect(n).toMatchObject({ text: 'Judge by band, yes', game: null, status: 'open', ref: { run: RUN } });
+  });
   it('POST /tell with unknown game is 400; empty text 400; ok adds a note; /notes/clear removes it', async () => {
     await seed();
     const app = mk();

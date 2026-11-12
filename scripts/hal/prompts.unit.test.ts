@@ -62,11 +62,13 @@ describe('prompt contents', () => {
     expect(how).toMatch(/Hal runs the full suite itself, sandboxed/);
     expect(how).not.toMatch(/then `npm test` and/);
   });
-  it('planner and director see every uncleared note with its status and last reply', () => {
+  it('planner and director see every uncleared note as a thread, with its status; the newest message is the direction', () => {
     for (const r of ['planner', 'director'] as const) {
       const p = loadPrompt(r);
       expect(p, r).toContain('`status`');
-      expect(p, r).toContain('`lastReply`');
+      expect(p, r).toMatch(/thread/);
+      expect(p, r).toMatch(/newest message/);
+      expect(p, r).not.toContain('`lastReply`');
     }
   });
   it('director returns the documented JSON shape', () => {

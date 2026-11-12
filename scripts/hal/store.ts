@@ -7,7 +7,22 @@ import { fileURLToPath } from 'node:url';
 import { dayFor, type Approval, type SpendDay } from '@studio/core/hal';
 
 export type NoteStatus = 'open' | 'acted' | 'queued' | 'asked';
-export type Note = { id: string; at: string; game: string | null; text: string; status: NoteStatus; reply?: string };
+/** One message in a note's thread. `run`: the run whose director wrote it (Hal's messages). */
+export type NoteMessage = { from: 'brian' | 'hal'; text: string; at: string; run?: string };
+/**
+ * A Tell Hal thread. `text` is Brian's first message and `reply` Hal's latest (kept for older readers); `thread` is the
+ * whole conversation. Notes written before threads have no `thread`: threadOf builds it from text and reply.
+ * `ref`: the report this thread replies to (Brian answered that night's Director's note).
+ */
+export type Note = { id: string; at: string; game: string | null; text: string; status: NoteStatus; reply?: string; thread?: NoteMessage[]; ref?: { run: string; night?: string } };
+
+/** The note's messages, oldest first (from text and reply for a note written before threads). */
+export function threadOf(n: Note): NoteMessage[] {
+  if (Array.isArray(n.thread) && n.thread.length) return n.thread;
+  return [{ from: 'brian', text: n.text, at: n.at }, ...(n.reply ? [{ from: 'hal' as const, text: n.reply, at: n.at }] : [])];
+}
+/** When the thread last moved: its newest message. */
+export const lastAt = (n: Note): string => threadOf(n).at(-1)?.at ?? n.at;
 export type Vote = { run: string; item: string; game?: string; vote: 'up' | 'down'; at: string; /** Brian's words, capped at 500 characters by the caller. */ comment?: string };
 export type UndoStatus = 'pending' | 'done' | 'failed' | 'rejected';
 /**
@@ -93,10 +108,11 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
   return {
     halDir, readNotes, readApprovals, readFeedback, readSpend,
 
-    async addNote({ text, game }: { text: string; game: string | null }): Promise<Note> {
+    async addNote({ text, game, ref }: { text: string; game: string | null; ref?: Note['ref'] }): Promise<Note> {
       const notes = await readNotes();
       const max = notes.reduce((m, n) => Math.max(m, Number(/^N-(\d+)$/.exec(n.id)?.[1] ?? 0)), 0);
-      const note: Note = { id: `N-${String(max + 1).padStart(3, '0')}`, at: now().toISOString(), game, text, status: 'open' };
+      const at = now().toISOString();
+      const note: Note = { id: `N-${String(max + 1).padStart(3, '0')}`, at, game, text, status: 'open', thread: [{ from: 'brian', text, at }], ...(ref ? { ref } : {}) };
       await writeJsonAtomic(p('notes.json'), [...notes, note]);
       return note;
     },
@@ -107,10 +123,29 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
       await writeJsonAtomic(p('notes.json'), notes.filter((n) => n.id !== id));
       return true;
     },
-    async setNote(id: string, patch: { status: NoteStatus; reply?: string }): Promise<boolean> {
+    /** Brian replies in a thread: the message is added and the note is open again (Hal answers it next run). */
+    async addReply(id: string, text: string): Promise<boolean> {
       const notes = await readNotes();
       if (!notes.some((n) => n.id === id)) return false;
-      await writeJsonAtomic(p('notes.json'), notes.map((n) => (n.id === id ? { ...n, ...patch } : n)));
+      const at = now().toISOString();
+      await writeJsonAtomic(p('notes.json'), notes.map((n) => (n.id === id ? { ...n, status: 'open' as const, thread: [...threadOf(n), { from: 'brian' as const, text, at }] } : n)));
+      return true;
+    },
+    /**
+     * Hal's answer (the director, once per run): sets the status and adds `reply` to the thread, unless it repeats Hal's
+     * last message word for word with nothing from Brian since (a director restating itself is not a new message).
+     */
+    async setNote(id: string, patch: { status: NoteStatus; reply?: string; run?: string }): Promise<boolean> {
+      const notes = await readNotes();
+      if (!notes.some((n) => n.id === id)) return false;
+      await writeJsonAtomic(p('notes.json'), notes.map((n) => {
+        if (n.id !== id) return n;
+        const thread = threadOf(n);
+        const last = thread.at(-1);
+        const repeat = last?.from === 'hal' && last.text === patch.reply;
+        const msg: NoteMessage | null = patch.reply && !repeat ? { from: 'hal', text: patch.reply, at: now().toISOString(), ...(patch.run ? { run: patch.run } : {}) } : null;
+        return { ...n, status: patch.status, ...(patch.reply ? { reply: patch.reply } : {}), thread: msg ? [...thread, msg] : thread };
+      }));
       return true;
     },
 

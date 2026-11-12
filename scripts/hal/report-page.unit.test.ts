@@ -208,10 +208,46 @@ describe('renderReport', () => {
     expect(send.body).toMatch(/<textarea name="text"/);
     expect(tell).toContain('Make the cannon louder');
     expect(tell).toContain('Done in HAL-004');
-    expect(tell).toMatch(/acted/i);
+    expect(tell).toContain('>Done<');
     expect(tell).toContain('Less purple');
-    expect(tell).toMatch(/open/i);
-    expect(fs.filter((f) => f.action === '/notes/clear').map((f) => f.fields.id)).toEqual(['N-001', 'N-002']);
+    expect(tell).toContain('>Waiting for Hal<');
+    // Newest thread first; each has a reply box and a Clear.
+    expect(fs.filter((f) => f.action === '/notes/clear').map((f) => f.fields.id)).toEqual(['N-002', 'N-001']);
+    expect(fs.filter((f) => f.action === '/notes/reply').map((f) => f.fields.id)).toEqual(['N-002', 'N-001']);
+    // An older note (text + reply, no thread) shows as two messages: Brian's, then Hal's.
+    const one = tell.slice(tell.indexOf('id="N-001"'));
+    expect(one.indexOf('Make the cannon louder')).toBeLessThan(one.indexOf('Done in HAL-004'));
+    expect(one).toMatch(/<div class="msg me">[\s\S]*Make the cannon louder[\s\S]*<div class="msg hal">[\s\S]*Done in HAL-004/);
+  });
+
+  it('threads: a note Hal asked about comes first, says so, and its reply box asks for an answer; long threads fold their start', () => {
+    const msgs = Array.from({ length: 9 }, (_, i) => ({ from: (i % 2 ? 'hal' : 'brian') as 'hal' | 'brian', text: `m${i}`, at: `2026-11-11T2${i}:00:00Z`.replace('T29', 'T23') }));
+    const html = renderReport(view({
+      notes: [
+        { id: 'N-001', at: '2026-11-11T20:00:00Z', game: null, text: 'm0', status: 'open', thread: msgs },
+        { id: 'N-002', at: '2026-11-10T20:00:00Z', game: 'gearhold', text: 'louder?', status: 'asked', reply: 'How loud?', thread: [{ from: 'brian', text: 'louder?', at: '2026-11-10T20:00:00Z' }, { from: 'hal', text: 'How loud?', at: '2026-11-10T21:00:00Z' }] },
+        { id: 'N-003', at: '2026-11-12T08:00:00Z', game: null, text: 'Yes, judge by band', status: 'open', ref: { run: RUN, night: '2026-11-11' } },
+      ],
+    }));
+    const tell = section(html, 'Tell Hal');
+    expect(tell.indexOf('id="N-002"')).toBeLessThan(tell.indexOf('id="N-003"'));
+    expect(tell.indexOf('id="N-003"')).toBeLessThan(tell.indexOf('id="N-001"'));
+    const asked = tell.slice(tell.indexOf('id="N-002"'), tell.indexOf('id="N-003"'));
+    expect(asked).toContain('>Hal asked you<');
+    expect(asked).toContain('placeholder="Answer Hal"');
+    const long = tell.slice(tell.indexOf('id="N-001"'));
+    expect(long).toContain('Earlier messages (3)');
+    expect(long.indexOf('m2')).toBeLessThan(long.indexOf('<div class="msgs">'));
+    expect(long.indexOf('m8')).toBeGreaterThan(long.indexOf('<div class="msgs">'));
+    const reply = tell.slice(tell.indexOf('id="N-003"'), tell.indexOf('id="N-001"'));
+    expect(reply).toContain(`href="/runs/${RUN}">Re: the Director&#39;s note of 2026-11-11</a>`);
+  });
+
+  it('the Director\'s note has a reply box that starts a thread tied to this report', () => {
+    const note = section(renderReport(view()), 'Director&#39;s note');
+    const f = forms(note).find((x) => x.action === '/tell')!;
+    expect(f.fields).toMatchObject({ run: RUN, ref: RUN });
+    expect(f.body).toMatch(/<textarea name="text"[^>]*required/);
   });
 
   it('old report (no perGame, no planned) renders without those parts; report-only with only planned shows Planned, not built and "Nothing changed overnight."', () => {

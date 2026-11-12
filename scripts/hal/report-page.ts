@@ -9,7 +9,7 @@ import type { CandidateResult } from './candidate.js';
 import { esc, noteHtml, pageHead } from './page-style.js';
 import { phaseProgress } from './status-client.js';
 import type { RunReport } from './run.js';
-import type { Note, Undo, Vote } from './store.js';
+import { lastAt, threadOf, type Note, type Undo, type Vote } from './store.js';
 
 // perGame and Vote.comment land with Task 2; typed here as optional so this compiles before and after it.
 type ViewReport = RunReport & { perGame?: Record<string, string> };
@@ -20,7 +20,7 @@ type ViewUndo = Undo & { version?: string };
 export type ReportView = {
   report: ViewReport; note: string;
   feedback: { votes: ViewVote[]; undos: ViewUndo[] };   // this run's (store.feedbackFor)
-  notes: Note[];                                          // all open notes, for Tell Hal
+  notes: Note[];                                          // every thread Brian has not cleared, for Tell Hal
   approvals: string[];                                    // approved liability items
   status: { running: boolean; phase?: string; startedAt?: string };
   /** latest.json's run when the page was rendered: /hal.js offers the new report once a newer one exists. */
@@ -110,9 +110,11 @@ function header(v: ReportView, merged: number, dropped: number, needYou: number)
 function director(v: ReportView): string {
   if (!v.note.trim()) return '';
   const r = v.report;
+  // A reply starts a Tell Hal thread tied to this report, so Hal knows which note it answers (next run).
   return `<section><h2>${esc("Director's note")}</h2><div class="card note">
 ${noteHtml(v.note)}
 <p class="sign">— Hal · ${usd(r.spend.api)} API, ${usd(r.spend.subscription)} subscription</p>
+<form method="post" action="/tell" class="reply-form note-reply">${hidden('run', r.runId)}${hidden('ref', r.runId)}<textarea name="text" rows="2" maxlength="2000" required placeholder="Reply to Hal&#39;s note" aria-label="Reply to the Director's note"></textarea><button type="submit" class="tonal inline">Reply</button></form>
 </div></section>`;
 }
 
@@ -226,30 +228,46 @@ ${action}
 }
 
 const NOTE_STATUS: Record<string, [string, State['tone']]> = {
-  open: ['Open', 'accent'], acted: ['Acted', 'good'], queued: ['Queued', 'accent'], asked: ['Hal asked', 'warn'],
+  open: ['Waiting for Hal', 'accent'], acted: ['Done', 'good'], queued: ['Queued', 'accent'], asked: ['Hal asked you', 'warn'],
 };
+/** Messages a thread shows before "Earlier messages". */
+const THREAD_TAIL = 6;
+
+/** One thread: what it is about, its state, its messages (oldest first, the last few shown), a reply box and Clear. */
+function thread(v: ReportView, n: Note, run: string): string {
+  const [label, tone] = NOTE_STATUS[n.status] ?? [n.status, 'accent'];
+  const about = n.ref
+    ? `<a class="label" href="/runs/${esc(encodeURIComponent(n.ref.run))}">${esc("Re: the Director's note")}${n.ref.night ? ` of ${esc(n.ref.night)}` : ''}</a>`
+    : `<span class="label">${esc(n.game ? gameName(n.game) : 'The whole studio')}</span>`;
+  const msg = (m: ReturnType<typeof threadOf>[number]) => `<div class="msg ${m.from === 'hal' ? 'hal' : 'me'}"><div class="who small">${m.from === 'hal' ? 'Hal' : 'You'} · ${esc(when(m.at, v.timeZone))}</div><p>${esc(clip(m.text, 2000))}</p></div>`;
+  const all = threadOf(n);
+  const older = all.slice(0, -THREAD_TAIL), recent = all.slice(-THREAD_TAIL);
+  const ask = n.status === 'asked';
+  return `<li class="thread${ask ? ' asks' : ''}" id="${esc(n.id)}">
+<div class="note-top">${about}${pill(label, tone)}</div>
+${older.length ? `<details class="rest"><summary>Earlier messages (${older.length})</summary>${older.map(msg).join('')}</details>` : ''}
+<div class="msgs">${recent.map(msg).join('')}</div>
+<form method="post" action="/notes/reply" class="reply-form">${hidden('run', run)}${hidden('id', n.id)}<textarea name="text" rows="1" maxlength="2000" required placeholder="${ask ? 'Answer Hal' : 'Reply'}" aria-label="Reply in ${esc(n.id)}"></textarea><button type="submit" class="${ask ? 'primary' : 'tonal'} inline">Send</button></form>
+<form method="post" action="/notes/clear" class="clear">${hidden('run', run)}${hidden('id', n.id)}<button type="submit" class="inline text">Clear</button></form>
+</li>`;
+}
 
 function tell(v: ReportView): string {
   const run = v.report.runId;
   const opts = gameOptions(v.games);
-  const notes = v.notes.map((n) => {
-    const [label, tone] = NOTE_STATUS[n.status] ?? [n.status, 'accent'];
-    return `<li class="hal-note">
-<div class="note-top"><span class="label">${esc(n.game ? gameName(n.game) : 'The whole studio')}</span>${pill(label, tone)}</div>
-<p>${esc(clip(n.text, 2000))}</p>
-${n.reply ? `<p class="reply small"><span class="who">Hal</span> ${esc(clip(n.reply, 1000))}</p>` : ''}
-<form method="post" action="/notes/clear" class="clear">${hidden('run', run)}${hidden('id', n.id)}<button type="submit" class="inline">Clear</button></form>
-</li>`;
-  });
+  // Threads waiting on Brian first, then by newest message.
+  const order = [...v.notes].sort((a, b) => Number(b.status === 'asked') - Number(a.status === 'asked') || lastAt(b).localeCompare(lastAt(a)));
+  const threads = order.map((n) => thread(v, n, run));
   return `<section class="tell"><h2>Tell Hal</h2>
-<form method="post" action="/tell" class="card stack">${hidden('run', run)}
-<label class="label" for="tell-game">About</label>
+<form method="post" action="/tell" class="card compose stack">${hidden('run', run)}
+<label class="label" for="tell-game">New thread about</label>
 <select name="game" id="tell-game"><option value="">The whole studio</option>${opts}</select>
-<label class="label" for="tell-text">What should Hal know?</label>
-<textarea name="text" id="tell-text" maxlength="2000" required placeholder="An idea, a gripe, something you noticed while playing"></textarea>
+<label class="label" for="tell-text">Message</label>
+<textarea name="text" id="tell-text" rows="2" maxlength="2000" required placeholder="An idea, a gripe, something you noticed while playing"></textarea>
 <button type="submit" class="primary">Send to Hal</button>
 </form>
-${notes.length ? `<div class="card">${capped(notes)}</div>` : ''}
+${threads.length ? capped(threads, 'threads') : ''}
+<p class="small muted hint">Hal reads every thread and answers in its next run.</p>
 </section>`;
 }
 
@@ -474,10 +492,27 @@ const REPORT_CSS = `
 .item-title{font-weight:600}
 .inline-form{display:flex;gap:8px;margin-top:8px}
 .inline-form input{flex:1;min-width:0}
-.hal-note p{margin:6px 0 0}
-.reply{padding:8px 12px;border-radius:12px;background:var(--md-surface-container)}
-.reply .who{font-weight:700;color:var(--accent);margin-right:4px}
-.clear{display:flex;justify-content:flex-end;margin-top:8px}
+/* ---- Tell Hal: threads of messages ---- */
+.threads{list-style:none;margin:12px 0 0;padding:0}
+.threads>li{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:12px}
+.threads>li:first-child{margin-top:0}
+.threads>li.asks{border-color:var(--warn)}
+.msgs,.thread details.rest{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.thread details.rest>summary{padding-top:0}
+.msg{max-width:92%;padding:8px 12px;border-radius:16px}
+.msg p{margin:2px 0 0;font-size:14px;line-height:20px}
+.msg .who{font-size:12px;line-height:16px;color:var(--muted)}
+.msg.me{align-self:flex-end;background:var(--accent-soft);color:var(--md-on-secondary-container);border-bottom-right-radius:4px}
+.msg.hal{align-self:flex-start;background:var(--md-surface-container);border-bottom-left-radius:4px}
+.msg.hal .who{color:var(--accent);font-weight:500}
+.reply-form{display:flex;align-items:flex-end;gap:8px;margin-top:10px}
+.reply-form textarea{flex:1;min-width:0;min-height:44px;padding:10px 12px;font-size:16px;resize:vertical}
+.reply-form textarea:focus{padding:9px 11px}
+.note-reply{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.clear{display:flex;justify-content:flex-end;margin-top:4px}
+button.text{border-color:transparent;background:none;color:var(--accent);padding:8px 12px}
+.compose textarea{min-height:64px}
+.tell .hint{margin:8px 2px 0}
 .warnings{background:var(--warn-soft);border-color:transparent}
 .warnings .rows>li{border-color:color-mix(in srgb,var(--warn) 25%,transparent)}
 .runs>li{padding:0;border-top:1px solid var(--line)}

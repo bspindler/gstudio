@@ -86,8 +86,11 @@ Each liability item under Your calls has two buttons:
 - **Approve** says yes. Hal builds it on its next run.
 - **Leave it** says no.
 
-**Tell Hal** sends a note aimed at one game or the whole studio. Hal reads your notes every run, ranks them above its
-own ideas, and replies in the director's note. A note stays until you clear it, with Clear on the page or
+**Tell Hal** is a set of threads with Hal. Start one about a game or the whole studio, or reply under the Director's
+note, which starts a thread tied to that report. Each thread shows your messages and Hal's. When Hal asks you
+something, the thread goes to the top, marked "Hal asked you", with a box to answer. A reply reopens the thread. Hal
+reads every thread in the next run, with the whole conversation, ranks your direction above its own ideas, and
+answers in the thread. It does not answer right away. A thread stays until you clear it, with Clear on the page or
 `hal notes --clear`.
 
 The next run's planner and director also read your votes and comments.

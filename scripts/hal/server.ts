@@ -346,8 +346,26 @@ export function createServerApp(d: ServerDeps) {
       if (game !== '' && !d.games.includes(game)) return bad(c);
       const text = str(b.text).trim().slice(0, 2000).trim();
       if (!text) return bad(c);
-      await store.addNote({ text, game: game || null });
-      return back(c, await backRun(b.run), 'Sent to Hal');
+      // A reply to a report's Director's note: `ref` must name a real report (its night is shown to Hal).
+      let ref: { run: string; night?: string } | undefined;
+      if (str(b.ref) !== '') {
+        const r = await loadRun(b.ref);
+        if (!r) return bad(c);
+        ref = { run: r.runId, ...(r.night ? { night: r.night } : {}) };
+      }
+      await store.addNote({ text, game: game || null, ...(ref ? { ref } : {}) });
+      return back(c, await backRun(b.run), ref ? 'Sent to Hal; it answers in the next run' : 'Sent to Hal');
+    });
+  });
+  /** Brian answers in a thread; Hal replies in the next run. */
+  app.post('/notes/reply', async (c) => {
+    const b = await form(c);
+    if (!b) return bad(c);
+    return serial(async () => {
+      const id = str(b.id);
+      const text = str(b.text).trim().slice(0, 2000).trim();
+      if (!/^N-\d+$/.test(id) || !text || !(await store.addReply(id, text))) return bad(c);
+      return back(c, await backRun(b.run), 'Reply sent; Hal answers in the next run');
     });
   });
   app.post('/notes/clear', async (c) => {

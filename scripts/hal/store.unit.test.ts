@@ -2,7 +2,8 @@ import { mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { writeJsonAtomic, createStore, defaultHalDir, KEEP_SPEND_DAYS } from './store.js';
+import { writeJsonAtomic, createStore, defaultHalDir, KEEP_SPEND_DAYS, threadOf } from './store.js';
+import { writeFileSync } from 'node:fs';
 
 let dir: string, clock: Date;
 const mk = () => createStore({ halDir: dir, now: () => clock });
@@ -30,8 +31,29 @@ describe('store', () => {
     clock = new Date(2026, 10, 12, 1, 0, 0);
     const b = await s.addNote({ text: 'general', game: null });
     expect([a.id, b.id]).toEqual(['N-001', 'N-002']);
-    expect(a).toEqual({ id: 'N-001', at: new Date(2026, 10, 11, 1).toISOString(), game: 'tidepool-pals', text: 'make it juicier', status: 'open' });
+    const at = new Date(2026, 10, 11, 1).toISOString();
+    expect(a).toEqual({ id: 'N-001', at, game: 'tidepool-pals', text: 'make it juicier', status: 'open', thread: [{ from: 'brian', text: 'make it juicier', at }] });
     expect(await mk().readNotes()).toEqual([a, b]);
+  });
+  it('threads: Brian replies reopen the note; Hal\'s replies add messages, but a word-for-word repeat does not', async () => {
+    const s = mk();
+    const n = await s.addNote({ text: 'louder?', game: 'gearhold' });
+    await s.setNote(n.id, { status: 'asked', reply: 'How loud?', run: 'run-1' });
+    await s.setNote(n.id, { status: 'asked', reply: 'How loud?', run: 'run-2' }); // restated: no new message
+    expect(await s.addReply(n.id, 'Twice as loud')).toBe(true);
+    expect(await s.addReply('N-999', 'x')).toBe(false);
+    const [got] = await s.readNotes();
+    expect(got!.status).toBe('open');
+    expect(threadOf(got!).map((m) => [m.from, m.text, m.run])).toEqual([['brian', 'louder?', undefined], ['hal', 'How loud?', 'run-1'], ['brian', 'Twice as loud', undefined]]);
+    await s.setNote(n.id, { status: 'acted', reply: 'How loud?' }); // same words, but Brian spoke since: a new message
+    expect(threadOf((await s.readNotes())[0]!).map((m) => m.from)).toEqual(['brian', 'hal', 'brian', 'hal']);
+  });
+  it('a note written before threads reads as Brian\'s message then Hal\'s, and gains a thread on the next reply', async () => {
+    const s = mk();
+    writeFileSync(join(dir, 'notes.json'), JSON.stringify([{ id: 'N-001', at: '2026-11-01T00:00:00Z', game: null, text: 'old', status: 'asked', reply: 'q?' }]));
+    expect(threadOf((await s.readNotes())[0]!).map((m) => [m.from, m.text])).toEqual([['brian', 'old'], ['hal', 'q?']]);
+    await s.addReply('N-001', 'a!');
+    expect(threadOf((await s.readNotes())[0]!).map((m) => m.text)).toEqual(['old', 'q?', 'a!']);
   });
   it('note ids continue from the existing notes, not from the count', async () => {
     const s = mk();
