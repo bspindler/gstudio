@@ -452,6 +452,49 @@ export async function ensureMainWorktree(repo: string, deps: GitDeps = {}): Prom
   return { dir, head, fetched, fastForwarded, diverged };
 }
 
+export type Replay =
+  | { ok: true; head: string; from: string; onto: string; replayed: number; dropped: number }
+  | { ok: false; from: string; onto: string; reason: string };
+
+/**
+ * When refs/hal/main has diverged from origin/main (Hal has unpushed commits and origin moved), rebuilds Hal's commits
+ * (`onto..refs/hal/main`, oldest first) on top of `onto` (default refs/remotes/origin/main) with plumbing only: for each
+ * commit, `merge-tree --write-tree --merge-base <its parent>` against the new head, then `commit-tree` with its own
+ * message and author. No worktree, no checkout, no filters, no hooks. A commit whose change origin already has is
+ * dropped. Refuses on a merge commit in the range or on any conflict. Never moves a ref: the caller checks the new head
+ * (ci:local) and then moves refs/hal/main by CAS from `from`. Undo finds Hal's commits by their Hal-Pass trailer, which
+ * the replay keeps, so new SHAs do not break 👎.
+ */
+export async function replayHalOnto(repo: string, deps: GitDeps & { onto?: string } = {}): Promise<Replay> {
+  const git = safeGit(deps.git ?? runGit);
+  const root = resolve(repo);
+  const from = await rev(git, HAL_MAIN, root);
+  const onto = await rev(git, deps.onto ?? 'refs/remotes/origin/main', root);
+  const fail = (reason: string): Replay => ({ ok: false, from, onto, reason });
+  const merges = (await git(['rev-list', '--merges', `${onto}..${from}`], root)).trim();
+  if (merges) return fail(`${HAL_MAIN} has a merge commit (${merges.split('\n')[0]!.slice(0, 12)}) that Hal will not replay`);
+  const list = (await git(['rev-list', '--reverse', `${onto}..${from}`], root)).trim().split('\n').filter(Boolean);
+  let head = onto, replayed = 0, dropped = 0;
+  for (const c of list) {
+    const parent = (await git(['rev-parse', `${c}^`], root)).trim();
+    let tree: string;
+    try {
+      tree = (await git(['merge-tree', '--write-tree', '--no-messages', '--merge-base', parent, head, c], root)).trim().split('\n')[0]!;
+    } catch {
+      return fail(`${c.slice(0, 12)} ("${(await git(['log', '-1', '--format=%s', c], root)).trim()}") conflicts with origin/main`);
+    }
+    if (tree === (await git(['rev-parse', `${head}^{tree}`], root)).trim()) { dropped++; continue; } // origin already has it
+    const [name, email, date] = (await git(['log', '-1', '--format=%an%x00%ae%x00%aI', c], root)).trim().split('\0');
+    const message = await git(['log', '-1', '--format=%B', c], root);
+    head = (await git(['commit-tree', '--no-gpg-sign', tree, '-p', head, '-F', '-'], root, {
+      input: message.endsWith('\n') ? message : `${message}\n`,
+      env: { GIT_AUTHOR_NAME: name!, GIT_AUTHOR_EMAIL: email!, GIT_AUTHOR_DATE: date! },
+    })).trim();
+    replayed++;
+  }
+  return { ok: true, head, from, onto, replayed, dropped };
+}
+
 export type CandidateWorktree = { dir: string; branch: string; base: string };
 
 /** Creates branch hal/<pass> at refs/hal/main, checked out at <repo>/.data/hal/wt/<pass>. Clears a stale one of the same pass first. */

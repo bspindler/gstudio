@@ -4,7 +4,7 @@
 //   1. lock      <halDir>/run.lock {pid, runId, startedAt, phase, trigger}; a live holder -> exit 2 "busy", a dead
 //                pid's lock is taken over. The stop flag is cleared. SIGINT/SIGTERM/exit kill live Claude children
 //                and remove the lock; the lock is always removed in finally.
-//   2. preflight ensureMainWorktree (refs/hal/main, never Brian's branches), push checks (diverged -> report-only, R22; --dry-run),
+//   2. preflight ensureMainWorktree (refs/hal/main, never Brian's branches), push checks (diverged -> replay Hal's commits onto origin/main + ci:local, else report-only, R22; --dry-run),
 //                last run's ci:local results, pending undos from feedback.json (same path as `hal undo`)
 //   3. play      every scorer of every game in scope, screens and controls once, on Hal's main -> runs/<id>/play/
 //   4. plan      planner Claude -> validateTickets -> --kind filter -> splitLiability (calls) -> --max-tickets
@@ -36,7 +36,7 @@ import { runCandidate, scorersFor, type CandidateCtx, type CandidateResult } fro
 import { killLiveClaudeChildren, roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
-  changedPaths, commitTree, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, pushHalMain, runGit, safeGit, type GitRunner,
+  changedPaths, commitTree, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, pushHalMain, replayHalOnto, runGit, safeGit, type GitRunner,
 } from './git.js';
 import { loadPrompt, renderPrompt } from './prompts.js';
 import { assertNoRepoFilters, errMsg, extractJson, redactor, type Redactor } from './run-util.js';
@@ -443,15 +443,38 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     setPhase('preflight');
     // Fail closed before any git in Hal's trees: no filter driver / attributes file / include in the repo's config.
     await assertNoRepoFilters(repo, existsSync(mainWorktreeDir(repo)) ? mainWorktreeDir(repo) : repo, git);
-    const main = await ensureMainWorktree(repo, { git: raw });
+    let main = await ensureMainWorktree(repo, { git: raw });
     mainDir = main.dir;
     if (main.diverged) {
-      // R22: building on a diverged ref would only pile up commits that can never fast-forward. Report only.
-      reportOnly = true;
-      warn(`${HAL_MAIN} and origin/main have diverged: this run is report-only (nothing built, undone or pushed). To recover: `
-        + `see what Hal has that origin lacks with \`git log origin/main..${HAL_MAIN}\` (save anything worth keeping), then reset Hal's ref `
-        + `with \`git update-ref ${HAL_MAIN} origin/main\`. The next run starts from origin/main.`);
-      pushOff ??= `${HAL_MAIN} and origin/main have diverged (origin moved while Hal had unpushed commits)`;
+      // Origin moved while Hal had unpushed commits. Replay them onto origin/main; keep the result only if ci:local
+      // passes on it, and move refs/hal/main by CAS from where it was.
+      // --report-only promises to change nothing, so it does not replay either.
+      const rp = o.reportOnly ? null : await replayHalOnto(repo, { git: raw });
+      let why = rp === null ? 'this run is --report-only, so Hal did not try' : rp.ok ? '' : rp.reason;
+      if (rp?.ok) {
+        let ci: { ok: boolean; detail: string };
+        try { ci = await d.ciLocal(rp.head); } catch (e) { ci = { ok: false, detail: errMsg(e) }; }
+        if (!ci.ok) why = `ci:local failed on the replayed commits (${rp.head.slice(0, 12)}): ${ci.detail}`;
+        else {
+          await git(['update-ref', '-m', 'hal: replay onto origin/main', HAL_MAIN, rp.head, rp.from], repo);
+          main = await ensureMainWorktree(repo, { git: raw });
+          mainDir = main.dir;
+          if (main.diverged) why = 'origin/main moved again while the replayed commits were being checked';
+          else warn(`origin/main moved while Hal had unpushed commits: Hal replayed ${rp.replayed} of its commits onto origin/main`
+            + `${rp.dropped ? ` (${rp.dropped} dropped: origin already had them)` : ''} and ci:local passed, so ${HAL_MAIN} moved from `
+            + `${rp.from.slice(0, 12)} to ${rp.head.slice(0, 12)}. The commits are the same changes with new SHAs; they are still not on origin.`);
+        }
+      }
+      if (main.diverged) {
+        // R22: building on a diverged ref would only pile up commits that can never fast-forward. Report only.
+        reportOnly = true;
+        warn(`${HAL_MAIN} and origin/main have diverged and Hal could not replay its commits onto origin/main (${why}): `
+          + `this run is report-only (nothing built, undone or pushed). Hal's unpushed commits are NOT on origin/main; they are `
+          + `untouched on ${HAL_MAIN} (\`git log origin/main..${HAL_MAIN}\`). To keep them: cherry-pick them onto origin/main, fix the `
+          + `conflict, and point Hal's ref at the result (\`git update-ref ${HAL_MAIN} <new>\`). Only if you want them gone: `
+          + `\`git update-ref ${HAL_MAIN} origin/main\`, which discards them.`);
+        pushOff ??= `${HAL_MAIN} and origin/main have diverged (origin moved while Hal had unpushed commits, and they could not be replayed)`;
+      }
     }
     if (!pushOff) {
       try { await raw(['push', '--dry-run', '--porcelain', 'origin', `${HAL_MAIN}:refs/heads/main`], repo); } catch (e) {
