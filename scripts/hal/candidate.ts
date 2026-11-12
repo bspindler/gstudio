@@ -32,7 +32,7 @@ import {
   addFileToTree, blobBytes, blobText, changedPaths, collectTreeDiff, commitTree, extendTree, linkNodeModules, trustRootDigest, newCandidateWorktree, removeWorktree, runGit, snapshotTree,
   squashMerge, verifyNodeModules, vitestCounts, type CollectDeps, type GitRunner,
 } from './git.js';
-import { loadPrompt, parseImplementerOutput, renderPrompt } from './prompts.js';
+import { loadPrompt, parseImplementerOutput, renderPrompt, type ImplementerOutput } from './prompts.js';
 import { runIsolated, sandboxAvailable, sandboxEnv, type IsolatedResult, type SandboxPolicy } from './sandbox.js';
 import type { ScreensResult } from './screens.js';
 import { startScoreBroker } from './score-broker.js';
@@ -41,6 +41,8 @@ export const IMPLEMENTER_TIMEOUT_MS = 20 * 60_000;
 export const CHECK_TIMEOUT_MS = 20 * 60_000;
 export const RESULT_PREFIX = 'HAL-RESULT ';
 export const NONCE_ENV = 'HAL_CHECK_NONCE';
+/** Fix rounds after a failing npm test or typecheck: each a fresh implementer call with the failure (and its own slice). */
+export const FIX_ROUNDS = 2;
 const TAIL_CHARS = 1500;
 /** Paths a mid-build score must find unchanged from the base: Hal scores only with main's scorer code. */
 export const SCORER_PATHS = ['scripts/hal', 'scripts/hal.ts', 'package.json', 'packages/core/src/hal'];
@@ -122,6 +124,8 @@ export type CandidateCtx = {
   billing: Billing;
   /** Default IMPLEMENTER_TIMEOUT_MS (20 min). */
   implementerTimeoutMs?: number;
+  /** Default FIX_ROUNDS. */
+  fixRounds?: number;
   appendSystemPromptFile?: string;
   /** Real secret values (the API key from .hal.env), kept out of every diff, env, reason and result (ruling R8). */
   secrets: string[];
@@ -157,6 +161,8 @@ export type CandidateResult = {
   costUsd: number;
   /** Scores Hal ran for the implementer while it worked (the score broker). */
   scoreRequests?: number;
+  /** Fix rounds the implementer got after failing npm test / typecheck (absent: none were needed). */
+  fixRounds?: number;
   /** The squash commit on refs/hal/main. */
   commit?: string;
   /** Repo-relative paths of the history images in the commit. */
@@ -340,8 +346,8 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     const prompt = renderPrompt(loadPrompt('implementer'), { game, scorers: scorersFor(game).map((x) => `\`${x}\``).join(', '), ticket: JSON.stringify(ticketData, null, 2) });
     // The score broker (scripts/hal/score-broker.ts): the implementer's `npm run hal -- score` asks Hal, which scores a
     // snapshot of the worktree as it is at that moment, with the same isolated check the gate runs in step 6. The
-    // request dir is a fresh one outside privDir: the only place outside the worktree the implementer may write.
-    const askDir = await mkdtemp(join(tmpdir(), 'hal-ask-'));
+    // request dir (one per implementer call, see `implement`) is a fresh one outside privDir: the only place outside the
+    // worktree the implementer may write.
     const snapDir = join(privDir, 'snap');
     const treeEntry = (t: string, p: string) => git(['rev-parse', '--verify', '-q', `${t}:${p}`], ctx.repo).then((o) => o.trim(), () => '');
     const scoreNow = async (scorer: string): Promise<unknown> => {
@@ -364,13 +370,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
         return parseResult(r.stdout, nonce);
       } finally { await rm(snapDir, { recursive: true, force: true }); }
     };
-    const call: ClaudeCall = {
-      role: 'implementer', prompt, cwd: wt.dir, scoreDir: askDir, billing: ctx.billing, maxBudgetUsd: slice, model: ctx.model,
-      allowedTools: roleAllowedTools('implementer'), disallowedTools: [], timeoutMs: ctx.implementerTimeoutMs ?? IMPLEMENTER_TIMEOUT_MS,
-      denyReadPaths: denyRead,
-      ...(ctx.appendSystemPromptFile ? { appendSystemPromptFile: ctx.appendSystemPromptFile } : {}),
-    };
-    const book = (billing: Billing, usd: number | null) => {
+    const book = (billing: Billing, usd: number | null, slice: number) => {
       ctx.budget.record('implementer', billing, usd);
       res.costUsd = Math.round((res.costUsd + (usd ?? (billing === 'api' ? slice : 0))) * 1e6) / 1e6;
     };
@@ -383,88 +383,121 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       writeFileSync(join(wt.dir, '.git'), gitPtr);
       discard('tampered .git');
     };
-    let out: Awaited<ReturnType<CandidateCtx['claude']>>;
-    const broker = startScoreBroker({ dir: askDir, scorers: scorersFor(game), score: scoreNow });
-    const stopBroker = async () => {
-      await broker.stop();
-      res.scoreRequests = broker.served();
-      await rm(askDir, { recursive: true, force: true }).catch(() => {});
-    };
-    try { out = await ctx.claude(call, slice); await stopBroker(); } catch (e) {
-      await stopBroker();
-      // We cannot know whether anything was spawned, so book the call as unknown cost (the full slice on the API).
-      book(call.billing, null);
+    /** One implementer call in the worktree (the first, or a fix round): its own budget slice and score broker. */
+    const implement = async (text: string, slice: number): Promise<ImplementerOutput> => {
+      const askDir = await mkdtemp(join(tmpdir(), 'hal-ask-'));
+      const call: ClaudeCall = {
+        role: 'implementer', prompt: text, cwd: wt.dir, scoreDir: askDir, billing: ctx.billing, maxBudgetUsd: slice, model: ctx.model,
+        allowedTools: roleAllowedTools('implementer'), disallowedTools: [], timeoutMs: ctx.implementerTimeoutMs ?? IMPLEMENTER_TIMEOUT_MS,
+        denyReadPaths: denyRead,
+        ...(ctx.appendSystemPromptFile ? { appendSystemPromptFile: ctx.appendSystemPromptFile } : {}),
+      };
+      let out: Awaited<ReturnType<CandidateCtx['claude']>>;
+      const broker = startScoreBroker({ dir: askDir, scorers: scorersFor(game), score: scoreNow });
+      const stopBroker = async () => {
+        await broker.stop();
+        res.scoreRequests = (res.scoreRequests ?? 0) + broker.served();
+        await rm(askDir, { recursive: true, force: true }).catch(() => {});
+      };
+      try { out = await ctx.claude(call, slice); await stopBroker(); } catch (e) {
+        await stopBroker();
+        // We cannot know whether anything was spawned, so book the call as unknown cost (the full slice on the API).
+        book(call.billing, null, slice);
+        checkGitPtr();
+        return discard(`implementer call failed: ${msg(e)}`);
+      }
+      book(call.billing, out.first.costUsd, slice); // settle every reservation first: a tampered-.git discard must not leave one open
+      if (out.retry) book('api', out.retry.costUsd, slice);
       checkGitPtr();
-      return discard(`implementer call failed: ${msg(e)}`);
-    }
-    book(call.billing, out.first.costUsd); // settle every reservation first: a tampered-.git discard must not leave one open
-    if (out.retry) book('api', out.retry.costUsd);
-    checkGitPtr();
-    const final = out.retry ?? out.first;
-    if (!final.ok) discard(final.timedOut ? 'implementer timed out' : final.limitHit ? 'implementer hit a usage limit' : `implementer failed (${final.subtype})`);
-    const parsed = parseImplementerOutput(final.text);
-    if (!parsed) discard('implementer output does not match the contract');
-    if (parsed!.blocked !== undefined) discard(`implementer blocked: ${parsed!.blocked}`);
-    res.changelog = parsed!.changelog;
-    res.summary = parsed!.summary;
+      const final = out.retry ?? out.first;
+      if (!final.ok) discard(final.timedOut ? 'implementer timed out' : final.limitHit ? 'implementer hit a usage limit' : `implementer failed (${final.subtype})`);
+      const parsed = parseImplementerOutput(final.text);
+      if (!parsed) discard('implementer output does not match the contract');
+      if (parsed!.blocked !== undefined) discard(`implementer blocked: ${parsed!.blocked}`);
+      return parsed!;
+    };
 
-    await checkTrustRoot(); // the implementer's edit tools could have written through node_modules symlinks
-    // 3. The candidate tree from the bytes on disk (index flags and filters cannot hide anything), disk pruned to it.
-    const t1 = await snapshotTree(wt.dir, wt.base, { ...tree, prune: true });
-    if (t1 === baseTree) discard('no edits');
-    await guard(t1); // node_modules rebuilt before the test listing runs candidate code
-    let diff: Diff;
-    try { diff = await collectTreeDiff(wt.dir, wt.base, t1, { git, countTests }); } catch (e) { return discard(`diff collection failed: ${msg(e)}`); }
-    if (diff.files.length === 0) discard('no edits');
-    const hits = checkTripwires(diff, secrets, { scope: { game, testPrefixes: testPrefixesFor(game) } }); // R18: its game and its tests only
-    if (hits.length) discard(...hits.map((v) => `tripwire ${v.rule}${v.path ? `: ${v.path}` : ''}: ${v.detail}`));
-    await guard(t1);
-
-    // 4. Release: Hal's own version bump and changelog entry, read from T1 and added to it.
     const rel = (f: string) => `games/${game}/${f}`;
     const files = { yaml: rel('game.yaml'), html: rel('index.html'), changelog: rel('CHANGELOG.md') };
-    const cur = { yaml: '', html: '', changelog: '' };
-    let next: typeof cur;
-    try {
-      for (const k of ['yaml', 'html', 'changelog'] as const) cur[k] = await blobText(wt.dir, t1, files[k], { git });
-      const current = /^version:[ \t]*(\S+)[ \t]*$/m.exec(cur.yaml)?.[1];
-      if (!current) throw new Error('game.yaml has no version');
-      // R20: share tonight's version only with Hal's own release of it tonight (trailers on refs/hal/main), never with
-      // a version Brian released himself tonight, even though its CHANGELOG heading is dated tonight.
-      const shared = halReleasedTonight(await halCommits(ctx.repo, wt.base, git), game, current, night, tz) ? bumpedTonight(cur.changelog, night) : null;
-      const version = planVersion({ current, kind: ticket.kind, alreadyBumpedTonight: shared });
-      next = applyRelease(cur, { slug: game, version, night, entry: { kind: ticket.kind, text: parsed!.changelog }, shareTonight: shared !== null });
-      res.version = version;
-    } catch (e) { return discard(`release failed: ${msg(e)}`); }
-    for (const k of ['yaml', 'html', 'changelog'] as const) await writeFile(join(wt.dir, files[k]), next[k]);
-    // The changelog text is Claude's, written after the tripwires: check what Hal wrote for secrets too.
-    const releaseDiff: Diff = {
-      files: (['yaml', 'html', 'changelog'] as const).map((k): FileChange => ({ path: files[k], status: 'M', before: cur[k], after: next[k], binary: false })),
-      testCountBefore: 0, testCountAfter: 0, levelCounts: { before: {}, after: {} }, secrets,
-    };
-    const leaks = TRIPWIRE_RULES.secret!(releaseDiff);
-    if (leaks.length) discard(...leaks.map((v) => `tripwire ${v.rule}: ${v.path}: ${v.detail} (in Hal's release edit)`));
     const releasePaths = Object.values(files);
-    const t2 = await extendTree(wt.dir, t1, releasePaths, tree);
-    const extra = await changedPaths(wt.dir, t1, t2, tree);
-    if (!extra.every((p) => releasePaths.includes(p))) discard(`release changed unexpected paths: ${extra.join(', ')}`);
+    const rounds = ctx.fixRounds ?? FIX_ROUNDS;
+    let parsed = await implement(prompt, slice);
+    let t2 = '';
+    // Steps 3-5, once per attempt. A failing npm test or typecheck is the implementer's to fix, like any failed build:
+    // up to `rounds` fix rounds, each a fresh implementer call in the same worktree with the failure output, and each
+    // attempt goes through every step again (tree, tripwires, release, checks). Anything else still discards at once.
+    for (let round = 0; ; round++) {
+      res.changelog = parsed.changelog;
+      res.summary = parsed.summary;
+      await checkTrustRoot(); // the implementer's edit tools could have written through node_modules symlinks
+      // 3. The candidate tree from the bytes on disk (index flags and filters cannot hide anything), disk pruned to it.
+      const t1 = await snapshotTree(wt.dir, wt.base, { ...tree, prune: true });
+      if (t1 === baseTree) discard('no edits');
+      await guard(t1); // node_modules rebuilt before the test listing runs candidate code
+      let diff: Diff;
+      try { diff = await collectTreeDiff(wt.dir, wt.base, t1, { git, countTests }); } catch (e) { return discard(`diff collection failed: ${msg(e)}`); }
+      if (diff.files.length === 0) discard('no edits');
+      const hits = checkTripwires(diff, secrets, { scope: { game, testPrefixes: testPrefixesFor(game) } }); // R18: its game and its tests only
+      if (hits.length) discard(...hits.map((v) => `tripwire ${v.rule}${v.path ? `: ${v.path}` : ''}: ${v.detail}`));
+      await guard(t1);
 
-    // 5. Tests and typecheck, isolated, each step guarded.
-    let steps: Array<[string, string[]]>;
-    try {
-      steps = [
-        ...(await cmd('test'))(wt.dir).map((a): [string, string[]] => ['npm test', a]),
-        ...(await cmd('typecheck'))(wt.dir).map((a): [string, string[]] => ['npm run typecheck', a]),
-      ];
-    } catch (e) { return discard(`checks unavailable: ${msg(e)}`); }
-    // Guard (prune ignored files, compare the tree) before each script, not between the `&&` parts of one: the
-    // typecheck script is `tsc -b <packages> && tsc -p scripts`, and the second part needs the first part's dist/.
-    let prev = '';
-    for (const [name, argv] of steps) {
-      if (name !== prev) await guard(t2);
-      prev = name;
-      const r = await inTree(wt.dir, argv, [wt.dir]);
-      if (r.code !== 0) discard(`${name} failed${r.timedOut ? ' (timed out)' : r.error ? ` to run: ${r.error}` : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`);
+      // 4. Release: Hal's own version bump and changelog entry, read from T1 and added to it.
+      const cur = { yaml: '', html: '', changelog: '' };
+      let next: typeof cur;
+      try {
+        for (const k of ['yaml', 'html', 'changelog'] as const) cur[k] = await blobText(wt.dir, t1, files[k], { git });
+        const current = /^version:[ \t]*(\S+)[ \t]*$/m.exec(cur.yaml)?.[1];
+        if (!current) throw new Error('game.yaml has no version');
+        // R20: share tonight's version only with Hal's own release of it tonight (trailers on refs/hal/main), never with
+        // a version Brian released himself tonight, even though its CHANGELOG heading is dated tonight.
+        const shared = halReleasedTonight(await halCommits(ctx.repo, wt.base, git), game, current, night, tz) ? bumpedTonight(cur.changelog, night) : null;
+        const version = planVersion({ current, kind: ticket.kind, alreadyBumpedTonight: shared });
+        next = applyRelease(cur, { slug: game, version, night, entry: { kind: ticket.kind, text: parsed.changelog }, shareTonight: shared !== null });
+        res.version = version;
+      } catch (e) { return discard(`release failed: ${msg(e)}`); }
+      for (const k of ['yaml', 'html', 'changelog'] as const) await writeFile(join(wt.dir, files[k]), next[k]);
+      // The changelog text is Claude's, written after the tripwires: check what Hal wrote for secrets too.
+      const releaseDiff: Diff = {
+        files: (['yaml', 'html', 'changelog'] as const).map((k): FileChange => ({ path: files[k], status: 'M', before: cur[k], after: next[k], binary: false })),
+        testCountBefore: 0, testCountAfter: 0, levelCounts: { before: {}, after: {} }, secrets,
+      };
+      const leaks = TRIPWIRE_RULES.secret!(releaseDiff);
+      if (leaks.length) discard(...leaks.map((v) => `tripwire ${v.rule}: ${v.path}: ${v.detail} (in Hal's release edit)`));
+      t2 = await extendTree(wt.dir, t1, releasePaths, tree);
+      const extra = await changedPaths(wt.dir, t1, t2, tree);
+      if (!extra.every((p) => releasePaths.includes(p))) discard(`release changed unexpected paths: ${extra.join(', ')}`);
+
+      // 5. Tests and typecheck, isolated, each step guarded.
+      let steps: Array<[string, string[]]>;
+      try {
+        steps = [
+          ...(await cmd('test'))(wt.dir).map((a): [string, string[]] => ['npm test', a]),
+          ...(await cmd('typecheck'))(wt.dir).map((a): [string, string[]] => ['npm run typecheck', a]),
+        ];
+      } catch (e) { return discard(`checks unavailable: ${msg(e)}`); }
+      // Guard (prune ignored files, compare the tree) before each script, not between the `&&` parts of one: the
+      // typecheck script is `tsc -b <packages> && tsc -p scripts`, and the second part needs the first part's dist/.
+      let prev = '';
+      let failure: string | null = null;
+      for (const [name, argv] of steps) {
+        if (name !== prev) await guard(t2);
+        prev = name;
+        const r = await inTree(wt.dir, argv, [wt.dir]);
+        if (r.code === 0) continue;
+        if (r.error) discard(`${name} failed to run: ${r.error}`); // not the candidate's code: no fix round
+        failure = `${name} failed${r.timedOut ? ' (timed out)' : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`;
+        break;
+      }
+      if (failure === null) break;
+      const after = round ? ` (after ${round} fix round${round > 1 ? 's' : ''})` : '';
+      if (round >= rounds) discard(`${failure}${after}`);
+      const fixSlice = ctx.budget.slice('implementer');
+      if (!(fixSlice > 0)) discard(`${failure}${after}`, 'no budget left for a fix round');
+      // Back to the implementer's own tree: Hal's release edits come out (the next attempt gets a fresh release).
+      for (const k of ['yaml', 'html', 'changelog'] as const) await writeFile(join(wt.dir, files[k]), cur[k]);
+      try { await guard(t1); } catch (e) { throw e instanceof Discard ? new Discard([...e.reasons, failure]) : e; } // keep what failed
+      res.fixRounds = round + 1;
+      parsed = await implement(`${prompt}\n${renderPrompt(loadPrompt('implementer-fix'), { round: String(round + 1), rounds: String(rounds), failure })}`, fixSlice);
     }
 
     // 6. Scores and gate, then screens and controls, isolated, each guarded, each result nonce-checked.

@@ -2,12 +2,14 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-export type PromptRole = 'planner' | 'implementer' | 'director';
+/** `implementer-fix` is appended to the implementer prompt for a fix round after failed checks (candidate.ts). */
+export type PromptRole = 'planner' | 'implementer' | 'implementer-fix' | 'director';
 
 /** The inputs each template takes. Callers must supply every one. */
 export const ROLE_PLACEHOLDERS: Record<PromptRole, readonly string[]> = {
   planner: ['games', 'scores', 'ledger', 'screens', 'controls', 'consoleErrors', 'changelogs', 'notes', 'feedback', 'approvals', 'stagnation', 'budget'],
   implementer: ['game', 'scorers', 'ticket'],
+  'implementer-fix': ['round', 'rounds', 'failure'],
   director: ['results', 'notes', 'stagnation', 'feedback'],
 };
 
