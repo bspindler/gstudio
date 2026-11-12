@@ -3,7 +3,7 @@
 // Every user and Claude string goes through esc. Fields added by plan 3 (perGame, Vote.comment) are optional.
 import type { Ticket } from '@studio/core/hal';
 import type { CandidateResult } from './candidate.js';
-import { esc, pageHead } from './page-style.js';
+import { esc, noteHtml, pageHead } from './page-style.js';
 import type { RunReport } from './run.js';
 import type { Note, Undo, Vote } from './store.js';
 
@@ -45,42 +45,7 @@ const minOf = (xs: number[]) => (xs.length ? Math.min(...xs) : null);
 
 // ---- the director's note -------------------------------------------------------------------------------------------
 
-const inline = (s: string) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-/**
- * Paragraphs, `-`/`*` and `1.` lists, and `**bold**`; everything else is escaped text. The note's own title lines
- * (`# Hal, night of ...`, `## Director's note, ...`) at the top repeat the page header and are dropped; a heading
- * further down shows as a bold paragraph.
- */
-export function noteHtml(md: string): string {
-  const lines = md.replace(/\r\n?/g, '\n').split('\n');
-  while (lines.length && (!lines[0]!.trim() || /^#{1,6}\s/.test(lines[0]!.trim()))) lines.shift();
-  const out: string[] = [];
-  let kind: 'p' | 'ul' | 'ol' | null = null;
-  let items: string[] = [];
-  const flush = () => {
-    if (kind === 'p') out.push(`<p>${items.join(' ')}</p>`);
-    else if (kind) out.push(`<${kind}>${items.map((i) => `<li>${i}</li>`).join('')}</${kind}>`);
-    kind = null;
-    items = [];
-  };
-  const add = (k: 'p' | 'ul' | 'ol', html: string) => {
-    if (kind !== k) flush();
-    kind = k;
-    items.push(html);
-  };
-  for (const raw of lines) {
-    const t = raw.trim();
-    let m: RegExpExecArray | null;
-    if (!t) flush();
-    else if ((m = /^[-*+]\s+(.*)$/.exec(t))) add('ul', inline(m[1]!));
-    else if ((m = /^\d+[.)]\s+(.*)$/.exec(t))) add('ol', inline(m[1]!));
-    else if ((m = /^#{1,6}\s+(.*)$/.exec(t))) { flush(); add('p', `<strong>${esc(m[1]!)}</strong>`); flush(); }
-    else add('p', inline(t));
-  }
-  flush();
-  return out.join('\n');
-}
+export { noteHtml };
 
 // ---- states --------------------------------------------------------------------------------------------------------
 

@@ -94,3 +94,40 @@ details.fold[open]>summary{margin-bottom:8px}
 export const pageHead = (title: string, extraCss = ''): string =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">` +
   `<meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer"><title>${esc(title)}</title><style>${PAGE_CSS}${extraCss}</style></head>`;
+
+const inline = (s: string) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+/**
+ * Paragraphs, `-`/`*` and `1.` lists, and `**bold**`; everything else is escaped text. The note's own title lines
+ * (`# Hal, night of ...`, `## Director's note, ...`) at the top repeat the page header and are dropped; a heading
+ * further down shows as a bold paragraph.
+ */
+export function noteHtml(md: string): string {
+  const lines = md.replace(/\r\n?/g, '\n').split('\n');
+  while (lines.length && (!lines[0]!.trim() || /^#{1,6}\s/.test(lines[0]!.trim()))) lines.shift();
+  const out: string[] = [];
+  let kind: 'p' | 'ul' | 'ol' | null = null;
+  let items: string[] = [];
+  const flush = () => {
+    if (kind === 'p') out.push(`<p>${items.join(' ')}</p>`);
+    else if (kind) out.push(`<${kind}>${items.map((i) => `<li>${i}</li>`).join('')}</${kind}>`);
+    kind = null;
+    items = [];
+  };
+  const add = (k: 'p' | 'ul' | 'ol', html: string) => {
+    if (kind !== k) flush();
+    kind = k;
+    items.push(html);
+  };
+  for (const raw of lines) {
+    const t = raw.trim();
+    let m: RegExpExecArray | null;
+    if (!t) flush();
+    else if ((m = /^[-*+]\s+(.*)$/.exec(t))) add('ul', inline(m[1]!));
+    else if ((m = /^\d+[.)]\s+(.*)$/.exec(t))) add('ol', inline(m[1]!));
+    else if ((m = /^#{1,6}\s+(.*)$/.exec(t))) { flush(); add('p', `<strong>${esc(m[1]!)}</strong>`); flush(); }
+    else add('p', inline(t));
+  }
+  flush();
+  return out.join('\n');
+}
