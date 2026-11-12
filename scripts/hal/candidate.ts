@@ -23,6 +23,7 @@ import {
   applyRelease, bumpedTonight, checkTripwires, testPrefixesFor, compareScores, formatTrailers, halReleasedTonight, nightOf, planVersion, TRIPWIRE_RULES,
   type Billing, type Diff, type FileChange, type ScoreReport, type Ticket,
 } from '@studio/core/hal';
+import { secretReadPaths } from './env.js';
 import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
@@ -254,7 +255,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
   const shotDir = join(privDir, 'shots');
   // Every piece of candidate code runs through here: isolated child, scrubbed env, sandboxed, group killed afterwards.
   const env = sandboxEnv(process.env, secrets);
-  const denyRead = [join(ctx.repo, '.hal.env')];
+  const denyRead = secretReadPaths(ctx.repo);
   const isolated = (argv: string[], cwd: string, writable: string[], o: { nonce?: string; denyWrite?: string[] } = {}) => {
     const policy: SandboxPolicy = { writable, denyRead, denyWrite: o.denyWrite ?? [] }; // + a private temp dir (runIsolated)
     const e = o.nonce ? { ...env, [NONCE_ENV]: o.nonce } : env;

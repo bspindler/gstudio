@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTrailers, type ScoreReport, type Ticket } from '@studio/core/hal';
+import { secretReadPaths } from './env.js';
 import { defaultCommands, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseResult, runCandidate, scriptArgv, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
 import type { ClaudeCall, ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
@@ -157,7 +158,7 @@ describe('runCandidate (temp git repo)', () => {
     expect(jpegSize(execFileSync('git', ['show', `${HAL_MAIN}:${r.shots!.after}`], { cwd: repo }))).toEqual({ width: 390, height: 844 });
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ role: 'implementer', cwd: join(repo, '.data/hal/wt/HAL-1'), model: 'test-model', billing: 'api', maxBudgetUsd: 3, timeoutMs: IMPLEMENTER_TIMEOUT_MS, denyReadPaths: [join(repo, '.hal.env')] });
+    expect(calls[0]).toMatchObject({ role: 'implementer', cwd: join(repo, '.data/hal/wt/HAL-1'), model: 'test-model', billing: 'api', maxBudgetUsd: 3, timeoutMs: IMPLEMENTER_TIMEOUT_MS, denyReadPaths: secretReadPaths(repo) });
     expect(IMPLEMENTER_TIMEOUT_MS).toBe(20 * 60_000);
     expect(calls[0]!.prompt).toContain('Smoother jumps');
     expect(calls[0]!.prompt).not.toContain(KEY);

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { secretReadPaths } from './env.js';
 import { NONCE_ENV, parseResult } from './candidate.js';
 import { linkNodeModules, verifyNodeModules, type GitRunner } from './git.js';
 import { runIsolated, sandboxAvailable, sandboxEnv, type IsolatedResult } from './sandbox.js';
@@ -75,7 +76,7 @@ export async function isolatedCheck(argv: string[], o: IsolatedCheckOptions): Pr
     cwd: o.cwd, env, timeoutMs: o.timeoutMs,
     ...(unsandboxed ? { unsandboxed: true } : {
       // .git too: a rewritten gitdir pointer (or config) would make Hal's next git call in this tree run a smudge filter.
-      policy: { writable: o.writable /* + a private temp dir, added by runIsolated */, denyRead: [join(o.repo, '.hal.env')], denyWrite: [...(o.ownNodeModules ? [] : [join(o.cwd, 'node_modules')]), join(o.cwd, '.git'), ...(o.denyWrite ?? [])] },
+      policy: { writable: o.writable /* + a private temp dir, added by runIsolated */, denyRead: secretReadPaths(o.repo), denyWrite: [...(o.ownNodeModules ? [] : [join(o.cwd, 'node_modules')]), join(o.cwd, '.git'), ...(o.denyWrite ?? [])] },
     }),
   });
 }

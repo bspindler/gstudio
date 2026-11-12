@@ -31,6 +31,7 @@ import {
   apiSpent, DAILY_CAP_USD, emptyLedger, ledgerMarkdown, nextPassId, nightOf, parseLedger, recordPass, reserveCall, settleCall, sliceFor, SLICES, splitLiability, stagnated, validateTickets,
   type Billing, type Ledger, type Measures, type ScoreReport, type Ticket, type TicketKind,
 } from '@studio/core/hal';
+import { secretReadPaths } from './env.js';
 import { runCandidate, scorersFor, type CandidateCtx, type CandidateResult } from './candidate.js';
 import { killLiveClaudeChildren, roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
@@ -386,7 +387,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     const call: ClaudeCall = {
       role, prompt: R.str(prompt), cwd, billing: st.billing, maxBudgetUsd: slice, model: d.model,
       allowedTools: roleAllowedTools(role), disallowedTools: [], timeoutMs,
-      denyReadPaths: [join(repo, '.hal.env')], // absolute deny rules for every role
+      denyReadPaths: secretReadPaths(repo), // absolute deny rules for every role
       ...(addDirs.length ? { addDirs } : {}),
       ...(d.appendSystemPromptFile ? { appendSystemPromptFile: d.appendSystemPromptFile } : {}),
     };

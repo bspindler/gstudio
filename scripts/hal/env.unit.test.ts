@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { childEnv, loadHalEnv, parseHalEnv } from './env.js';
+import { childEnv, loadHalEnv, parseHalEnv, secretReadPaths } from './env.js';
 
 describe('parseHalEnv', () => {
   it('parses KEY=VALUE, comments, blanks, quotes, no interpolation', () => {
@@ -60,5 +60,14 @@ describe('childEnv', () => {
     childEnv(base, 'subscription');
     childEnv(base, 'api', 'k');
     expect(base).toEqual({ PATH: '/bin', ANTHROPIC_API_KEY: 'old', ANTHROPIC_AUTH_TOKEN: 'tok' });
+  });
+});
+
+describe('secretReadPaths', () => {
+  it('is <repo>/.hal.env, then the home credentials and shell profiles', () => {
+    const p = secretReadPaths('/r', '/h');
+    expect(p[0]).toBe('/r/.hal.env');
+    for (const n of ['.ssh', '.aws', '.azure', '.config/gh', '.npmrc', '.zshrc', '.zprofile', '.claude', 'Library/Keychains']) expect(p).toContain(`/h/${n}`);
+    expect(p.every((x) => x.startsWith('/') && !/[\s,()]/.test(x))).toBe(true); // safe as --disallowedTools rule paths
   });
 });
