@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
-import { ALWAYS_DISALLOWED, NODE_MODULES_WRITE_DENY, buildArgs, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
+import { ALWAYS_DISALLOWED, NODE_MODULES_WRITE_DENY, buildArgs, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, type ClaudeCall, type SpawnFn } from './claude.js';
 
 const KEY = 'sk-ant-test-FAKE123';
 
@@ -166,16 +166,38 @@ describe('runClaude', () => {
       expect(kills).toEqual([]);
       kill.mockRestore();
     });
-    it('does not SIGKILL when the child exits after SIGTERM', async () => {
+    it('a leader that exits after SIGTERM still gets its whole group SIGKILLed (grandchildren cannot outlive the timeout)', async () => {
       const kills: [number, string][] = [];
       const kill = vi.spyOn(process, 'kill').mockImplementation(((pid: number, sig: string) => { kills.push([pid, sig]); return true; }) as any);
       const f = fake(() => {});
       const p = runClaude({ ...base, timeoutMs: 1000 }, deps(f.spawn));
       await vi.advanceTimersByTimeAsync(1000);
-      f.calls[0]!.child.emit('close', null, 'SIGTERM');
-      await p;
-      await vi.advanceTimersByTimeAsync(20_000);
       expect(kills).toEqual([[-4242, 'SIGTERM']]);
+      f.calls[0]!.child.emit('exit', null, 'SIGTERM'); // the leader is gone; its group may not be
+      await expect(p).resolves.toMatchObject({ timedOut: true, subtype: 'timeout' });
+      expect(kills).toEqual([[-4242, 'SIGTERM'], [-4242, 'SIGKILL']]);
+      f.calls[0]!.child.emit('close', null, 'SIGTERM');
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(kills).toEqual([[-4242, 'SIGTERM'], [-4242, 'SIGKILL']]); // timers cleared: nothing more
+      kill.mockRestore();
+    });
+    it('the give-up timer path SIGKILLs the group once more when it resolves', async () => {
+      const kills: [number, string][] = [];
+      const kill = vi.spyOn(process, 'kill').mockImplementation(((pid: number, sig: string) => { kills.push([pid, sig]); return true; }) as any);
+      const f = fake(() => {});
+      const p = runClaude({ ...base, timeoutMs: 1000 }, deps(f.spawn));
+      await vi.advanceTimersByTimeAsync(1000 + 10_000 + 2_000);
+      await expect(p).resolves.toMatchObject({ timedOut: true });
+      expect(kills).toEqual([[-4242, 'SIGTERM'], [-4242, 'SIGKILL'], [-4242, 'SIGKILL']]);
+      kill.mockRestore();
+    });
+    it('a call that ends on its own is never signalled', async () => {
+      const kills: [number, string][] = [];
+      const kill = vi.spyOn(process, 'kill').mockImplementation(((pid: number, sig: string) => { kills.push([pid, sig]); return true; }) as any);
+      const f = fake(finish(json({ subtype: 'success', is_error: false, result: 'x', total_cost_usd: 0 })));
+      await runClaude({ ...base, timeoutMs: 1000 }, deps(f.spawn));
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(kills).toEqual([]);
       kill.mockRestore();
     });
   });
@@ -218,6 +240,36 @@ describe('runClaude', () => {
       expect(arg(args, '--disallowedTools')!.split(',')).toEqual(expect.arrayContaining(ALWAYS_DISALLOWED));
       expect(arg(args, '--append-system-prompt-file')).toBe('/repo/CLAUDE.md');
       expect(args.join(' ')).not.toContain(KEY);
+    });
+    for (const role of ['planner', 'implementer', 'director'] as const) {
+      for (const billing of ['api', 'subscription'] as const) {
+        it(`R24: ${role} + ${billing} gets --append-system-prompt-file <repo>/CLAUDE.md, once`, async () => {
+          const f = ok();
+          await runClaude({ ...base, role, billing, allowedTools: roleAllowedTools(role), appendSystemPromptFile: '/repo/CLAUDE.md' }, deps(f.spawn));
+          const { args } = f.calls[0]!;
+          expect(args.filter((a) => a === '--append-system-prompt-file')).toHaveLength(1);
+          expect(arg(args, '--append-system-prompt-file')).toBe('/repo/CLAUDE.md');
+        });
+        it(`R24: no CLAUDE.md or auto-memory of the user's own (${role} + ${billing}): only the appended file`, async () => {
+          const f = ok();
+          await runClaude({ ...base, role, billing, allowedTools: roleAllowedTools(role), appendSystemPromptFile: '/repo/CLAUDE.md' }, deps(f.spawn));
+          const { args, opts } = f.calls[0]!;
+          expect(opts.env.CLAUDE_CODE_DISABLE_CLAUDE_MDS).toBe('1');
+          expect(opts.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).toBe('1');
+          expect(args).not.toContain('--safe-mode');
+          expect(arg(args, '--setting-sources')).toBe('project');
+        });
+        it(`R23: HAL_SANDBOXED=1 only in the implementer's env (${role} + ${billing})`, async () => {
+          const f = ok();
+          await runClaude({ ...base, role, billing, allowedTools: roleAllowedTools(role) }, deps(f.spawn, { env: { ...baseEnv, HAL_SANDBOXED: undefined } }));
+          expect(f.calls[0]!.opts.env.HAL_SANDBOXED).toBe(role === 'implementer' ? '1' : undefined);
+        });
+      }
+    }
+    it('no appendSystemPromptFile: no flag', async () => {
+      const f = ok();
+      await runClaude(base, deps(f.spawn));
+      expect(f.calls[0]!.args).not.toContain('--append-system-prompt-file');
     });
     it('every role is denied Edit/Write/NotebookEdit through any node_modules path (the trust root)', async () => {
       for (const t of ['Edit', 'Write', 'NotebookEdit']) for (const p of ['./node_modules/**', '**/node_modules/**', 'node_modules/**']) expect(NODE_MODULES_WRITE_DENY).toContain(`${t}(${p})`);
@@ -349,48 +401,6 @@ describe('runClaude', () => {
       const f = fake(finish('', 1, 'e'.repeat(100_000)));
       expect((await runClaude(base, deps(f.spawn))).stderrTail.length).toBeLessThanOrEqual(4000);
     });
-  });
-});
-
-describe('runClaudeWithFallback', () => {
-  const okOut = json({ subtype: 'success', is_error: false, result: 'fine', total_cost_usd: 0.2 });
-  const limitOut = json({ subtype: 'success', is_error: true, result: "You've hit your limit" });
-  it('no retry when the subscription call succeeds', async () => {
-    const f = fake(finish(okOut));
-    const r = await runClaudeWithFallback(base, deps(f.spawn));
-    expect(r.retry).toBeUndefined();
-    expect(f.calls).toHaveLength(1);
-  });
-  it('does not retry an ok result whose text mentions a limit', async () => {
-    const f = fake(finish(json({ subtype: 'success', is_error: false, result: 'usage limit reached', total_cost_usd: 0.1 })));
-    const r = await runClaudeWithFallback(base, deps(f.spawn));
-    expect(r.retry).toBeUndefined();
-    expect(f.calls).toHaveLength(1);
-  });
-  it('a throwing retry (no key) keeps first and reports retry_error', async () => {
-    const f = fake(finish(limitOut));
-    const r = await runClaudeWithFallback(base, deps(f.spawn, { apiKey: undefined }));
-    expect(r.first.limitHit).toBe(true);
-    expect(r.retry).toMatchObject({ ok: false, subtype: 'retry_error' });
-    expect(f.calls).toHaveLength(1);
-  });
-  it('retries once with api billing and a fresh slice on limitHit', async () => {
-    let n = 0;
-    const f = fake((c) => finish(n++ === 0 ? limitOut : okOut)(c));
-    const r = await runClaudeWithFallback(base, deps(f.spawn), 0.75);
-    expect(f.calls).toHaveLength(2);
-    expect(r.first.limitHit).toBe(true);
-    expect(r.retry!.ok).toBe(true);
-    const second = f.calls[1]!;
-    expect(second.args).toContain('--bare');
-    expect(second.opts.env.ANTHROPIC_API_KEY).toBe(KEY);
-    expect(arg(second.args, '--max-budget-usd')).toBe('0.75');
-  });
-  it('never retries an api call', async () => {
-    const f = fake(finish(limitOut));
-    const r = await runClaudeWithFallback({ ...base, billing: 'api' }, deps(f.spawn));
-    expect(r.retry).toBeUndefined();
-    expect(f.calls).toHaveLength(1);
   });
 });
 

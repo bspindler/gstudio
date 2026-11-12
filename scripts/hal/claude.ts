@@ -206,12 +206,10 @@ export function buildArgs(call: ClaudeCall): string[] {
   // --allowedTools/--disallowedTools are variadic: one comma-joined value each, and the prompt is sent on stdin.
   if (call.allowedTools.length > 0) args.push('--allowedTools', call.allowedTools.join(','));
   args.push('--disallowedTools', denied.join(','));
-  if (call.billing === 'api') {
-    args.push('--bare'); // never reads OAuth / keychain
-    if (call.appendSystemPromptFile) args.push('--append-system-prompt-file', call.appendSystemPromptFile);
-  } else {
-    args.push('--strict-mcp-config'); // keep personal hooks/plugins out of Hal
-  }
+  if (call.billing === 'api') args.push('--bare'); // never reads OAuth / keychain
+  else args.push('--strict-mcp-config'); // keep personal hooks/plugins out of Hal
+  // R24: the repo's CLAUDE.md, the same way for every role in both billings (--bare skips CLAUDE.md auto-discovery).
+  if (call.appendSystemPromptFile) args.push('--append-system-prompt-file', call.appendSystemPromptFile);
   return args; // the prompt goes on stdin, not argv
 }
 
@@ -235,6 +233,17 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
   Object.assign(env, { TMPDIR: tmpDir, TMP: tmpDir, TEMP: tmpDir, CLAUDE_CODE_TMPDIR: tmpDir });
   delete env.CLAUDE_TMPDIR;
   delete env.HAL_TOKEN; // the dashboard token is never a child's business (childEnv returns a fresh copy)
+  // R24: the same CLAUDE.md context in both billings: only the file passed with --append-system-prompt-file. --bare
+  // (api) already skips CLAUDE.md discovery and auto-memory; a subscription call would otherwise load the user's own
+  // ~/.claude/CLAUDE.md, CLAUDE.local.md, the cwd's CLAUDE.md and auto-memory. In the 2.1.322 bundle every CLAUDE.md
+  // loader (managed, user, project, local, nested) returns [] when CLAUDE_CODE_DISABLE_CLAUDE_MDS is set, and auto-memory
+  // is "off" when CLAUDE_CODE_DISABLE_AUTO_MEMORY is set; neither touches auth or --settings. (--safe-mode was not used:
+  // it disables "all customizations", and nothing says it keeps --settings, which carries the implementer's sandbox.)
+  env.CLAUDE_CODE_DISABLE_CLAUDE_MDS = '1';
+  env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
+  // R23: the implementer's own `npm test` runs inside Claude Code's sandbox, where Hal's nested sandbox tests cannot
+  // run (macOS cannot nest sandbox-exec): they skip on HAL_SANDBOXED=1. Hal runs the full suite itself afterwards.
+  if (call.role === 'implementer') env.HAL_SANDBOXED = '1';
   const key = call.billing === 'api' ? deps.apiKey : undefined;
   const child = deps.spawn('claude', buildArgs(call), { cwd: call.cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   live.add(child);
@@ -266,6 +275,9 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
     const finish = (r: ClaudeResult) => {
       if (done) return;
       done = true;
+      // A timed-out call's grandchildren (its Bash, tests, browsers) may outlive the leader: SIGKILL the whole group
+      // however the call ended, by 'exit'/'close' or the give-up timer, even if the leader is already gone.
+      if (timedOut) signal('SIGKILL');
       live.delete(child);
       try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* best effort */ }
       clearTimeout(termTimer);
@@ -306,21 +318,4 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
       }, KILL_GRACE_MS);
     }, call.timeoutMs);
   });
-}
-
-/** Subscription call that hits a usage limit is retried once on the API with a fresh slice; both results are returned so both get recorded. */
-export async function runClaudeWithFallback(
-  call: ClaudeCall,
-  deps: ClaudeDeps,
-  apiSliceUsd: number = call.maxBudgetUsd,
-): Promise<{ first: ClaudeResult; retry?: ClaudeResult }> {
-  const first = await runClaude(call, deps);
-  if (call.billing !== 'subscription' || !first.limitHit) return { first };
-  try {
-    return { first, retry: await runClaude({ ...call, billing: 'api', maxBudgetUsd: apiSliceUsd }, deps) };
-  } catch (e) {
-    // Never lose `first`. The message is key-free (childEnv's error names no value).
-    const msg = e instanceof Error ? e.message : 'retry failed';
-    return { first, retry: { ok: false, text: '', costUsd: null, subtype: 'retry_error', limitHit: false, timedOut: false, stderrTail: redact(msg, deps.apiKey) } };
-  }
 }
