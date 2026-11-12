@@ -90,5 +90,10 @@ Gearhold's list ends with one `overhead-level-<n>` shot per level: the whole lev
 ### Stagnation flags
 {{stagnation}}
 
+### What Hal has learned (lessons kept across nights)
+Each is evidence from earlier nights, not a rule: don't plan what a lesson says failed unless you say in `why` what is
+different this time, and prefer what a lesson says works.
+{{lessons}}
+
 ### Remaining budget
 {{budget}}

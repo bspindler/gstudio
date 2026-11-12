@@ -98,6 +98,11 @@ answers in the thread. It does not answer right away. A thread stays until you c
 
 The next run's planner and director also read your votes and comments.
 
+**What Hal has learned.** Each night the director may write up to five lessons, short and specific things the
+results showed, such as "Gearhold: moving a repair crystal fixed `supplied`" (in `.data/hal/lessons.json`). It
+retires one when later results contradict it. The planner reads them all before it plans. They show on the report
+under "What Hal has learned". If one is wrong, tell Hal in a thread.
+
 **Play** opens the dev server (`npm run dev:lan`), and the dev server serves your checkout, not Hal's ref. Hal's
 merges sit on `refs/hal/main` (and origin) until you pull, so run `git pull` on the Mac to play Hal's latest. When
 your checkout is behind `refs/hal/main`, the report says so next to Play, with how many Hal commits you are missing.

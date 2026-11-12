@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { writeJsonAtomic, createStore, defaultHalDir, KEEP_SPEND_DAYS, threadOf, withFileLock } from './store.js';
+import { writeJsonAtomic, createStore, defaultHalDir, KEEP_SPEND_DAYS, MAX_LESSONS, threadOf, withFileLock } from './store.js';
 import { existsSync, writeFileSync } from 'node:fs';
 
 let dir: string, clock: Date;
@@ -190,5 +190,19 @@ describe('file locks (the report server and a running Hal both write these files
     writeFileSync(join(dir, 'x.lock'), `${process.ppid} ${new Date().toISOString()}\n`); // alive, and not us
     await expect(withFileLock(join(dir, 'x.lock'), async () => 1, { timeoutMs: 200 })).rejects.toThrow(/timed out/);
     expect(await withFileLock(join(dir, 'x.lock'), async () => 2, { timeoutMs: 200, staleMs: 0 })).toBe(2); // too old: taken over
+  });
+});
+
+describe('lessons', () => {
+  it('new ids, no duplicates (case ignored), retire by id, at most MAX_LESSONS kept (oldest dropped)', async () => {
+    const s = mk();
+    expect((await s.applyLessons({ add: [{ game: 'g', text: 'A' }, { game: null, text: 'B' }], retire: [] }, 'r1')).added.map((l) => l.id)).toEqual(['L-001', 'L-002']);
+    expect((await s.applyLessons({ add: [{ game: 'g', text: 'a' }], retire: ['L-001', 'L-9'] }, 'r2'))).toEqual({ added: [], retired: ['L-001'] });
+    expect((await s.readLessons()).map((l) => l.text)).toEqual(['B']);
+    await s.applyLessons({ add: Array.from({ length: MAX_LESSONS + 3 }, (_, i) => ({ game: null, text: `t${i}` })), retire: [] }, 'r3');
+    const all = await s.readLessons();
+    expect(all).toHaveLength(MAX_LESSONS);
+    expect(all.at(-1)!.text).toBe(`t${MAX_LESSONS + 2}`);
+    expect(all.some((l) => l.text === 'B')).toBe(false);
   });
 });

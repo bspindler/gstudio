@@ -38,6 +38,9 @@ records "moving crystals works on Gearhold, adding moves doesn't work on Tidepoo
 with no comparison of alternatives. Two tickets aimed at the wrong level show weak diagnosis.
 **Fix:** a lessons file the director keeps each night (short, specific, retired when wrong), read by the planner
 and director. Later: try two variants of a tuning ticket and keep the better one.
+**Done 2026-11-12 (lessons):** `.data/hal/lessons.json`; the director adds up to 5 a night (one sentence, a known game
+or the whole studio, citing the pass) and retires contradicted ones; the planner and director read them; the report
+shows them under "What Hal has learned". Still open: trying variants.
 
 ## 4. It can't improve itself
 

@@ -364,6 +364,33 @@ describe('end-of-run alert', () => {
   }, 60_000);
 });
 
+describe('lessons (what Hal learns across nights)', () => {
+  const night1 = { note: 'n', perGame: {}, noteReplies: [], lessons: { add: [
+    { game: 'hyperline', text: 'Hyperline: a wider gap fixed noSpikes (HAL-001).' },
+    { game: 'pong', text: 'not a game we have' },
+    { game: null, text: '  Whole studio:\n one line  ' },
+    ...Array.from({ length: 6 }, (_, i) => ({ game: 'hyperline', text: `extra ${i}` })),
+  ] } };
+  it('the director adds lessons (known games or the studio, one line, at most 5 a night); the next planner and director read them', async () => {
+    await runNight(opts(), deps({ claude: fakeClaude({ director: night1 }) }));
+    const saved = JSON.parse(read(halDir, 'lessons.json')) as Array<{ id: string; game: string | null; text: string; run: string }>;
+    expect(saved.map((l) => [l.id, l.game, l.text])).toEqual([
+      ['L-001', 'hyperline', 'Hyperline: a wider gap fixed noSpikes (HAL-001).'],
+      ['L-002', null, 'Whole studio: one line'],
+      ['L-003', 'hyperline', 'extra 0'], ['L-004', 'hyperline', 'extra 1'], ['L-005', 'hyperline', 'extra 2'],
+    ]);
+    calls.length = 0;
+    await runNight(opts(), deps({ claude: fakeClaude({ director: { note: 'n', perGame: {}, noteReplies: [], lessons: { retire: ['L-003', 'L-999'], add: [{ game: 'hyperline', text: 'Hyperline: a wider gap fixed noSpikes (HAL-001).' }] } } }) }));
+    for (const role of ['planner', 'director']) expect(calls.find((c) => c.role === role)!.prompt, role).toContain('a wider gap fixed noSpikes');
+    const after = JSON.parse(read(halDir, 'lessons.json')) as Array<{ id: string }>;
+    expect(after.map((l) => l.id)).toEqual(['L-001', 'L-002', 'L-004', 'L-005']); // L-003 retired; the repeat not re-added
+  }, 90_000);
+  it('no lessons yet: the prompts say so', async () => {
+    await runNight(opts(), deps());
+    expect(calls.find((c) => c.role === 'planner')!.prompt).toContain('(none yet)');
+  }, 60_000);
+});
+
 describe('models per role', () => {
   it('the implementer runs on implementerModel; the planner and director on model', async () => {
     await runNight(opts(), deps({ model: 'plan-model', implementerModel: 'build-model' }));

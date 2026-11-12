@@ -216,11 +216,11 @@ export function createServerApp(d: ServerDeps) {
       games: d.games, runs: await recentRuns(), latestRunId: latestRunId(d.halDir), ...(flash ? { flash: flash.slice(0, 300) } : {}),
     };
     if (!report) return c.html(renderRunHalOnly(base));
-    const [note, feedback, notes, approvals, playUrl, behind] = await Promise.all([
+    const [note, feedback, notes, approvals, playUrl, behind, lessons] = await Promise.all([
       readNote(report.runId), feedbackOf(report), store.readNotes(), store.readApprovals(),
-      d.devUrl ? d.devUrl().catch(() => null) : Promise.resolve(null), behindHal(),
+      d.devUrl ? d.devUrl().catch(() => null) : Promise.resolve(null), behindHal(), store.readLessons(),
     ]);
-    return c.html(renderReport({ ...base, report, note, feedback, notes, approvals: approvals.map((a) => a.item), playUrl, ...(behind ? { behindHal: behind } : {}) }));
+    return c.html(renderReport({ ...base, report, note, feedback, notes, approvals: approvals.map((a) => a.item), playUrl, lessons, ...(behind ? { behindHal: behind } : {}) }));
   };
 
   app.get('/', async (c) => page(c, await loadRun(latestRunId(d.halDir))));

@@ -611,7 +611,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     const open = notesInScope(await store.readNotes(), o.games);
     const shotsDir = join(runDir, 'play', 'screens');
     await mkdir(shotsDir, { recursive: true });
-    const plannerText = await ask('planner', renderPrompt(loadPrompt('planner'), plannerVars(o, d, c, { scores, screens, controls, ledger, open, mainDir })), mainDir, PLANNER_TIMEOUT_MS, [shotsDir]);
+    const plannerText = await ask('planner', renderPrompt(loadPrompt('planner'), plannerVars(o, d, c, { scores, screens, controls, ledger, open, mainDir, lessons: await lessonsVar(c, o.games) })), mainDir, PLANNER_TIMEOUT_MS, [shotsDir]);
     let tickets: Ticket[] = [];
     if (plannerText !== null) {
       const measures = Object.fromEntries(o.games.map((g) => [g, [...new Set(scorersFor(g).flatMap((s) => Object.keys(scores[s]?.measures ?? {})))]]));
@@ -713,8 +713,15 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       notes: J(notesNow.map(noteForPrompt)),
       stagnation,
       feedback: feedbackVars(c).feedback,
+      lessons: await lessonsVar(c, o.games),
     }), mainDir, DIRECTOR_TIMEOUT_MS);
-    const dir = parseDirector(directorText);
+    const dir = parseDirector(directorText, o.games);
+    if (dir && (dir.lessons.add.length || dir.lessons.retire.length)) {
+      try {
+        const l = await store.applyLessons({ add: dir.lessons.add.map((x) => ({ ...x, text: R.str(x.text) })), retire: dir.lessons.retire }, runId);
+        if (l.added.length || l.retired.length) log(`lessons: ${l.added.length} added, ${l.retired.length} retired`);
+      } catch (e) { warn(`lessons not saved: ${errMsg(e)}`); }
+    }
     if (dir) directorPerGame = dir.perGame;
     if (directorText !== null && !dir) warn("the director's reply did not match its contract: Hal wrote the note");
     noteText = dir?.note ?? fallbackNote(st.capReached, changes);
@@ -870,6 +877,8 @@ async function ciFollowUp(d: RunDeps, c: Common, warn: (s: string) => void): Pro
 type PlanInputs = {
   scores: Record<string, ScoreReport<unknown>>; screens: Record<string, ScreensResult>; controls: ControlCheck[];
   ledger: Ledger | null; open: Note[]; mainDir: string;
+  /** The lessons, already rendered for the prompt (lessonsVar). */
+  lessons: string;
 };
 function plannerVars(o: RunOptions, d: RunDeps, c: Common, p: PlanInputs): Record<string, string> {
   const left = (() => { try { return c.store.loadSpendTodaySync(); } catch { return null; } })();
@@ -893,6 +902,7 @@ function plannerVars(o: RunOptions, d: RunDeps, c: Common, p: PlanInputs): Recor
     changelogs: o.games.map(changelog).join('\n\n'),
     notes: J(p.open.map(noteForPrompt)),
     stagnation: stagnationText(o.games, p.ledger),
+    lessons: p.lessons,
     budget: left
       ? `${fmt(Math.max(0, DAILY_CAP_USD - apiSpent(left)))} of API credits left today; each ticket's implementer gets up to ${fmt(sliceFor(left, 'implementer'))}. At most ${o.maxTickets} tickets will be built.`
       : `At most ${o.maxTickets} tickets will be built.`,
@@ -940,8 +950,10 @@ const brief = (r: CandidateResult) => ({
   fitness: Object.fromEntries(Object.keys({ ...r.scoresBefore, ...r.scoresAfter }).map((s) => [s, { before: r.scoresBefore[s]?.fitness ?? null, after: r.scoresAfter[s]?.fitness ?? null }])),
 });
 
-type Director = { note: string; perGame: Record<string, string>; noteReplies: NoteReply[] };
-function parseDirector(text: string | null): Director | null {
+type Director = { note: string; perGame: Record<string, string>; noteReplies: NoteReply[]; lessons: { add: Array<{ game: string | null; text: string }>; retire: string[] } };
+/** Lessons the director may add in one night. */
+const LESSONS_PER_NIGHT = 5;
+function parseDirector(text: string | null, games: string[] = []): Director | null {
   if (text === null) return null;
   const v = extractJson(text) as Record<string, unknown> | null;
   if (!v || typeof v.note !== 'string' || !v.note.trim()) return null;
@@ -956,7 +968,21 @@ function parseDirector(text: string | null): Director | null {
       noteReplies.push({ id: x.id, status: x.status as NoteReply['status'], reply: x.reply });
     }
   }
-  return { note: v.note, perGame, noteReplies };
+  const l = (v.lessons && typeof v.lessons === 'object' ? v.lessons : {}) as { add?: unknown; retire?: unknown };
+  const add = (Array.isArray(l.add) ? l.add : []).flatMap((x) => {
+    const a = x as { game?: unknown; text?: unknown };
+    const text = typeof a.text === 'string' ? oneLine(a.text).slice(0, 300) : '';
+    const game = a.game === null || a.game === undefined || a.game === '' ? null : typeof a.game === 'string' && games.includes(a.game) ? a.game : undefined;
+    return text && game !== undefined ? [{ game, text }] : [];
+  }).slice(0, LESSONS_PER_NIGHT);
+  const retire = (Array.isArray(l.retire) ? l.retire : []).filter((id): id is string => typeof id === 'string' && /^L-\d+$/.test(id));
+  return { note: v.note, perGame, noteReplies, lessons: { add, retire } };
+}
+
+/** The lessons as the planner and director see them. */
+async function lessonsVar(c: Pick<Common, 'store'>, games: string[]): Promise<string> {
+  const all = (await c.store.readLessons()).filter((x) => x.game === null || games.includes(x.game));
+  return all.length ? J(all.map((x) => ({ id: x.id, game: x.game ?? 'studio', since: x.at.slice(0, 10), text: x.text }))) : '(none yet)';
 }
 
 const plannedBrief = (t: Ticket) => ({ id: t.id, game: t.game, kind: t.kind, title: t.title });
