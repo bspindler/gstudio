@@ -541,6 +541,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       const rp = o.reportOnly ? null : await replayHalOnto(repo, { git: raw });
       let why = rp === null ? 'this run is --report-only, so Hal did not try' : rp.ok ? '' : rp.reason;
       if (rp?.ok) {
+        setPhase(`preflight: checking ${rp.replayed} replayed commit${rp.replayed === 1 ? '' : 's'} (ci:local)`);
         let ci: { ok: boolean; detail: string };
         try { ci = await d.ciLocal(rp.head); } catch (e) { ci = { ok: false, detail: errMsg(e) }; }
         if (!ci.ok) why = `ci:local failed on the replayed commits (${rp.head.slice(0, 12)}): ${ci.detail}`;
