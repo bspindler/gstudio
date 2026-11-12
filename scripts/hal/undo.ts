@@ -9,12 +9,13 @@
 //      node_modules relinked and verified and the tree required unchanged before each step and after the last
 //   5. commit-tree of that exact tree (trailers incl. Hal-Undo, Hal-Reason) and a compare-and-swap of refs/hal/main
 // On any failure the main worktree is reset to refs/hal/main, which has not moved.
+import { writeFileSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { formatTrailers, nightOf, parseTrailers, undoEntry } from '@studio/core/hal';
 import { blobText, commitTree, HAL_MAIN, mainWorktreeDir, revertPass, runGit, safeGit, snapshotTree, type GitRunner } from './git.js';
 import { defaultCommands, resolveTools } from './candidate.js';
-import { errMsg, isolatedCheck, redactor, scriptsOf, tail } from './run-util.js';
+import { assertNoRepoFilters, dotGit, errMsg, isolatedCheck, redactor, scriptsOf, tail } from './run-util.js';
 import { sandboxAvailable } from './sandbox.js';
 
 export const UNDO_TEST_TIMEOUT_MS = 20 * 60_000;
@@ -64,11 +65,24 @@ export async function applyUndo(pass: string, reason: string, ctx: UndoCtx): Pro
     head = (await git(['rev-parse', '--verify', `${HAL_MAIN}^{commit}`], repo)).trim();
     if ((await git(['rev-parse', 'HEAD'], dir)).trim() !== head) return { ok: false, error: `main worktree is not at ${HAL_MAIN}` };
     if ((await git(['status', '--porcelain', '--untracked-files=all'], dir)).trim() !== '') return { ok: false, error: 'main worktree is not clean' };
+    await assertNoRepoFilters(repo, dir, git);
   } catch (e) { return { ok: false, error: redact(errMsg(e)) }; }
 
   let touched = false;
+  const gitPtr = dotGit(dir); // the worktree's gitdir pointer: a check that rewrote it would aim Hal's git at its own config
+  /** Puts .git back if a check changed it (`tampered`), then `filter` is set if this tree's config could run a filter. */
+  const safeHere = async (): Promise<{ tampered: boolean; filter: string | null }> => {
+    const tampered = dotGit(dir) !== gitPtr;
+    if (tampered) writeFileSync(join(dir, '.git'), gitPtr);
+    try { await assertNoRepoFilters(repo, dir, git); return { tampered, filter: null }; } catch (e) { return { tampered, filter: errMsg(e) }; }
+  };
+  const TAMPERED = "the main worktree's .git changed during the tests (restored)";
   const fail = async (error: string): Promise<UndoResult> => {
     if (touched) {
+      const h = await safeHere();
+      if (h.tampered && !error.includes(TAMPERED)) error = `${error}; ${TAMPERED}`;
+      // Fail closed: no git at all in a tree whose config could run a program. ensureMainWorktree refuses too.
+      if (h.filter) return { ok: false, error: redact(tail(`${error}; ${h.filter}; the main worktree was left as it is`, 2000)) };
       for (const a of [['revert', '--quit'], ['reset', '--hard', '--quiet', head], ['clean', '-fdq']]) await git(a, dir).catch(() => {});
     }
     return { ok: false, error: redact(tail(error, 2000)) };
@@ -133,6 +147,9 @@ export async function applyUndo(pass: string, reason: string, ctx: UndoCtx): Pro
         ...(ctx.unsandboxedForTests ? { unsandboxedForTests: true } : {}),
       });
       if (r.error === 'no sandbox') return fail('no sandbox: refusing to run npm test unsandboxed');
+      const h = await safeHere();
+      if (h.tampered) return fail(TAMPERED);
+      if (h.filter) return fail(h.filter);
       if (r.code !== 0) return fail(`npm test failed${r.timedOut ? ' (timed out)' : r.error ? ` to run: ${r.error}` : ''}:\n${tail(`${r.stdout}\n${r.stderr}`)}`);
     }
     if ((await snap()) !== tree) return fail('the worktree changed while the tests ran');

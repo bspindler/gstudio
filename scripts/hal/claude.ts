@@ -3,7 +3,7 @@
 // It never records spend: the caller does (see @studio/core/hal), using `costUsd`.
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { childEnv } from './env.js';
 
 export type ClaudeRole = 'planner' | 'implementer' | 'director';
@@ -24,6 +24,8 @@ export type ClaudeCall = {
    * so the repo's .hal.env cannot be derived from it. `<cwd>/.hal.env` is always denied as well.
    */
   denyReadPaths?: string[];
+  /** Extra directories the role's tools may reach (`--add-dir`), e.g. the planner's screenshot folder. */
+  addDirs?: string[];
 };
 export type ClaudeResult = {
   ok: boolean;
@@ -59,6 +61,17 @@ export const ALWAYS_DISALLOWED: string[] = [
   // edit may go through them. Reads stay allowed (the implementer may look at library types).
   ...NODE_MODULES_WRITE_DENY,
 ];
+
+/**
+ * Absolute deny rules for `denyReadPaths`, for every role. In 2.1.322's permission matcher a rule path starting with
+ * `//` is absolute from the filesystem root (a single `/` is relative to the settings root): the bundle's path resolver
+ * does `if (e.startsWith("//")) return Md(H0(e.slice(1)))`. So `/abs/.hal.env` becomes `Read(//abs/.hal.env)`.
+ */
+export function absoluteDenyRules(paths: string[]): string[] {
+  return paths.flatMap((p) => ['Read', 'Grep', 'Edit', 'Write'].map((t) => `${t}(/${resolve(p)})`));
+}
+/** Deny paths go into one comma/space-separated --disallowedTools value: refuse any that could split a rule. */
+const unsafeRulePath = (p: string) => /[\s,()]/.test(p) || !isAbsolute(p);
 
 /** Built-in tool set per role (`--tools`); `--allowedTools` only pre-approves, it does not restrict. */
 export function roleTools(role: ClaudeRole): string {
@@ -163,7 +176,7 @@ export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyR
 }
 
 export function buildArgs(call: ClaudeCall): string[] {
-  const denied = [...new Set([...ALWAYS_DISALLOWED, ...call.disallowedTools])];
+  const denied = [...new Set([...ALWAYS_DISALLOWED, ...absoluteDenyRules(call.denyReadPaths ?? []), ...call.disallowedTools])];
   const args = [
     '-p', '--output-format', 'json',
     '--max-budget-usd', String(call.maxBudgetUsd),
@@ -177,6 +190,7 @@ export function buildArgs(call: ClaudeCall): string[] {
     // The implementer's Bash runs code Claude wrote (tests); sandbox it in both billing modes.
     args.push('--settings', JSON.stringify(implementerSandboxSettings(call)));
   }
+  for (const d of call.addDirs ?? []) args.push('--add-dir', d);
   // --allowedTools/--disallowedTools are variadic: one comma-joined value each, and the prompt is sent on stdin.
   if (call.allowedTools.length > 0) args.push('--allowedTools', call.allowedTools.join(','));
   args.push('--disallowedTools', denied.join(','));
@@ -196,6 +210,9 @@ export async function runClaude(call: ClaudeCall, deps: ClaudeDeps): Promise<Cla
   // The implementer must name <repo>/.hal.env explicitly; never fall back to the cwd-only deny (fail closed).
   if (call.role === 'implementer' && !(call.denyReadPaths && call.denyReadPaths.length > 0)) {
     return { ok: false, text: '', costUsd: null, subtype: 'no_deny_paths', limitHit: false, timedOut: false, stderrTail: '' };
+  }
+  if ((call.denyReadPaths ?? []).some(unsafeRulePath)) {
+    return { ok: false, text: '', costUsd: null, subtype: 'bad_deny_path', limitHit: false, timedOut: false, stderrTail: '' };
   }
   // Throws `no API key in .hal.env` (no key value) before anything is spawned.
   const env = childEnv(deps.env, call.billing, deps.apiKey);

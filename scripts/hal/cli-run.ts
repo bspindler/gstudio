@@ -5,17 +5,18 @@
 //   npm run hal -- stop
 //   npm run hal -- undo HAL-0xx --reason "<text>" [--no-push]
 import { spawn } from 'node:child_process';
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { ciLocalSandboxed } from './ci-sandboxed.js';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { Billing, ScoreReport, TicketKind } from '@studio/core/hal';
 import { CHECK_TIMEOUT_MS, defaultCommands, resolveTools } from './candidate.js';
-import { runClaude, runClaudeWithFallback, type ClaudeDeps } from './claude.js';
+import { runClaude, type ClaudeDeps } from './claude.js';
 import type { ControlCheck } from './controls.js';
-import { childEnv, loadHalEnv } from './env.js';
+import { loadHalEnv } from './env.js';
 import { runNight, STOP_FILE, undoCommand, type CiLocal, type PlayPort, type RunDeps, type RunOptions } from './run.js';
-import { entryCheck, errMsg, redactor, tail } from './run-util.js';
+import { entryCheck } from './run-util.js';
 import type { ScreensResult } from './screens.js';
 
 export const RUN_COMMANDS = ['run', 'stop', 'undo'] as const;
@@ -95,12 +96,14 @@ export async function runRunCommand(c: RunCommand, rest: string[], d: RunCmdDeps
 export function realRunDeps(repo: string, halDir: string): RunDeps {
   const env = loadHalEnv(repo);
   const apiKey = env.ANTHROPIC_API_KEY?.trim() || undefined;
-  const secrets = [apiKey, env.HAL_TOKEN?.trim()].filter((s): s is string => !!s);
+  // Redacted everywhere: the key, the dashboard token, and any Claude credential in .hal.env or the environment.
+  const secrets = [...new Set([apiKey, env.HAL_TOKEN, env.CLAUDE_CODE_OAUTH_TOKEN, env.ANTHROPIC_AUTH_TOKEN, process.env.ANTHROPIC_API_KEY, process.env.CLAUDE_CODE_OAUTH_TOKEN, process.env.ANTHROPIC_AUTH_TOKEN, process.env.HAL_TOKEN]
+    .map((v) => v?.trim()).filter((v): v is string => !!v))];
   const claudeDeps: ClaudeDeps = { spawn: (cmd, args, o) => spawn(cmd, args, o), env: process.env, now: Date.now, ...(apiKey ? { apiKey } : {}) };
   return {
     repo, halDir, now: () => new Date(), model: env.HAL_MODEL?.trim() || DEFAULT_MODEL, secrets, hasApiKey: !!apiKey,
-    // Without a key there is nothing to fall back to: a limit hit switches the run to API, which then stops cleanly.
-    claude: apiKey ? (call, s) => runClaudeWithFallback(call, claudeDeps, s) : async (call) => ({ first: await runClaude(call, claudeDeps) }),
+    // One spawn per call; run.ts reserves spend first and does the subscription -> API fallback itself.
+    claude: (call) => runClaude(call, claudeDeps),
     play: realPlay(repo, secrets),
     ciLocal: realCiLocal(repo, secrets),
   };
@@ -129,30 +132,7 @@ export function realPlay(repo: string, secrets: string[]): PlayPort {
   };
 }
 
-/** `npm run ci:local -- <sha>` in Brian's checkout with the secrets scrubbed from its env; the verdict is .data/ci/<sha>.json. */
+/** Hal's ci:local: scripts/hal/ci-sandboxed.ts (npm ci unsandboxed, every other step sandboxed); writes .data/ci/<sha>.json. */
 export function realCiLocal(repo: string, secrets: string[]): CiLocal {
-  const { str } = redactor(secrets);
-  return (sha) => new Promise((resolve) => {
-    const env = childEnv(process.env, 'subscription');
-    for (const k of Object.keys(env)) {
-      const v = env[k];
-      if (/^(?:HAL_TOKEN|CLAUDE_CODE_OAUTH_TOKEN)$/.test(k) || (v !== undefined && secrets.some((s) => v.includes(s)))) delete env[k];
-    }
-    let out = '';
-    const child = spawn('npm', ['run', 'ci:local', '--', sha], { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    const timer = setTimeout(() => child.kill('SIGKILL'), CI_LOCAL_TIMEOUT_MS);
-    child.stdout.on('data', (b: Buffer) => { out = (out + b.toString()).slice(-20_000); });
-    child.stderr.on('data', (b: Buffer) => { out = (out + b.toString()).slice(-20_000); });
-    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, detail: str(errMsg(e)) }); });
-    child.on('close', async (code) => {
-      clearTimeout(timer);
-      try {
-        const r = JSON.parse(await readFile(join(repo, '.data', 'ci', `${sha}.json`), 'utf8')) as { ok?: boolean; steps?: { step: string; ok: boolean }[] };
-        const failed = (r.steps ?? []).filter((s) => !s.ok).map((s) => s.step);
-        resolve({ ok: r.ok === true && code === 0, detail: r.ok === true ? 'passed' : `failed: ${failed.join(', ') || `exit ${code}`}` });
-      } catch {
-        resolve({ ok: false, detail: str(`no result (exit ${code}): ${tail(out, 600)}`) });
-      }
-    });
-  });
+  return async (sha) => { const r = await ciLocalSandboxed(sha, { repo, secrets }); return { ok: r.ok, detail: r.detail }; };
 }

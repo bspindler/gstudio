@@ -9,12 +9,12 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dayOf, formatTrailers, parseTrailers, type ScoreReport, type SpendDay, type Ticket } from '@studio/core/hal';
 import type { CheckCommands } from './candidate.js';
-import { runClaudeWithFallback, type ClaudeCall, type ClaudeResult } from './claude.js';
+import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
 import { acquireLock, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
 import { parseRunArgs, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
-import { sandboxAvailable } from './sandbox.js';
+import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
 
 const KEY = 'sk-ant-test-FAKE0123456789';
 const NOW = new Date('2026-11-12T03:00:00Z'); // night 2026-11-11 at tz offset 0
@@ -112,13 +112,13 @@ function fakeClaude(o: ClaudeOpts = {}): RunDeps['claude'] {
   return async (call) => {
     calls.push(call);
     o.onCall?.(call);
-    if (call.role === 'planner') return { first: ok(o.plannerText ?? `Here you go:\n${J({ tickets: o.tickets ?? [GOOD] })}`, cost('planner', 0.5)) };
+    if (call.role === 'planner') return ok(o.plannerText ?? `Here you go:\n${J({ tickets: o.tickets ?? [GOOD] })}`, cost('planner', 0.5));
     if (call.role === 'director') {
-      return { first: ok(J(o.director ?? { note: 'A good night for Hyperline.', perGame: { hyperline: 'Hyperline kept its snap.' }, noteReplies: [] }), cost('director', 0.2)) };
+      return ok(J(o.director ?? { note: 'A good night for Hyperline.', perGame: { hyperline: 'Hyperline kept its snap.' }, noteReplies: [] }), cost('director', 0.2));
     }
     const title = Object.keys(EDITS).find((t) => call.prompt.includes(t))!;
     (o.implementer?.[title]?.edit ?? EDITS[title]!)(call.cwd);
-    return { first: ok(IMPL_OUT(o.implementer?.[title]?.summary), cost(title, 0.5)) };
+    return ok(IMPL_OUT(o.implementer?.[title]?.summary), cost(title, 0.5));
   };
 }
 
@@ -159,7 +159,7 @@ describe('full fake run', () => {
     expect(r.capReached).toBe(true);
     expect(r).toMatchObject({ night: NIGHT, trigger: 'nightly', billing: 'api', pushed: true });
     expect(r.spend.api).toBe(7.5);
-    expect(Object.keys(r).sort()).toEqual(['billing', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
+    expect(Object.keys(r).sort()).toEqual(['billing', 'billingEnded', 'calls', 'capReached', 'changes', 'endedAt', 'games', 'night', 'notes', 'pushed', 'runId', 'spend', 'startedAt', 'trigger', 'warnings'].sort());
     expect(r.games.hyperline).toMatchObject({ before: { hyperline: 60 }, after: { hyperline: 61 } });
     // The director had no budget left: the note is Hal's own summary, still written and committed.
     expect(calls.map((c) => c.role)).toEqual(['planner', 'implementer', 'implementer']);
@@ -196,7 +196,7 @@ describe('full fake run', () => {
 
 describe('lock', () => {
   it('a second run while a live pid holds the lock exits 2 with "busy" and touches nothing', async () => {
-    put(halDir, 'run.lock', J({ pid: process.pid, runId: 'other', startedAt: NOW.toISOString() }));
+    put(halDir, 'run.lock', J({ pid: process.pid, runId: 'other', startedAt: new Date().toISOString() }));
     const claude = vi.fn();
     expect(await runNight(opts(), deps({ claude }))).toBe(2);
     expect(logs.join('\n')).toMatch(/busy/);
@@ -214,9 +214,9 @@ describe('lock', () => {
     expect(existsSync(join(halDir, 'run.lock'))).toBe(false);
   });
   it('acquireLock: second acquire is busy while held; release only removes our own lock', () => {
-    const a = acquireLock(halDir, { pid: process.pid, runId: 'a', startedAt: NOW.toISOString() });
+    const a = acquireLock(halDir, { pid: process.pid, runId: 'a', startedAt: new Date().toISOString() });
     expect('busy' in a).toBe(false);
-    const b = acquireLock(halDir, { pid: process.pid, runId: 'b', startedAt: NOW.toISOString() });
+    const b = acquireLock(halDir, { pid: process.pid, runId: 'b', startedAt: new Date().toISOString() });
     expect('busy' in b && b.busy.runId).toBe('a');
     if (!('busy' in a)) a.release();
     expect(existsSync(join(halDir, 'run.lock'))).toBe(false);
@@ -266,6 +266,7 @@ describe('report-only', () => {
     expect(r.changes).toEqual([]);
     expect(calls.map((c) => c.role)).toEqual(['planner', 'director']);
     expect(r.pushed).toBe(false);
+    expect(r.pushSkippedReason).toBe('--report-only');
     expect(existsSync(join(halDir, 'runs', r.runId, 'play', 'scores.json'))).toBe(true);
   });
   it('a liability ticket without an approval becomes a call; with one it is built', async () => {
@@ -356,11 +357,16 @@ describe('push', () => {
 describe('spend under the lock', () => {
   it('records every call before the next one starts; an unknown API cost books the whole slice', async () => {
     seedSpend(0);
-    const seen: number[] = [];
+    const seen: unknown[] = [];
     await runNight(opts(), deps({
-      claude: fakeClaude({ tickets: [GOOD], costs: { planner: null, 'Smoother jumps': 0.75 }, onCall: () => seen.push(existsSync(join(halDir, 'spend.json')) ? spendCalls().length : 0) }),
+      claude: fakeClaude({ tickets: [GOOD], costs: { planner: null, 'Smoother jumps': 0.75 }, onCall: (call) => seen.push(spendCalls().map((x) => [x.role, x.usd, x.pending ?? false])) }),
     }));
-    expect(seen).toEqual([0, 1, 2]); // planner, implementer, director: each saw the previous call already on disk
+    // During each call: its own reservation (full slice, pending) is already on disk, and every earlier call is settled.
+    expect(seen).toEqual([
+      [['planner', 1.5, true]],
+      [['planner', 1.5, false], ['implementer', 3, true]],
+      [['planner', 1.5, false], ['implementer', 0.75, false], ['director', 1, true]],
+    ]);
     const c = spendCalls();
     expect(c.map((x) => [x.role, x.billing, x.usd])).toEqual([['planner', 'api', 1.5], ['implementer', 'api', 0.75], ['director', 'api', 0.2]]);
     expect(readReport().spend).toEqual({ api: 2.45, subscription: 0 });
@@ -369,11 +375,13 @@ describe('spend under the lock', () => {
     const limit: ClaudeResult = { ok: false, text: "You've hit your limit", costUsd: null, subtype: 'error', limitHit: true, timedOut: false, stderrTail: '' };
     const claude: RunDeps['claude'] = async (call) => {
       calls.push(call);
-      if (call.role === 'planner') return { first: limit, retry: ok(J({ tickets: [] }), 0.3) };
-      return { first: ok(J({ note: 'n', perGame: {}, noteReplies: [] }), 0.1) };
+      if (call.billing === 'subscription') return limit;
+      if (call.role === 'planner') return ok(J({ tickets: [] }), 0.3);
+      return ok(J({ note: 'n', perGame: {}, noteReplies: [] }), 0.1);
     };
     await runNight(opts({ trigger: 'manual', billing: 'subscription' }), deps({ claude }));
-    expect(calls.map((c) => c.billing)).toEqual(['subscription', 'api']);
+    expect(calls.map((c) => [c.role, c.billing])).toEqual([['planner', 'subscription'], ['planner', 'api'], ['director', 'api']]);
+    expect(readReport()).toMatchObject({ billing: 'subscription', billingEnded: 'api' });
     expect(spendCalls().map((x) => [x.role, x.billing])).toEqual([['planner', 'subscription'], ['planner', 'api'], ['director', 'api']]);
     expect(readReport().warnings.join('\n')).toMatch(/limit/);
   });
@@ -391,10 +399,10 @@ describe('signals', () => {
     let child: ChildProcess | undefined;
     let lockAtExit: boolean | undefined;
     proc.exit.mockImplementation(() => { lockAtExit = existsSync(join(halDir, 'run.lock')); });
-    const claude: RunDeps['claude'] = (call, s) => runClaudeWithFallback({ ...call, billing: 'subscription' }, {
+    const claude: RunDeps['claude'] = (call) => runClaude({ ...call, billing: 'subscription' }, {
       env: {}, now: Date.now,
       spawn: (_c, _a, o) => { child = spawn('sleep', ['30'], o); setTimeout(() => proc.emit('SIGINT'), 100); return child; },
-    }, s);
+    });
     await runNight(opts({ reportOnly: true }), deps({ claude, proc }));
     expect(proc.exit).toHaveBeenCalledWith(130);
     expect(lockAtExit).toBe(false);
@@ -507,7 +515,7 @@ describe('undo', () => {
   });
   it('an unknown pass exits 1; a busy lock exits 2', async () => {
     expect(await undoCommand('HAL-404', 'r', { push: false }, deps())).toBe(1);
-    put(halDir, 'run.lock', J({ pid: process.pid, runId: 'other', startedAt: NOW.toISOString() }));
+    put(halDir, 'run.lock', J({ pid: process.pid, runId: 'other', startedAt: new Date().toISOString() }));
     expect(await undoCommand('HAL-404', 'r', { push: false }, deps())).toBe(2);
   });
   it('preflight applies a pending undo from feedback.json the same way, and reports last run\'s ci:local failures', async () => {
@@ -517,8 +525,8 @@ describe('undo', () => {
     // The previous run (run-x) pushed this commit.
     put(halDir, 'latest.json', J({ runId: 'run-x', endedAt: NOW.toISOString(), reportMd: join(halDir, 'runs', 'run-x', 'report.md') }));
     put(halDir, 'runs/run-x/report.json', J({ runId: 'run-x', pushed: true }));
-    expect(await runNight(opts({ reportOnly: true, push: false }), deps())).toBe(0);
-    expect(parseTrailers(gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN))).toMatchObject({ undo: 'HAL-001' });
+    expect(await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [] }) }))).toBe(0);
+    expect(gitIn(repo, 'log', '--format=%B', HAL_MAIN)).toMatch(/^Hal-Undo: HAL-001$/m);
     expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done' })]);
     const w = readReport().warnings.join('\n');
     expect(w).toMatch(/undid HAL-001/);
@@ -543,5 +551,102 @@ describe('cli flags', () => {
   it('undo needs a pass id and --reason', async () => {
     await expect(runRunCommand('undo', ['HAL-001'], { halDir, games })).rejects.toThrow(/reason/);
     await expect(runRunCommand('undo', ['nope', '--reason', 'x'], { halDir, games })).rejects.toThrow(/HAL-/);
+  });
+});
+
+describe('fix round 1', () => {
+  it('R19: SIGINT during an API call leaves the whole slice booked in spend.json (reserved before the spawn)', async () => {
+    seedSpend(0);
+    const proc = Object.assign(new EventEmitter(), { exit: vi.fn() });
+    let atExit: unknown;
+    proc.exit.mockImplementation(() => { atExit = spendCalls().map((x) => [x.role, x.billing, x.usd, x.pending ?? false]); });
+    const claude: RunDeps['claude'] = async (call) => { calls.push(call); if (call.role === 'planner') { proc.emit('SIGINT'); throw new Error('killed'); } return ok(J({ note: 'n', perGame: {}, noteReplies: [] }), 0.1); };
+    await runNight(opts({ reportOnly: true }), deps({ claude, proc }));
+    expect(proc.exit).toHaveBeenCalledWith(130);
+    expect(atExit).toEqual([['planner', 'api', 1.5, true]]);
+    expect(spendCalls()[0]).toMatchObject({ role: 'planner', usd: 1.5 }); // settled as unknown: the slice stays
+    expect(spendCalls()[0]!.pending).toBeUndefined();
+  });
+  it('planner gets --add-dir for its screenshots; planner and director get <repo>/.hal.env as a deny path', async () => {
+    await runNight(opts({ reportOnly: true }), deps());
+    const r = readReport();
+    const [planner, director] = calls;
+    expect(planner!.addDirs).toEqual([join(halDir, 'runs', r.runId, 'play', 'screens')]);
+    expect(existsSync(planner!.addDirs![0]!)).toBe(true);
+    for (const c of [planner!, director!]) expect(c.denyReadPaths).toEqual([join(repo, '.hal.env')]);
+  });
+  it('--report-only does not apply pending undos (and pushes nothing)', async () => {
+    await makePass();
+    const head = halHead();
+    put(halDir, 'feedback.json', J({ votes: [], undos: [{ run: 'page', pass: 'HAL-001', reason: 'r', status: 'pending', at: NOW.toISOString() }] }));
+    const ci = vi.fn(async () => ({ ok: true, detail: '' }));
+    expect(await runNight(opts({ reportOnly: true }), deps({ ciLocal: ci }))).toBe(0);
+    expect(halHead()).toBe(head);
+    expect(feedback().undos[0]!.status).toBe('pending');
+    expect(ci).not.toHaveBeenCalled();
+  });
+  it('a candidate that reports "trust root modified" stops the build, warns to run npm ci, and nothing is pushed', async () => {
+    const ci = vi.fn(async () => ({ ok: true, detail: '' }));
+    const candidate = vi.fn(async (t: Ticket, ctx: { pass: string }) => ({
+      pass: ctx.pass, ticket: t, verdict: 'discarded' as const, reasons: ['trust root modified'], scoresBefore: {}, scoresAfter: {}, costUsd: 0,
+      warnings: ['trust root modified: node_modules changed; reinstall it (npm ci)'],
+    }));
+    expect(await runNight(opts(), deps({ candidate, ciLocal: ci, claude: fakeClaude({ tickets: [GOOD, THIRD] }) }))).toBe(0);
+    const r = readReport();
+    expect(candidate).toHaveBeenCalledTimes(1);
+    expect(r.changes.map((c) => c.reasons)).toEqual([['trust root modified'], ['stopped: trust root modified']]);
+    expect(r.warnings.join('\n')).toMatch(/Run npm ci/);
+    expect(r.pushed).toBe(false);
+    expect(r.pushSkippedReason).toMatch(/trust root/);
+    expect(ci).not.toHaveBeenCalled();
+  });
+  it('a filter driver in the repo config: the run refuses before any git or Claude (fail closed); so does undo', async () => {
+    gitIn(repo, 'config', 'filter.evil.smudge', 'touch /tmp/hal-evil-smudge');
+    const claude = vi.fn();
+    expect(await runNight(opts(), deps({ claude }))).toBe(1);
+    expect(claude).not.toHaveBeenCalled();
+    expect(readReport().warnings.join('\n')).toMatch(/filter\.evil\.smudge/);
+    expect(existsSync(join(halDir, 'wt', 'main'))).toBe(false);
+    expect(await undoCommand('HAL-001', 'r', { push: false }, deps())).toBe(1);
+    expect(logs.join('\n')).toMatch(/refusing to run git/);
+  });
+  it('undo: a test step that rewrites the worktree .git is caught; .git is restored before any git call; nothing moves', async () => {
+    await makePass();
+    const head = halHead();
+    const dotGit = join(halDir, 'wt', 'main', '.git');
+    const before = readFileSync(dotGit, 'utf8');
+    const evil = node(`require('fs').writeFileSync('.git', 'gitdir: /tmp/evil-gitdir\\n')`);
+    expect(await undoCommand('HAL-001', 'r', { push: false }, deps({ undoTest: () => [evil] }))).toBe(1);
+    expect(readFileSync(dotGit, 'utf8')).toBe(before);
+    expect(halHead()).toBe(head);
+    expect(gitIn(join(halDir, 'wt', 'main'), 'status', '--porcelain')).toBe('');
+    expect(feedback().undos[0]!.error).toMatch(/\.git changed/);
+  });
+  it('undo: a filter configured during the tests (worktree config) makes Hal leave the tree alone', async () => {
+    await makePass();
+    const head = halHead();
+    const step = node(`require('child_process').execFileSync('git', ['config', 'filter.evil.smudge', 'false'])`);
+    expect(await undoCommand('HAL-001', 'r', { push: false }, deps({ undoTest: () => [step] }))).toBe(1);
+    expect(halHead()).toBe(head);
+    expect(feedback().undos[0]!.error).toMatch(/filter\.evil\.smudge.*left as it is/);
+  });
+  it('lock: a live pid that started after the lock was taken is a reused pid: the lock is taken over', async () => {
+    put(halDir, 'run.lock', J({ pid: process.pid, runId: 'ancient', startedAt: '2000-01-01T00:00:00.000Z' }));
+    expect(await runNight(opts({ reportOnly: true }), deps())).toBe(0);
+    put(halDir, 'run.lock', J({ pid: process.pid, runId: 'unknown-start', startedAt: '2000-01-01T00:00:00.000Z' }));
+    expect(await runNight(opts({ reportOnly: true }), deps({ startTimeOf: () => null }))).toBe(2); // start unknown: alive
+  });
+  it('killLiveGroups (called by the signal guard) kills a running isolated check\'s process group', async () => {
+    const t0 = Date.now();
+    const p = runIsolated(['sleep', '30'], { cwd: repo, env: { PATH: process.env.PATH }, timeoutMs: 60_000, unsandboxed: true });
+    await new Promise((r) => setTimeout(r, 100));
+    killLiveGroups();
+    const r = await p;
+    expect(r.code).not.toBe(0);
+    expect(Date.now() - t0).toBeLessThan(5_000);
+  });
+  it('an undo of a pass that was never merged is recorded as rejected (not retried)', async () => {
+    expect(await undoCommand('HAL-404', 'nope', { push: false }, deps())).toBe(1);
+    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-404', status: 'rejected' })]);
   });
 });

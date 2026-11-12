@@ -71,6 +71,20 @@ export type IsolatedOptions = {
 };
 
 const MAX_OUT = 32 * 1024 * 1024;
+
+/** Process groups of isolated checks (and other detached children Hal registers) still running. */
+const liveGroups = new Set<number>();
+/** Registers a detached child's process group so killLiveGroups() reaches it; returns the unregister function. */
+export function trackGroup(pid: number | undefined): () => void {
+  if (!pid) return () => {};
+  liveGroups.add(pid);
+  return () => { liveGroups.delete(pid); };
+}
+/** SIGKILLs every tracked process group: for Hal's SIGINT/SIGTERM/exit handler, next to killLiveClaudeChildren. */
+export function killLiveGroups(): void {
+  for (const pid of liveGroups) { try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } }
+  liveGroups.clear();
+}
 const killGroup = (pid: number | undefined) => { if (pid) try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } };
 
 /**
@@ -83,7 +97,8 @@ export function runIsolated(argv: string[], o: IsolatedOptions): Promise<Isolate
   return new Promise((done) => {
     let stdout = '', stderr = '', timedOut = false, finished = false;
     const child = spawn(cmd, args, { cwd: o.cwd, env: o.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    const finish = (r: IsolatedResult) => { if (finished) return; finished = true; clearTimeout(timer); killGroup(child.pid); done(r); };
+    const untrack = trackGroup(child.pid);
+    const finish = (r: IsolatedResult) => { if (finished) return; finished = true; clearTimeout(timer); killGroup(child.pid); untrack(); done(r); };
     const timer = setTimeout(() => { timedOut = true; killGroup(child.pid); }, o.timeoutMs);
     child.stdout.on('data', (d: Buffer) => { stdout = (stdout + d.toString('utf8')).slice(-MAX_OUT); });
     child.stderr.on('data', (d: Buffer) => { stderr = (stderr + d.toString('utf8')).slice(-MAX_OUT); });

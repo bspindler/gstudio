@@ -20,21 +20,23 @@
 // start; an unknown cost is the whole slice (recordCall). A zero slice stops the run cleanly (capReached).
 // Secrets: the key is only in RunDeps.claude's own deps; every string written under .data, logged, or put in a prompt
 // goes through the redactor first.
+import { execFileSync } from 'node:child_process';
 import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
-  emptyLedger, ledgerMarkdown, nextPassId, nightOf, parseLedger, recordCall, recordPass, sliceFor, splitLiability, stagnated, validateTickets,
+  apiSpent, DAILY_CAP_USD, emptyLedger, ledgerMarkdown, nextPassId, nightOf, parseLedger, recordPass, reserveCall, settleCall, sliceFor, splitLiability, stagnated, validateTickets,
   type Billing, type Ledger, type Measures, type ScoreReport, type Ticket, type TicketKind,
 } from '@studio/core/hal';
 import { runCandidate, scorersFor, type CandidateCtx, type CandidateResult } from './candidate.js';
-import { killLiveClaudeChildren, roleAllowedTools, type ClaudeCall } from './claude.js';
+import { killLiveClaudeChildren, roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import {
-  changedPaths, commitTree, ensureMainWorktree, extendTree, HAL_MAIN, pushHalMain, runGit, safeGit, type GitRunner,
+  changedPaths, commitTree, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, pushHalMain, runGit, safeGit, type GitRunner,
 } from './git.js';
 import { loadPrompt, renderPrompt } from './prompts.js';
-import { errMsg, extractJson, redactor, type Redactor } from './run-util.js';
+import { assertNoRepoFilters, errMsg, extractJson, redactor, type Redactor } from './run-util.js';
+import { killLiveGroups } from './sandbox.js';
 import type { ScreensResult } from './screens.js';
 import type { RunLock } from './server.js';
 import { createStore, writeJsonAtomic, type Note, type NoteStatus, type Store } from './store.js';
@@ -88,8 +90,11 @@ export type RunDeps = {
   secrets: string[];
   /** Whether .hal.env has an API key; API-billed calls are not attempted without one. */
   hasApiKey: boolean;
-  /** runClaudeWithFallback bound to its deps (which alone hold the key). */
-  claude: ClaudePort;
+  /**
+   * One `claude -p` call: runClaude bound to its deps (which alone hold the key). The run does the subscription -> API
+   * fallback itself, so that every spawn, the retry included, is reserved in spend.json before it starts (R19).
+   */
+  claude: (call: ClaudeCall) => Promise<ClaudeResult>;
   play: PlayPort;
   ciLocal: CiLocal;
   git?: GitRunner;
@@ -103,6 +108,8 @@ export type RunDeps = {
   unsandboxedForTests?: boolean;
   pid?: number;
   isAlive?: (pid: number) => boolean;
+  /** A pid's process start time (pid-reuse guard for the lock); default `ps -o lstart=`. null = unknown. */
+  startTimeOf?: (pid: number) => Date | null;
   /** Signal source and exit; default process. */
   proc?: ProcLike;
   log?: (line: string) => void;
@@ -123,6 +130,8 @@ export type RunReport = {
   endedAt: string;
   trigger: RunTrigger;
   billing: Billing;
+  /** The billing at the end (differs from `billing` after a subscription limit hit). */
+  billingEnded: Billing;
   spend: { api: number; subscription: number };
   games: Record<string, GameSummary>;
   /** Every ticket tried or skipped, in order. Skipped ones have pass ''. `version` is set once the release step ran. */
@@ -143,6 +152,21 @@ export const defaultAlive = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; }
 };
 export type HeldLock = { info: RunLock; setPhase(phase: string): void; release(): void };
+/** `ps -o lstart= -p <pid>` as a Date (second resolution), or null. */
+export const defaultStartTime = (pid: number): Date | null => {
+  try {
+    const t = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const d = new Date(t);
+    return t && Number.isFinite(d.getTime()) ? d : null;
+  } catch { return null; }
+};
+const PID_REUSE_SLACK_MS = 5_000;
+/** A lock is live if its pid is alive and that process started no later than the lock (else the pid was reused). */
+export function lockLive(l: RunLock, isAlive: (pid: number) => boolean = defaultAlive, startTimeOf: (pid: number) => Date | null = defaultStartTime): boolean {
+  if (!isAlive(l.pid)) return false;
+  const started = startTimeOf(l.pid), at = Date.parse(l.startedAt);
+  return !(started && Number.isFinite(at) && started.getTime() > at + PID_REUSE_SLACK_MS);
+}
 const TAKEOVER_STALE_MS = 30_000;
 
 function readLockFile(path: string): RunLock | 'missing' | 'corrupt' {
@@ -159,7 +183,8 @@ function readLockFile(path: string): RunLock | 'missing' | 'corrupt' {
  * fails if it exists). A lock whose pid is dead (or that is unreadable) is replaced by rename under a short-lived
  * takeover directory, so two runs cannot both take over the same stale lock.
  */
-export function acquireLock(halDir: string, info: RunLock, isAlive: (pid: number) => boolean = defaultAlive): HeldLock | { busy: RunLock } {
+export function acquireLock(halDir: string, info: RunLock, isAlive: (pid: number) => boolean = defaultAlive, startTimeOf: (pid: number) => Date | null = defaultStartTime): HeldLock | { busy: RunLock } {
+  const live = (l: RunLock) => lockLive(l, isAlive, startTimeOf);
   mkdirSync(halDir, { recursive: true });
   const path = join(halDir, LOCK_FILE);
   const tmp = `${path}.${info.pid}.${Date.now()}.tmp`;
@@ -183,7 +208,7 @@ export function acquireLock(halDir: string, info: RunLock, isAlive: (pid: number
       try { linkSync(tmp, path); return held(); } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e; }
       const cur = readLockFile(path);
       if (cur === 'missing') continue; // released meanwhile
-      if (typeof cur === 'object' && isAlive(cur.pid)) return { busy: cur };
+      if (typeof cur === 'object' && live(cur)) return { busy: cur };
       const mutex = `${path}.takeover`;
       try { mkdirSync(mutex); } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
@@ -194,7 +219,7 @@ export function acquireLock(halDir: string, info: RunLock, isAlive: (pid: number
       }
       try {
         const again = readLockFile(path);
-        if (typeof again === 'object' && isAlive(again.pid)) return { busy: again };
+        if (typeof again === 'object' && live(again)) return { busy: again };
         renameSync(tmp, path); // atomic replace of the stale lock
         return held();
       } finally { rmSync(mutex, { recursive: true, force: true }); }
@@ -208,12 +233,13 @@ export function acquireLock(halDir: string, info: RunLock, isAlive: (pid: number
 function guard(proc: ProcLike, lock: HeldLock, log: (s: string) => void): () => void {
   const sig = (name: string, code: number) => () => {
     killLiveClaudeChildren();
+    killLiveGroups(); // isolated checks, ci:local's npm ci
     lock.release();
-    log(`${name}: Claude children killed, lock removed`);
+    log(`${name}: Claude children and checks killed, lock removed`);
     proc.exit(code);
   };
   const onInt = sig('SIGINT', 130), onTerm = sig('SIGTERM', 143);
-  const onExit = () => { killLiveClaudeChildren(); lock.release(); };
+  const onExit = () => { killLiveClaudeChildren(); killLiveGroups(); lock.release(); };
   proc.on('SIGINT', onInt); proc.on('SIGTERM', onTerm); proc.on('exit', onExit);
   return () => { proc.off('SIGINT', onInt); proc.off('SIGTERM', onTerm); proc.off('exit', onExit); };
 }
@@ -263,7 +289,7 @@ export async function runNight(o: RunOptions, d: RunDeps): Promise<number> {
   const startedAt = d.now();
   let runId = `run-${stamp(startedAt)}`;
   for (let i = 2; existsSync(c.store.runDir(runId)); i++) runId = `run-${stamp(startedAt)}-${i}`;
-  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: 'lock', trigger: o.trigger }, d.isAlive);
+  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: 'lock', trigger: o.trigger }, d.isAlive, d.startTimeOf);
   if ('busy' in lock) {
     c.log(`busy: run ${lock.busy.runId} (pid ${lock.busy.pid}) is running since ${lock.busy.startedAt}`);
     return 2;
@@ -290,7 +316,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   const warn = (s: string) => { const r = R.str(s); warnings.push(r); log(`warning: ${r}`); };
   const st = {
     billing: o.billing, spend: { api: 0, subscription: 0 }, capReached: false, pushed: false,
-    pushSkippedReason: undefined as string | undefined, noKeyWarned: false, spendBroken: false,
+    pushSkippedReason: undefined as string | undefined, noKeyWarned: false, spendBroken: false, trustRoot: false,
   };
   const changes: CandidateResult[] = [];
   let calls: Ticket[] = [];
@@ -304,41 +330,60 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   const writeText = async (path: string, text: string) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, R.str(text)); };
   await mkdir(runDir, { recursive: true });
 
-  // Budget: today's spend, reloaded and saved on every call, synchronously, while we hold the lock.
+  // Budget (R19, reserve then settle): before every spawn a pending entry of the full slice is appended and saved,
+  // synchronously, under the lock; afterwards that same entry is settled with the real cost (unknown/threw: the slice
+  // stays). A crash between the two leaves the slice booked.
   const budget = {
     slice(role: string): number {
       if (st.spendBroken) return 0;
       try { return sliceFor(store.loadSpendTodaySync(), role); } catch (e) { st.spendBroken = true; warn(`spend.json unreadable, no more Claude calls: ${errMsg(e)}`); return 0; }
     },
+    reserve(role: string, billing: Billing): void {
+      try { store.saveSpendDaySync(reserveCall(store.loadSpendTodaySync(), { run: runId, role, billing, at: d.now().toISOString() })); } catch (e) {
+        st.spendBroken = true;
+        warn(`could not reserve spend, no more Claude calls: ${errMsg(e)}`);
+        throw new Error('spend reservation failed'); // never spawn an unbooked call
+      }
+    },
+    /** Settles the newest pending entry for this run, role and billing (the candidate port's `record` lands here). */
     record(role: string, billing: Billing, usd: number | null): void {
       try {
-        const day = store.loadSpendTodaySync();
-        const next = recordCall(day, { run: runId, role, billing, at: d.now().toISOString(), ...(usd === null ? {} : { usd }) });
+        const next = settleCall(store.loadSpendTodaySync(), { run: runId, role, billing, at: d.now().toISOString(), usd });
         store.saveSpendDaySync(next);
-        st.spend[billing] = round(st.spend[billing] + next.calls[next.calls.length - 1]!.usd);
+        const settled = [...next.calls].reverse().find((c) => c.run === runId && c.role === role && c.billing === billing && !c.pending);
+        st.spend[billing] = round(st.spend[billing] + (settled?.usd ?? 0));
       } catch (e) { st.spendBroken = true; warn(`could not record spend, no more Claude calls: ${errMsg(e)}`); }
     },
   };
-  const claude: ClaudePort = async (call, s) => {
-    const out = await d.claude(call, s);
-    if (call.billing === 'subscription' && out.first.limitHit && st.billing === 'subscription') {
-      st.billing = 'api';
-      warn('subscription usage limit hit: the rest of this run uses API credits');
+  /** One reserved spawn. */
+  const once = async (call: ClaudeCall): Promise<ClaudeResult> => {
+    budget.reserve(call.role, call.billing);
+    return d.claude(call);
+  };
+  /** The ClaudePort every role uses: a subscription limit hit switches the run to the API and retries there (if a key). */
+  const claude: ClaudePort = async (call, apiSlice) => {
+    const first = await once(call);
+    if (call.billing !== 'subscription' || !first.limitHit) return { first };
+    if (st.billing === 'subscription') { st.billing = 'api'; warn('subscription usage limit hit: the rest of this run uses API credits'); }
+    if (!d.hasApiKey) return { first };
+    try { return { first, retry: await once({ ...call, billing: 'api', maxBudgetUsd: apiSlice }) }; } catch (e) {
+      return { first, retry: { ok: false, text: '', costUsd: null, subtype: 'retry_error', limitHit: false, timedOut: false, stderrTail: R.str(errMsg(e)) } };
     }
-    return out;
   };
   const canCall = () => {
     if (st.billing !== 'api' || d.hasApiKey) return true;
     if (!st.noKeyWarned) { st.noKeyWarned = true; warn('no API key in .hal.env: API-billed Claude calls were not made'); }
     return false;
   };
-  const ask = async (role: 'planner' | 'director', prompt: string, cwd: string, timeoutMs: number): Promise<string | null> => {
+  const ask = async (role: 'planner' | 'director', prompt: string, cwd: string, timeoutMs: number, addDirs: string[] = []): Promise<string | null> => {
     if (!canCall()) return null;
     const slice = budget.slice(role);
     if (!(slice > 0)) { st.capReached = true; warn(`daily API cap reached: the ${role} did not run`); return null; }
     const call: ClaudeCall = {
       role, prompt: R.str(prompt), cwd, billing: st.billing, maxBudgetUsd: slice, model: d.model,
       allowedTools: roleAllowedTools(role), disallowedTools: [], timeoutMs,
+      denyReadPaths: [join(repo, '.hal.env')], // absolute deny rules for every role
+      ...(addDirs.length ? { addDirs } : {}),
     };
     let out: Awaited<ReturnType<ClaudePort>>;
     try { out = await claude(call, slice); } catch (e) {
@@ -355,10 +400,12 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
 
   let code = 0;
   let mainDir = '';
-  let pushOff: string | undefined = o.push ? undefined : '--no-push';
+  let pushOff: string | undefined = o.reportOnly ? '--report-only' : o.push ? undefined : '--no-push';
   try {
     // 2. Preflight.
     setPhase('preflight');
+    // Fail closed before any git in Hal's trees: no filter driver / attributes file / include in the repo's config.
+    await assertNoRepoFilters(repo, existsSync(mainWorktreeDir(repo)) ? mainWorktreeDir(repo) : repo, git);
     const main = await ensureMainWorktree(repo, { git: raw });
     mainDir = main.dir;
     if (main.diverged) {
@@ -372,7 +419,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       }
     }
     await ciFollowUp(d, c, warn);
-    for (const u of await store.pendingUndos()) {
+    for (const u of o.reportOnly ? [] : await store.pendingUndos()) { // --report-only changes nothing
       const r = await applyUndo(u.pass, u.reason, undoCtx(d, runId));
       const reason = R.str(u.reason);
       if (r.ok) {
@@ -412,7 +459,9 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       warn(`${errMsg(e)}: nothing is built this run`);
     }
     const open = (await store.readNotes()).filter((n) => n.status === 'open' && (n.game === null || o.games.includes(n.game)));
-    const plannerText = await ask('planner', renderPrompt(loadPrompt('planner'), plannerVars(o, d, c, { scores, screens, controls, ledger, open, mainDir })), mainDir, PLANNER_TIMEOUT_MS);
+    const shotsDir = join(runDir, 'play', 'screens');
+    await mkdir(shotsDir, { recursive: true });
+    const plannerText = await ask('planner', renderPrompt(loadPrompt('planner'), plannerVars(o, d, c, { scores, screens, controls, ledger, open, mainDir })), mainDir, PLANNER_TIMEOUT_MS, [shotsDir]);
     let tickets: Ticket[] = [];
     if (plannerText !== null) {
       const measures = Object.fromEntries(o.games.map((g) => [g, [...new Set(scorersFor(g).flatMap((s) => Object.keys(scores[s]?.measures ?? {})))]]));
@@ -433,6 +482,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       let baseline = { sha: (await git(['rev-parse', HAL_MAIN], repo)).trim(), scores: { ...scores } };
       for (const [i, t] of build.entries()) {
         const skip = (why: string) => { changes.push({ pass: '', ticket: t, verdict: 'skipped', reasons: [why], scoresBefore: {}, scoresAfter: {}, costUsd: 0 }); };
+        if (st.trustRoot) { skip('stopped: trust root modified'); continue; }
         if (existsSync(stopPath)) { skip('stopped'); continue; }
         if (!canCall()) { skip('no API key'); continue; }
         if (!(budget.slice('implementer') > 0)) { st.capReached = true; skip('budget'); continue; }
@@ -451,6 +501,13 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
           continue;
         }
         changes.push(r);
+        for (const w of r.warnings ?? []) warn(`${pass}: ${w}`);
+        if (r.reasons.includes('trust root modified')) {
+          // <repo>/node_modules (Hal's tools) changed under us: nothing more is built or pushed until it is reinstalled.
+          st.trustRoot = true;
+          pushOff = 'trust root modified: run npm ci';
+          warn(`trust root modified during ${pass}: <repo>/node_modules changed. The run stopped building and did not push. Run npm ci before the next run.`);
+        }
         const primary = scorersFor(t.game).find((s) => t.target !== undefined && Object.hasOwn(r.scoresBefore[s]?.measures ?? {}, t.target)) ?? scorersFor(t.game)[0]!;
         const after = r.scoresAfter[primary], before = r.scoresBefore[primary];
         ledger = recordPass(ledger, {
@@ -530,6 +587,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   /** Writes the night's notes into Hal's main worktree and commits them onto refs/hal/main by CAS (one commit). */
   async function commitHistory(files: { path: string; text: string }[]): Promise<string | null> {
     if (files.length === 0) return null;
+    await assertNoRepoFilters(repo, mainDir, git); // checks ran: refuse git here if a filter could be configured
     const head = (await git(['rev-parse', HAL_MAIN], repo)).trim();
     if ((await git(['rev-parse', 'HEAD'], mainDir)).trim() !== head) throw new Error(`main worktree is not at ${HAL_MAIN}`);
     if ((await git(['status', '--porcelain', '--untracked-files=all'], mainDir)).trim() !== '') throw new Error('main worktree is not clean');
@@ -568,7 +626,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       games[g] = s;
     }
     const report: RunReport = {
-      runId, night, startedAt: startedAt.toISOString(), endedAt, trigger: o.trigger, billing: o.billing, spend: st.spend, games,
+      runId, night, startedAt: startedAt.toISOString(), endedAt, trigger: o.trigger, billing: o.billing, billingEnded: st.billing, spend: st.spend, games,
       changes, calls, notes: replies, pushed: st.pushed, warnings,
       ...(st.pushSkippedReason ? { pushSkippedReason: st.pushSkippedReason } : {}),
       ...(st.capReached ? { capReached: true } : {}),
@@ -645,7 +703,7 @@ function plannerVars(o: RunOptions, d: RunDeps, c: Common, p: PlanInputs): Recor
     notes: J(p.open.map(noteForPrompt)),
     stagnation: stagnationText(o.games, p.ledger),
     budget: left
-      ? `${fmt(Math.max(0, 20 - left.calls.filter((x) => x.billing === 'api').reduce((s, x) => s + x.usd, 0)))} of API credits left today; each ticket's implementer gets up to ${fmt(sliceFor(left, 'implementer'))}. At most ${o.maxTickets} tickets will be built.`
+      ? `${fmt(Math.max(0, DAILY_CAP_USD - apiSpent(left)))} of API credits left today; each ticket's implementer gets up to ${fmt(sliceFor(left, 'implementer'))}. At most ${o.maxTickets} tickets will be built.`
       : `At most ${o.maxTickets} tickets will be built.`,
     ...feedbackVars(c),
   };
@@ -741,19 +799,20 @@ export async function undoCommand(pass: string, reason: string, o: { push: boole
   const c = common(d);
   const startedAt = d.now();
   const runId = `undo-${stamp(startedAt)}`;
-  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: `undo ${pass}`, trigger: 'manual' }, d.isAlive);
+  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: `undo ${pass}`, trigger: 'manual' }, d.isAlive, d.startTimeOf);
   if ('busy' in lock) {
     c.log(`busy: run ${lock.busy.runId} (pid ${lock.busy.pid}) is running since ${lock.busy.startedAt}`);
     return 2;
   }
   const unguard = guard(d.proc ?? process, lock, c.log);
   try {
+    await assertNoRepoFilters(d.repo, existsSync(mainWorktreeDir(d.repo)) ? mainWorktreeDir(d.repo) : d.repo, c.git);
     const main = await ensureMainWorktree(d.repo, { git: c.raw });
     const r = await applyUndo(pass, reason, undoCtx(d, runId));
     const why = c.R.str(reason);
     if (!r.ok) {
-      if (!r.permanent) await c.store.recordUndo({ pass, run: runId, reason: why, status: 'failed', error: c.R.str(r.error) });
-      c.log(`undo ${pass} failed${r.permanent ? '' : ' (saved; the next run retries it)'}: ${r.error}`);
+      await c.store.recordUndo({ pass, run: runId, reason: why, status: r.permanent ? 'rejected' : 'failed', error: c.R.str(r.error) });
+      c.log(`undo ${pass} failed${r.permanent ? ' (rejected: not retried)' : ' (saved; the next run retries it)'}: ${r.error}`);
       return 1;
     }
     await c.store.recordUndo({ pass, run: runId, reason: why, status: 'done', commit: r.commit });

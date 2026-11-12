@@ -20,7 +20,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  applyRelease, bumpedTonight, checkTripwires, compareScores, formatTrailers, nightOf, planVersion, topEntry, TRIPWIRE_RULES,
+  applyRelease, bumpedTonight, checkTripwires, testPrefixesFor, compareScores, formatTrailers, nightOf, planVersion, topEntry, TRIPWIRE_RULES,
   type Billing, type Diff, type FileChange, type ScoreReport, type Ticket,
 } from '@studio/core/hal';
 import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.js';
@@ -247,7 +247,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
   };
   /** A check in a tree: the tree writable (unless read-only), its node_modules never. */
   const inTree = (dir: string, argv: string[], writable: string[], nonce?: string) =>
-    isolated(argv, dir, writable, { denyWrite: [join(dir, 'node_modules')], ...(nonce ? { nonce } : {}) });
+    isolated(argv, dir, writable, { denyWrite: [join(dir, 'node_modules'), join(dir, '.git')], ...(nonce ? { nonce } : {}) });
 
   try {
     const wt = await newCandidateWorktree(ctx.repo, ctx.pass, { git });
@@ -348,7 +348,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     let diff: Diff;
     try { diff = await collectTreeDiff(wt.dir, wt.base, t1, { git, countTests }); } catch (e) { return discard(`diff collection failed: ${msg(e)}`); }
     if (diff.files.length === 0) discard('no edits');
-    const hits = checkTripwires(diff, secrets);
+    const hits = checkTripwires(diff, secrets, { scope: { game, testPrefixes: testPrefixesFor(game) } }); // R18: its game and its tests only
     if (hits.length) discard(...hits.map((v) => `tripwire ${v.rule}${v.path ? `: ${v.path}` : ''}: ${v.detail}`));
     await guard(t1);
 

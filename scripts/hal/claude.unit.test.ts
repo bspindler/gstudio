@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tmpdir } from 'node:os';
-import { ALWAYS_DISALLOWED, NODE_MODULES_WRITE_DENY, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
+import { ALWAYS_DISALLOWED, NODE_MODULES_WRITE_DENY, buildArgs, SANDBOX_DENIED_ENV, implementerSandboxSettings, killLiveClaudeChildren, roleAllowedTools, roleTools, runClaude, runClaudeWithFallback, type ClaudeCall, type SpawnFn } from './claude.js';
 
 const KEY = 'sk-ant-test-FAKE123';
 
@@ -391,5 +391,35 @@ describe('runClaudeWithFallback', () => {
     const r = await runClaudeWithFallback({ ...base, billing: 'api' }, deps(f.spawn));
     expect(r.retry).toBeUndefined();
     expect(f.calls).toHaveLength(1);
+  });
+});
+
+describe('buildArgs per role: absolute deny rules and --add-dir (fix round 1)', () => {
+  const deny = ['/repo/.hal.env'];
+  const rules = ['Read(//repo/.hal.env)', 'Grep(//repo/.hal.env)', 'Edit(//repo/.hal.env)', 'Write(//repo/.hal.env)'];
+  for (const role of ['planner', 'implementer', 'director'] as const) {
+    it(`${role}: denyReadPaths become // absolute rules in --disallowedTools`, () => {
+      const a = buildArgs({ ...base, role, allowedTools: roleAllowedTools(role), denyReadPaths: deny });
+      const d = arg(a, '--disallowedTools')!.split(',');
+      for (const r of rules) expect(d).toContain(r);
+      expect(a.includes('--add-dir')).toBe(false);
+    });
+  }
+  it('implementer keeps the sandbox denyRead too', () => {
+    const a = buildArgs({ ...base, denyReadPaths: deny });
+    expect(JSON.parse(arg(a, '--settings')!).sandbox.filesystem.denyRead).toContain('/repo/.hal.env');
+  });
+  it('planner: one --add-dir per directory, before --allowedTools', () => {
+    const a = buildArgs({ ...base, role: 'planner', allowedTools: roleAllowedTools('planner'), denyReadPaths: deny, addDirs: ['/run/play/screens', '/x y'] });
+    expect(a.filter((x, i) => a[i - 1] === '--add-dir')).toEqual(['/run/play/screens', '/x y']);
+    expect(a.lastIndexOf('--add-dir')).toBeLessThan(a.indexOf('--allowedTools'));
+  });
+  it('a deny path that could split a rule (space, comma, relative) is refused without spawning', async () => {
+    for (const p of ['/My Repo/.hal.env', '/a,b/.hal.env', 'rel/.hal.env']) {
+      const f = fake(finish(json({ subtype: 'success', result: 'x', total_cost_usd: 0 })));
+      const r = await runClaude({ ...base, role: 'planner', allowedTools: roleAllowedTools('planner'), denyReadPaths: [p] }, deps(f.spawn));
+      expect(r.subtype).toBe('bad_deny_path');
+      expect(f.calls).toHaveLength(0);
+    }
   });
 });

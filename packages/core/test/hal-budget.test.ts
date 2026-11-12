@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DAILY_CAP_USD, SLICES, apiSpent, dayFor, dayOf, recordCall, sliceFor, type SpendDay } from '../src/hal/budget.js';
+import { DAILY_CAP_USD, SLICES, apiSpent, dayFor, dayOf, recordCall, reserveCall, settleCall, sliceFor, type SpendDay } from '../src/hal/budget.js';
 
 const empty = (day = '2026-11-11'): SpendDay => ({ day, calls: [] });
 const call = (usd: number | undefined, billing: 'api' | 'subscription' = 'api', role = 'planner') => ({ run: 'r1', role, billing, usd, at: '2026-11-11T01:00:00Z' });
@@ -72,5 +72,37 @@ describe('hal budget', () => {
     for (let i = 0; i < 200; i++) d = recordCall(d, call(0.1, 'api', 'director'));
     expect(apiSpent(d)).toBe(20);
     expect(sliceFor(d, 'director')).toBe(0);
+  });
+});
+
+describe('reserve then settle (R19)', () => {
+  const at = '2026-11-12T03:00:00.000Z';
+  const empty: SpendDay = { day: '2026-11-12', calls: [] };
+  it('a reservation books the full slice, pending, and counts against the cap', () => {
+    const d = reserveCall(empty, { run: 'r', role: 'implementer', billing: 'api', at });
+    expect(d.calls).toEqual([{ run: 'r', role: 'implementer', billing: 'api', at, usd: SLICES.implementer, pending: true }]);
+    expect(apiSpent(d)).toBe(SLICES.implementer);
+  });
+  it('settles the same entry with the real cost (no double count); unknown keeps the slice', () => {
+    let d = reserveCall(empty, { run: 'r', role: 'planner', billing: 'api', at });
+    d = settleCall(d, { run: 'r', role: 'planner', billing: 'api', at, usd: 0.25 });
+    expect(d.calls).toEqual([{ run: 'r', role: 'planner', billing: 'api', at, usd: 0.25 }]);
+    let u = reserveCall(empty, { run: 'r', role: 'planner', billing: 'api', at });
+    u = settleCall(u, { run: 'r', role: 'planner', billing: 'api', at, usd: null });
+    expect(u.calls).toEqual([{ run: 'r', role: 'planner', billing: 'api', at, usd: SLICES.planner }]);
+  });
+  it('settles only a matching pending entry (run, role, billing), newest first; appends when there is none', () => {
+    let d = reserveCall(empty, { run: 'r', role: 'implementer', billing: 'subscription', at });
+    d = reserveCall(d, { run: 'r', role: 'implementer', billing: 'api', at });
+    d = settleCall(d, { run: 'r', role: 'implementer', billing: 'api', at, usd: 1 });
+    expect(d.calls.map((c) => [c.billing, c.usd, c.pending ?? false])).toEqual([['subscription', 3, true], ['api', 1, false]]);
+    const e = settleCall(empty, { run: 'other', role: 'director', billing: 'api', at, usd: 0.5 });
+    expect(e.calls).toEqual([{ run: 'other', role: 'director', billing: 'api', at, usd: 0.5 }]);
+  });
+  it('a pending reservation left by a crash keeps the cap honest', () => {
+    let d: SpendDay = { day: '2026-11-12', calls: [{ run: 'old', role: 'implementer', billing: 'api', usd: 18, at }] };
+    d = reserveCall(d, { run: 'r', role: 'implementer', billing: 'api', at });
+    expect(apiSpent(d)).toBe(DAILY_CAP_USD);
+    expect(sliceFor(d, 'planner')).toBe(0);
   });
 });
