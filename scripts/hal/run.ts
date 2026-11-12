@@ -441,7 +441,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       const r = await applyUndo(u.pass, u.reason, undoCtx(d, runId));
       const reason = R.str(u.reason);
       if (r.ok) {
-        await store.recordUndo({ pass: u.pass, run: runId, reason, status: 'done', commit: r.commit });
+        await store.recordUndo({ pass: u.pass, run: runId, reason, status: 'done', commit: r.commit, version: r.version });
         warn(`undid ${u.pass} (${reason})${r.already ? ': it was already undone' : ` as ${r.game} ${r.version}`}`);
       } else {
         await store.recordUndo({ pass: u.pass, run: runId, reason, status: r.permanent ? 'rejected' : 'failed', error: R.str(r.error) });
@@ -877,7 +877,7 @@ export async function undoCommand(pass: string, reason: string, o: { push: boole
       c.log(`undo ${pass} failed${r.permanent ? ' (rejected: not retried)' : ' (saved; the next run retries it)'}: ${r.error}`);
       return 1;
     }
-    await c.store.recordUndo({ pass, run: runId, reason: why, status: 'done', commit: r.commit });
+    await c.store.recordUndo({ pass, run: runId, reason: why, status: 'done', commit: r.commit, version: r.version });
     c.log(r.already ? `${pass} was already undone (${r.commit.slice(0, 12)})` : `undid ${pass}: ${r.commit.slice(0, 12)} on ${HAL_MAIN}, ${r.game} ${r.version}`);
     if (!o.push) { c.log('not pushed (--no-push)'); return 0; }
     if (main.diverged) { c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged`); return 0; }

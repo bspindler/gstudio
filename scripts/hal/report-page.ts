@@ -314,8 +314,9 @@ const when = (iso: string, timeZone?: string) => {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone }).format(d);
 };
 
-function runHal(v: ReportView): string {
-  const run = v.report.runId;
+type RunHalView = Pick<ReportView, 'status' | 'spendToday' | 'capUsd' | 'games' | 'runs' | 'timeZone'>;
+
+function runHal(v: RunHalView, run: string): string {
   const s = v.status;
   const status = s.running ? `Running${s.phase ? `: ${esc(s.phase)}` : ''}${s.startedAt ? ` (since ${esc(when(s.startedAt, v.timeZone))})` : ''}` : 'Idle';
   const opts = gameOptions(v.games);
@@ -427,6 +428,14 @@ ${fixes(v, fixed)}
 ${dropped(gone)}
 ${planned(plan, merged.length === 0)}
 ${warnings(r)}
-${runHal(v)}
+${runHal(v, r.runId)}
+</main></body></html>`;
+}
+
+/** The page before Hal's first report: the flash and the Run Hal section only. */
+export function renderRunHalOnly(v: RunHalView & { flash?: string }): string {
+  return `${pageHead('Hal', REPORT_CSS)}<body><main class="page">
+${v.flash ? `<p class="flash" role="status">${esc(clip(v.flash, 300))}</p>` : ''}
+${runHal(v, '')}
 </main></body></html>`;
 }

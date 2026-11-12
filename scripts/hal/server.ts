@@ -1,21 +1,28 @@
 // "Run now": a small token-gated Hono app for Brian's phone on home Wi-Fi. Every route, any method, answers a bare 404
 // unless the request carries HAL_TOKEN (as ?t= or the cookie set from it). POSTs also need a same-origin Origin header.
-// The token is never rendered, logged or put in an error.
-import { spawn } from 'node:child_process';
+// The token is never rendered, logged or put in an error. `/` is the morning report (latest.json's run), `/runs/<id>` an
+// earlier one; every form POST is checked against that run's own report.json and redirects back with a one-shot flash.
+import { execFile, spawn } from 'node:child_process';
 import { timingSafeEqual } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { DAILY_CAP_USD, apiSpent } from '@studio/core/hal';
 import { Hono, type Context } from 'hono';
-import { getCookie, setCookie } from 'hono/cookie';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
+import { renderReport, renderRunHalOnly } from './report-page.js';
+import type { RunReport } from './run.js';
 import { createStore } from './store.js';
 
 export const SERVER_PORT = 5180;
 const COOKIE = 'hal_token';
-const CSP = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'";
+const FLASH = 'hal_flash';
+const CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'";
+/** A history image Hal committed: the only paths /shot will read out of git. */
+const SHOT_PATH = /^docs\/hal\/history\/([a-z0-9-]+)\/\d{4}-\d{2}-\d{2}\/(HAL-\d+)-(before|after)\.jpg$/;
+const PASS = /^HAL-\d+$/;
 
 export type RunLock = { pid: number; runId: string; startedAt: string; phase?: string; trigger?: 'nightly' | 'manual' };
 export type SpawnRun = (o: { args: string[]; logPath: string }) => void;
@@ -32,6 +39,8 @@ export type ServerDeps = {
   spawnRun?: SpawnRun;
   /** The dev server's games URL when it is up, else null. */
   devUrl?: () => Promise<string | null>;
+  /** `git <args>` in the repo, stdout as bytes (for /shot). Default: none, so /shot 404s; `serve` passes realGit(repo). */
+  git?: (args: string[]) => Promise<Buffer>;
 };
 
 export function tokenOk(given: string | undefined, token: string): boolean {
@@ -59,7 +68,13 @@ export function realSpawnRun(repo: string, spawnFn: typeof spawn = spawn): Spawn
   };
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+/** `git -C <repo> <args>` through execFile (no shell), stdout as a Buffer. */
+export function realGit(repo: string): (args: string[]) => Promise<Buffer> {
+  return (args) => new Promise((resolve, reject) => {
+    execFile('git', ['-C', repo, ...args], { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024, timeout: 10_000 }, (err, out) => (err ? reject(err) : resolve(out)));
+  });
+}
+
 const stamp = (d: Date) => d.toISOString().replace(/[:.]/g, '-');
 
 function readLock(halDir: string): RunLock | null {
@@ -69,16 +84,21 @@ function readLock(halDir: string): RunLock | null {
   } catch { return null; }
 }
 
-function latestReport(halDir: string): { runId: string; endedAt: string; text: string } | null {
+/** latest.json's run id, or null. */
+function latestRunId(halDir: string): string | null {
   try {
-    const l = JSON.parse(readFileSync(join(halDir, 'latest.json'), 'utf8')) as { runId: string; endedAt: string; reportMd: string };
-    return { runId: String(l.runId), endedAt: String(l.endedAt), text: readFileSync(l.reportMd, 'utf8') };
+    const id = (JSON.parse(readFileSync(join(halDir, 'latest.json'), 'utf8')) as { runId?: unknown }).runId;
+    return typeof id === 'string' ? id : null;
   } catch { return null; }
 }
 
-/** One place for the response headers. same-origin, not no-referrer: with no-referrer browsers send "Origin: null" on same-origin form POSTs (Fetch spec), which the Origin check would reject, breaking Run now and Stop. */
+/** One line, at most `n` characters (votes' comments and undo reasons). */
+const oneLine = (v: unknown, n: number) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
+
+/** One place for the response headers (pages are no-store; a handler that set Cache-Control keeps it). same-origin, not no-referrer: with no-referrer browsers send "Origin: null" on same-origin form POSTs (Fetch spec), which the Origin check would reject, breaking Run now and Stop. */
 const secure = (c: Context) => {
-  c.header('Cache-Control', 'no-store');
+  if (!c.res.headers.has('cache-control')) c.header('Cache-Control', 'no-store'); // /shot's images set their own
   c.header('Referrer-Policy', 'same-origin');
   c.header('Content-Security-Policy', CSP);
 };
@@ -111,30 +131,146 @@ export function createServerApp(d: ServerDeps) {
     secure(c);
   });
 
-  app.get('/', async (c) => {
+  const store = createStore({ halDir: d.halDir, now });
+
+  /** That run's report.json, or null for a bad id or a missing/unreadable report. */
+  const loadRun = async (id: unknown): Promise<RunReport | null> => {
+    if (typeof id !== 'string' || !id) return null;
+    let dir: string;
+    try { dir = store.runDir(id); } catch { return null; }
+    try {
+      const r = JSON.parse(await readFile(join(dir, 'report.json'), 'utf8')) as RunReport;
+      return r && r.runId === id && Array.isArray(r.changes) && Array.isArray(r.calls) && r.games && r.spend ? r : null;
+    } catch { return null; }
+  };
+  const readNote = async (id: string) => { try { return await readFile(join(store.runDir(id), 'note.md'), 'utf8'); } catch { return ''; } };
+  /** Up to 10 earlier reports, newest first (run ids sort by their start stamp). */
+  const recentRuns = async () => {
+    let names: string[];
+    try { names = (await readdir(join(d.halDir, 'runs'))).sort().reverse(); } catch { return []; }
+    const out: Array<{ runId: string; endedAt: string }> = [];
+    for (const n of names) {
+      if (out.length >= 10) break;
+      const r = await loadRun(n);
+      if (r) out.push({ runId: r.runId, endedAt: String(r.endedAt) });
+    }
+    return out.sort((x, y) => y.endedAt.localeCompare(x.endedAt));
+  };
+  const merged = (r: RunReport, pass: unknown) =>
+    typeof pass === 'string' && PASS.test(pass) ? r.changes.find((x) => x.pass === pass && x.verdict === 'merged') ?? null : null;
+
+  const page = async (c: Context, report: RunReport | null) => {
     const lock = running();
-    const store = createStore({ halDir: d.halDir, now });
-    const spend = apiSpent(await store.loadSpendToday());
-    const report = latestReport(d.halDir);
-    const play = d.devUrl ? await d.devUrl().catch(() => null) : null;
-    const status = lock
-      ? `Running${lock.phase ? `: ${esc(lock.phase)}` : ''} (since ${esc(lock.startedAt)}${lock.trigger ? `, ${esc(lock.trigger)}` : ''})`
-      : 'Idle';
-    const opts = d.games.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
-    return c.html(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hal</title><style>
-body{font:16px/1.4 system-ui,-apple-system,sans-serif;margin:0;padding:16px;max-width:40rem;margin-inline:auto;background:#fff;color:#111}
-@media(prefers-color-scheme:dark){body{background:#111;color:#eee}}
-h1{font-size:1.4rem}.card{border:1px solid #8885;border-radius:12px;padding:12px;margin:12px 0}
-button,select{font:inherit;padding:12px 16px;border-radius:10px;margin:4px 0}button{width:100%}
-pre{white-space:pre-wrap;word-break:break-word;font-size:.85rem}label{display:block;margin:6px 0}
-</style></head><body><h1>Hal</h1>
-<div class="card"><strong>${status}</strong><br>API spend today: $${spend.toFixed(2)} of $${DAILY_CAP_USD.toFixed(2)}</div>
-<form class="card" method="post" action="/run"><label>Game <select name="game"><option value="">all games</option>${opts}</select></label>
-<label><input type="checkbox" name="reportOnly" value="1"> Report only</label><button type="submit">Run now</button></form>
-<form class="card" method="post" action="/stop"><button type="submit">Stop</button></form>
-${play ? `<div class="card"><a href="${esc(play)}">Play the games</a></div>` : ''}
-<div class="card"><strong>Latest report${report ? ` (${esc(report.runId)}, ${esc(report.endedAt)})` : ''}</strong><pre>${report ? esc(report.text) : 'No report yet.'}</pre></div>
-</body></html>`);
+    const flash = getCookie(c, FLASH);
+    if (flash !== undefined) deleteCookie(c, FLASH, { path: '/' });
+    const base = {
+      status: lock ? { running: true, phase: lock.phase, startedAt: lock.startedAt } : { running: false },
+      spendToday: apiSpent(await store.loadSpendToday()), capUsd: DAILY_CAP_USD,
+      games: d.games, runs: await recentRuns(), ...(flash ? { flash: flash.slice(0, 300) } : {}),
+    };
+    if (!report) return c.html(renderRunHalOnly(base));
+    const [note, feedback, notes, approvals, playUrl] = await Promise.all([
+      readNote(report.runId), store.feedbackFor(report.runId), store.readNotes(), store.readApprovals(),
+      d.devUrl ? d.devUrl().catch(() => null) : Promise.resolve(null),
+    ]);
+    return c.html(renderReport({ ...base, report, note, feedback, notes, approvals: approvals.map((a) => a.item), playUrl }));
+  };
+
+  app.get('/', async (c) => page(c, await loadRun(latestRunId(d.halDir))));
+  app.get('/runs/:id', async (c) => {
+    const r = await loadRun(c.req.param('id'));
+    return r ? page(c, r) : notFound();
+  });
+
+  app.get('/shot', async (c) => {
+    const q = (k: string) => c.req.query(k);
+    const which = q('which');
+    if (which !== 'before' && which !== 'after' || !d.git) return notFound();
+    const r = await loadRun(q('run'));
+    const ch = r && merged(r, q('pass'));
+    const path = ch?.shots?.[which];
+    const m = typeof path === 'string' ? SHOT_PATH.exec(path) : null;
+    if (!ch || !m || m[1] !== ch.ticket.game || m[2] !== ch.pass || m[3] !== which) return notFound();
+    if (typeof ch.commit !== 'string' || !/^[0-9a-f]{7,64}$/.test(ch.commit)) return notFound();
+    let bytes: Buffer;
+    try { bytes = await d.git(['show', `${ch.commit}:${path}`]); } catch { return notFound(); }
+    return c.body(new Uint8Array(bytes), 200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' });
+  });
+
+  /** 303 back to the run's page (`/` for the latest) with the flash in a short-lived cookie, never in the URL. */
+  const back = (c: Context, run: string | null, flash: string) => {
+    setCookie(c, FLASH, flash, { httpOnly: true, sameSite: 'Strict', path: '/', maxAge: 60 });
+    return c.redirect(!run || run === latestRunId(d.halDir) ? '/' : `/runs/${encodeURIComponent(run)}`, 303);
+  };
+  const bad = (c: Context) => c.text('bad request', 400);
+  const form = async (c: Context) => (await c.req.parseBody()) as Record<string, unknown>;
+
+  app.post('/vote', async (c) => {
+    const b = await form(c);
+    const r = await loadRun(b.run);
+    const ch = r && merged(r, b.pass);
+    if (!r || !ch) return bad(c);
+    const comment = oneLine(b.comment, 500);
+    await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'up', ...(comment ? { comment } : {}) });
+    return back(c, r.runId, 'Kept');
+  });
+
+  app.post('/undo', async (c) => {
+    const b = await form(c);
+    const r = await loadRun(b.run);
+    const ch = r && merged(r, b.pass);
+    if (!r || !ch) return bad(c);
+    const { undos } = await store.feedbackFor(r.runId);
+    if (undos.some((u) => u.pass === ch.pass && (u.status === 'pending' || u.status === 'done'))) return back(c, r.runId, 'Undo already asked for');
+    const given = oneLine(b.reason, 500);
+    const reason = given || 'no reason given';
+    await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'down', ...(given ? { comment: given } : {}) });
+    await store.addUndo({ run: r.runId, pass: ch.pass, reason, status: 'pending' });
+    if (running()) return back(c, r.runId, 'Undo queued: the run in progress finishes first');
+    try {
+      if (!spawnRun) throw new Error('no spawn');
+      // One argv element each: the reason can never be read as a flag; the pass matched ^HAL-\d+$.
+      spawnRun({ args: ['undo', ch.pass, `--reason=${reason}`], logPath: join(d.halDir, 'logs', `undo-${stamp(now())}.log`) });
+    } catch {
+      return back(c, r.runId, 'Undo queued: the next run applies it');
+    }
+    return back(c, r.runId, 'Undo started');
+  });
+
+  const callItem = (r: RunReport, item: unknown) => (typeof item === 'string' && item ? r.calls.find((t) => t.liability === item) ?? null : null);
+  app.post('/approve', async (c) => {
+    const b = await form(c);
+    const r = await loadRun(b.run);
+    const t = r && callItem(r, b.item);
+    if (!r || !t) return bad(c);
+    await store.addApproval(t.liability!);
+    return back(c, r.runId, 'Approved; Hal builds it next run');
+  });
+  app.post('/decline', async (c) => {
+    const b = await form(c);
+    const r = await loadRun(b.run);
+    const t = r && callItem(r, b.item);
+    if (!r || !t) return bad(c);
+    await store.addVote({ run: r.runId, item: t.liability!, game: t.game, vote: 'down' });
+    return back(c, r.runId, 'Left it for now');
+  });
+
+  /** The page to go back to: the form's run when it names a real report, else `/`. */
+  const backRun = async (v: unknown) => (await loadRun(v))?.runId ?? null;
+  app.post('/tell', async (c) => {
+    const b = await form(c);
+    const game = str(b.game);
+    if (game !== '' && !d.games.includes(game)) return bad(c);
+    const text = str(b.text).trim().slice(0, 2000).trim();
+    if (!text) return bad(c);
+    await store.addNote({ text, game: game || null });
+    return back(c, await backRun(b.run), 'Sent to Hal');
+  });
+  app.post('/notes/clear', async (c) => {
+    const b = await form(c);
+    const id = str(b.id);
+    if (!/^N-\d+$/.test(id) || !(await store.clearNote(id))) return bad(c);
+    return back(c, await backRun(b.run), 'Note cleared');
   });
 
   app.post('/run', async (c) => {

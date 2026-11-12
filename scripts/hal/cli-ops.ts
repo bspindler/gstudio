@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadHalEnv, parseHalEnv } from './env.js';
 import { dryRun, install, parseAt, uninstall, type Launchctl } from './launchd.js';
-import { SERVER_PORT, createServerApp, probeDevUrl, realSpawnRun } from './server.js';
+import { SERVER_PORT, createServerApp, probeDevUrl, realGit, realSpawnRun } from './server.js';
 
 export const OPS_COMMANDS = ['serve', 'setup', 'install', 'uninstall'] as const;
 export type OpsCommand = (typeof OPS_COMMANDS)[number];
@@ -74,7 +74,7 @@ async function serveCmd(rest: string[], d: OpsDeps): Promise<number> {
   const hostname = values.lan ? '0.0.0.0' : '127.0.0.1';
   const ip = lanIp((d.interfaces ?? networkInterfaces)());
   const host = values.lan ? ip ?? 'localhost' : 'localhost';
-  const app = createServerApp({ halDir: d.halDir, token, games: d.games, spawnRun: realSpawnRun(repo), devUrl: probeDevUrl(host) });
+  const app = createServerApp({ halDir: d.halDir, token, games: d.games, spawnRun: realSpawnRun(repo), devUrl: probeDevUrl(host), git: realGit(repo) });
   const tty = d.isTTY ?? Boolean(process.stdout.isTTY);
   // The token goes only to an interactive terminal; launchd's log file (not a TTY, --quiet) never gets it.
   console.log(`Hal Run now: ${bookmark(host, tty && !values.quiet ? token : undefined)}${values.lan ? ' (LAN)' : ' (this Mac only; use --lan for your phone)'}`);

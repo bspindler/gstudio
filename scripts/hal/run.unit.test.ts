@@ -483,7 +483,7 @@ describe('undo', () => {
     expect(show('index.html')).toContain("version: '0.3.3'");
     expect(show('CHANGELOG.md')).toMatch(new RegExp(`## 0\\.3\\.3 \\(${NIGHT}\\)\\n- Undone: Smoother jumps \\(HAL-001\\): too bouncy\\n\\n## 0\\.3\\.2 \\(${NIGHT}\\)\\n- Jumps feel smoother\\.`));
     expect(gitIn(repo, 'show', '--stat', '--format=', HAL_MAIN)).not.toMatch(/history/); // the pictures stay as history
-    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: 'too bouncy' })]);
+    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: 'too bouncy', version: '0.3.3' })]);
     expect(brianMain()).toBe(brian);
     expect(existsSync(join(halDir, 'run.lock'))).toBe(false);
   });
@@ -566,7 +566,8 @@ describe('undo', () => {
     put(halDir, 'runs/run-x/report.json', J({ runId: 'run-x', pushed: true }));
     expect(await runNight(opts({ push: false }), deps({ claude: fakeClaude({ tickets: [] }) }))).toBe(0);
     expect(gitIn(repo, 'log', '--format=%B', HAL_MAIN)).toMatch(/^Hal-Undo: HAL-001$/m);
-    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done' })]);
+    // R3: the page's request keeps its run (the report's), so the report card finds it; the version it released is recorded.
+    expect(feedback().undos).toEqual([expect.objectContaining({ run: 'page', pass: 'HAL-001', status: 'done', version: '0.3.3', undoRun: expect.stringMatching(/^run-/) })]);
     const w = readReport().warnings.join('\n');
     expect(w).toMatch(/undid HAL-001/);
     expect(w).toMatch(/ci:local failed for .* \(run-x\)/);
@@ -590,6 +591,13 @@ describe('cli flags', () => {
   it('undo needs a pass id and --reason', async () => {
     await expect(runRunCommand('undo', ['HAL-001'], { halDir, games })).rejects.toThrow(/reason/);
     await expect(runRunCommand('undo', ['nope', '--reason', 'x'], { halDir, games })).rejects.toThrow(/HAL-/);
+  });
+  it('--reason=<text> is one argv element: a reason starting with -- stays the reason (the report page spawns it this way)', async () => {
+    const makeDeps = () => deps();
+    await makePass();
+    expect(await runRunCommand('undo', ['HAL-001', '--reason=--no-push'], { halDir, games, makeDeps })).toBe(0);
+    expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-001', status: 'done', reason: '--no-push' })]);
+    expect(parseTrailers(gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN))!).toMatchObject({ undo: 'HAL-001', reason: '--no-push' });
   });
 });
 
