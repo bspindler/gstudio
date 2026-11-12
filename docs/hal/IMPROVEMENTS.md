@@ -23,6 +23,11 @@ broken and unfair levels but cannot tell dull from delightful. At 100 the gate o
 better?" rests entirely on the morning review.
 **Fix:** at least one measure aimed at fun rather than balance, such as near-misses and close finishes (tension),
 variety of challenges in a level or sector, or decisions per minute.
+**Done 2026-11-12 (tension, Tidepool and Gearhold):** `tension` = how often a level's wins are close finishes
+(Tidepool: at most 2 moves left, or a tenth of the moves; Gearhold: 35 health or less), healthy at 15-50%. It is a
+measure (targetable, gated against falling) but not in fitness yet, so earlier nights still compare. On day one:
+Tidepool 39 (6 of 29 levels in band), Gearhold 0 (every bot win ends at 60-99 health). Still open: Hyperline
+(its bot doesn't track near-misses), variety, and folding tension into fitness once its bands are trusted.
 
 ## 2. It ships first and asks later
 

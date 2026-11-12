@@ -1,5 +1,9 @@
 // Scores Gearhold gunplay from robot play records (browser runs). Two-sided so a softer, emptier or more generous game never scores higher.
 import type { ScoreReport } from './types.js';
+import { tensionMeasure } from './tension.js';
+
+/** A close Gearhold win: finished with at most this much health (of 100). */
+export const GEARHOLD_CLOSE_HP = 35;
 
 /** The one place the default play range is set; scorers and the direct runner both read it. */
 /** Seeds per level. The level count is not fixed here: the scorer plays every level the game has (scorers.ts). */
@@ -15,6 +19,7 @@ export type LevelPlayStats = {
   medianWinTime: number | null; // seconds, over wins only; null when nothing won
   hitRatio: number;             // median hits / shotsFired over the level's runs
   unseenShare: number;          // damageUnseen / max(1, damageTaken)
+  wins: number; closeWins: number; // wins, and wins at GEARHOLD_CLOSE_HP or less (tension.ts)
 };
 
 /** Brian-reviewed bands; changing them changes what "good" means. Win rate: first level (index 0) vs later levels. */
@@ -55,7 +60,7 @@ export function scoreGearholdPlay(records: PlayRecord[]): ScoreReport<LevelPlayS
     return !bad;
   }); // invalid records are excluded from the measures and reported as hard failures
   if (records.length === 0)
-    return { game: 'gearhold-play', levels: [], measures: { winnable: 0, fairDamage: 0, pace: 0, feel: 0 }, fitness: 0, hardFailures };
+    return { game: 'gearhold-play', levels: [], measures: { winnable: 0, fairDamage: 0, pace: 0, feel: 0, tension: 0 }, fitness: 0, hardFailures };
 
   const byLevel = new Map<number, PlayRecord[]>();
   for (const r of records) byLevel.set(r.level, [...(byLevel.get(r.level) ?? []), r]);
@@ -69,6 +74,7 @@ export function scoreGearholdPlay(records: PlayRecord[]): ScoreReport<LevelPlayS
       medianWinTime: wins.length ? median(wins.map((r) => r.time)) : null,
       hitRatio: round2(median(rs.map(ratio))),
       unseenShare: round2(unseen / Math.max(1, taken)),
+      wins: wins.length, closeWins: wins.filter((r) => r.hpLeft <= GEARHOLD_CLOSE_HP).length,
     };
   });
 
@@ -81,8 +87,8 @@ export function scoreGearholdPlay(records: PlayRecord[]): ScoreReport<LevelPlayS
   const pace = pct(levels.filter((l) => l.medianWinTime !== null && inBand(l.medianWinTime, B.winSeconds)).length, levels.length);
   const feel = round2(feelScore(median(records.map(ratio))));
 
-  const measures = { winnable, fairDamage, pace, feel };
-  const vals = Object.values(measures);
+  const vals = [winnable, fairDamage, pace, feel]; // fitness: the balance measures; tension is reported and gated beside it
+  const measures = { winnable, fairDamage, pace, feel, tension: tensionMeasure(levels.map((l) => ({ wins: l.wins, close: l.closeWins }))) };
   return {
     game: 'gearhold-play', levels, measures,
     fitness: round2(vals.reduce((a, b) => a + b, 0) / vals.length), hardFailures,

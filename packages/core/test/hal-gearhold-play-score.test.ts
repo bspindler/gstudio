@@ -23,8 +23,9 @@ describe('scoreGearholdPlay', () => {
   it('scores a healthy run at 100', () => {
     const r = scoreGearholdPlay(good());
     expect(r.game).toBe('gearhold-play');
-    expect(r.measures).toEqual({ winnable: 100, fairDamage: 100, pace: 100, feel: 100 });
-    expect(r.fitness).toBe(100);
+    expect(r.measures).toMatchObject({ winnable: 100, fairDamage: 100, pace: 100, feel: 100 });
+    expect(Object.keys(r.measures)).toEqual(['winnable', 'fairDamage', 'pace', 'feel', 'tension']);
+    expect(r.fitness).toBe(100); // the balance measures only: tension is reported and gated beside fitness
     expect(r.hardFailures).toEqual([]);
     expect(r.levels.map((l) => [l.level, l.n, l.winRate])).toEqual([[0, 10, 0.9], [1, 10, 0.7], [2, 10, 0.6]]);
     expect(r.levels[0]!.medianWinTime).toBe(60);
