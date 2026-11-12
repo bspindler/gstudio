@@ -56,6 +56,7 @@ const passing: CheckCommands = {
   screens: (_d, game) => result({ game, shots: [], errors: [], reached: true, notes: [], blockedRequests: [] }),
   controls: (_d, game) => result([{ game, check: 'tap', ok: true, detail: '' }]),
   shoot: (_d, _g, out) => result({ ok: true }, writeJpeg(out)),
+  fingerprint: () => result([{ key: 'same', label: 'level 1' }]),
 };
 
 let repo: string, origin: string, halDir: string, logs: string[];

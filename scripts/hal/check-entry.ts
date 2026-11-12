@@ -1,7 +1,8 @@
 // One Hal check, run in the tree that holds this file and printed as `HAL-RESULT <json>` on the last line.
 // Hal runs it in a candidate worktree under sandbox-exec (scripts/hal/sandbox.ts), never in its own process: the
 // scorers, screens and controls execute the candidate's game code. scripts/hal/** is protected, so this file is main's.
-//   check-entry.ts score <scorer> | screens <game> [outDir] | controls <game> | shoot <game> <out.jpg>
+//   check-entry.ts score <scorer> | screens <game> [outDir] | controls <game> | shoot <game> <out.jpg> [focus]
+//                  | fingerprint <game>
 // The result line is `HAL-RESULT <nonce> <json>`: the nonce comes in $HAL_CHECK_NONCE. check-nonce.ts is imported
 // first: it deletes the nonce from the env and captures JSON.stringify and stdout.write before anything else loads;
 // everything that can load game code is imported dynamically, after the channel has been taken.
@@ -18,8 +19,8 @@ import { join } from 'node:path';
 
 const out = takeResultChannel();
 
-async function main(op: string | undefined, a: string | undefined, b: string | undefined): Promise<void> {
-  if (!a) throw new Error('usage: check-entry.ts <score|screens|controls|shoot> <name> [out]');
+async function main(op: string | undefined, a: string | undefined, b: string | undefined, c?: string): Promise<void> {
+  if (!a) throw new Error('usage: check-entry.ts <score|screens|controls|shoot|fingerprint> <name> [out] [focus]');
   switch (op) {
     case 'score': {
       const { gearholdPlayScorer, SCORERS, scorerFor } = await import('@studio/core/hal');
@@ -38,14 +39,19 @@ async function main(op: string | undefined, a: string | undefined, b: string | u
     case 'shoot': {
       if (!b) throw new Error('shoot needs an output path');
       const { repo } = await import('./browser.js');
-      await (await import('./screens.js')).shootGame(repo, a, b);
+      const focus = c === undefined ? undefined : Number(c);
+      await (await import('./screens.js')).shootGame(repo, a, b, focus);
       return out({ ok: true });
+    }
+    case 'fingerprint': {
+      const { repo } = await import('./browser.js');
+      return out(await (await import('./focus.js')).fingerprintGame(repo, a));
     }
     default: throw new Error(`unknown check ${op}`);
   }
 }
 
-main(process.argv[2], process.argv[3], process.argv[4]).then(() => process.exit(0), (e) => {
+main(process.argv[2], process.argv[3], process.argv[4], process.argv[5]).then(() => process.exit(0), (e) => {
   console.error(String((e as Error)?.message ?? e));
   process.exit(1);
 });

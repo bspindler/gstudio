@@ -835,6 +835,25 @@ function loop(now) {
   if (!modal.hidden && !reduced) mcard.querySelectorAll('canvas.spin').forEach((h) => paintCanvas(h, G.t));
   requestAnimationFrame(loop);
 }
+// ---- hal hook (test only; inert without ?hal) ----
+// Hal's before/after shots: view(x) starts a run on the course behind the ready screen, puts the runner at distance x
+// and freezes there (paused, with no pause screen), so the frame shows that part of the course and its sector banner.
+// Nothing here touches the network; Hal's browser blocks every request but the local game server.
+if (new URLSearchParams(location.search).has('hal')) {
+  window.__hal = {
+    view(x) {
+      if (G.state !== 'run' && G.state !== 'paused') startRun();
+      extendCourse(G.course, x + 120);
+      Object.assign(G.runner, { x, y: 0, vy: 0, grounded: true, flip: false, dead: '' });
+      G.state = 'paused'; $('paused').hidden = true; $('ready').hidden = true; $('pauseBtn').hidden = true;
+      Object.assign(G.stats, { dist: x, sector: sectorAt(x) + 1 }); hud(); // the HUD agrees with the frame
+      banner(sectorAt(x));
+      return { x, sector: sectorAt(x) };
+    },
+  };
+}
+// ---- end hal hook ----
+
 audio.setSound(S.settings.sound); audio.setMusic(S.settings.music);
 reset(); cred(); resize(); requestAnimationFrame(loop);
 </script>

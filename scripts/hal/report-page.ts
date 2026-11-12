@@ -189,7 +189,7 @@ function changeCard(v: ReportView, c: CandidateResult): string {
 <h3>${esc(t.title)}</h3>
 ${lead ? `<p class="lead">${esc(clip(lead, 700))}</p>` : ''}
 ${more ? `<details class="how"><summary class="small">How Hal did it</summary><p class="small muted">${esc(clip(more, 1500))}</p></details>` : ''}
-${c.shots ? `<div class="grid2 shots">${shot('before')}${shot('after')}</div>` : ''}
+${c.shots ? `<div class="grid2 shots">${shot('before')}${shot('after')}</div>${c.shotsOf ? `<p class="shots-of small muted">Showing ${esc(clip(c.shotsOf, 80))}, the part this change touched</p>` : ''}` : ''}
 ${scoreLine(c)}
 ${withState(changeState(c.pass, v.feedback), forms)}
 </article>`;
@@ -467,6 +467,7 @@ const REPORT_CSS = `
 .change h3,.call h3{margin:6px 0 8px;font-size:17px}
 .change .lead{margin-bottom:12px}
 .shots{margin:0 0 12px}
+.shots-of{margin:-6px 0 12px}
 .shot{position:relative;margin:0;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--bg)}
 .shot img{width:100%}
 .shot .tag{position:absolute;left:6px;top:6px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
