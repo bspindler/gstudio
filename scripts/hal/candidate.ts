@@ -422,7 +422,8 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       const final = out.retry ?? out.first;
       if (!final.ok) discard(final.timedOut ? 'implementer timed out' : final.limitHit ? 'implementer hit a usage limit' : `implementer failed (${final.subtype})`);
       const parsed = parseImplementerOutput(final.text);
-      if (!parsed) discard('implementer output does not match the contract');
+      // Say how the reply ended: the reason is the only record (no session persistence), and a miss is otherwise opaque.
+      if (!parsed) discard(`implementer output does not match the contract (its reply ended: ${JSON.stringify(redact(final.text.replace(/\s+/g, ' ').trim()).slice(-400) || '(empty)')})`);
       if (parsed!.blocked !== undefined) discard(`implementer blocked: ${parsed!.blocked}`);
       return parsed!;
     };

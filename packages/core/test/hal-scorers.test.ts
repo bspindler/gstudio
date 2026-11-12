@@ -6,7 +6,7 @@ import { SECTORS, SECTOR_LEN } from '../../../games/hyperline/lib/world.js';
 
 describe('hal scorers', () => {
   it('registers tidepool with its defaults', () => {
-    expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: 30, seeds: 20 });
+    expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: TIDEPOOL_TO, seeds: 20 });
   });
   it('throws on unknown games, including prototype names', () => {
     expect(() => scorerFor('nope')).toThrow(/unknown game: nope/);
@@ -24,7 +24,7 @@ describe('hal scorers', () => {
   });
   it('registers all three games', () => {
     expect(Object.keys(SCORERS).sort()).toEqual(['gearhold', 'hyperline', 'tidepool-pals']);
-    expect(scorerFor('hyperline').defaults).toEqual({ seeds: 100, until: 1900 });
+    expect(scorerFor('hyperline').defaults).toEqual({ seeds: 100, until: HYPERLINE_UNTIL });
     expect(scorerFor('gearhold').defaults).toEqual({});
   });
   it('validates hyperline ranges', () => {
