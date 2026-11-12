@@ -26,9 +26,20 @@ export type StatusJson = {
   progress: number | null;
   /** latest.json's run: the page offers the new report when it differs from the one it was rendered with. */
   latestRunId: string | null;
+  /** API dollars booked against the cap today (pending reservations at their full slice). */
   spendToday: number;
   capUsd: number;
+  /** Settled subscription dollars today (runs started from the page bill the subscription first). */
+  subscriptionToday: number;
+  /** Settled dollars of the running run so far, both billings; absent when idle. */
+  runSpend?: number;
 };
+
+/** The card's spend line: API against the cap, the subscription, and the running run so far. */
+export function spendLine(s: Pick<StatusJson, 'spendToday' | 'capUsd' | 'subscriptionToday' | 'runSpend'>): string {
+  const usd = (n: number) => `$${(Number.isFinite(n) ? n : 0).toFixed(2)}`;
+  return `Today: ${usd(s.spendToday)} of ${usd(s.capUsd)} API · ${usd(s.subscriptionToday)} subscription${typeof s.runSpend === 'number' ? ` · this run ${usd(s.runSpend)}` : ''}`;
+}
 
 export const STATUS_JS = `(() => {
   'use strict';
@@ -53,7 +64,7 @@ export const STATUS_JS = `(() => {
     started = s.running && s.startedAt ? new Date(s.startedAt) : null;
     set('[data-since]', '');
     clock();
-    set('[data-spend]', usd(s.spendToday) + ' of ' + usd(s.capUsd) + ' API today');
+    set('[data-spend]', 'Today: ' + usd(s.spendToday) + ' of ' + usd(s.capUsd) + ' API · ' + usd(s.subscriptionToday) + ' subscription' + (typeof s.runSpend === 'number' ? ' · this run ' + usd(s.runSpend) : ''));
     const bar = q('[data-progress]');
     if (bar) {
       bar.hidden = !s.running;

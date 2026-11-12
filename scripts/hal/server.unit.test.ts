@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createServerApp, tokenOk, type SpawnRun } from './server.js';
+import { createServerApp, spendOf, tokenOk, type SpawnRun } from './server.js';
 
 const TOKEN = 'tok-' + 'a'.repeat(40);
 let halDir: string, spawned: Parameters<SpawnRun>[0][], alive: boolean, startedAt: Date | null;
@@ -645,7 +645,7 @@ describe('live status and all reports', () => {
     const idle = await get(app, '/status.json');
     expect(idle.headers.get('content-type')).toMatch(/^application\/json/);
     expect(idle.headers.get('cache-control')).toBe('no-store');
-    expect(await idle.json()).toEqual({ running: false, progress: null, latestRunId: RUN, spendToday: 0, capUsd: 20 });
+    expect(await idle.json()).toEqual({ running: false, progress: null, latestRunId: RUN, spendToday: 0, subscriptionToday: 0, capUsd: 20 });
     await writeFile(join(halDir, 'run.lock'), JSON.stringify({ pid: 99999, runId: 'r1', startedAt: '2026-11-11T08:00:00Z', phase: 'build HAL-004 (3/4)' }));
     const s = await (await get(app, '/status.json')).json() as Record<string, unknown>;
     expect(s).toMatchObject({ running: true, phase: 'build HAL-004 (3/4)', startedAt: '2026-11-11T08:00:00Z', latestRunId: RUN });
@@ -684,5 +684,20 @@ describe('live status and all reports', () => {
     for (const bad of ['0', '-1', 'x', '99', '1.5']) expect((await get(app, `/runs?page=${bad}`)).status, bad).toBe(200);
     expect(await (await get(app, '/runs?page=99')).text()).toContain('Page 2 of 2');
     expect(one.match(/<script/g)).toBeNull(); // the index needs no script
+  });
+});
+
+describe('spendOf (the Run Hal card)', () => {
+  it('API against the cap (pending at its slice), settled subscription dollars, and the running run so far', () => {
+    const day = { day: '2026-11-12', calls: [
+      { run: 'r1', role: 'planner', billing: 'subscription' as const, usd: 0.28, at: 'x' },
+      { run: 'r1', role: 'implementer', billing: 'subscription' as const, usd: 0.335, at: 'x' },
+      { run: 'r2', role: 'planner', billing: 'subscription' as const, usd: 1.5, at: 'x' },
+      { run: 'r2', role: 'implementer', billing: 'subscription' as const, usd: 3, at: 'x', pending: true }, // reserved, not spent yet
+      { run: 'r0', role: 'director', billing: 'api' as const, usd: 0.4, at: 'x' },
+      { run: 'r2', role: 'implementer', billing: 'api' as const, usd: 2, at: 'x', pending: true },
+    ] };
+    expect(spendOf(day)).toEqual({ spendToday: 2.4, subscriptionToday: 2.12 });
+    expect(spendOf(day, 'r2')).toEqual({ spendToday: 2.4, subscriptionToday: 2.12, runSpend: 1.5 });
   });
 });

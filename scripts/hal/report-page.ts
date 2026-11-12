@@ -7,7 +7,7 @@
 import type { Ticket } from '@studio/core/hal';
 import type { CandidateResult } from './candidate.js';
 import { esc, noteHtml, pageHead } from './page-style.js';
-import { phaseProgress } from './status-client.js';
+import { phaseProgress, spendLine } from './status-client.js';
 import type { RunReport } from './run.js';
 import { lastAt, threadOf, type Note, type Undo, type Vote } from './store.js';
 
@@ -26,6 +26,8 @@ export type ReportView = {
   /** latest.json's run when the page was rendered: /hal.js offers the new report once a newer one exists. */
   latestRunId?: string | null;
   spendToday: number; capUsd: number;
+  /** Settled subscription dollars today, and the running run's so far (see server spendOf). */
+  subscriptionToday?: number; runSpend?: number;
   playUrl: string | null;
   /** How many commits refs/hal/main has that the checkout's HEAD lacks (Play serves the checkout); absent when unknown. */
   behindHal?: number;
@@ -319,7 +321,7 @@ const when = (iso: string, timeZone?: string) => {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone }).format(d);
 };
 
-type RunHalView = Pick<ReportView, 'status' | 'spendToday' | 'capUsd' | 'games' | 'runs' | 'timeZone' | 'latestRunId'>;
+type RunHalView = Pick<ReportView, 'status' | 'spendToday' | 'capUsd' | 'subscriptionToday' | 'runSpend' | 'games' | 'runs' | 'timeZone' | 'latestRunId'>;
 
 /** The Run Hal card: the state as of now (kept live by /hal.js), and Run now or Stop, whichever applies. */
 function runHal(v: RunHalView, run: string): string {
@@ -331,7 +333,7 @@ function runHal(v: RunHalView, run: string): string {
 <p class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><strong data-state>${s.running ? 'Running' : 'Idle'}</strong> <span data-phase>${s.running ? esc(s.phase ?? 'starting') : ''}</span><br>
 <span class="small" data-since>${s.running && s.startedAt ? `since ${esc(when(s.startedAt, v.timeZone))}` : ''}</span></p>
 <progress data-progress max="1"${p !== null ? ` value="${p.toFixed(3)}"` : ''}${s.running ? '' : ' hidden'} aria-label="Run progress"></progress>
-<p class="small" data-spend>${usd(v.spendToday)} of ${usd(v.capUsd)} API today</p>
+<p class="small" data-spend>${esc(spendLine({ spendToday: v.spendToday, capUsd: v.capUsd, subscriptionToday: v.subscriptionToday ?? 0, ...(s.running && typeof v.runSpend === 'number' ? { runSpend: v.runSpend } : {}) }))}</p>
 <p class="small new" data-new hidden><a href="/">A new report is ready: see it</a></p>
 <p class="small offline" data-offline hidden>Can't reach Hal right now; the status may be out of date.</p>
 <form method="post" action="/run" class="stack" data-run-form${s.running ? ' hidden' : ''}>${hidden('run', run)}
