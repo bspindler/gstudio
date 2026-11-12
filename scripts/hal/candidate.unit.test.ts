@@ -385,6 +385,63 @@ describe('runCandidate (temp git repo)', () => {
     expectDiscarded(await runCandidate(ticket(), ctx({ checkTimeoutMs: 300, cmds: { test: () => [node('setTimeout(() => {}, 30000)')] } })), old, /npm test failed \(timed out\)/);
   });
 
+  describe('fix rounds', () => {
+    /** npm test fails until games/hyperline/game.js says "fixed". */
+    const pickyTest = () => [node(`const s = require('fs').readFileSync('games/hyperline/game.js', 'utf8'); if (!s.includes('fixed')) { console.error('FAIL hyperline-speed.test.ts: speed must stay under 2 (${KEY})'); process.exit(1); }`)];
+    it('a failing npm test goes back to the implementer with the output; the fixed attempt merges with one release', async () => {
+      const prompts: string[] = [];
+      const c = ctx({
+        cmds: { test: pickyTest },
+        claude: async (call) => {
+          prompts.push(call.prompt);
+          put(call.cwd, 'games/hyperline/game.js', prompts.length === 1 ? 'export const speed = 1.2;\n' : 'export const speed = 1.2; // fixed\n');
+          // A fix round starts from the implementer's own tree: Hal's release edits are not on disk.
+          if (prompts.length === 2) expect(readFileSync(join(call.cwd, 'games/hyperline/game.yaml'), 'utf8')).toBe(readFileSync(join(mainDir, 'games/hyperline/game.yaml'), 'utf8'));
+          return { first: ok(prompts.length === 1 ? OUT : 'Fixed.\n{"changelog": "Jumps feel smoother.", "summary": "Tuned speed, kept under the cap."}') };
+        },
+      });
+      const r = await runCandidate(ticket(), c);
+      expect(r.verdict).toBe('merged');
+      expect(r.fixRounds).toBe(1);
+      expect(r.summary).toBe('Tuned speed, kept under the cap.');
+      expect(prompts).toHaveLength(2);
+      expect(prompts[1]!.startsWith(prompts[0]!)).toBe(true);
+      expect(prompts[1]).toContain('Fix round 1 of 2');
+      expect(prompts[1]).toMatch(/npm test failed:[\s\S]*FAIL hyperline-speed\.test\.ts: speed must stay under 2 \(\[REDACTED\]\)/);
+      expect(prompts[1]).not.toContain(KEY);
+      expect(c.budget.slice).toHaveBeenCalledTimes(2); // each round reserves its own slice
+      expect(c.budget.record).toHaveBeenCalledTimes(2);
+      expect(r.costUsd).toBeCloseTo(0.84);
+      const changelog = gitIn(repo, 'show', `${HAL_MAIN}:games/hyperline/CHANGELOG.md`);
+      expect(changelog.split('Jumps feel smoother.').length - 1).toBe(1); // released once
+      expect(gitIn(repo, 'show', `${HAL_MAIN}:games/hyperline/game.yaml`)).toContain(`version: ${r.version}`);
+      worktreesGone();
+    });
+    it('still failing after the last fix round: discarded, saying how many rounds it had', async () => {
+      const old = halHead();
+      const c = ctx({ cmds: { test: pickyTest } });
+      const r = await runCandidate(ticket(), c);
+      expectDiscarded(r, old, /npm test failed:[\s\S]*speed must stay under 2[\s\S]*\(after 2 fix rounds\)/);
+      expect(r.fixRounds).toBe(2);
+      expect(calls).toHaveLength(3);
+    });
+    it('no budget for a fix round: discarded with the failure, no second call', async () => {
+      const old = halHead();
+      const slices = [3, 0];
+      const c = ctx({ cmds: { test: pickyTest }, budget: { slice: vi.fn(() => slices.shift() ?? 0), record: vi.fn() } });
+      const r = await runCandidate(ticket(), c);
+      expectDiscarded(r, old, /speed must stay under 2[\s\S]*no budget left for a fix round/);
+      expect(calls).toHaveLength(1);
+    });
+    it('a fix round goes through the tripwires again', async () => {
+      const old = halHead();
+      let n = 0;
+      const c = ctx({ cmds: { test: pickyTest } }, (cwd) => { n++; if (n === 1) put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n'); else put(cwd, 'games/tidepool-pals/game.js', 'export const x = "fixed";\n'); });
+      expectDiscarded(await runCandidate(ticket(), c), old, /tripwire outside-scope/);
+      expect(n).toBe(2);
+    });
+  });
+
   it('a score regression past the tolerance is discarded; a target picks score mode', async () => {
     const old = halHead();
     expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { score: () => result(report('hyperline', 60, { flow: 60, fair: 65 })) } })), old, /hyperline: fair regressed/);
