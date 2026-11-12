@@ -70,9 +70,11 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
 async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck, now }: CliDeps): Promise<number> {
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
-  if (isStoreCommand(command)) return runStoreCommand(command, rest, { halDir, now, games: Object.keys(scorers) });
-  if (isOpsCommand(command)) return runOpsCommand(command, rest, { halDir, games: Object.keys(scorers) });
-  if (isRunCommand(command)) return runRunCommand(command, rest, { halDir, games: gameSlugs(Object.keys(scorers)), ...(now ? { now } : {}) });
+  // Game slugs, not scorer names: gearhold-play is Gearhold's second scorer, not a game (tell --game, Run now, run --game).
+  const games = gameSlugs(Object.keys(scorers));
+  if (isStoreCommand(command)) return runStoreCommand(command, rest, { halDir, now, games });
+  if (isOpsCommand(command)) return runOpsCommand(command, rest, { halDir, games });
+  if (isRunCommand(command)) return runRunCommand(command, rest, { halDir, games, ...(now ? { now } : {}) });
   // Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
   // Flag names are kebab-case (seedBase -> --seed-base).
   const flag = (k: string) => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
