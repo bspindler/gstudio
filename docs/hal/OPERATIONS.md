@@ -75,12 +75,21 @@ own ideas, and replies in the director's note. A note stays until you clear it, 
 
 The next run's planner and director also read your votes and comments.
 
+**Play** opens the dev server (`npm run dev:lan`), and the dev server serves your checkout, not Hal's ref. Hal's
+merges sit on `refs/hal/main` (and origin) until you pull, so run `git pull` on the Mac to play Hal's latest. When
+your checkout is behind `refs/hal/main`, the report says so next to Play, with how many Hal commits you are missing.
+
 ### History
 
 On the shelf (`npm run dev`), each game has a History button. It shows, night by night, what changed and why, with
 the pictures. Each change shows its status: kept, undone (with your reason), or reverted later by you. It also shows
 your own commits, scores over time, search and filter, and a permalink for each change. It is built from git
-(`docs/hal/history/` plus commit trailers), so it survives a wiped `.data/`.
+(`docs/hal/history/` plus commit trailers), so it survives a wiped `.data/`. A night where nothing merged for a game
+still shows its director's note. Commits by the repo's `git config user.name` say "Yours"; anyone else's show their
+name.
+
+The History pages have no token. With `npm run dev:lan`, anyone on your Wi-Fi can read them. They show only what is
+already in git, but that includes your undo reasons and the director's notes.
 
 ### Where the files live
 
