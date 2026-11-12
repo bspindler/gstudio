@@ -258,6 +258,8 @@ h3{font-family:var(--display);font-weight:400;font-size:19px;margin:0;color:var(
 .rmeter i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,#25B5A6,var(--aqua) 60%,#9CF7EC);transition:width .6s cubic-bezier(.2,.8,.3,1)}
 .rmeter b{position:absolute;top:2px;bottom:2px;width:2px;margin-left:-1px;background:rgba(234,248,245,.35);border-radius:1px}
 .rsub{display:flex;justify-content:space-between;flex-wrap:wrap;gap:2px 8px;font-size:12.5px;font-weight:800;color:var(--mist)}
+.rcont{display:flex;padding:0 12px 10px}
+.rcont .btn{flex:1}
 .rlevels{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;padding:2px 12px 14px}
 .lvl{position:relative;width:100%;aspect-ratio:1;max-height:62px;border:0;border-radius:16px;padding:0 0 9px;font-family:var(--display);font-size:20px;color:var(--ink);cursor:pointer;background:radial-gradient(circle at 36% 28%,#FFF6D6 0 12%,#FFD98A 50%,#D9973A);box-shadow:inset 0 -4px 0 rgba(0,0,0,.12),0 4px 0 #8A5A1E;display:grid;place-items:center}
 .lvl:active{transform:translateY(2px);box-shadow:inset 0 -4px 0 rgba(0,0,0,.12),0 2px 0 #8A5A1E}
@@ -482,10 +484,10 @@ import { ABILITIES, GRAVITY, activeMask, applyAbility, buildBoard, collapse, cou
 import { HELPER_LEVEL, levelDef, withoutTides } from './levels.js';
 import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, loadSave, palEarned, pickHelper,
   recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, writeSave } from './save.js';
-import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, didYouKnow, homeScenery, initReef, pendingThriving,
+import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.4.2', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.5.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1405,7 +1407,10 @@ function poolCard(x) {
     ? `<div class="rmeter" role="progressbar" aria-label="${info.name} restoration" aria-valuemin="0" aria-valuemax="${x.total}" aria-valuenow="${x.cleared}"><i style="width:${(x.fraction * 100).toFixed(0)}%"></i>${STAGES.slice(1, 3).map((s) => `<b style="left:${s.at * 100}%"></b>`).join('')}</div>
       <div class="rsub"><span>${x.cleared} of ${x.total} levels cleaned up</span><span>${x.stage === 3 ? 'Pals have moved in' : nextStageLine(x)}</span></div>`
     : `<div class="rsub"><span>Levels ${first}–${first + x.total - 1}</span></div>`;
-  const levels = open ? `<div class="rlevels">${x.levels.map((n) => {
+  const cont = continueAt(S), playing = lvl && !lvl.over;
+  const contBtn = open && cont && !playing && cont.pool === x.pool
+    ? `<div class="rcont"><button class="btn buy" data-act="play-next">Continue · Level ${cont.level}</button></div>` : '';
+  const levels = open ? `${contBtn}<div class="rlevels">${x.levels.map((n) => {
     const s = S.stars[n] || 0, can = n <= S.level, cur = n === S.level;
     return `<button class="lvl${cur ? ' cur' : ''}${can ? '' : ' lock'}" ${can ? `data-act="open-level" data-n="${n}"` : 'disabled'} aria-label="Level ${n}${can ? (s ? `, ${s} star${s > 1 ? 's' : ''}` : ', not cleared yet') : ', not reached yet'}">${n}${s ? `<span class="ls">${[1, 2, 3].map((i) => STAR(i <= s)).join('')}</span>` : ''}</button>`;
   }).join('')}</div>` : '';
@@ -1421,9 +1426,9 @@ function renderMap() {
   const pools = reefPools(S), open = pools.filter((x) => x.unlocked);
   const thriving = open.filter((x) => x.stage === 3).length;
   const totalStars = Object.values(S.stars).reduce((a, b) => a + b, 0);
-  const isNew = S.level === 1 && !Object.keys(S.stars).length;
+  const cont = continueAt(S), isNew = !cont;
   $('view-map').innerHTML = `<div class="maphead"><div><h2>Your Reef</h2><p class="muted">${isNew ? 'Every level you clear tidies a pool' : `${thriving} of ${open.length} pool${open.length > 1 ? 's' : ''} thriving · ★ ${totalStars}`}</p></div>
-    <button class="btn buy" data-act="${playing ? 'resume' : 'play-next'}">${playing ? `Resume ${lvl.n}` : `Play ${S.level}`}</button></div>
+    <button class="btn buy" data-act="${playing ? 'resume' : 'play-next'}">${playing ? `Resume ${lvl.n}` : cont ? `Continue · Level ${cont.level}` : 'Play 1'}</button></div>
     ${isNew ? `<div class="welcome"><b>Welcome to the reef</b><span>Litter has drifted into these rock pools. Each level you clear tidies a little more, until a pool is thriving and pals move in.</span><span class="kind">The kind puzzle game: no lives, no timers, just tides.</span></div>`
       : '<p class="kind">The kind puzzle game: no lives, no timers, just tides.</p>'}
     <div class="reef">${pools.map(poolCard).join('')}</div>`;
@@ -1745,6 +1750,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.hi
 
 /* ---------- boot ---------- */
 hud();
+// A returning player opens on the reef map with Continue at their furthest unlocked level; a new player starts level 1.
+{ const c = continueAt(S); if (c && c.level > S.level) { S.level = c.level; persist(); } }
 showView('map');
-if (S.level === 1 && !Object.keys(S.stars).length) openLevel(1);
+if (!continueAt(S)) openLevel(1);
 </script>

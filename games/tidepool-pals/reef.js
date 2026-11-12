@@ -22,6 +22,14 @@ export function poolOf(n, lookup) {
   if (!lookup) poolCache.set(n, p);
   return p;
 }
+/** Where a returning player picks up: their furthest unlocked level and its pool. Null for a brand-new player.
+ *  Never points behind a cleared level, so a lagging stored level cannot send anyone back. */
+export function continueAt(S) {
+  const cleared = Object.keys(S.stars || {}).map(Number).filter((n) => Number.isInteger(n) && n > 0 && S.stars[n] > 0);
+  const level = Math.max(1, Math.floor(S.level) || 1, ...cleared.map((n) => n + 1));
+  if (level === 1 && !cleared.length) return null;
+  return { level, pool: poolOf(level) };
+}
 export function poolLevels(p) { return Array.from({ length: POOL_SIZE }, (_, i) => p * POOL_SIZE + i + 1); }
 
 /* ---------- names, palettes and scenery ---------- */

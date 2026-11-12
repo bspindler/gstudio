@@ -22,6 +22,7 @@ export declare const FIELD_NOTES: Record<string, FieldNotes>;
 export declare const DID_YOU_KNOW: string[][];
 
 export declare function poolOf(n: number, lookup?: (n: number) => { pool?: number } | null | undefined): number;
+export declare function continueAt(S: Save): { level: number; pool: number } | null;
 export declare function poolLevels(p: number): number[];
 export declare function poolInfo(p: number): PoolInfo;
 export declare function stageFor(fraction: number): number;
