@@ -880,7 +880,7 @@ describe('final review fixes', () => {
     for (const p of [planner.prompt, dir.prompt]) {
       expect(p).toContain('more neon please');
       expect(p).toContain('"status": "queued"');
-      expect(p).toContain('"lastReply": "Neon is next week."');
+      expect(p).toMatch(/"from": "Hal",[\s\S]*"text": "Neon is next week."/); // the thread, Hal's reply in it
       expect(p).not.toContain('not in scope'); // another game's note stays out of a hyperline-only run
     }
   }, 60_000);

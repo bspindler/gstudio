@@ -44,7 +44,7 @@ import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 import { killLiveGroups } from './sandbox.js';
 import type { ScreensResult } from './screens.js';
 import type { RunLock } from './server.js';
-import { createStore, writeJsonAtomic, type Note, type NoteStatus, type Store } from './store.js';
+import { createStore, threadOf, writeJsonAtomic, type Note, type NoteStatus, type Store } from './store.js';
 import { applyUndo, type UndoCtx } from './undo.js';
 
 export const LOCK_FILE = 'run.lock';
@@ -725,7 +725,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       if (!ids.has(r.id)) continue;
       ids.delete(r.id);
       const reply = R.str(oneLine(r.reply));
-      if (await store.setNote(r.id, { status: r.status, reply })) replies.push({ id: r.id, status: r.status, reply });
+      if (await store.setNote(r.id, { status: r.status, reply, run: runId })) replies.push({ id: r.id, status: r.status, reply });
     }
 
     // 7. Push.
@@ -887,8 +887,13 @@ function notesInScope(notes: Note[], games: string[]): Note[] {
   const mine = notes.filter((n) => n.game === null || games.includes(n.game));
   return [...mine.filter((n) => n.status === 'open'), ...mine.filter((n) => n.status !== 'open')];
 }
-/** A note as the planner and director see it: its status, and Hal's last reply if it has one. */
-const noteForPrompt = (n: Note) => ({ id: n.id, at: n.at, game: n.game, text: n.text, status: n.status, ...(n.reply ? { lastReply: n.reply } : {}) });
+/** A note as the planner and director see it: its status and its thread (the last NOTE_MESSAGES messages, oldest first). */
+const NOTE_MESSAGES = 12;
+const noteForPrompt = (n: Note) => ({
+  id: n.id, at: n.at, game: n.game, status: n.status,
+  ...(n.ref ? { repliesTo: `the Director's note of ${n.ref.night ?? n.ref.run}` } : {}),
+  thread: threadOf(n).slice(-NOTE_MESSAGES).map((m) => ({ from: m.from === 'hal' ? 'Hal' : 'Brian', at: m.at, text: m.text })),
+});
 /** The highest Hal-Pass number in the trailers on refs/hal/main (0 if none). */
 async function maxHalPass(git: GitRunner, repo: string): Promise<number> {
   const out = await git(['log', '-n', '2000', '--format=%B%x1e', HAL_MAIN], repo);
