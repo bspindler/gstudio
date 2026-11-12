@@ -89,3 +89,17 @@ describe('hal ledger', () => {
     expect(two[2]).toContain('HAL-002');
   });
 });
+
+describe('pass ids with a floor from git', () => {
+  const p = (): Omit<Pass, 'id'> => ({ ts: 't', game: 'g', change: 'c', fitness: 1, baseline: null, measures: {}, kept: true, reasons: [], costUsd: 0 });
+  it('next id = max(ledger, floor) + 1, and recordPass takes it', () => {
+    expect(nextPassId(emptyLedger(), 3)).toBe('HAL-004');
+    let l = recordPass(emptyLedger(), p(), nextPassId(emptyLedger(), 3));
+    expect(l.passes.map((x) => x.id)).toEqual(['HAL-004']);
+    expect(nextPassId(l, 3)).toBe('HAL-005');
+    expect(nextPassId(l, 9)).toBe('HAL-010');
+    l = recordPass(l, p());
+    expect(l.passes.map((x) => x.id)).toEqual(['HAL-004', 'HAL-005']);
+    expect(() => recordPass(l, p(), 'x')).toThrow(/bad pass id/);
+  });
+});

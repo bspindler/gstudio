@@ -38,14 +38,20 @@ export function parseLedger(json: string): Ledger {
 
 const idNum = (p: Pass): number => Number(p.id.slice(4));
 
-export function nextPassId(l: Ledger): string {
+/**
+ * The next pass id: one past the larger of the ledger's last id and `floor` (the highest pass number known elsewhere,
+ * e.g. the newest Hal-Pass trailer on refs/hal/main, so a fresh .data/hal never reuses an id that git already has).
+ */
+export function nextPassId(l: Ledger, floor = 0): string {
   const last = l.passes[l.passes.length - 1];
-  const n = last ? idNum(last) + 1 : 1;
+  const n = Math.max(last ? idNum(last) : 0, Number.isInteger(floor) && floor > 0 ? floor : 0) + 1;
   return `HAL-${String(n).padStart(3, '0')}`;
 }
 
-export function recordPass(l: Ledger, p: Omit<Pass, 'id'>): Ledger {
-  const pass: Pass = { ...p, id: nextPassId(l) };
+/** Appends a pass with id `id` (default nextPassId(l)). */
+export function recordPass(l: Ledger, p: Omit<Pass, 'id'>, id: string = nextPassId(l)): Ledger {
+  if (!/^HAL-\d+$/.test(id)) throw new Error(`bad pass id ${JSON.stringify(id)}`);
+  const pass: Pass = { ...p, id };
   const best = { ...l.best };
   if (p.kept && (best[p.game] === undefined || p.fitness > best[p.game]!)) best[p.game] = p.fitness;
   const streak = { ...l.streak, [p.game]: p.kept ? 0 : (l.streak[p.game] ?? 0) + 1 };

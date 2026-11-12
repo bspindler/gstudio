@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DAILY_CAP_USD, SLICES, apiSpent, dayFor, dayOf, recordCall, reserveCall, settleCall, sliceFor, type SpendDay } from '../src/hal/budget.js';
+import { CAP_MARGIN_USD, DAILY_CAP_USD, SLICES, apiSpent, dayFor, dayOf, recordCall, reserveCall, settleCall, sliceFor, type SpendDay } from '../src/hal/budget.js';
 
 const empty = (day = '2026-11-11'): SpendDay => ({ day, calls: [] });
 const call = (usd: number | undefined, billing: 'api' | 'subscription' = 'api', role = 'planner') => ({ run: 'r1', role, billing, usd, at: '2026-11-11T01:00:00Z' });
@@ -7,6 +7,7 @@ const call = (usd: number | undefined, billing: 'api' | 'subscription' = 'api', 
 describe('hal budget', () => {
   it('has the spec constants', () => {
     expect(DAILY_CAP_USD).toBe(20);
+    expect(CAP_MARGIN_USD).toBe(0.5);
     expect(SLICES).toEqual({ planner: 1.5, implementer: 3, director: 1 });
   });
   it('apiSpent sums api calls only', () => {
@@ -16,12 +17,18 @@ describe('hal budget', () => {
     d = recordCall(d, call(1.5));
     expect(apiSpent(d)).toBe(3.5);
   });
-  it('sliceFor is the role slice, clipped to the remaining cap', () => {
+  it('sliceFor is the role slice, clipped to the remaining cap less the 0.50 margin (R21)', () => {
     expect(sliceFor(empty(), 'implementer')).toBe(3);
-    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 18.5, at: 't' }] };
+    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 18, at: 't' }] };
     expect(sliceFor(d, 'implementer')).toBe(1.5);
+    const d2: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 18.5, at: 't' }] };
+    expect(sliceFor(d2, 'implementer')).toBe(1);
   });
-  it('cap is reached exactly at 20 and slice is 0', () => {
+  it('for slicing the cap is reached at 19.50 (the cap itself stays 20); slice is 0', () => {
+    const at: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 19.5, at: 't' }] };
+    expect(sliceFor(at, 'director')).toBe(0);
+    const near: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 19.4, at: 't' }] };
+    expect(sliceFor(near, 'director')).toBe(0.1);
     const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 20, at: 't' }] };
     expect(sliceFor(d, 'director')).toBe(0);
     const over: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 25, at: 't' }] };
@@ -37,9 +44,17 @@ describe('hal budget', () => {
     const d2 = recordCall(empty(), { ...call(undefined, 'api', 'planner'), usd: Number.NaN });
     expect(d2.calls[0]!.usd).toBe(1.5);
   });
-  it('unknown cost never exceeds what is left of the cap', () => {
-    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 19, at: 't' }] };
+  it('unknown cost never exceeds what is left of the cap (less the margin)', () => {
+    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 18.5, at: 't' }] };
     expect(recordCall(d, call(undefined, 'api', 'implementer')).calls[1]!.usd).toBe(1);
+  });
+  it('heldUsd sets money aside (the director\'s slice during builds)', () => {
+    const d: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 16, at: 't' }] };
+    expect(sliceFor(d, 'implementer')).toBe(3);
+    expect(sliceFor(d, 'implementer', SLICES.director)).toBe(2.5);
+    const tight: SpendDay = { day: '2026-11-11', calls: [{ run: 'r', role: 'x', billing: 'api', usd: 18.5, at: 't' }] };
+    expect(sliceFor(tight, 'implementer', SLICES.director)).toBe(0);
+    expect(sliceFor(tight, 'director')).toBe(1);
   });
   it('recordCall does not mutate its input', () => {
     const d = empty();
@@ -102,10 +117,14 @@ describe('reserve then settle (R19), by id', () => {
     expect(settled.day).toBe(dayOf(late));
     expect(apiSpent(settled) + apiSpent(d2)).toBe(0.1);
   });
+  it('a reservation books the call\'s own smaller slice when given, never more than sliceFor', () => {
+    expect(reserveCall(empty, { id: 'a', run: 'r', role: 'implementer', billing: 'api', at }, 2).calls[0]!.usd).toBe(2);
+    expect(reserveCall(empty, { id: 'a', run: 'r', role: 'implementer', billing: 'api', at }, 9).calls[0]!.usd).toBe(SLICES.implementer);
+  });
   it('a pending reservation left by a crash keeps the cap honest', () => {
     let d: SpendDay = { day: '2026-11-12', calls: [{ run: 'old', role: 'implementer', billing: 'api', usd: 18, at }] };
     d = reserveCall(d, { id: 'c', run: 'r', role: 'implementer', billing: 'api', at });
-    expect(apiSpent(d)).toBe(DAILY_CAP_USD);
+    expect(apiSpent(d)).toBe(DAILY_CAP_USD - CAP_MARGIN_USD);
     expect(sliceFor(d, 'planner')).toBe(0);
   });
 });

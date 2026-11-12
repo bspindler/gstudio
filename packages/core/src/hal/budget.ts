@@ -9,6 +9,11 @@ export type SpendCall = { run: string; role: string; billing: Billing; usd: numb
 export type SpendDay = { day: string; calls: SpendCall[] };
 
 export const DAILY_CAP_USD = 20;
+/**
+ * Slices are cut from DAILY_CAP_USD minus this margin (ruling R21): `claude --max-budget-usd` is only checked after a
+ * turn, so a call can overshoot its slice a little. The cap itself (what the report shows) stays DAILY_CAP_USD.
+ */
+export const CAP_MARGIN_USD = 0.5;
 export const SLICES: Record<string, number> = { planner: 1.5, implementer: 3, director: 1 };
 
 /** Local calendar date (YYYY-MM-DD) of an injected clock reading. */
@@ -23,9 +28,12 @@ export function apiSpent(day: SpendDay): number {
   return cents / 100;
 }
 
-/** Dollars this role may spend now: its slice, clipped to what is left of the cap. 0 means stop. */
-export function sliceFor(day: SpendDay, role: string): number {
-  const left = Math.max(0, DAILY_CAP_USD - apiSpent(day));
+/**
+ * Dollars this role may spend now: its slice, clipped to what is left of the cap less CAP_MARGIN_USD and less `heldUsd`
+ * (money set aside for a later call, e.g. the director's slice during the build loop). 0 means stop.
+ */
+export function sliceFor(day: SpendDay, role: string, heldUsd = 0): number {
+  const left = Math.max(0, Math.round((DAILY_CAP_USD - CAP_MARGIN_USD - apiSpent(day) - Math.max(0, heldUsd)) * 100) / 100);
   if (!Object.hasOwn(SLICES, role)) return 0;
   const slice = Math.min(SLICES[role]!, left);
   return slice < 0.01 ? 0 : slice;
@@ -45,11 +53,17 @@ export function dayFor(prev: SpendDay | undefined, now: Date): SpendDay {
   return prev && prev.day === day ? prev : { day, calls: [] };
 }
 
-/** Reserve-then-settle, step 1: appends `{..., id, usd: slice, pending: true}` before the call starts. `id` is the caller's. */
-export function reserveCall(day: SpendDay, call: Omit<SpendCall, 'usd' | 'pending'> & { id: string }): SpendDay {
+/**
+ * Reserve-then-settle, step 1: appends `{..., id, usd: slice, pending: true}` before the call starts. `id` is the
+ * caller's. `slice` is the call's own --max-budget-usd when the caller cut it smaller (e.g. with money held back);
+ * default, and never more than, sliceFor(day, role).
+ */
+export function reserveCall(day: SpendDay, call: Omit<SpendCall, 'usd' | 'pending'> & { id: string }, slice?: number): SpendDay {
   if (!Object.hasOwn(SLICES, call.role)) throw new Error(`unknown budget role: ${call.role}`);
   if (day.calls.some((c) => c.id === call.id)) throw new Error(`duplicate spend id: ${call.id}`);
-  return { ...day, calls: [...day.calls, { ...call, usd: sliceFor(day, call.role), pending: true }] };
+  const max = sliceFor(day, call.role);
+  const usd = typeof slice === 'number' && Number.isFinite(slice) && slice >= 0 ? Math.min(slice, max) : max;
+  return { ...day, calls: [...day.calls, { ...call, usd, pending: true }] };
 }
 
 /**

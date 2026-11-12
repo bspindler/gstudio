@@ -4,7 +4,7 @@
 //   1. lock      <halDir>/run.lock {pid, runId, startedAt, phase, trigger}; a live holder -> exit 2 "busy", a dead
 //                pid's lock is taken over. The stop flag is cleared. SIGINT/SIGTERM/exit kill live Claude children
 //                and remove the lock; the lock is always removed in finally.
-//   2. preflight ensureMainWorktree (refs/hal/main, never Brian's branches), push checks (diverged, --dry-run),
+//   2. preflight ensureMainWorktree (refs/hal/main, never Brian's branches), push checks (diverged -> report-only, R22; --dry-run),
 //                last run's ci:local results, pending undos from feedback.json (same path as `hal undo`)
 //   3. play      every scorer of every game in scope, screens and controls once, on Hal's main -> runs/<id>/play/
 //   4. plan      planner Claude -> validateTickets -> --kind filter -> splitLiability (calls) -> --max-tickets
@@ -16,16 +16,19 @@
 //   7. push      ci:local on refs/hal/main's sha, then pushHalMain (fast-forward only); any failure keeps it local
 //   8. report    runs/<id>/report.json + report.md, latest.json
 //
-// Money: every Claude call's spend is booked into spend.json synchronously, under the lock, before the next call can
-// start; an unknown cost is the whole slice (recordCall). A zero slice stops the run cleanly (capReached).
+// Money (R19, reserve then settle; R21): before every spawn, the retry after a usage limit included, a pending entry of
+// the role's full slice is appended to spend.json and saved, synchronously, under the lock; after the call that same
+// entry (by id, in the day it was reserved) is settled with the real cost. An unknown cost, a throw or a crash between
+// the two leaves the whole slice booked. Slices are cut from DAILY_CAP_USD - CAP_MARGIN_USD ($19.50 of the $20 cap,
+// since --max-budget-usd is only checked after a turn), and during the build loop the director's $1 is held back so
+// the builds cannot starve the note. A zero slice stops the run cleanly (capReached).
 // Secrets: the key is only in RunDeps.claude's own deps; every string written under .data, logged, or put in a prompt
 // goes through the redactor first.
-import { execFileSync } from 'node:child_process';
 import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
-  apiSpent, DAILY_CAP_USD, emptyLedger, ledgerMarkdown, nextPassId, nightOf, parseLedger, recordPass, reserveCall, settleCall, sliceFor, splitLiability, stagnated, validateTickets,
+  apiSpent, DAILY_CAP_USD, emptyLedger, ledgerMarkdown, nextPassId, nightOf, parseLedger, recordPass, reserveCall, settleCall, sliceFor, SLICES, splitLiability, stagnated, validateTickets,
   type Billing, type Ledger, type Measures, type ScoreReport, type Ticket, type TicketKind,
 } from '@studio/core/hal';
 import { runCandidate, scorersFor, type CandidateCtx, type CandidateResult } from './candidate.js';
@@ -36,6 +39,7 @@ import {
 } from './git.js';
 import { loadPrompt, renderPrompt } from './prompts.js';
 import { assertNoRepoFilters, errMsg, extractJson, redactor, type Redactor } from './run-util.js';
+import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 import { killLiveGroups } from './sandbox.js';
 import type { ScreensResult } from './screens.js';
 import type { RunLock } from './server.js';
@@ -110,6 +114,8 @@ export type RunDeps = {
   isAlive?: (pid: number) => boolean;
   /** A pid's process start time (pid-reuse guard for the lock); default `ps -o lstart=`. null = unknown. */
   startTimeOf?: (pid: number) => Date | null;
+  /** `--append-system-prompt-file` for every role in both billings (R24): <repo>/CLAUDE.md in realRunDeps. */
+  appendSystemPromptFile?: string;
   /** Signal source and exit; default process. */
   proc?: ProcLike;
   log?: (line: string) => void;
@@ -148,25 +154,8 @@ export type RunReport = {
 
 // ---- the lock -----------------------------------------------------------------------------------------------------
 
-export const defaultAlive = (pid: number): boolean => {
-  try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === 'EPERM'; }
-};
+export { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 export type HeldLock = { info: RunLock; setPhase(phase: string): void; release(): void };
-/** `ps -o lstart= -p <pid>` as a Date (second resolution), or null. */
-export const defaultStartTime = (pid: number): Date | null => {
-  try {
-    const t = execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    const d = new Date(t);
-    return t && Number.isFinite(d.getTime()) ? d : null;
-  } catch { return null; }
-};
-const PID_REUSE_SLACK_MS = 5_000;
-/** A lock is live if its pid is alive and that process started no later than the lock (else the pid was reused). */
-export function lockLive(l: RunLock, isAlive: (pid: number) => boolean = defaultAlive, startTimeOf: (pid: number) => Date | null = defaultStartTime): boolean {
-  if (!isAlive(l.pid)) return false;
-  const started = startTimeOf(l.pid), at = Date.parse(l.startedAt);
-  return !(started && Number.isFinite(at) && started.getTime() > at + PID_REUSE_SLACK_MS);
-}
 const TAKEOVER_STALE_MS = 30_000;
 
 function readLockFile(path: string): RunLock | 'missing' | 'corrupt' {
@@ -317,6 +306,8 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   const st = {
     billing: o.billing, spend: { api: 0, subscription: 0 }, capReached: false, pushed: false,
     pushSkippedReason: undefined as string | undefined, noKeyWarned: false, spendBroken: false, trustRoot: false, spendSeq: 0,
+    /** R21: during the build loop the director's slice is held back from the implementers. */
+    holdDirector: false,
   };
   const changes: CandidateResult[] = [];
   let calls: Ticket[] = [];
@@ -337,13 +328,14 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   const budget = {
     slice(role: string): number {
       if (st.spendBroken) return 0;
-      try { return sliceFor(store.loadSpendTodaySync(), role); } catch (e) { st.spendBroken = true; warn(`spend.json unreadable, no more Claude calls: ${errMsg(e)}`); return 0; }
+      const held = st.holdDirector && role !== 'director' ? SLICES.director! : 0;
+      try { return sliceFor(store.loadSpendTodaySync(), role, held); } catch (e) { st.spendBroken = true; warn(`spend.json unreadable, no more Claude calls: ${errMsg(e)}`); return 0; }
     },
-    reserve(role: string, billing: Billing): void {
+    reserve(role: string, billing: Billing, slice: number): void {
       try {
         const today = store.loadSpendTodaySync();
         const id = `${runId}#${++st.spendSeq}`;
-        store.saveSpendDaySync(reserveCall(today, { id, run: runId, role, billing, at: d.now().toISOString() }));
+        store.saveSpendDaySync(reserveCall(today, { id, run: runId, role, billing, at: d.now().toISOString() }, slice)); // the call's own cap
         outstanding.push({ id, day: today.day, role, billing });
       } catch (e) {
         st.spendBroken = true;
@@ -369,7 +361,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   };
   /** One reserved spawn. */
   const once = async (call: ClaudeCall): Promise<ClaudeResult> => {
-    budget.reserve(call.role, call.billing);
+    budget.reserve(call.role, call.billing, call.maxBudgetUsd);
     return d.claude(call);
   };
   /** The ClaudePort every role uses: a subscription limit hit switches the run to the API and retries there (if a key). */
@@ -396,6 +388,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       allowedTools: roleAllowedTools(role), disallowedTools: [], timeoutMs,
       denyReadPaths: [join(repo, '.hal.env')], // absolute deny rules for every role
       ...(addDirs.length ? { addDirs } : {}),
+      ...(d.appendSystemPromptFile ? { appendSystemPromptFile: d.appendSystemPromptFile } : {}),
     };
     let out: Awaited<ReturnType<ClaudePort>>;
     try { out = await claude(call, slice); } catch (e) {
@@ -413,6 +406,8 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   let code = 0;
   let mainDir = '';
   let pushOff: string | undefined = o.reportOnly ? '--report-only' : o.push ? undefined : '--no-push';
+  /** --report-only, or forced on by a diverged refs/hal/main (R22). */
+  let reportOnly = o.reportOnly;
   try {
     // 2. Preflight.
     setPhase('preflight');
@@ -421,7 +416,11 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     const main = await ensureMainWorktree(repo, { git: raw });
     mainDir = main.dir;
     if (main.diverged) {
-      warn(`${HAL_MAIN} and origin/main have diverged: push is off for this run`);
+      // R22: building on a diverged ref would only pile up commits that can never fast-forward. Report only.
+      reportOnly = true;
+      warn(`${HAL_MAIN} and origin/main have diverged: this run is report-only (nothing built, undone or pushed). To recover: `
+        + `see what Hal has that origin lacks with \`git log origin/main..${HAL_MAIN}\` (save anything worth keeping), then reset Hal's ref `
+        + `with \`git update-ref ${HAL_MAIN} origin/main\`. The next run starts from origin/main.`);
       pushOff ??= `${HAL_MAIN} and origin/main have diverged (origin moved while Hal had unpushed commits)`;
     }
     if (!pushOff) {
@@ -431,7 +430,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       }
     }
     await ciFollowUp(d, c, warn);
-    for (const u of o.reportOnly ? [] : await store.pendingUndos()) { // --report-only changes nothing
+    for (const u of reportOnly ? [] : await store.pendingUndos()) { // report-only changes nothing
       const r = await applyUndo(u.pass, u.reason, undoCtx(d, runId));
       const reason = R.str(u.reason);
       if (r.ok) {
@@ -470,7 +469,8 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       ledger = null;
       warn(`${errMsg(e)}: nothing is built this run`);
     }
-    const open = (await store.readNotes()).filter((n) => n.status === 'open' && (n.game === null || o.games.includes(n.game)));
+    // Every note still in notes.json (only `notes --clear` removes one), with its status and Hal's last reply.
+    const open = notesInScope(await store.readNotes(), o.games);
     const shotsDir = join(runDir, 'play', 'screens');
     await mkdir(shotsDir, { recursive: true });
     const plannerText = await ask('planner', renderPrompt(loadPrompt('planner'), plannerVars(o, d, c, { scores, screens, controls, ledger, open, mainDir })), mainDir, PLANNER_TIMEOUT_MS, [shotsDir]);
@@ -478,8 +478,10 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     if (plannerText !== null) {
       const measures = Object.fromEntries(o.games.map((g) => [g, [...new Set(scorersFor(g).flatMap((s) => Object.keys(scores[s]?.measures ?? {})))]]));
       const v = validateTickets(extractJson(plannerText) ?? plannerText, o.games, measures);
-      if (v.ok) tickets = R.deep(v.tickets); // the tickets go into the implementer's prompt: never with a secret in them
-      else warn(`the planner's tickets were rejected: ${v.errors.join('; ')}`);
+      if (v.ok) {
+        tickets = R.deep(v.tickets); // the tickets go into the implementer's prompt: never with a secret in them
+        for (const x of v.rejected) warn(`planner ticket ${x.index}${x.id ? ` (${x.id}${x.title ? `: ${oneLine(x.title).slice(0, 80)}` : ''})` : ''} was rejected: ${x.reasons.join('; ')}`);
+      } else warn(`the planner's tickets were rejected: ${v.errors.join('; ')}`);
     }
     if (o.kinds.length) tickets = tickets.filter((t) => o.kinds.includes(t.kind));
     const split = splitLiability(tickets, await store.readApprovals());
@@ -489,53 +491,59 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     await writeData('tickets.json', { build, calls });
 
     // 5. Build.
-    if (!o.reportOnly && ledger) {
+    if (!reportOnly && ledger) {
       setPhase('build');
       let baseline = { sha: (await git(['rev-parse', HAL_MAIN], repo)).trim(), scores: { ...scores } };
-      for (const [i, t] of build.entries()) {
-        const skip = (why: string) => { changes.push({ pass: '', ticket: t, verdict: 'skipped', reasons: [why], scoresBefore: {}, scoresAfter: {}, costUsd: 0 }); };
-        if (st.trustRoot) { skip('stopped: trust root modified'); continue; }
-        if (existsSync(stopPath)) { skip('stopped'); continue; }
-        if (!canCall()) { skip('no API key'); continue; }
-        if (!(budget.slice('implementer') > 0)) { st.capReached = true; skip('budget'); continue; }
-        const pass = nextPassId(ledger);
-        setPhase(`build ${pass} (${i + 1}/${build.length})`);
-        const ctx: CandidateCtx = {
-          repo, pass, run: runId, now: d.now, tzOffsetMinutes: tz, model: d.model, billing: st.billing, secrets: [...d.secrets],
-          budget: { slice: () => budget.slice('implementer'), record: (_r, b, u) => budget.record('implementer', b, u) },
-          claude, mainDir, baseline, ...(d.git ? { git: d.git } : {}), ...(d.candidateCtx ?? {}),
-        };
-        const r = R.deep(await (d.candidate ?? runCandidate)(t, ctx));
-        log(`${pass} ${t.game}: ${r.verdict}${r.reasons.length ? ` (${r.reasons.join('; ')})` : ''}`);
-        if (r.verdict === 'skipped') {
-          if (r.reasons.includes('budget')) st.capReached = true;
-          changes.push({ ...r, pass: '' });
-          continue;
+      // Pass ids continue from the larger of the ledger and refs/hal/main's Hal-Pass trailers (a fresh .data/hal).
+      const gitPass = await maxHalPass(git, repo);
+      st.holdDirector = true;
+      try {
+        for (const [i, t] of build.entries()) {
+          const skip = (why: string) => { changes.push({ pass: '', ticket: t, verdict: 'skipped', reasons: [why], scoresBefore: {}, scoresAfter: {}, costUsd: 0 }); };
+          if (st.trustRoot) { skip('stopped: trust root modified'); continue; }
+          if (existsSync(stopPath)) { skip('stopped'); continue; }
+          if (!canCall()) { skip('no API key'); continue; }
+          if (!(budget.slice('implementer') > 0)) { st.capReached = true; skip('budget'); continue; }
+          const pass = nextPassId(ledger, gitPass);
+          setPhase(`build ${pass} (${i + 1}/${build.length})`);
+          const ctx: CandidateCtx = {
+            repo, pass, run: runId, now: d.now, tzOffsetMinutes: tz, model: d.model, billing: st.billing, secrets: [...d.secrets],
+            budget: { slice: () => budget.slice('implementer'), record: (_r, b, u) => budget.record('implementer', b, u) },
+            claude, mainDir, baseline, ...(d.git ? { git: d.git } : {}),
+            ...(d.appendSystemPromptFile ? { appendSystemPromptFile: d.appendSystemPromptFile } : {}), ...(d.candidateCtx ?? {}),
+          };
+          const r = R.deep(await (d.candidate ?? runCandidate)(t, ctx));
+          log(`${pass} ${t.game}: ${r.verdict}${r.reasons.length ? ` (${r.reasons.join('; ')})` : ''}`);
+          if (r.verdict === 'skipped') {
+            if (r.reasons.includes('budget')) st.capReached = true;
+            changes.push({ ...r, pass: '' });
+            continue;
+          }
+          changes.push(r);
+          for (const w of r.warnings ?? []) warn(`${pass}: ${w}`);
+          if (r.reasons.includes('trust root modified')) {
+            // <repo>/node_modules (Hal's tools) changed under us: nothing more is built or pushed until it is reinstalled.
+            st.trustRoot = true;
+            pushOff = 'trust root modified: run npm ci';
+            warn(`trust root modified during ${pass}: <repo>/node_modules changed. The run stopped building and did not push. Run npm ci before the next run.`);
+          }
+          const primary = scorersFor(t.game).find((s) => t.target !== undefined && Object.hasOwn(r.scoresBefore[s]?.measures ?? {}, t.target)) ?? scorersFor(t.game)[0]!;
+          const after = r.scoresAfter[primary], before = r.scoresBefore[primary];
+          ledger = recordPass(ledger, {
+            ts: d.now().toISOString(), game: t.game, change: t.title, ...(t.target !== undefined ? { target: t.target } : {}),
+            fitness: Number.isFinite(after?.fitness) ? after!.fitness : Number.isFinite(before?.fitness) ? before!.fitness : 0,
+            baseline: Number.isFinite(before?.fitness) ? before!.fitness : null, measures: after?.measures ?? {},
+            kept: r.verdict === 'merged', reasons: r.reasons, costUsd: r.costUsd,
+          }, pass);
+          await writeJsonAtomic(ledgerPath, R.deep(ledger));
+          if (r.verdict === 'merged') {
+            const next = await afterMerge(r, baseline);
+            baseline = next.baseline;
+            mainDir = next.mainDir;
+            finalScores = { ...finalScores, ...baseline.scores };
+          }
         }
-        changes.push(r);
-        for (const w of r.warnings ?? []) warn(`${pass}: ${w}`);
-        if (r.reasons.includes('trust root modified')) {
-          // <repo>/node_modules (Hal's tools) changed under us: nothing more is built or pushed until it is reinstalled.
-          st.trustRoot = true;
-          pushOff = 'trust root modified: run npm ci';
-          warn(`trust root modified during ${pass}: <repo>/node_modules changed. The run stopped building and did not push. Run npm ci before the next run.`);
-        }
-        const primary = scorersFor(t.game).find((s) => t.target !== undefined && Object.hasOwn(r.scoresBefore[s]?.measures ?? {}, t.target)) ?? scorersFor(t.game)[0]!;
-        const after = r.scoresAfter[primary], before = r.scoresBefore[primary];
-        ledger = recordPass(ledger, {
-          ts: d.now().toISOString(), game: t.game, change: t.title, ...(t.target !== undefined ? { target: t.target } : {}),
-          fitness: Number.isFinite(after?.fitness) ? after!.fitness : Number.isFinite(before?.fitness) ? before!.fitness : 0,
-          baseline: Number.isFinite(before?.fitness) ? before!.fitness : null, measures: after?.measures ?? {},
-          kept: r.verdict === 'merged', reasons: r.reasons, costUsd: r.costUsd,
-        });
-        await writeJsonAtomic(ledgerPath, R.deep(ledger));
-        if (r.verdict === 'merged') {
-          const next = await afterMerge(r, baseline);
-          baseline = next.baseline;
-          mainDir = next.mainDir;
-          finalScores = { ...finalScores, ...baseline.scores };
-        }
-      }
+      } finally { st.holdDirector = false; }
     }
 
     /** The next baseline: the merged candidate's scoresAfter at the new refs/hal/main, else main re-scored. */
@@ -556,7 +564,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
 
     // 6. Note.
     setPhase('note');
-    const notesNow = (await store.readNotes()).filter((n) => n.status === 'open' && (n.game === null || o.games.includes(n.game)));
+    const notesNow = notesInScope(await store.readNotes(), o.games);
     const stagnation = stagnationText(o.games, ledger);
     const directorText = await ask('director', renderPrompt(loadPrompt('director'), {
       results: J(R.deep({ changes: changes.map(brief), calls, warnings })),
@@ -567,7 +575,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     if (directorText !== null && !dir) warn("the director's reply did not match its contract: Hal wrote the note");
     noteText = dir?.note ?? fallbackNote(st.capReached, changes);
     await writeText(join(runDir, 'note.md'), `# Hal, night of ${night} (${runId})\n\n${noteText.trim()}\n`);
-    if (!o.reportOnly) {
+    if (!reportOnly) {
       try {
         const files = historyFiles(o.games, mainDir, night, runId, dir?.perGame ?? {}, changes).map((f) => ({ ...f, text: R.str(f.text) }));
         const commit = await commitHistory(files);
@@ -729,7 +737,24 @@ function feedbackVars(c: Common): { feedback: string; approvals: string } {
     approvals: J(read('approvals.json', [])),
   };
 }
-const noteForPrompt = (n: Note) => ({ id: n.id, at: n.at, game: n.game, text: n.text });
+/** Notes in scope, open ones first (then oldest first): Brian's direction is never dropped until he clears it. */
+function notesInScope(notes: Note[], games: string[]): Note[] {
+  const mine = notes.filter((n) => n.game === null || games.includes(n.game));
+  return [...mine.filter((n) => n.status === 'open'), ...mine.filter((n) => n.status !== 'open')];
+}
+/** A note as the planner and director see it: its status, and Hal's last reply if it has one. */
+const noteForPrompt = (n: Note) => ({ id: n.id, at: n.at, game: n.game, text: n.text, status: n.status, ...(n.reply ? { lastReply: n.reply } : {}) });
+/** The highest Hal-Pass number in the trailers on refs/hal/main (0 if none). */
+async function maxHalPass(git: GitRunner, repo: string): Promise<number> {
+  const out = await git(['log', '-n', '2000', '--format=%B%x1e', HAL_MAIN], repo);
+  let max = 0;
+  for (const rec of out.split('\x1e')) {
+    const paras = rec.replace(/\s+$/, '').split(/\n[ \t]*\n/);
+    const m = /^Hal-Pass:[ \t]*HAL-(\d+)[ \t]*$/m.exec(paras[paras.length - 1] ?? '');
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max;
+}
 function stagnationText(games: string[], l: Ledger | null): string {
   return games.map((g) => `- ${g}: ${l && stagnated(l, g) ? `STAGNATED (${l.streak[g]} attempts in a row kept nothing)` : 'not stagnated'}`).join('\n');
 }
@@ -787,7 +812,7 @@ function reportMarkdown(r: RunReport, note: string): string {
     `# Hal report, night of ${r.night}`,
     '',
     `Run ${r.runId} (${r.trigger}, ${r.billing} billing), ${r.startedAt} to ${r.endedAt}.`,
-    `Spend: API ${usd(r.spend.api)}, subscription ${usd(r.spend.subscription)}${r.capReached ? '. **The daily API cap was reached.**' : '.'}`,
+    `Spend this run: API ${usd(r.spend.api)}, subscription ${usd(r.spend.subscription)} (the daily API cap is ${usd(DAILY_CAP_USD)})${r.capReached ? '. **The daily API cap was reached.**' : '.'}`,
     `Pushed: ${r.pushed ? 'yes' : `no${r.pushSkippedReason ? ` (${r.pushSkippedReason})` : ''}`}.`,
     '',
     '## Director\'s note',
