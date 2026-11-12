@@ -8,6 +8,10 @@ import {
   type Baseline, type Ledger, type LevelStats, type Range, type ScoreReport, type Scorer,
 } from '@studio/core/hal';
 // Type-only imports are erased, so the CLI still never loads Playwright.
+import { isOpsCommand, runOpsCommand } from './cli-ops.js';
+import { isRunCommand, runRunCommand } from './cli-run.js';
+import { scorersFor } from './candidate.js';
+import { isStoreCommand, runStoreCommand } from './cli-store.js';
 import type { ControlCheck } from './controls.js';
 import type { ScreensResult } from './screens.js';
 
@@ -18,6 +22,8 @@ export type CliDeps = {
   runScreens?: (o: { outDir?: string }) => Promise<ScreensResult[]>;
   /** Loaded lazily too: the real-input controls check (scripts/hal/controls.ts). */
   runControlsCheck?: () => Promise<ControlCheck[]>;
+  /** Injected clock for the stored-state commands (tell, notes, approve, spend). */
+  now?: () => Date;
 };
 
 class Exit extends Error {
@@ -47,6 +53,9 @@ function printReport(r: ScoreReport<unknown>) {
   if (r.hardFailures.length) console.log(`hard failures: ${r.hardFailures.join('; ')}`);
 }
 
+/** Game slugs among scorer names: a scorer that is another game's second scorer (gearhold-play) is not a game. */
+const gameSlugs = (names: string[]) => names.filter((n) => !names.some((g) => g !== n && scorersFor(g).includes(n)));
+
 /** Runs the CLI and returns its exit code. */
 export async function main(argv: string[], deps: CliDeps): Promise<number> {
   try {
@@ -58,9 +67,14 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
   }
 }
 
-async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck }: CliDeps): Promise<number> {
+async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck, now }: CliDeps): Promise<number> {
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
+  // Game slugs, not scorer names: gearhold-play is Gearhold's second scorer, not a game (tell --game, Run now, run --game).
+  const games = gameSlugs(Object.keys(scorers));
+  if (isStoreCommand(command)) return runStoreCommand(command, rest, { halDir, now, games });
+  if (isOpsCommand(command)) return runOpsCommand(command, rest, { halDir, games });
+  if (isRunCommand(command)) return runRunCommand(command, rest, { halDir, games, ...(now ? { now } : {}) });
   // Numeric flags are the union of every registered scorer's default keys; the chosen game then rejects the ones it lacks.
   // Flag names are kebab-case (seedBase -> --seed-base).
   const flag = (k: string) => k.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
@@ -196,6 +210,6 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
       return res.keep ? 0 : 2;
     }
     default:
-      return fail('usage: npm run hal -- <score|baseline|check|status|screens|controls> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
+      return fail('usage: npm run hal -- <score|baseline|check|status|screens|controls|run|stop|undo|tell|notes|approve|spend|serve|setup|install|uninstall> [--game <slug>] [--<key> N ...] [--json] [--change "..."] [--target <measure>] [--out dir]');
   }
 }

@@ -3,7 +3,7 @@
 // Output: <outDir>/<game>/<n>.png (1-based) and <outDir>/<game>/errors.json. Local builds only (127.0.0.1).
 //   A browser that can't launch throws "browser unavailable: ...".
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Browser, Page } from 'playwright';
 import { closeAll, launchBrowser, newHalContext, repo, serveGames, type HalContext, type StaticServer } from './browser.js';
 
@@ -103,7 +103,8 @@ const FLOWS: Record<string, FlowFn> = {
 };
 
 /** Runs every game's flow in a fresh phone-size page; returns the shots and console errors per game. */
-export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: string } = {}): Promise<ScreensResult[]> {
+/** `games` limits the run to those games (default: all). */
+export async function runScreens({ outDir = DEFAULT_SCREENS_DIR, games }: { outDir?: string; games?: string[] } = {}): Promise<ScreensResult[]> {
   // The per-game folders under outDir are deleted first, so never aim this at the repo root or the games' own sources.
   const inGames = relative(join(repo, 'games'), resolve(outDir));
   if (resolve(outDir) === resolve(repo) || (inGames !== '..' && !inGames.startsWith('..' + sep) && !isAbsolute(inGames)))
@@ -113,7 +114,7 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: st
     server = await serveGames();
     browser = await launchBrowser();
     const results: ScreensResult[] = [];
-    for (const [game, flowFn] of Object.entries(FLOWS)) {
+    for (const [game, flowFn] of Object.entries(FLOWS).filter(([g]) => !games || games.includes(g))) {
       const dir = join(outDir, game);
       await rm(dir, { recursive: true, force: true });
       await mkdir(dir, { recursive: true });
@@ -147,6 +148,38 @@ export async function runScreens({ outDir = DEFAULT_SCREENS_DIR }: { outDir?: st
     }
     return results;
   } finally {
+    await closeAll(browser, server);
+  }
+}
+
+/** History-shot settings: phone portrait at device scale 1, JPEG quality 70, so a night's images stay small in git. */
+export const HISTORY_SHOT = { width: 390, height: 844, deviceScaleFactor: 1, quality: 70 } as const;
+
+/**
+ * Hal's `shoot` port: one JPEG of `game` in gameplay (the flow's second shot, as in runScreens), served from the tree at
+ * `rootDir` (a worktree), written to `outPath`. Throws when the game has no flow, the browser is unavailable, or the flow
+ * fails before gameplay.
+ */
+export async function shootGame(rootDir: string, game: string, outPath: string): Promise<void> {
+  const flowFn = Object.hasOwn(FLOWS, game) ? FLOWS[game]! : undefined;
+  if (!flowFn) throw new Error(`shoot: no screen flow for ${game}`);
+  let server: StaticServer | undefined, browser: Browser | undefined, hal: HalContext | undefined;
+  try {
+    server = await serveGames(rootDir);
+    browser = await launchBrowser();
+    hal = await newHalContext(browser, { contextOptions: { viewport: { width: HISTORY_SHOT.width, height: HISTORY_SHOT.height }, deviceScaleFactor: HISTORY_SHOT.deviceScaleFactor, hasTouch: true, isMobile: true } });
+    const page = await hal.context.newPage();
+    await mkdir(dirname(outPath), { recursive: true });
+    let n = 0, done = false;
+    const shoot: Shoot = async () => {
+      if (++n !== 2) return;
+      await page.screenshot({ path: outPath, type: 'jpeg', quality: HISTORY_SHOT.quality });
+      done = true;
+    };
+    try { await flowFn(page, server.origin, shoot, { reached: false, notes: [] }); } catch (e) { if (!done) throw e; }
+    if (!done) throw new Error(`shoot: ${game} flow ended before gameplay`);
+  } finally {
+    await hal?.context.close().catch(() => {});
     await closeAll(browser, server);
   }
 }

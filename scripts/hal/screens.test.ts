@@ -2,7 +2,8 @@ import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runScreens } from './screens.js';
+import { runScreens, shootGame } from './screens.js';
+import { repo } from './browser.js';
 
 describe('runScreens', () => {
   it('writes changing phone-size PNGs and an errors list for each game', async () => {
@@ -21,5 +22,22 @@ describe('runScreens', () => {
       expect(r.errors.filter((e) => e.startsWith('flow:')), r.game).toEqual([]);
       expect(Array.isArray(JSON.parse(await readFile(join(outDir, r.game, 'errors.json'), 'utf8')))).toBe(true);
     }
+  }, 120_000);
+});
+
+describe('shootGame', () => {
+  it('writes a 390x844 JPEG of each game in gameplay', async () => {
+    const outDir = await mkdtemp(join(tmpdir(), 'hal-shoot-'));
+    for (const game of ['gearhold', 'tidepool-pals', 'hyperline']) {
+      const out = join(outDir, game, 'after.jpg');
+      await shootGame(repo, game, out);
+      const buf = await readFile(out);
+      expect(buf.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+      // JPEG SOF0 frame header carries height then width.
+      const sof = buf.indexOf(Buffer.from([0xff, 0xc0]));
+      expect(sof, game).toBeGreaterThan(0);
+      expect([buf.readUInt16BE(sof + 5), buf.readUInt16BE(sof + 7)], game).toEqual([844, 390]);
+    }
+    await expect(shootGame(repo, 'nosuch', join(outDir, 'x.jpg'))).rejects.toThrow(/no screen flow/);
   }, 120_000);
 });
