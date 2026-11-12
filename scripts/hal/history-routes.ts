@@ -25,7 +25,7 @@ export function mountHistory(site: Hono, o: { repo: string; games: Array<{ slug:
     if (kind) filter.kind = kind;
     if (q.status === 'kept' || q.status === 'undone') filter.status = q.status;
     const nights = focus ? h.nights : filterHistory(h.nights, filter);
-    return c.html(renderHistory({ game: game.slug, title: game.title, nights, notes: h.notes, scores: h.scores, filter, ...(focus ? { focus } : {}) }), 200, { 'Content-Security-Policy': CSP, 'Cache-Control': 'no-store' });
+    return c.html(renderHistory({ game: game.slug, title: game.title, nights, notes: h.notes, scores: h.scores, filter, me: h.me, ...(focus ? { focus } : {}) }), 200, { 'Content-Security-Policy': CSP, 'Cache-Control': 'no-store' });
   };
   const safe = (fn: (c: Context) => Promise<Response> | Response) => async (c: Context) => { try { return await fn(c); } catch { return fail(c); } };
   site.get('/_history/:game', safe((c) => page(c, c.req.param('game')!)));

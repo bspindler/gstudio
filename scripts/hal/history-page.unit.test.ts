@@ -13,7 +13,7 @@ const nights: HistoryNight[] = [
   { night: '2026-11-11', entries: [hal({ pass: 'HAL-002', night: '2026-11-11', title: 'Bigger jump', status: { kind: 'undone', by: 'hal', reason: 'felt floaty', commit: 'c', version: '1.0.3' } }), brian()] },
   { night: '2026-11-10', entries: [hal()] },
 ];
-const base = { game: 'hyperline', title: 'Hyperline', nights, notes: {} as Record<string, string>, scores: [], filter: {} };
+const base = { game: 'hyperline', title: 'Hyperline', nights, notes: {} as Record<string, string>, scores: [], filter: {}, me: 'Brian' };
 
 describe('renderHistory', () => {
   it('has no no-referrer meta (the server header sets same-origin)', () => {
@@ -45,6 +45,35 @@ describe('renderHistory', () => {
   });
   it('Brian entries say Yours', () => {
     expect(renderHistory(base)).toMatch(/Yours[\s\S]*tweak colors/);
+  });
+  it('final fix 10: only the repo user\'s commits say Yours; anyone else shows their name, escaped', () => {
+    const html = renderHistory({ ...base, nights: [{ night: '2026-11-10', entries: [brian({ title: 'mine' }), brian({ sha: 'c'.repeat(40), author: '<i>Rob</i>', title: 'robs' })] }] });
+    expect(html).toMatch(/<span class="pill">Yours<\/span>[^]*mine/);
+    expect(html).toMatch(/<span class="pill">&lt;i&gt;Rob&lt;\/i&gt;<\/span>[^]*robs/);
+    expect(html).not.toContain('<i>Rob');
+    expect(html.match(/class="pill">Yours</g)).toHaveLength(1);
+    // no configured user.name: nobody is "Yours"
+    const none = renderHistory({ ...base, me: null });
+    expect(none).not.toContain('<span class="pill">Yours</span>');
+    expect(none).toContain('<span class="pill">Brian</span>');
+  });
+  it('final fix 2: a night with only a director\'s note shows, in order; a note above its entries; filters hide note-only nights', () => {
+    const notes = { '2026-11-12': 'Nothing merged for **hyperline**.', '2026-11-11': 'Night eleven note', '2026-11-09': 'Quiet <b>night</b>' };
+    const html = renderHistory({ ...base, notes });
+    const order = ['2026-11-12', '2026-11-11', '2026-11-10', '2026-11-09'].map((n) => html.indexOf(`· ${n}</h2>`));
+    for (const i of order) expect(i).toBeGreaterThan(-1);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html).toContain('Nothing merged for <strong>hyperline</strong>.');
+    expect(html).toContain('Quiet &lt;b&gt;night&lt;/b&gt;');
+    expect(html.indexOf('Night eleven note')).toBeLessThan(html.indexOf('Bigger jump'));
+    expect(html).not.toContain('Nothing here yet');
+    // only notes, no entries at all: still shown
+    expect(renderHistory({ ...base, nights: [], notes })).toContain('Nothing merged for <strong>hyperline</strong>.');
+    // a filter shows matching entries only, so note-only nights drop out
+    const filtered = renderHistory({ ...base, notes, filter: { q: 'jump' } });
+    expect(filtered).not.toContain('Nothing merged for');
+    expect(filtered).not.toContain('Quiet');
+    expect(filtered).toContain('Night eleven note');
   });
   it('permalink ids', () => {
     const html = renderHistory(base);

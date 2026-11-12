@@ -7,6 +7,8 @@ import { esc, noteHtml, pageHead } from './page-style.js';
 export type HistoryView = {
   game: string; title: string; nights: HistoryNight[]; notes: Record<string, string>; scores: ScoreRun[];
   filter: HistoryFilter; focus?: string;
+  /** The repo's `git config user.name`: a non-Hal commit by them says "Yours", anyone else's shows the author. */
+  me?: string | null;
 };
 
 const HISTORY_CSS = `
@@ -57,9 +59,10 @@ const shotUrl = (game: string, path: string | undefined): string | null => {
   return m ? `/_history/${encodeURIComponent(game)}/img/${m[1]}/${m[2]}` : null;
 };
 
-function entryHtml(game: string, e: HistoryEntry, focused: boolean): string {
+function entryHtml(game: string, e: HistoryEntry, focused: boolean, me?: string | null): string {
   if (e.type === 'brian') {
-    return `<article class="card entry"><div class="head"><span class="pill">Yours</span><span class="small muted">${esc(nightTitle(e.night))}</span></div><h3>${esc(e.title)}</h3></article>`;
+    const who = me && e.author === me ? 'Yours' : e.author || 'Someone';
+    return `<article class="card entry"><div class="head"><span class="pill">${esc(who)}</span><span class="small muted">${esc(nightTitle(e.night))}</span></div><h3>${esc(e.title)}</h3></article>`;
   }
   const st = e.status;
   const status =
@@ -119,7 +122,7 @@ function filterForm(game: string, f: HistoryFilter): string {
   return `<form class="filter card stack" method="get" action="/_history/${esc(encodeURIComponent(game))}">
 <label class="label" for="q">Search</label>
 <input type="text" id="q" name="q" value="${esc(f.q ?? '')}" autocomplete="off">
-<div class="grid2"><div><label class="label" for="kind">Kind</label><select id="kind" name="kind">${opt('', 'Any', f.kind)}${KINDS.map((k) => opt(k, k, f.kind)).join('')}${opt('brian', 'Yours', f.kind)}</select></div>
+<div class="grid2"><div><label class="label" for="kind">Kind</label><select id="kind" name="kind">${opt('', 'Any', f.kind)}${KINDS.map((k) => opt(k, k, f.kind)).join('')}${opt('brian', "Not Hal's", f.kind)}</select></div>
 <div><label class="label" for="status">Status</label><select id="status" name="status">${opt('', 'Any', f.status)}${opt('kept', 'Kept', f.status)}${opt('undone', 'Undone', f.status)}</select></div></div>
 <button class="primary go" type="submit">Filter</button>
 </form>`;
@@ -131,14 +134,20 @@ export function renderHistory(v: HistoryView): string {
   let body: string;
   if (v.focus) {
     const e = v.nights.flatMap((n) => n.entries).find((x) => x.type === 'hal' && x.pass === v.focus);
-    body = `<section>${e ? entryHtml(v.game, e, true) : ''}<p class="small"><a class="perma" href="/_history/${esc(encodeURIComponent(v.game))}">See the full history</a></p></section>`;
+    body = `<section>${e ? entryHtml(v.game, e, true, v.me) : ''}<p class="small"><a class="perma" href="/_history/${esc(encodeURIComponent(v.game))}">See the full history</a></p></section>`;
   } else {
-    const nights = v.nights.map((n, i) => {
+    // Unfiltered, a night with only a director's note (nothing merged for this game) shows too: entry nights and
+    // note nights together, newest first. A filter shows matching entries only, so note-only nights drop out.
+    const filtered = !!(v.filter.q || v.filter.kind || v.filter.status);
+    const byNight = new Map(v.nights.map((n) => [n.night, n]));
+    if (!filtered) for (const night of Object.keys(v.notes)) if (!byNight.has(night) && v.notes[night]!.trim()) byNight.set(night, { night, entries: [] });
+    const all = [...byNight.values()].sort((a, b) => (a.night < b.night ? 1 : a.night > b.night ? -1 : 0));
+    const nights = all.map((n, i) => {
       const note = v.notes[n.night]?.trim() ? noteHtml(v.notes[n.night]!) : '';
       const noteBlock = !note ? ''
         : i < 3 ? `<div class="card note">${note}</div>`
         : `<details class="fold note-fold"><summary>Hal's note</summary>${note}</details>`;
-      return `<section class="night"><h2>${esc(nightTitle(n.night))}</h2>${noteBlock}${n.entries.map((e) => entryHtml(v.game, e, false)).join('\n')}</section>`;
+      return `<section class="night"><h2>${esc(nightTitle(n.night))}</h2>${noteBlock}${n.entries.map((e) => entryHtml(v.game, e, false, v.me)).join('\n')}</section>`;
     }).join('\n');
     body = `${chart(v.scores)}${filterForm(v.game, v.filter)}${nights || '<p class="empty muted">Nothing here yet.</p>'}`;
   }

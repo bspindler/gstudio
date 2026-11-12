@@ -3,18 +3,30 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { buildHistory, type CommitRecord, type HistoryNight } from '@studio/core/hal';
-import { gitEnv } from './git.js';
+import { GIT_TIMEOUT_MS, gitEnv } from './git.js';
 
 const exec = promisify(execFile);
 const MAX = 64 * 1024 * 1024;
 const HAL_MAIN = 'refs/hal/main';
 
 export type ScoreRun = { night: string; run: string; scorers: Record<string, { fitness: number; measures: Record<string, number> }> };
-export type GameHistory = { nights: HistoryNight[]; notes: Record<string, string>; scores: ScoreRun[] };
+/** `me`: the repo's `git config user.name` (whose commits are "Yours"), or null when it is not set. */
+export type GameHistory = { nights: HistoryNight[]; notes: Record<string, string>; scores: ScoreRun[]; me: string | null };
 
 const git = async (repo: string, args: string[]): Promise<Buffer> =>
-  (await exec('git', args, { cwd: repo, env: gitEnv(), encoding: 'buffer', maxBuffer: MAX })).stdout;
+  (await exec('git', args, { cwd: repo, env: gitEnv(), encoding: 'buffer', maxBuffer: MAX, timeout: GIT_TIMEOUT_MS })).stdout;
 const ok = (repo: string, args: string[]) => git(repo, args).then(() => true, () => false);
+
+const userNames = new Map<string, Promise<string | null>>();
+/** The repo's configured `user.name`, read once per repo for the life of the process; null when unset or on a failure. */
+export function repoUserName(repo: string): Promise<string | null> {
+  let p = userNames.get(repo);
+  if (!p) {
+    p = git(repo, ['config', '--get', 'user.name']).then((b) => b.toString('utf8').trim() || null, () => null);
+    userNames.set(repo, p);
+  }
+  return p;
+}
 
 /** Whether refs/hal/main exists, and the tip to read: it if it contains HEAD, else HEAD. Probed once per call. */
 export async function refState(repo: string): Promise<{ hasHalMain: boolean; tip: string }> {
@@ -75,7 +87,7 @@ export async function readGameHistory(repo: string, game: string, tzOffsetMinute
     if (file === 'note.md') notes[night] = text;
     else scores.push(...parseScores(night, text));
   }
-  return { nights, notes, scores };
+  return { nights, notes, scores, me: await repoUserName(repo) };
 }
 
 /** The committed bytes of one history image at the tip, or null (missing, a symlink, or not a regular file). */

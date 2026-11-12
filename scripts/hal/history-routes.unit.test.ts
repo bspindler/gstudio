@@ -162,6 +162,49 @@ describe('tip choice and git failures', () => {
   });
 });
 
+describe('final fixes 2 and 10: note-only nights, and whose commit is "Yours"', () => {
+  let r: string;
+  beforeAll(() => {
+    r = mkdtempSync(join(tmpdir(), 'hal-note-'));
+    const at = (date: string, name: string, msg: string) => {
+      const env = { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date, GIT_AUTHOR_NAME: name, GIT_COMMITTER_NAME: name };
+      git(r, env, 'add', '-A');
+      git(r, env, 'commit', '-q', '--allow-empty', '-m', msg);
+    };
+    git(r, {}, 'init', '-q', '-b', 'main');
+    git(r, {}, 'config', 'user.name', 'Brian Owner');
+    put(r, 'games/hyperline/a.js', '1');
+    at('2026-11-08T12:00:00Z', 'Brian Owner', 'brian tweak');
+    put(r, 'games/hyperline/a.js', '2');
+    at('2026-11-08T13:00:00Z', 'Rob "R" & Co', 'rob tweak'); // git strips < and > from names; & and " must still be escaped
+    // Night of 2026-11-10: Hal merged nothing for hyperline; only the director's note is committed.
+    put(r, 'docs/hal/history/hyperline/2026-11-10/note.md', '# hyperline, night of Nov 10\n\nNo change cleared the bar **tonight**.\n');
+    at('2026-11-11T06:00:00Z', 'Hal', "docs(hal): director's note for 2026-11-10");
+  });
+  afterAll(() => rmSync(r, { recursive: true, force: true }));
+  const page = async (q = '') => {
+    const s = new Hono();
+    mountHistory(s, { repo: r, games: [{ slug: 'hyperline', title: 'Hyperline' }] });
+    const res = await s.request(`/_history/hyperline${q}`);
+    expect(res.status).toBe(200);
+    return res.text();
+  };
+  it('a night with note.md and no commits for the game shows its note, above the older nights', async () => {
+    const html = await page();
+    expect(html).toContain('No change cleared the bar <strong>tonight</strong>.');
+    expect(html).toContain('· 2026-11-10</h2>');
+    expect(html.indexOf('· 2026-11-10</h2>')).toBeLessThan(html.indexOf('· 2026-11-08</h2>'));
+    expect(html).not.toContain('director&#39;s note for');
+    expect(await page('?q=tweak')).not.toContain('No change cleared the bar');
+  });
+  it('only the configured user.name is "Yours"; another author shows by name, escaped', async () => {
+    const html = await page();
+    expect(html).toMatch(/<span class="pill">Yours<\/span>[^]*brian tweak/);
+    expect(html).toContain('<span class="pill">Rob &quot;R&quot; &amp; Co</span>');
+    expect(html.match(/class="pill">Yours</g)).toHaveLength(1);
+  });
+});
+
 describe('not part of the Pages build or a flagless shelf', () => {
   it('pagesIndexHtml output has no "_history"', () => {
     const html = pagesIndexHtml([{ slug: 'hyperline', title: 'Hyperline' } as never]);
