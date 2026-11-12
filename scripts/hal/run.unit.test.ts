@@ -344,6 +344,18 @@ describe('no key anywhere', () => {
   });
 });
 
+describe('models per role', () => {
+  it('the implementer runs on implementerModel; the planner and director on model', async () => {
+    await runNight(opts(), deps({ model: 'plan-model', implementerModel: 'build-model' }));
+    const byRole = Object.fromEntries(calls.map((c) => [c.role, c.model]));
+    expect(byRole).toMatchObject({ planner: 'plan-model', implementer: 'build-model', director: 'plan-model' });
+  }, 60_000);
+  it('without implementerModel the implementer uses model', async () => {
+    await runNight(opts(), deps({ model: 'one-model' }));
+    expect(new Set(calls.map((c) => c.model))).toEqual(new Set(['one-model']));
+  }, 60_000);
+});
+
 describe('push', () => {
   it('ci:local fails once and passes on a re-run (flaky): pushed, with a warning naming the first failure', async () => {
     let n = 0;
@@ -716,8 +728,10 @@ describe('cli flags', () => {
   it('defaults: manual, subscription, push on, 6 tickets, all games', () => {
     expect(parseRunArgs([], games)).toEqual({ games, kinds: [], reportOnly: false, maxTickets: 6, trigger: 'manual', billing: 'subscription', push: true });
   });
-  it('--nightly is API billing with push; --billing, --game, --kind, --max-tickets, --no-push, --report-only', () => {
-    expect(parseRunArgs(['--nightly'], games)).toMatchObject({ trigger: 'nightly', billing: 'api', push: true });
+  it('--nightly bills the subscription first, with push (--billing api forces credits); --billing, --game, --kind, --max-tickets, --no-push, --report-only', () => {
+    expect(parseRunArgs(['--nightly'], games)).toMatchObject({ trigger: 'nightly', billing: 'subscription', push: true });
+    expect(parseRunArgs(['--nightly', '--billing', 'api'], games)).toMatchObject({ trigger: 'nightly', billing: 'api' });
+    expect(parseRunArgs([], games)).toMatchObject({ trigger: 'manual', billing: 'subscription' });
     expect(parseRunArgs(['--billing', 'subscription', '--game', 'gearhold', '--report-only'], games)).toMatchObject({ games: ['gearhold'], billing: 'subscription', reportOnly: true });
     expect(parseRunArgs(['--kind', 'fix', '--kind', 'polish', '--max-tickets', '2', '--no-push'], games)).toMatchObject({ kinds: ['fix', 'polish'], maxTickets: 2, push: false });
     expect(() => parseRunArgs(['--game', 'nope'], games)).toThrow(/unknown game/);

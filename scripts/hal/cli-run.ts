@@ -25,7 +25,10 @@ export type RunCommand = (typeof RUN_COMMANDS)[number];
 export const isRunCommand = (c: string | undefined): c is RunCommand => !!c && (RUN_COMMANDS as readonly string[]).includes(c);
 
 export const DEFAULT_MAX_TICKETS = 6;
+/** Planner and director (about 12% of spend; planning needs judgment). Override with HAL_MODEL. */
 export const DEFAULT_MODEL = 'opus';
+/** The implementer (about 88% of spend; fix rounds and Hal's checks catch weaker builds). Override with HAL_IMPLEMENTER_MODEL. */
+export const DEFAULT_IMPLEMENTER_MODEL = 'sonnet';
 const KINDS: readonly TicketKind[] = ['fix', 'tuning', 'polish', 'feature'];
 
 export type RunCmdDeps = {
@@ -51,7 +54,9 @@ export function parseRunArgs(rest: string[], games: string[]): RunOptions {
   });
   if (positionals.length) throw new Error(`run takes no positional arguments (got ${positionals.join(' ')})`);
   const nightly = values.nightly === true;
-  let billing: Billing = nightly ? 'api' : 'subscription';
+  // Every run bills the subscription first (nightly too: Brian's call, 2026-11-12); run.ts falls back to the API
+  // only when the subscription hits a usage limit. --billing api forces credits.
+  let billing: Billing = 'subscription';
   if (values.billing !== undefined) {
     if (values.billing !== 'api' && values.billing !== 'subscription') throw new Error('--billing must be api or subscription');
     billing = values.billing;
@@ -101,7 +106,8 @@ export function realRunDeps(repo: string, halDir: string): RunDeps {
     .map((v) => v?.trim()).filter((v): v is string => !!v))];
   const claudeDeps: ClaudeDeps = { spawn: (cmd, args, o) => spawn(cmd, args, o), env: process.env, now: Date.now, ...(apiKey ? { apiKey } : {}) };
   return {
-    repo, halDir, now: () => new Date(), model: env.HAL_MODEL?.trim() || DEFAULT_MODEL, secrets, hasApiKey: !!apiKey,
+    repo, halDir, now: () => new Date(), model: env.HAL_MODEL?.trim() || DEFAULT_MODEL,
+    implementerModel: env.HAL_IMPLEMENTER_MODEL?.trim() || DEFAULT_IMPLEMENTER_MODEL, secrets, hasApiKey: !!apiKey,
     // R24: every role, both billings, gets the repo's CLAUDE.md the same way (--bare skips auto-discovery).
     ...(existsSync(join(repo, 'CLAUDE.md')) ? { appendSystemPromptFile: join(repo, 'CLAUDE.md') } : {}),
     // One spawn per call; run.ts reserves spend first and does the subscription -> API fallback itself.
