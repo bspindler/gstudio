@@ -6,6 +6,8 @@ Keep each game's identity in view. Say what makes each game itself, and whether 
 
 ## The run's results
 
+`changes` are the tickets that were built and checked. `planned` are tickets the planner made that were not built tonight: on a report-only run (`reportOnly` is set) that is all of them, by design, so say what Hal would have done rather than calling the night empty.
+
 ```
 {{results}}
 ```

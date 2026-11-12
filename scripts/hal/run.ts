@@ -144,6 +144,8 @@ export type RunReport = {
   changes: CandidateResult[];
   /** Liability tickets awaiting Brian's approval (by `liability`). */
   calls: Ticket[];
+  /** Tickets planned but not built: all of them on a report-only run, else the ones past --max-tickets. */
+  planned: Ticket[];
   /** The director's replies applied to notes.json. */
   notes: NoteReply[];
   pushed: boolean;
@@ -311,6 +313,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   };
   const changes: CandidateResult[] = [];
   let calls: Ticket[] = [];
+  let planned: Ticket[] = [];
   const replies: NoteReply[] = [];
   let scores: Record<string, ScoreReport<unknown>> = {};
   let finalScores: Record<string, ScoreReport<unknown>> = {};
@@ -487,6 +490,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     const split = splitLiability(tickets, await store.readApprovals());
     calls = split.calls;
     const build = split.build.slice(0, o.maxTickets);
+    planned = !reportOnly && ledger ? split.build.slice(build.length) : split.build;
     if (split.build.length > build.length) log(`--max-tickets ${o.maxTickets}: ${split.build.length - build.length} ticket(s) left for another run`);
     await writeData('tickets.json', { build, calls });
 
@@ -567,7 +571,10 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     const notesNow = notesInScope(await store.readNotes(), o.games);
     const stagnation = stagnationText(o.games, ledger);
     const directorText = await ask('director', renderPrompt(loadPrompt('director'), {
-      results: J(R.deep({ changes: changes.map(brief), calls, warnings })),
+      results: J(R.deep({
+        ...(reportOnly ? { reportOnly: 'this run was report-only: it planned but built nothing, by design' } : {}),
+        changes: changes.map(brief), planned: planned.map(plannedBrief), calls, warnings,
+      })),
       notes: J(notesNow.map(noteForPrompt)),
       stagnation,
     }), mainDir, DIRECTOR_TIMEOUT_MS);
@@ -647,7 +654,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
     }
     const report: RunReport = {
       runId, night, startedAt: startedAt.toISOString(), endedAt, trigger: o.trigger, billing: o.billing, billingEnded: st.billing, spend: st.spend, games,
-      changes, calls, notes: replies, pushed: st.pushed, warnings,
+      changes, calls, planned, notes: replies, pushed: st.pushed, warnings,
       ...(st.pushSkippedReason ? { pushSkippedReason: st.pushSkippedReason } : {}),
       ...(st.capReached ? { capReached: true } : {}),
     };
@@ -783,6 +790,8 @@ function parseDirector(text: string | null): Director | null {
   return { note: v.note, perGame, noteReplies };
 }
 
+const plannedBrief = (t: Ticket) => ({ id: t.id, game: t.game, kind: t.kind, title: t.title });
+
 const line = (r: CandidateResult) =>
   `- ${r.pass || '(not built)'} ${r.ticket.kind}(${r.ticket.game}): ${oneLine(r.ticket.title)}: **${r.verdict}**${r.version ? ` (${r.version})` : ''}${r.reasons.length ? ` (${oneLine(r.reasons.join('; ')).slice(0, 300)})` : ''}`;
 
@@ -823,6 +832,7 @@ function reportMarkdown(r: RunReport, note: string): string {
     '',
     r.changes.length ? r.changes.map(line).join('\n') : 'None.',
   ];
+  if (r.planned.length) parts.push('', '## Planned, not built', '', ...r.planned.map((t) => `- ${t.id} ${t.kind}(${t.game}): ${oneLine(t.title)}. ${oneLine(t.why).slice(0, 300)}`));
   if (r.calls.length) parts.push('', '## Your calls', '', ...r.calls.map((t) => `- ${t.game}: ${oneLine(t.title)}. Needs your approval of: ${oneLine(t.liability ?? '')} (\`npm run hal -- approve "${oneLine(t.liability ?? '')}"\`)`));
   if (r.notes.length) parts.push('', '## Your notes', '', ...r.notes.map((n) => `- ${n.id} (${n.status}): ${n.reply}`));
   if (r.warnings.length) parts.push('', '## Warnings', '', ...r.warnings.map((w) => `- ${oneLine(w).slice(0, 500)}`));
