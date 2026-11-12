@@ -40,3 +40,15 @@ Changes:
 Changes:
 - HAL-017 feature(tidepool-pals): Tidepool Pals opens on the reef map with Continue at your next level: **merged** (0.5.0)
 - HAL-019 tuning(tidepool-pals): Ease the Tidepool Pals levels the scorer still finds walling: **merged** (0.5.0)
+
+## Run run-2026-11-12T19-02-22-946Z
+
+**Identity:** calm reef, hand-made boards, finishes that land close.
+
+- **Merged, HAL-020:** layout-only fix. The board and its level label are now centred as a group under the HUD. Tile art, HUD and logic are untouched. **The visual result is unconfirmed, so please look on a tall phone.**
+- **Dropped, HAL-024:** easing goals on L13, L21 and L29 gave +0.45 fitness but cost 2.55 tension, and easing L11 made it worse. Easing has reached its useful limit.
+- **Next:** look at layout on the levels that are still unfinished, rather than lowering their goals.
+
+Changes:
+- HAL-020 polish(tidepool-pals): Close the empty band between the goal bar and the board on tall phones: **merged** (0.5.0)
+- HAL-024 tuning(tidepool-pals): Ease goal counts on the Tidepool levels where the scorer falls short of goals: **discarded** (0.5.0) (tidepool-pals: no real gain: 0.45 < 0.5; tidepool-pals: tension regressed 2.55 (> 1))

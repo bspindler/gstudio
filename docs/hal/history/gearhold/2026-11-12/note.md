@@ -44,3 +44,18 @@ Changes:
 Changes:
 - HAL-015 feature(gearhold): Gearhold mid-level checkpoint: respawn at the gear key, not the level start: **merged** (0.3.0)
 - HAL-018 feature(gearhold): Add Gearhold level 4 built around one new clockwork hazard: **discarded** (0.3.0) (implementer blocked: Protected test scripts/hal/cli.unit.test.ts:30 assumes exactly 3 Gearhold levels, so any fourth level fails it, and scripts/hal/** may not be edited. The ticket says the level-count contract is resolved, but this test still pins 3. It needs updating in Hal's own code (count take)
+
+## Run run-2026-11-12T19-02-22-946Z
+
+**Identity:** a citadel of attrition, with keys, doors and threats.
+
+- **Dropped, HAL-021 (crystal):** contract mismatch, so it was never measured.
+- **Dropped, HAL-022 (exit guard):** stayed in band, but tension stayed at 0. The bot still wins with more than 35 health.
+- **Dropped, HAL-023 (backtracking):** stopped because it targeted the wrong level. Level 1, Terrace of Dials, is too fast at 15.4s.
+- **Next:** lengthen Terrace of Dials with a guarded detour, which should help pace and tension together. Then retry the Kiln Heart crystal with a tighter contract.
+- **Level 4:** still waits on the pinned 3-level test (N-001).
+
+Changes:
+- HAL-021 tuning(gearhold): Put a repair crystal on the final approach of the level the play-bot can't win: **discarded** (implementer output does not match the contract)
+- HAL-022 tuning(gearhold): Station one existing enemy by the exit arch on the easiest Gearhold level: **discarded** (0.3.0) (gearhold-play: no real gain: 0.00 < 0.5)
+- HAL-023 tuning(gearhold): Trim backtracking on the Gearhold level that misses its pace band: **discarded** (implementer blocked: The ticket targets the wrong level and direction: level 1 (Terrace of Dials) is too fast at 15.4s, not a slow level 3. A new ticket should lengthen level 1.)

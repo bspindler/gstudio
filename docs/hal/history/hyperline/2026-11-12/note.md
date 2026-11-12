@@ -30,3 +30,13 @@ Changes:
 
 Changes:
 - HAL-016 feature(hyperline): Hyperline: start an endless run from any sector you've already reached: **merged** (0.4.0)
+
+## Run run-2026-11-12T19-02-22-946Z
+
+**Identity:** neon, synth, split-second dodging.
+
+- **Merged, HAL-025:** a near-miss spark and a two-note blip, both made in code. It's softer under reduced motion, and the sim is unchanged. This keeps to the identity and follows N-002's push to keep improving healthy games.
+- **Next:** a bolder on-identity addition, such as a new sector mechanic, building on SLOT GATES.
+
+Changes:
+- HAL-025 polish(hyperline): Hyperline near-miss spark: a neon flash and synth blip when you just clear a hit: **merged** (0.4.0)
