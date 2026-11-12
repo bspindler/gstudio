@@ -16,7 +16,7 @@
 // (vitest, tsc, tsx) are resolved by Hal under <repo>/node_modules, never from the worktree.
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -207,6 +207,8 @@ const msg = (e: unknown) => String((e as Error)?.message ?? e).trim();
 const oneLine = (s: string) => s.replace(/\s*[\r\n]+\s*/g, ' ').trim();
 const GAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const newNonce = () => randomBytes(16).toString('hex');
+/** The bytes of <dir>/.git (a worktree's gitdir pointer), or a marker if it is not a readable file. */
+const readGitPtr = (dir: string): string => { try { return readFileSync(join(dir, '.git'), 'utf8'); } catch (e) { return `\0unreadable ${(e as NodeJS.ErrnoException).code ?? ''}`; } };
 function scriptsOf(packageJson: string): Record<string, string> {
   try { return (JSON.parse(packageJson) as { scripts?: Record<string, string> }).scripts ?? {}; } catch { return {}; }
 }
@@ -324,12 +326,23 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       ctx.budget.record('implementer', billing, usd);
       res.costUsd = Math.round((res.costUsd + (usd ?? (billing === 'api' ? slice : 0))) * 1e6) / 1e6;
     };
+    // The worktree's .git is a gitdir pointer: an implementer that rewrote it would aim Hal's next git call in this
+    // tree at a config of its own (a filter runs code). Compared, and restored before any git runs, right after the call.
+    const gitPtr = readGitPtr(wt.dir);
+    const checkGitPtr = () => {
+      if (readGitPtr(wt.dir) === gitPtr) return;
+      rmSync(join(wt.dir, '.git'), { recursive: true, force: true });
+      writeFileSync(join(wt.dir, '.git'), gitPtr);
+      discard('tampered .git');
+    };
     let out: Awaited<ReturnType<CandidateCtx['claude']>>;
     try { out = await ctx.claude(call, slice); } catch (e) {
       // We cannot know whether anything was spawned, so book the call as unknown cost (the full slice on the API).
       book(call.billing, null);
+      checkGitPtr();
       return discard(`implementer call failed: ${msg(e)}`);
     }
+    checkGitPtr();
     book(call.billing, out.first.costUsd);
     if (out.retry) book('api', out.retry.costUsd);
     const final = out.retry ?? out.first;

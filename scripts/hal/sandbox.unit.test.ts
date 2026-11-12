@@ -99,3 +99,12 @@ describe.runIf(sandboxAvailable())('runIsolated under sandbox-exec (darwin)', ()
     expect(t.timedOut).toBe(true);
   });
 });
+
+describe('sandboxProfile: paths that do not exist yet (fix round 2)', () => {
+  it('a not-yet-existing path also gets the real spelling of its nearest existing ancestor', () => {
+    const d = mkdtempSync(join(tmpdir(), 'hal-sbx-'));
+    const prof = sandboxProfile({ writable: [], denyRead: [], denyWrite: [join(d, 'node_modules', 'x')] });
+    expect(prof).toContain(JSON.stringify(join(realpathSync(d), 'node_modules', 'x')));
+    expect(prof).toContain(JSON.stringify(join(d, 'node_modules', 'x')));
+  });
+});

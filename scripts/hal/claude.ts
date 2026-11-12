@@ -51,6 +51,9 @@ export const NODE_MODULES_WRITE_DENY: string[] = ['Edit', 'Write', 'NotebookEdit
   `${t}(node_modules/**)`, `${t}(./node_modules/**)`, `${t}(**/node_modules/**)`, `${t}(node_modules)`, `${t}(**/node_modules)`,
 ]);
 
+/** Every edit tool, for `.git` at the cwd and at any depth, and anything under one. */
+export const GIT_WRITE_DENY: string[] = ['Edit', 'Write', 'NotebookEdit'].flatMap((t) => [`${t}(.git)`, `${t}(./.git)`, `${t}(**/.git)`, `${t}(**/.git/**)`]);
+
 export const ALWAYS_DISALLOWED: string[] = [
   'WebFetch', 'WebSearch', 'Bash(git push:*)', 'Bash(git remote:*)', 'Bash(curl:*)', 'Bash(wget:*)',
   'Bash(npm install:*)', 'Bash(npm i:*)', 'Bash(npx:*)', 'Bash(gh:*)',
@@ -60,6 +63,8 @@ export const ALWAYS_DISALLOWED: string[] = [
   // A worktree's node_modules entries are symlinks into <repo>/node_modules (Hal's tools, and Brian's checkout): no
   // edit may go through them. Reads stay allowed (the implementer may look at library types).
   ...NODE_MODULES_WRITE_DENY,
+  // A worktree's .git is its gitdir pointer (and a repo's .git its config and hooks): no edit tool may touch it.
+  ...GIT_WRITE_DENY,
 ];
 
 /**

@@ -316,7 +316,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   const warn = (s: string) => { const r = R.str(s); warnings.push(r); log(`warning: ${r}`); };
   const st = {
     billing: o.billing, spend: { api: 0, subscription: 0 }, capReached: false, pushed: false,
-    pushSkippedReason: undefined as string | undefined, noKeyWarned: false, spendBroken: false, trustRoot: false,
+    pushSkippedReason: undefined as string | undefined, noKeyWarned: false, spendBroken: false, trustRoot: false, spendSeq: 0,
   };
   const changes: CandidateResult[] = [];
   let calls: Ticket[] = [];
@@ -333,25 +333,37 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
   // Budget (R19, reserve then settle): before every spawn a pending entry of the full slice is appended and saved,
   // synchronously, under the lock; afterwards that same entry is settled with the real cost (unknown/threw: the slice
   // stays). A crash between the two leaves the slice booked.
+  const outstanding: { id: string; day: string; role: string; billing: Billing }[] = [];
   const budget = {
     slice(role: string): number {
       if (st.spendBroken) return 0;
       try { return sliceFor(store.loadSpendTodaySync(), role); } catch (e) { st.spendBroken = true; warn(`spend.json unreadable, no more Claude calls: ${errMsg(e)}`); return 0; }
     },
     reserve(role: string, billing: Billing): void {
-      try { store.saveSpendDaySync(reserveCall(store.loadSpendTodaySync(), { run: runId, role, billing, at: d.now().toISOString() })); } catch (e) {
+      try {
+        const today = store.loadSpendTodaySync();
+        const id = `${runId}#${++st.spendSeq}`;
+        store.saveSpendDaySync(reserveCall(today, { id, run: runId, role, billing, at: d.now().toISOString() }));
+        outstanding.push({ id, day: today.day, role, billing });
+      } catch (e) {
         st.spendBroken = true;
         warn(`could not reserve spend, no more Claude calls: ${errMsg(e)}`);
         throw new Error('spend reservation failed'); // never spawn an unbooked call
       }
     },
-    /** Settles the newest pending entry for this run, role and billing (the candidate port's `record` lands here). */
+    /**
+     * Settles this run's newest outstanding reservation for the role and billing (calls are sequential; the candidate
+     * port's `record` lands here), by its id, in the day it was reserved (a call may cross local midnight).
+     */
     record(role: string, billing: Billing, usd: number | null): void {
+      let i = -1;
+      for (let j = outstanding.length - 1; j >= 0; j--) if (outstanding[j]!.role === role && outstanding[j]!.billing === billing) { i = j; break; }
+      if (i < 0) { warn(`spend: no reservation to settle for ${role} (${billing})`); return; }
+      const r = outstanding.splice(i, 1)[0]!;
       try {
-        const next = settleCall(store.loadSpendTodaySync(), { run: runId, role, billing, at: d.now().toISOString(), usd });
+        const next = settleCall(store.loadSpendDaySync(r.day), r.id, usd);
         store.saveSpendDaySync(next);
-        const settled = [...next.calls].reverse().find((c) => c.run === runId && c.role === role && c.billing === billing && !c.pending);
-        st.spend[billing] = round(st.spend[billing] + (settled?.usd ?? 0));
+        st.spend[billing] = round(st.spend[billing] + next.calls.find((c) => c.id === r.id)!.usd);
       } catch (e) { st.spendBroken = true; warn(`could not record spend, no more Claude calls: ${errMsg(e)}`); }
     },
   };

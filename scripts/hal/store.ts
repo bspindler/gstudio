@@ -162,6 +162,10 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
       const days = readJsonSync<SpendDay[]>(p('spend.json'), [], isArr);
       return dayFor(days.find((d) => d.day === dayFor(undefined, now()).day), now());
     },
+    /** A given day's ledger (YYYY-MM-DD), synchronously: a reservation is settled in the day it was made. */
+    loadSpendDaySync(day: string): SpendDay {
+      return readJsonSync<SpendDay[]>(p('spend.json'), [], isArr).find((d) => d.day === day) ?? { day, calls: [] };
+    },
     /** saveSpendDay, synchronously: the record is on disk before the next Claude call can start. */
     saveSpendDaySync(day: SpendDay): void {
       const days = [...readJsonSync<SpendDay[]>(p('spend.json'), [], isArr).filter((d) => d.day !== day.day), day].sort((a, b) => a.day.localeCompare(b.day));

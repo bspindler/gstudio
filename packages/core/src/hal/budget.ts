@@ -4,7 +4,7 @@ export type Billing = 'api' | 'subscription';
  * One Claude call. `pending` marks a reservation made before the call started (usd = the full slice); it is settled
  * with the real cost afterwards (settleCall). A crash leaves it pending, so the whole slice stays booked.
  */
-export type SpendCall = { run: string; role: string; billing: Billing; usd: number; at: string; pending?: boolean };
+export type SpendCall = { run: string; role: string; billing: Billing; usd: number; at: string; pending?: boolean; id?: string };
 /** `day` is YYYY-MM-DD in local time. */
 export type SpendDay = { day: string; calls: SpendCall[] };
 
@@ -45,26 +45,23 @@ export function dayFor(prev: SpendDay | undefined, now: Date): SpendDay {
   return prev && prev.day === day ? prev : { day, calls: [] };
 }
 
-/** Reserve-then-settle, step 1: appends `{..., usd: slice, pending: true}` before the call starts. */
-export function reserveCall(day: SpendDay, call: Omit<SpendCall, 'usd' | 'pending'>): SpendDay {
+/** Reserve-then-settle, step 1: appends `{..., id, usd: slice, pending: true}` before the call starts. `id` is the caller's. */
+export function reserveCall(day: SpendDay, call: Omit<SpendCall, 'usd' | 'pending'> & { id: string }): SpendDay {
   if (!Object.hasOwn(SLICES, call.role)) throw new Error(`unknown budget role: ${call.role}`);
+  if (day.calls.some((c) => c.id === call.id)) throw new Error(`duplicate spend id: ${call.id}`);
   return { ...day, calls: [...day.calls, { ...call, usd: sliceFor(day, call.role), pending: true }] };
 }
 
 /**
- * Step 2: settles the newest pending entry of this run, role and billing with the real cost. An unknown cost (null,
- * NaN, negative) keeps the reserved slice. With no pending entry to settle, the call is appended (recordCall).
+ * Step 2: settles the pending entry `id` (in the day it was reserved; the caller loads that day) with the real cost.
+ * An unknown cost (null, NaN, negative) keeps the reserved slice. Throws if `day` has no pending entry `id`.
  */
-export function settleCall(day: SpendDay, call: Omit<SpendCall, 'usd' | 'pending'> & { usd?: number | null }): SpendDay {
-  const known = typeof call.usd === 'number' && Number.isFinite(call.usd) && call.usd >= 0;
-  for (let i = day.calls.length - 1; i >= 0; i--) {
-    const c = day.calls[i]!;
-    if (c.pending && c.run === call.run && c.role === call.role && c.billing === call.billing) {
-      const calls = [...day.calls];
-      const { pending: _p, ...rest } = c;
-      calls[i] = { ...rest, usd: known ? (call.usd as number) : c.usd, at: call.at };
-      return { ...day, calls };
-    }
-  }
-  return recordCall(day, { run: call.run, role: call.role, billing: call.billing, at: call.at, ...(known ? { usd: call.usd as number } : {}) });
+export function settleCall(day: SpendDay, id: string, usd: number | null | undefined): SpendDay {
+  const i = day.calls.findIndex((c) => c.id === id && c.pending);
+  if (i < 0) throw new Error(`no pending spend entry ${id} on ${day.day}`);
+  const known = typeof usd === 'number' && Number.isFinite(usd) && usd >= 0;
+  const calls = [...day.calls];
+  const { pending: _p, ...rest } = calls[i]!;
+  calls[i] = { ...rest, usd: known ? usd : rest.usd };
+  return { ...day, calls };
 }

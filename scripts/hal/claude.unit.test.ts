@@ -423,3 +423,14 @@ describe('buildArgs per role: absolute deny rules and --add-dir (fix round 1)', 
     }
   });
 });
+
+describe('.git is never editable (fix round 2)', () => {
+  it('ALWAYS_DISALLOWED denies Edit/Write/NotebookEdit on .git at the cwd, any depth, and under it; every role gets it', () => {
+    for (const t of ['Edit', 'Write', 'NotebookEdit']) for (const p of ['.git', './.git', '**/.git', '**/.git/**']) expect(ALWAYS_DISALLOWED).toContain(`${t}(${p})`);
+    for (const role of ['planner', 'implementer', 'director'] as const) {
+      const d = arg(buildArgs({ ...base, role, allowedTools: roleAllowedTools(role) }), '--disallowedTools')!.split(',');
+      expect(d).toContain('Write(**/.git/**)');
+      expect(d).toContain('Edit(.git)');
+    }
+  });
+});

@@ -40,6 +40,8 @@ export type IsolatedCheckOptions = {
   timeoutMs: number;
   /** Passed as $HAL_CHECK_NONCE (entry checks print `HAL-RESULT <nonce> <json>`). */
   nonce?: string;
+  /** More paths the child may not write (on top of <cwd>/.git and, unless ownNodeModules, <cwd>/node_modules). */
+  denyWrite?: string[];
   /** Extra env for the child (never secrets: values containing one are dropped). */
   extraEnv?: Record<string, string>;
   /** The tree has its own throwaway node_modules (ci:local after `npm ci`): not relinked from <repo>, not write-denied
@@ -73,7 +75,7 @@ export async function isolatedCheck(argv: string[], o: IsolatedCheckOptions): Pr
     cwd: o.cwd, env, timeoutMs: o.timeoutMs,
     ...(unsandboxed ? { unsandboxed: true } : {
       // .git too: a rewritten gitdir pointer (or config) would make Hal's next git call in this tree run a smudge filter.
-      policy: { writable: [...o.writable, tmpdir()], denyRead: [join(o.repo, '.hal.env')], denyWrite: [...(o.ownNodeModules ? [] : [join(o.cwd, 'node_modules')]), join(o.cwd, '.git')] },
+      policy: { writable: [...o.writable, tmpdir()], denyRead: [join(o.repo, '.hal.env')], denyWrite: [...(o.ownNodeModules ? [] : [join(o.cwd, 'node_modules')]), join(o.cwd, '.git'), ...(o.denyWrite ?? [])] },
     }),
   });
 }

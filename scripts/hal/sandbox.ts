@@ -6,7 +6,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { childEnv } from './env.js';
 
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
@@ -26,8 +26,16 @@ const q = (p: string) => `"${p.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 /** The path as given, and its real path (sandbox rules match resolved paths: /var -> /private/var). */
 function variants(p: string): string[] {
   const abs = resolve(p);
-  let real = abs;
-  try { real = realpathSync(abs); } catch { /* not there yet */ }
+  // A path that does not exist yet (a deny on node_modules before it is made) still needs its real spelling: resolve the
+  // nearest existing ancestor and re-append the rest, or /var/... would never match the sandbox's /private/var/....
+  let real = abs, rest = '';
+  for (let cur = abs; ; ) {
+    try { real = join(realpathSync(cur), rest); break; } catch { /* not there yet */ }
+    const up = dirname(cur);
+    if (up === cur) { real = abs; break; }
+    rest = rest ? join(basename(cur), rest) : basename(cur);
+    cur = up;
+  }
   return [...new Set([abs, real])];
 }
 

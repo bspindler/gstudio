@@ -1,18 +1,25 @@
-// Hal's ci:local (review fix round 1, critical 1): the same steps and the same `.data/ci/<sha>.json` record as
-// scripts/ci-local.ts, but the merged commit's own code never runs unsandboxed.
+// Hal's ci:local (review fix rounds 1-2): the same steps and the same `.data/ci/<sha>.json` record as
+// scripts/ci-local.ts, but the merged commit's own code never runs unsandboxed, and nothing it runs can reach a step
+// that has more rights than it.
 //   npm ci       unsandboxed (needs the registry). Safe: a candidate that touches package.json or the lockfile trips
 //                `protected-path`/`dependency`, so what it installs is what Brian committed. Env scrubbed of secrets.
-//   typecheck,   isolatedCheck, sandboxed: no network but loopback, <repo>/.hal.env unreadable, writes only to the ci
-//   test,        worktree and tmp, its .git write-denied, own process group. lint:infra only if the script exists and
-//   lint:infra   `az` is installed (as ci-local.ts), also sandboxed (plus ~/.azure writable, a tmp .NET extract dir).
+//   lint:infra   FIRST, right after npm ci, before any merged code has run: <wt>/package.json must still be the
+//                commit's bytes, and the scripts come from those bytes. Sandboxed, writes only to a fresh temp dir:
+//                AZURE_CONFIG_DIR is a temp copy holding only bin/bicep (an APFS clone) and a minimal config, the .NET
+//                extract base is a fresh mkdtemp dir, and ~/.azure is write-denied. Skipped without the script or `az`.
+//   typecheck,   sandboxed: no network but loopback, <repo>/.hal.env unreadable, writes only to the ci worktree and tmp,
+//   test         never to <wt>/.git, <wt>/node_modules or <wt>/package.json. Run with the ci install's own tools
+//                (vitest run gets --no-cache, as candidates do), argv from the commit's package.json scripts.
 // The worktree is a detached checkout of <sha> in a fresh temp dir, made with Hal's safe git (no hooks), removed after.
 // Every tail written to .data/ci is redacted. Plain `npm run ci:local` (Brian's) is unchanged.
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { constants, existsSync } from 'node:fs';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { childEnv } from './env.js';
 import { runGit, safeGit, type GitRunner } from './git.js';
+import { resolveTools, scriptArgv } from './candidate.js';
 import { errMsg, isolatedCheck, redactor, scriptsOf } from './run-util.js';
 import { trackGroup } from './sandbox.js';
 import { writeJsonAtomic } from './store.js';
@@ -28,6 +35,10 @@ export type CiSandboxedOptions = {
   git?: GitRunner;
   /** Whether `az` is on PATH (lint:infra); default `command -v az`. */
   hasAz?: () => boolean;
+  /** Brian's az config dir (only bin/bicep is copied from it; it is write-denied); default ~/.azure. */
+  azureDir?: string;
+  /** TESTS ONLY: argv sequences instead of the package.json scripts run with the ci install's tools. */
+  commands?: Partial<Record<'lint' | 'typecheck' | 'test', string[][]>>;
   /** TESTS ONLY: run the sandboxed steps as plain isolated children. */
   unsandboxedForTests?: boolean;
 };
@@ -73,6 +84,7 @@ export async function ciLocalSandboxed(sha: string, o: CiSandboxedOptions): Prom
     return ok;
   };
   let dir: string | undefined;
+  let lintTmp: string | undefined;
   let wt = '';
   try {
     if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`not a full commit sha: ${sha}`);
@@ -80,34 +92,61 @@ export async function ciLocalSandboxed(sha: string, o: CiSandboxedOptions): Prom
     wt = join(dir, 'wt');
     await git(['worktree', 'add', '--detach', '--quiet', wt, sha], o.repo);
     let t0 = Date.now();
+    // The commit's package.json, from the object store: the scripts come from these bytes, never from the disk.
+    const pkg = await git(['cat-file', 'blob', `${sha}:package.json`], o.repo);
+    const scripts = scriptsOf(pkg);
     const ci = await runNpmCi(wt, npmCiEnv(process.env, o.secrets), timeoutMs);
     let ok = step('npm ci', ci.code === 0, t0, ci.out);
-    const sandboxed = async (name: string, argv: string[], more: { writable?: string[]; extraEnv?: Record<string, string> } = {}) => {
+    const argvOf = (k: 'lint' | 'typecheck' | 'test', script: string): string[][] => o.commands?.[k] ?? scriptArgv(script, resolveTools(wt));
+    /** Each argv of the sequence, sandboxed; the step fails at the first non-zero exit. */
+    const sandboxed = async (name: string, seq: () => string[][], more: { writable?: string[]; denyWrite?: string[]; extraEnv?: Record<string, string> }) => {
       t0 = Date.now();
-      const r = await isolatedCheck(argv, {
-        cwd: wt, repo: o.repo, secrets: o.secrets, writable: [wt, ...(more.writable ?? [])], timeoutMs, ownNodeModules: true,
-        ...(more.extraEnv ? { extraEnv: more.extraEnv } : {}),
-        ...(o.unsandboxedForTests ? { unsandboxedForTests: true } : {}),
-      });
-      return step(name, r.code === 0, t0, `${r.stdout}\n${r.stderr}${r.timedOut ? '\n(timed out)' : ''}${r.error ? `\n${r.error}` : ''}`);
+      let argvs: string[][];
+      try { argvs = seq(); } catch (e) { return step(name, false, t0, errMsg(e)); }
+      let out = '';
+      for (const argv of argvs) {
+        const r = await isolatedCheck(argv, {
+          cwd: wt, repo: o.repo, secrets: o.secrets, writable: more.writable ?? [], timeoutMs, ownNodeModules: true,
+          ...(more.denyWrite ? { denyWrite: more.denyWrite } : {}), ...(more.extraEnv ? { extraEnv: more.extraEnv } : {}),
+          ...(o.unsandboxedForTests ? { unsandboxedForTests: true } : {}),
+        });
+        out += `${r.stdout}\n${r.stderr}${r.timedOut ? '\n(timed out)' : ''}${r.error ? `\n${r.error}` : ''}`;
+        if (r.code !== 0) return step(name, false, t0, out);
+      }
+      return step(name, true, t0, out);
     };
-    if (ok) ok = await sandboxed('typecheck', ['npm', 'run', 'typecheck']);
-    if (ok) ok = await sandboxed('test', ['npm', 'test']);
     if (ok) {
-      const scripts = scriptsOf(await readFile(join(wt, 'package.json'), 'utf8').catch(() => '{}'));
+      // lint:infra first: no merged code has run yet, and package.json is still the commit's.
       const az = (o.hasAz ?? (() => spawnSync('sh', ['-c', 'command -v az']).status === 0))();
       if (!scripts['lint:infra']) step('lint:infra', true, Date.now(), '', 'no lint:infra script');
       else if (!az) step('lint:infra', true, Date.now(), '', 'az not installed');
-      // az keeps its logs and bicep binary under ~/.azure, and bicep (.NET) needs an extract dir. Measured on this Mac:
-      // lint:infra passes sandboxed with exactly these. Nothing it runs is Claude-written: infra/** is protected and
-      // scripts/ is outside every candidate's scope (R18).
-      else await sandboxed('lint:infra', ['npm', 'run', 'lint:infra'], { writable: [join(homedir(), '.azure')], extraEnv: { DOTNET_BUNDLE_EXTRACT_BASE_DIR: join(tmpdir(), 'hal-dotnet') } });
+      else if ((await readFile(join(wt, 'package.json'), 'utf8').catch(() => '')) !== pkg) ok = step('lint:infra', false, Date.now(), 'package.json in the ci worktree is not the commit\'s');
+      else {
+        lintTmp = await mkdtemp(join(tmpdir(), 'hal-lint-'));
+        const azDir = o.azureDir ?? join(homedir(), '.azure');
+        const cfg = join(lintTmp, 'azure');
+        await mkdir(join(cfg, 'bin'), { recursive: true });
+        // Only what bicep needs (measured): its binary and a config that keeps it on that binary, no tokens, no extensions.
+        await writeFile(join(cfg, 'config'), '[bicep]\nuse_binary_from_path = false\ncheck_version = false\n[core]\ncollect_telemetry = no\n[extension]\nuse_dynamic_install = no\n');
+        if (existsSync(join(azDir, 'bin', 'bicep'))) {
+          await copyFile(join(azDir, 'bin', 'bicep'), join(cfg, 'bin', 'bicep'), constants.COPYFILE_FICLONE);
+          await chmod(join(cfg, 'bin', 'bicep'), 0o755);
+        }
+        const dotnet = await mkdtemp(join(lintTmp, 'dotnet-'));
+        ok = await sandboxed('lint:infra', () => argvOf('lint', scripts['lint:infra']!), {
+          writable: [lintTmp], denyWrite: [azDir, wt], extraEnv: { AZURE_CONFIG_DIR: cfg, DOTNET_BUNDLE_EXTRACT_BASE_DIR: dotnet },
+        });
+      }
     }
+    const guarded = { writable: [wt], denyWrite: [join(wt, 'node_modules'), join(wt, 'package.json')] };
+    if (ok) ok = await sandboxed('typecheck', () => argvOf('typecheck', scripts.typecheck ?? ''), guarded);
+    if (ok) ok = await sandboxed('test', () => argvOf('test', scripts.test ?? ''), guarded);
   } catch (e) {
     steps.push({ step: 'setup', ok: false, seconds: 0, tail: redact(errMsg(e)) });
   } finally {
     if (wt) await git(['worktree', 'remove', '--force', '--force', wt], o.repo).catch(() => {});
     if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+    if (lintTmp) await rm(lintTmp, { recursive: true, force: true }).catch(() => {});
     await git(['worktree', 'prune'], o.repo).catch(() => {});
   }
   const record: CiRecord = {

@@ -653,6 +653,29 @@ describe('fix round 1', () => {
     expect(lockLive({ pid: process.pid, runId: 'x', startedAt: '2000-01-01T00:00:00.000Z' })).toBe(false);
     expect(lockLive({ pid: process.pid, runId: 'x', startedAt: new Date().toISOString() })).toBe(true);
   });
+  it('R19: a call reserved at 23:59 and settled at 00:01 is settled in its own day, booked once', async () => {
+    const late = new Date(2026, 10, 11, 23, 59), early = new Date(2026, 10, 12, 0, 1);
+    let clock = late;
+    const claude: RunDeps['claude'] = async (call) => {
+      calls.push(call);
+      if (call.role === 'planner') { clock = early; return ok(J({ tickets: [] }), 0.4); }
+      return ok(J({ note: 'n', perGame: {}, noteReplies: [] }), 0.1);
+    };
+    await runNight(opts({ reportOnly: true }), deps({ claude, now: () => clock }));
+    const days = JSON.parse(read(halDir, 'spend.json')) as SpendDay[];
+    const by = (d: Date) => days.find((x) => x.day === dayOf(d))?.calls.map((c) => [c.role, c.usd, c.pending ?? false]);
+    expect(by(late)).toEqual([['planner', 0.4, false]]);
+    expect(by(early)).toEqual([['director', 0.1, false]]);
+    expect(readReport().spend.api).toBe(0.5);
+  });
+  it('R19: each reservation carries its own id and is settled by it', async () => {
+    seedSpend(0);
+    await runNight(opts(), deps());
+    const ids = spendCalls().map((c) => (c as { id?: string }).id);
+    expect(ids.every((x) => typeof x === 'string')).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(spendCalls().some((c) => c.pending)).toBe(false);
+  }, 60_000);
   it('an undo of a pass that was never merged is recorded as rejected (not retried)', async () => {
     expect(await undoCommand('HAL-404', 'nope', { push: false }, deps())).toBe(1);
     expect(feedback().undos).toEqual([expect.objectContaining({ pass: 'HAL-404', status: 'rejected' })]);
