@@ -16,6 +16,11 @@ const nights: HistoryNight[] = [
 const base = { game: 'hyperline', title: 'Hyperline', nights, notes: {} as Record<string, string>, scores: [], filter: {} };
 
 describe('renderHistory', () => {
+  it('has no no-referrer meta (the server header sets same-origin)', () => {
+    const html = renderHistory(base);
+    expect(html).not.toContain('no-referrer');
+    expect(html).not.toMatch(/<meta name="referrer"(?![^>]*content="same-origin")/);
+  });
   it('renders nights newest first with the note above entries', () => {
     const html = renderHistory({ ...base, notes: { '2026-11-11': '# hyperline, night of x\n\nA **good** night.' } });
     expect(html.indexOf('2026-11-11')).toBeLessThan(html.indexOf('2026-11-10'));

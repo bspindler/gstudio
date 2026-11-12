@@ -85,6 +85,11 @@ function section(html: string, title: string): string {
 }
 
 describe('renderReport', () => {
+  it('has no referrer meta: no-referrer makes browsers send "Origin: null" on form POSTs, which the server 403s', () => {
+    const html = renderReport(view());
+    expect(html).not.toContain('no-referrer');
+    expect(html).not.toMatch(/<meta name="referrer"(?![^>]*content="same-origin")/);
+  });
   it('sections appear in order', () => {
     const r = fullReport();
     r.planned = [ticket('T7', 'gearhold', 'feature', 'A boss rush mode')];

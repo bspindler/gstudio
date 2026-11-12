@@ -93,7 +93,7 @@ details.fold[open]>summary{margin-bottom:8px}
 /** The head every Hal page starts with: charset, viewport, color-scheme, title, the shared CSS plus `extraCss`. */
 export const pageHead = (title: string, extraCss = ''): string =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">` +
-  `<meta name="color-scheme" content="light dark"><meta name="referrer" content="no-referrer"><title>${esc(title)}</title><style>${PAGE_CSS}${extraCss}</style></head>`;
+  `<meta name="color-scheme" content="light dark"><title>${esc(title)}</title><style>${PAGE_CSS}${extraCss}</style></head>`;
 
 const inline = (s: string) => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 
