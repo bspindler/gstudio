@@ -454,7 +454,7 @@ const REPORT_CSS = `
 .main>section:first-child{margin-top:28px}
 @media (min-width:840px){
   .app{display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-areas:"flash flash" "head side" "main side";
-    column-gap:24px;max-width:1280px;padding:24px}
+    grid-template-rows:auto auto 1fr;column-gap:24px;max-width:1280px;padding:24px}
   .app>.flash{grid-area:flash}
   .head{grid-area:head}
   .main{grid-area:main;min-width:0}
