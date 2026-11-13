@@ -279,7 +279,12 @@ const FOCUS: Record<string, FocusFn> = {
       await page.goto(`${origin}/gearhold/index.html?hal=1`);
       await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
     });
-    await step(`level ${i + 1} from above`, () => page.evaluate((n) => { const h = (globalThis as any).__hal; h.start(n); h.overhead(true); h.render(); }, i));
+    await step(`level ${i + 1} from above`, () => page.evaluate((n) => {
+      const h = (globalThis as any).__hal;
+      const count = Number(h.levels?.() ?? Infinity);
+      if (n >= count) throw new Error(`level ${n + 1} not present (this build has ${count})`);
+      h.start(n); h.overhead(true); h.render();
+    }, i));
   },
   async 'tidepool-pals'(page, origin, i) {
     const n = i + 1;

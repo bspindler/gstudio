@@ -562,7 +562,9 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     // Both shots show the level or sector the change touched (focus.ts): main's and the candidate's game data are
     // fingerprinted (each in its own isolated check) and the first one that differs is shot in both trees. No
     // difference, or a fingerprint that fails, keeps the default shot (gameplay at the start). Tampering still discards.
-    let focus: { i: number; label: string } | null = null;
+    // A level or sector new in the candidate (past the end of main's) can't be shot in main, so main keeps its default
+    // before shot (taken in step 1) and only the after shot shows it.
+    let focus: { i: number; label: string; inMain: boolean } | null = null;
     const fingerprint = async (dir: string, writable: string[]) => {
       const nonce = newNonce();
       const r = await inTree(dir, (await cmd('fingerprint'))(dir, game), writable, nonce);
@@ -574,13 +576,13 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       await guard(t2);
       const fa = await fingerprint(wt.dir, [wt.dir]);
       const i = fb && fa ? firstChanged(fb, fa) : null;
-      if (i !== null) focus = { i, label: fa![i]!.label };
+      if (i !== null) focus = { i, label: fa![i]!.label, inMain: i < fb!.length };
     } catch (e) { if (e instanceof Discard) throw e; focus = null; }
-    if (focus) {
+    if (focus?.inMain) {
       await shoot(ctx.mainDir, beforeTmp, [shotDir], 'before', focus.i); // replaces the default before shot
       checkJpeg(await readFile(beforeTmp).catch(() => null), 'before');
-      res.shotsOf = redact(focus.label);
     }
+    if (focus) res.shotsOf = redact(focus.inMain ? focus.label : `${focus.label} (new: before shows the start)`);
     await guard(t2);
     const hist = `docs/hal/history/${game}/${night}`;
     const shots = { before: `${hist}/${ctx.pass}-before.jpg`, after: `${hist}/${ctx.pass}-after.jpg` };

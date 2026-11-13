@@ -464,9 +464,21 @@ describe('runCandidate (temp git repo)', () => {
       expect(shots).toEqual([{ dir: 'main' }, { dir: 'main', focus: 2 }, { dir: 'wt', focus: 2 }]); // the early check, then both at level 3
       expect(r.shotsOf).toBe('level 3, Hall 3');
     });
-    it('a new level after the existing ones is the one shown', async () => {
-      const c = ctx({ cmds: { fingerprint: (d) => result(d === mainDir ? fp(['a', 'b']) : fp(['a', 'b', 'new'])) } });
-      expect((await runCandidate(ticket(), c)).shotsOf).toBe('level 3, Hall 3');
+    it('a new level after the existing ones is the one shown; main lacks it, so its before shot stays the default (N-001)', async () => {
+      const shots: Array<{ dir: string; focus?: number }> = [];
+      const c = ctx({ cmds: {
+        fingerprint: (d) => result(d === mainDir ? fp(['a', 'b']) : fp(['a', 'b', 'new'])),
+        // main's build has no level 3: asking it for one crashes, as Gearhold's old build did
+        shoot: (d, _g, out, focus) => {
+          shots.push({ dir: d === mainDir ? 'main' : 'wt', ...(focus === undefined ? {} : { focus }) });
+          return d === mainDir && focus !== undefined ? node('process.exit(1)') : result({ ok: true }, writeJpeg(out, fakeJpeg(390, 844)));
+        },
+      } });
+      const r = await runCandidate(ticket(), c);
+      expect(r.reasons).toEqual([]);
+      expect(r.verdict).toBe('merged');
+      expect(shots).toEqual([{ dir: 'main' }, { dir: 'wt', focus: 2 }]);
+      expect(r.shotsOf).toBe('level 3, Hall 3 (new: before shows the start)');
     });
     it('no level data changed, or a fingerprint that fails or is junk: the default shot, and the change still merges', async () => {
       const cases = [() => result(fp(['a'])), () => node('process.exit(3)'), () => result({ not: 'a fingerprint' })];
