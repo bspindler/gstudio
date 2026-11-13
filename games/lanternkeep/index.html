@@ -47,7 +47,9 @@
   .app:not(.playing) .play-only { display: none !important; }
 
   /* HUD */
-  .hud { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 4px; }
+  .hud { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; }
+  .hud > * { flex-shrink: 0; }
+  .hud .spacer { flex-shrink: 1; min-width: 0; }
   .stat { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 19px; font-variant-numeric: tabular-nums; }
   .stat svg { width: 19px; height: 19px; }
   .stat.lives { color: var(--life); }
@@ -371,13 +373,13 @@ import { LEVELS, REGIONS } from './lib/levels.js';
 import { endlessLevel } from './lib/endless.js';
 import { PERKS, canTake, modsFor, sparksFree } from './lib/meta.js';
 import { OLD_KEY, SAVE_KEY, isUnlocked, markSeen, parseSave, recordStars, totalStars } from './lib/save.js';
-import { createRenderer3d } from './scene3d.js';
+import { createRendererThree } from './scene-three.js';
 import { createRenderer } from './render.js';
 import { createAudio } from './audio.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 // Keep version the same as in game.yaml and CHANGELOG.md. Under the test robot the SDK sends nothing.
-const studio = createStudio({ game: 'lanternkeep', version: '0.2.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'lanternkeep', version: '0.3.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
@@ -396,8 +398,10 @@ const ENDLESS = endlessLevel();
 const ENDLESS_INDEX = -1;
 const endlessOpen = () => (save.stars[4] ?? 0) > 0;
 
-// ---------- renderer: 3D when WebGL2 is there, the flat garden otherwise ----------
-let renderer = createRenderer3d($('gl'), $('ov'), { reducedMotion, lowFx: save.lowFx });
+// ---------- renderer: the three.js garden when WebGL2 is there, the flat garden otherwise ----------
+let renderer = null;
+const hasWebGL2 = (() => { try { return !!document.createElement('canvas').getContext('webgl2'); } catch { return false; } })();
+if (hasWebGL2) try { renderer = createRendererThree($('gl'), $('ov'), { reducedMotion, lowFx: save.lowFx, autoQuality: !HAL }); } catch (e) { console.warn('3D unavailable', e); }
 if (!renderer) {
   $('gl').hidden = true; $('ov').hidden = true; $('board2d').hidden = false;
   $('stage').classList.add('flat');
@@ -798,7 +802,7 @@ function refreshHud() {
   if (g.phase === 'ready') { label = 'Start'; enabled = true; }
   else if (canCallWave(g)) {
     const bonus = earlyBonus(g);
-    label = bonus > 0 ? `Next wave<span class="cost">+${bonus}</span>` : 'Next wave';
+    label = bonus > 0 ? `Next<span class="cost">+${bonus}</span>` : 'Next wave';
     enabled = true;
   } else { label = g.level.endless ? `Wave ${Math.max(1, g.waveIndex + 1)}` : `Wave ${Math.max(1, g.waveIndex + 1)} of ${g.waveCount}`; enabled = false; }
   if (hudCache.waveBtn !== label) { hudCache.waveBtn = label; $('waveBtn').innerHTML = label; $('waveBtn').disabled = !enabled; }
@@ -830,6 +834,7 @@ function startLevel(i) {
   setMode('play');
   fit();
   renderer.intro();
+  if (!iconsPainted && renderer.kind === '3d') requestAnimationFrame(() => requestAnimationFrame(paintIcons));
   revealQueue = [];
   queuePlantReveals();
   studio.track('level_start', { level: i === ENDLESS_INDEX ? 'endless' : i + 1 });
@@ -1012,7 +1017,6 @@ function frame(now) {
     if (demo.phase !== 'wave' || demo.waveIndex > 25) demo = makeDemo();
     renderer.tickFx(dt);
     if (mode === 'title') renderer.draw(demo, { alpha: 1, prev, time, sel: null, selTower: null, hint: null });
-    if (!iconsPainted && renderer.kind === '3d') paintIcons();
     requestAnimationFrame(frame);
     return;
   }

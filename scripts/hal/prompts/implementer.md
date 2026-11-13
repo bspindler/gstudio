@@ -25,6 +25,7 @@ You may use only: Read, Edit, Write, Glob, Grep, `npm test`, `npm run typecheck`
 
 - `packages/core/src/hal/**`, `packages/core/test/hal-*.test.ts`, `scripts/hal.ts`, `scripts/hal/**`
 - `games/gearhold/levels.d.ts`, `games/lanternkeep/lib/{sim,levels,endless}.d.ts`, and the `// ---- hal hook` blocks in Gearhold and Lanternkeep, compared byte for byte
+- `games/lanternkeep/vendor/**` (bundled three.js; MIT license file must stay), `scripts/vendor/**`, `scripts/build-three.ts`
 - `.data/**`, `.hal.env`, `policy.yaml`, `markets.yaml`, `infra/**`, `.github/**`, `CLAUDE.md`
 - gateway, policy and compliance code and its tests (`packages/core/src/**/{gateway,policy,compliance}*`, `packages/core/test/{compliance,games-compliance,no-external-fonts,game-versions}*.test.ts`)
 - `package.json`, `package-lock.json`: any dependency change is a liability item
