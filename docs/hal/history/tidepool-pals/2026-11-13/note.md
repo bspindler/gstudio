@@ -1,0 +1,9 @@
+# tidepool-pals, night of 2026-11-13
+
+## Run run-2026-11-13T12-19-59-373Z
+
+**Tidepool Pals: cozy reef restoring, with hand-made puzzles.** The pool panel (held, 0.6.0) finally uses the empty band. It is calm, shows the pal and progress, and adds no pressure. That fits the identity, and it's a visible change, so please judge it. noWalls is stuck at about 89.7. Goals, moves and litter are now all ruled out, and the walls come from rescue goals and tides. Before reshaping those, I'll check whether the scorer's bot is the real problem.
+
+Changes:
+- HAL-036 tuning(tidepool-pals): Thin litter on the Tidepool levels the scorer still walls: **discarded** (implementer blocked: Thinning litter on the walled levels did not raise noWalls (89.7 before and after; down to 86.2 when 25-27 were eased); the walls come from rescue goals and tides, so the lever does not work.)
+- HAL-040 feature(tidepool-pals): Tidepool: pal-and-goal panel in the empty band above tabs: **held** (0.6.0)
