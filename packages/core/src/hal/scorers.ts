@@ -1,5 +1,6 @@
 // Registry of per-game scorers the Hal CLI drives. Add a game by registering its scorer here.
 import type { Range } from './baseline.js';
+import { scoreBlockBarn, type BlockBarnPage, type BlockBarnRecord } from './block-barn-score.js';
 import { scoreGearhold } from './gearhold-score.js';
 import { LEVELS } from '../../../../games/gearhold/levels.js';
 import { AUTHORED } from '../../../../games/tidepool-pals/levels.js';
@@ -91,6 +92,28 @@ export function gearholdPlayScorer(run: GearholdPlayRunner): Scorer {
       const want = (r.levels as number) * (r.seeds as number);
       if (records.length !== want) throw new Error(`gearhold-play: runner returned ${records.length} records, expected ${want}; no score`);
       return scoreGearholdPlay(records);
+    },
+  };
+}
+
+/** Plays Block Barn's fixed tap script in a browser at both viewports; injected so core never imports Playwright. */
+export type BlockBarnRunner = () => Promise<{ records: BlockBarnRecord[]; page: BlockBarnPage; errors: string[] }>;
+
+/**
+ * The browser-backed Block Barn scorer: the game's only scorer, so its name is the game's slug and registering it
+ * (scripts/hal.ts, check-entry.ts) is what puts Block Barn in Hal's loop. The tap script and seeds are fixed, so it
+ * takes no range. Runner errors (page or console errors, a blocked request, "browser unavailable:") make score()
+ * reject, never a fitness the gate could compare.
+ */
+export function blockBarnScorer(run: BlockBarnRunner): Scorer {
+  return {
+    game: 'block-barn',
+    defaults: {},
+    validate: () => null,
+    async score() {
+      const { records, page, errors } = await run();
+      if (errors.length) throw new Error(`block-barn hard failure (${errors.length}): ${errors.join('; ')}`);
+      return scoreBlockBarn(records, page);
     },
   };
 }

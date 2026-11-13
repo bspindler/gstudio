@@ -10,6 +10,7 @@ const GameMetaSchema = z.object({
   targetSegment: z.string().min(1),
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
   ageRating: z.string().nullable(),
+  childDirected: z.boolean().optional(),
 }).strict();
 
 export type GameMeta = z.infer<typeof GameMetaSchema>;

@@ -1,6 +1,8 @@
 // Hal tripwires: pure checks over a candidate diff. Any hit rejects the candidate before it can merge.
 // No fs, no clock, no randomness: scripts/hal/git.ts builds the Diff, this file only judges it.
 
+import { parse } from 'yaml';
+
 export type FileChange = {
   path: string;
   status: 'A' | 'M' | 'D' | 'R';
@@ -40,9 +42,10 @@ const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^(\.\/)+/, ''
 const touched = (f: FileChange): string[] => (f.oldPath ? [f.path, f.oldPath] : [f.path]);
 
 // games/lanternkeep/vendor/ is a bundled third-party library (three.js, MIT): changing it is a dependency change, which is Brian's call.
-const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/', 'games/lanternkeep/vendor/', 'scripts/vendor/'];
-const PROTECTED_EXACT = new Set(['scripts/hal.ts', 'scripts/build-three.ts', 'games/gearhold/levels.d.ts', 'games/lanternkeep/lib/sim.d.ts', 'games/lanternkeep/lib/levels.d.ts', 'games/lanternkeep/lib/endless.d.ts', '.hal.env', 'policy.yaml', 'markets.yaml', 'claude.md', 'package.json', 'package-lock.json']);
+const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/', 'games/lanternkeep/vendor/', 'scripts/vendor/', 'games/block-barn/audio/'];
+const PROTECTED_EXACT = new Set(['scripts/hal.ts', 'scripts/build-three.ts', 'games/gearhold/levels.d.ts', 'games/lanternkeep/lib/sim.d.ts', 'games/lanternkeep/lib/levels.d.ts', 'games/lanternkeep/lib/endless.d.ts', 'games/block-barn/recorder.js', '.hal.env', 'policy.yaml', 'markets.yaml', 'claude.md', 'package.json', 'package-lock.json']);
 const PROTECTED_REGEX = [
+  /^games\/block-barn\/(?:.*\/)?sources\.md$/,
   /^packages\/core\/test\/(?:.*\/)?hal-[^/]*\.test\.ts$/,
   /^packages\/core\/test\/(?:compliance|games-compliance|no-external-fonts|game-versions)[^/]*\.test\.ts$/,
   // packages/core/src/**/{gateway,policy,compliance}*: a file or a directory whose name starts so, at any depth.
@@ -95,6 +98,7 @@ export const protectedPath: Rule = (diff) =>
 const HOOKS = [
   { file: 'games/gearhold/index.html', dir: 'games/gearhold/' },
   { file: 'games/lanternkeep/index.html', dir: 'games/lanternkeep/' },
+  { file: 'games/block-barn/index.html', dir: 'games/block-barn/' },
 ];
 const HOOK_START = '// ---- hal hook';
 const HOOK_END = '// ---- end hal hook ----';
@@ -126,10 +130,13 @@ const HAL_TAMPER = [
   /\bhal\.\w+\s*(?:\+\+|--)/,
 ];
 
+// Block Barn's hook also runs a manual clock, and a headless robot shows navigator.webdriver: code outside the block may not read either to spot scoring.
+const BB_TAMPER = [...HAL_TAMPER, /\bmanualClock\b/, /\bwebdriver\b/];
+
 /** The statements in `src` that touch the hook, counters or flag, whitespace-normalised. */
-function halFragments(src: string | null): string[] {
+function halFragments(src: string | null, tamper: RegExp[] = HAL_TAMPER): string[] {
   if (src === null) return [];
-  return stripComments(src).split(/[;{}]/).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && HAL_TAMPER.some((r) => r.test(x)));
+  return stripComments(src).split(/[;{}]/).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && tamper.some((r) => r.test(x)));
 }
 
 export const halHook: Rule = (diff) => {
@@ -150,8 +157,10 @@ export const halHook: Rule = (diff) => {
     for (const g of diff.files) {
       if (!norm(g.path).startsWith(dir) || isProse(g) || g.symlink) continue;
       const isHookFile = norm(g.path) === HOOK_FILE;
-      const b = halFragments(isHookFile ? withoutHook(g.before) : g.before);
-      const a = halFragments(isHookFile ? withoutHook(g.after) : g.after);
+      // Block Barn's code may not detect that it is being scored either (manualClock, webdriver).
+      const tamper = HOOK_FILE === 'games/block-barn/index.html' ? BB_TAMPER : HAL_TAMPER;
+      const b = halFragments(isHookFile ? withoutHook(g.before) : g.before, tamper);
+      const a = halFragments(isHookFile ? withoutHook(g.after) : g.after, tamper);
       for (const [label, from, minus] of [['added', a, b], ['removed', b, a]] as const) {
         const budget = new Map<string, number>();
         for (const x of minus) budget.set(x, (budget.get(x) ?? 0) + 1);
@@ -395,9 +404,9 @@ export const darkPattern: Rule = (diff) => {
 
 // ---- asset-source --------------------------------------------------------
 
-const ASSET_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp3', 'ogg', 'wav', 'woff2', 'woff', 'ttf', 'otf', 'svg']);
+const ASSET_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp3', 'ogg', 'wav', 'm4a', 'woff2', 'woff', 'ttf', 'otf', 'svg']);
 const FONT_EXT = new Set(['woff2', 'woff', 'ttf', 'otf']);
-const LICENSE_RE = /\b(hal-generated|CC0|public domain|OFL[- ]1\.1)\b/i;
+const LICENSE_RE = /\b(hal-generated|studio-owned|CC0|public domain|OFL[- ]1\.1)\b/i;
 const OFL_RE = /\bOFL[- ]1\.1\b/i;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
@@ -423,8 +432,8 @@ export const assetSource: Rule = (diff) => {
     const lines = src.after.split('\n').filter((l) => name.test(l));
     if (lines.length === 0) { out.push(hit('asset-source', f.path, 'not named in SOURCES.md')); continue; }
     const licensed = lines.filter((l) => LICENSE_RE.test(l));
-    if (licensed.length === 0) { out.push(hit('asset-source', f.path, 'SOURCES.md entry has no allowed license (hal-generated, CC0, public domain, OFL-1.1)')); continue; }
-    const nonOfl = licensed.some((l) => /\b(hal-generated|CC0|public domain)\b/i.test(l));
+    if (licensed.length === 0) { out.push(hit('asset-source', f.path, 'SOURCES.md entry has no allowed license (hal-generated, studio-owned, CC0, public domain, OFL-1.1)')); continue; }
+    const nonOfl = licensed.some((l) => /\b(hal-generated|studio-owned|CC0|public domain)\b/i.test(l));
     if (FONT_EXT.has(ext) && !nonOfl) {
       const d = norm(dir ? dir + '/' : '');
       const has = [...tree].some((p) => p.startsWith(d) && /^ofl[^/]*\.txt$/.test(p.slice(d.length)));
@@ -435,6 +444,109 @@ export const assetSource: Rule = (diff) => {
   for (const f of codeIn(diff, inGames)) for (const l of addedLines(f)) if (DATA_URI_RE.test(l)) out.push(hit('asset-source', f.path, 'embedded data: URI for a font or image'));
   return out;
 };
+
+// ---- kid-asset -----------------------------------------------------------
+
+/** Block Barn is for toddlers: its images and sounds are vetted by hand, so Hal may not add or rename any (new code, pages and docs are fine). */
+export const kidAsset: Rule = (diff) =>
+  diff.files
+    .filter((f) => (f.status === 'A' || f.status === 'R') && norm(f.path).startsWith('games/block-barn/') && (f.binary || ASSET_EXT.has(extOf(f.path))))
+    .map((f) => hit('kid-asset', f.path, `asset ${f.status === 'A' ? 'added' : 'renamed'} under games/block-barn/`));
+
+// ---- child-directed ------------------------------------------------------
+
+const GAME_YAML = /^games\/[^/]+\/game\.yaml$/;
+/** The top-level `childDirected` of a game.yaml, as the compliance test reads it (`yaml` parse). undefined when absent, null source, or unparseable. */
+function childDirectedValue(src: string | null): string | undefined {
+  if (src === null) return undefined;
+  try {
+    const doc: unknown = parse(src);
+    if (doc === null || typeof doc !== 'object' || Array.isArray(doc) || !('childDirected' in doc)) return undefined;
+    return JSON.stringify((doc as Record<string, unknown>).childDirected) ?? 'undefined';
+  } catch {
+    return undefined;
+  }
+}
+
+/** A game that declares itself child-directed keeps that flag: removing it or changing its value is refused. Adding it is fine. */
+export const childDirected: Rule = (diff) => {
+  const out: Violation[] = [];
+  for (const f of diff.files) {
+    // Identity is the OLD path: a game.yaml renamed away is gone, wherever it went.
+    const oldAt = f.oldPath ?? f.path;
+    if (!GAME_YAML.test(norm(oldAt))) continue;
+    const before = childDirectedValue(f.before);
+    if (before === undefined) continue;
+    const gone = f.status === 'D' || norm(f.path) !== norm(oldAt);
+    if (gone || childDirectedValue(f.after) !== before) out.push(hit('child-directed', oldAt, gone ? 'game.yaml with childDirected deleted or moved' : 'childDirected removed, changed or unreadable'));
+  }
+  return out;
+};
+
+/** Added lines, except that a file moved to a new path counts every line as added (a rename carries no diff, so it must not smuggle content in). */
+const addedOrMovedLines = (f: FileChange): string[] =>
+  f.oldPath !== undefined && norm(f.oldPath) !== norm(f.path) ? (f.after ?? '').split('\n') : addedLines(f);
+
+// ---- studio-owned --------------------------------------------------------
+
+/** `studio-owned` is a license Hal may never claim: only the studio adds such a SOURCES.md line. */
+export const studioOwned: Rule = (diff) =>
+  diff.files.filter((f) => /(?:^|\/)sources\.md$/i.test(norm(f.path))).flatMap((f) =>
+    addedOrMovedLines(f).filter((l) => /studio-owned/i.test(l)).map((l) => hit('studio-owned', f.path, `added studio-owned entry: ${l.trim().slice(0, 100)}`)));
+
+// ---- kid-recorder --------------------------------------------------------
+
+const RECORDER_API = /\b(?:getUserMedia|MediaRecorder|indexedDB)\b|\brecorder\.(?:start|finish|keep|reset)\b|createRecorder|mountVoices|SpeechRecognition|mediaDevices|getDisplayMedia|webkitGetUserMedia|createMediaStreamSource|captureStream/;
+/** Microphone capture, speech recognition, recording control and storage live only in Block Barn's protected recorder.js. */
+export const kidRecorder: Rule = (diff) =>
+  diff.files.filter((f) => norm(f.path).startsWith('games/block-barn/') && norm(f.path) !== 'games/block-barn/recorder.js').flatMap((f) =>
+    addedOrMovedLines(f).filter((l) => RECORDER_API.test(l)).map((l) => hit('kid-recorder', f.path, `recorder API outside recorder.js: ${l.trim().slice(0, 100)}`)));
+
+// ---- kid-voice, kid-audio, kid-flash, kid-exit --------------------------
+
+const BB = 'games/block-barn/';
+/** Lines the change takes away: in `before` more times than in `after` (a delete, or a rename away, takes them all). */
+const removedLines = (f: FileChange): string[] => {
+  if (f.binary || f.symlink || f.before === null) return [];
+  const gone = f.status === 'D' || (f.oldPath !== undefined && norm(f.oldPath) !== norm(f.path));
+  return gone ? f.before.split('\n') : addedLines({ ...f, before: f.after, after: f.before });
+};
+const bbCode = (diff: Diff) => codeIn(diff, (f) => norm(f.path).startsWith(BB));
+/** A rule over Block Barn's added (or moved) code lines: any line matching one of `res` hits. */
+const bbLines = (rule: string, what: string, res: RegExp[]): Rule => (diff) =>
+  bbCode(diff).flatMap((f) => addedOrMovedLines(f).filter((l) => res.some((r) => r.test(l))).map((l) => hit(rule, f.path, `${what}: ${l.trim().slice(0, 100)}`)));
+
+/** voice.js speaks only with an on-device voice: no line about localService may be taken away or changed. */
+export const kidVoice: Rule = (diff) => {
+  const out: Violation[] = [];
+  for (const f of diff.files) {
+    const paths = touched(f).map(norm);
+    if (!paths.includes(`${BB}voice.js`)) continue;
+    const was = f.oldPath === undefined || norm(f.oldPath) === `${BB}voice.js`;
+    const lines = [...(was ? removedLines(f) : []), ...(norm(f.path) === `${BB}voice.js` ? addedLines(f) : [])];
+    for (const l of lines) if (/localService/.test(l)) out.push(hit('kid-voice', f.path, `localService line removed or changed: ${l.trim().slice(0, 100)}`));
+  }
+  return out;
+};
+
+/** Loudness the scorer's gain graph can't follow: embedded or new media elements, shaping/filtering nodes, compressor settings, harsh waves. */
+export const kidAudio = bbLines('kid-audio', 'sound the loudness check cannot follow', [
+  /data:(?:audio|image|video)\//i,
+  /\bnew\s+Audio\s*\(/, /<audio\b/i, /createObjectURL\s*\(/,
+  /createWaveShaper|createConvolver|AudioWorklet|createMediaElementSource|createBiquadFilter|createDynamicsCompressor|createIIRFilter|createPeriodicWave/,
+  /\b(?:WaveShaper|Convolver|MediaElementAudioSource|BiquadFilter|DynamicsCompressor|IIRFilter)Node\b/,
+  /\.(?:threshold|ratio|knee)\b/,
+  /\btype\s*[=:]\s*['"](?:square|sawtooth)['"]/,
+]);
+
+/** Flashes the scorer can't see: SVG animation elements (SMIL) run outside CSS animations. */
+export const kidFlash = bbLines('kid-flash', 'SVG animation', [/<(?:animate|animateColor|animateTransform|animateMotion|set)\b/i, /\bbeginElement(?:At)?\s*\(/, /['"]animate(?:Color|Transform|Motion)?['"]/]);
+
+/** Paths out of the barn: links, navigation, popups and history changes. */
+export const kidExit = bbLines('kid-exit', 'a way out of the barn', [
+  /href\s*=/i, /\blocation\.(?:href|assign|replace)\b/, /\blocation\s*=(?!=)/, /\bwindow\.open\b/, /\bhistory\.(?:pushState|replaceState|back|go|forward)\b/,
+  /\.click\(\)\s*;?\s*$/, /http-equiv/i, /<form\b/i,
+]);
 
 // ---- levels, tests, scope -----------------------------------------------
 
@@ -621,6 +733,14 @@ export const TRIPWIRE_RULES: Record<string, Rule> = {
   'random-reward': randomReward,
   'dark-pattern': darkPattern,
   'asset-source': assetSource,
+  'kid-asset': kidAsset,
+  'child-directed': childDirected,
+  'studio-owned': studioOwned,
+  'kid-recorder': kidRecorder,
+  'kid-voice': kidVoice,
+  'kid-audio': kidAudio,
+  'kid-flash': kidFlash,
+  'kid-exit': kidExit,
   'level-removed': levelRemoved,
   'tests-removed': testsRemoved,
   'outside-scope': outsideScope,

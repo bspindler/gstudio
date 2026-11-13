@@ -19,6 +19,8 @@ Phase 1 is split into three plans: 1a, 1b and 1c.
 
 **Both games play locally.** Tidepool's gray-overlay bug is fixed (a missing `[hidden]` CSS rule). It still needs a full manual playthrough: open a shell, decline +5 Moves, buy something, open the Album.
 
+**Block Barn (added 2026-11-13).** A toddler A-to-Z animal-blocks game, child-directed (`childDirected: true`: no events, no ingest, no prompts), on the shelf, and Hal scores it with five measures (responsive, noDeadEnds, bigTargets, alphabet, calm). Open: a real-iPhone check that speech and sound effects unlock on first tap; Brian's recordings (`docs/block-barn-recording.md`); in-game recording needs HTTPS hosting (a microphone is only offered on a secure page).
+
 ## Picking back up
 
 1. **Decide where 1c runs.** Should Plan 1c deploy to Azure, or stay local until the startup credits land? My default: build the console and portal locally first (SQLite and filesystem adapters), then add the Azure adapters and deploy once the subscription exists.

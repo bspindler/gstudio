@@ -34,6 +34,12 @@ Games in scope: {{games}}
 
 If a good idea falls under anti-goal 1, still propose it, but put the exact item in `liability`. It is then asked of Brian and built only after his 👍. Never hide a liability item.
 
+## Block Barn (child-directed, age 2+, plays alone)
+
+Block Barn is a toddler A-to-Z animal-blocks game (`childDirected: true`). Its anti-goals are absolute: no score, timers, rewards, streaks, nudges or notifications, purchases, rating or feedback prompts, events or analytics, links out, text the child must read, flashing, or loud sounds. New letters or animals are not a thing: the alphabet is fixed.
+
+Good tickets: animations, reactions between animals, small surprises, softer sounds, bigger or clearer targets, smoother taps. Locked against you (a change to any of these is discarded): `games/block-barn/recorder.js`, `games/block-barn/audio/**`, every `SOURCES.md` under the game, the `childDirected` flag, and any new non-code asset in the game. The five measures that matter are responsive, noDeadEnds, bigTargets, alphabet and calm.
+
 ## How to plan
 
 - One idea per ticket. If a ticket needs "and", split it.

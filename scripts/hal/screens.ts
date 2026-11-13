@@ -1,6 +1,7 @@
 // Phone-size screenshots and console errors for every game (390x844 @2x, touch).
 // Gearhold uses the ?hal hook; Lanternkeep reads its ?hal hook but is played with real taps; Tidepool Pals and
-// Hyperline are pressed through their own start buttons.
+// Hyperline are pressed through their own start buttons; Block Barn is tapped for real, finding its targets through
+// its ?hal hook.
 // Output: <outDir>/<game>/<n>.png (1-based; a labeled shot is <n>-<label>.png) and <outDir>/<game>/errors.json.
 // Gearhold adds an overhead layout shot of every level. Local builds only (127.0.0.1).
 //   A browser that can't launch throws "browser unavailable: ...".
@@ -159,6 +160,55 @@ const FLOWS: Record<string, FlowFn> = {
     await page.waitForTimeout(1500); // fixed time into the run, no further taps
     if (await page.locator('#pauseBtn').isHidden()) flow.notes.push('game over before shot 3');
     await shoot();
+  },
+  async 'block-barn'(page, origin, shoot, flow) {
+    type Target = { kind: string; letter?: string; x: number; y: number; w: number; h: number };
+    type State = { floor: string[]; named: string[]; tower: string[]; corner: boolean };
+    const hal = <T>(fn: string, arg?: unknown): Promise<T> => page.evaluate(([f, a]) => (globalThis as any).__hal[f as string](a), [fn, arg] as const) as Promise<T>;
+    const tap = async (kind: string, letter?: string) => {
+      const t = (await hal<Target[]>('targets')).find((x) => x.kind === kind && (letter === undefined || x.letter === letter));
+      if (!t) throw new Error(`no ${kind} target${letter ? ` for ${letter}` : ''}`);
+      await page.touchscreen.tap(t.x + t.w / 2, t.y + t.h / 2);
+    };
+    await step('load', async () => {
+      await page.goto(`${origin}/block-barn/index.html?hal`);
+      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
+      await hal('seed', 1);
+    });
+    await settle(page);
+    flow.reached = true;
+    await shoot(); // the barn: five blocks, their animals peeking
+    await step('tap two blocks', async () => {
+      for (const l of (await hal<State>('state')).floor.slice(0, 2)) await tap('block', l);
+      if ((await hal<State>('state')).named.length !== 2) throw new Error('two taps did not name two blocks');
+    });
+    await page.waitForTimeout(1200); // the flips, pops and first moves
+    await shoot('named');
+    await step('build and tumble a tower', async () => {
+      for (let i = 0; i < 4; i++) {
+        const l = (await hal<State>('state')).floor[0]!;
+        if (!(await hal<State>('state')).named.includes(l)) await tap('block', l);
+        await tap('block', l);
+      }
+      if ((await hal<State>('state')).tower.length !== 4) throw new Error('four stacked blocks did not make a tower of four');
+      await page.waitForTimeout(1100); // the last wobble ends before the tower is tapped
+      await tap('tower');
+      if ((await hal<State>('state')).tower.length !== 0) throw new Error('a tap on the tower did not knock it down');
+    });
+    await page.waitForTimeout(450); // blocks mid-tumble
+    await shoot('tumble');
+    await step('open the grown-up corner (3 s hold)', async () => {
+      const c = (await hal<Target[]>('targets')).find((x) => x.kind === 'corner');
+      if (!c) throw new Error('no corner target');
+      const cdp = await page.context().newCDPSession(page);
+      const at = { x: c.x + c.w / 2, y: c.y + c.h / 2 };
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at] });
+      await page.waitForTimeout(3300);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.getByRole('dialog').waitFor({ state: 'visible', timeout: T });
+    });
+    await settle(page);
+    await shoot('corner');
   },
 };
 

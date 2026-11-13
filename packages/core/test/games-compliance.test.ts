@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { parse } from 'yaml';
 
 import { EVENT_NAMES, complianceViolations, gameSources } from '../src/index.js';
 
@@ -15,7 +16,9 @@ const src = (slug: string) => readFileSync(new URL(`../../../games/${slug}/index
 
 describe.each(GAMES)('%s compliance', (slug) => {
   it('breaks no compliance rule (every .html and .js file)', () => {
-    expect(complianceViolations(gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url))))).toEqual([]);
+    const meta = parse(readFileSync(new URL(`../../../games/${slug}/game.yaml`, import.meta.url), 'utf8')) as { childDirected?: boolean };
+    const sources = gameSources(fileURLToPath(new URL(`../../../games/${slug}/`, import.meta.url)));
+    expect(complianceViolations(sources, { childDirected: meta.childDirected === true })).toEqual([]);
   });
 
   it('has inline module scripts that parse (catches duplicate declarations after merges)', () => {

@@ -126,3 +126,20 @@ describe('implementer contract', () => {
     expect(parseImplementerOutput('{"summary": "Moved the key", "blocked": ""}')).toBeNull();
   });
 });
+
+describe('planner.md Block Barn section', () => {
+  const p = loadPrompt('planner');
+  const sec = p.slice(p.indexOf('## Block Barn'), p.indexOf('## How to plan'));
+  it('exists and is child-directed', () => {
+    expect(p).toContain('## Block Barn');
+    expect(sec).toMatch(/child-directed/);
+  });
+  it.each(['score', 'timers', 'rewards', 'streaks', 'nudges', 'purchases', 'prompts', 'events', 'links out', 'must read', 'flashing'])(
+    'names the anti-goal %s',
+    (w) => expect(sec.toLowerCase()).toContain(w),
+  );
+  it.each(['games/block-barn/recorder.js', 'games/block-barn/audio/**', 'SOURCES.md', 'childDirected', 'responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm'])(
+    'names %s',
+    (w) => expect(sec).toContain(w),
+  );
+});

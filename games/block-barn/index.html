@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#6b3a26">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Block Barn</title>
+<style>
+  :root {
+    --ink: #3d2a1e;
+    --wall: #b9573d;
+    --wall2: #a84c35;
+    --beam: #6b3a26;
+    --hay: #e9c55c;
+    --hay2: #ddb54a;
+    --S: 110px;
+    --T: 44px;
+    color-scheme: light;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--wall);
+    color: var(--ink);
+    font: 800 16px/1.2 ui-rounded, "Arial Rounded MT Bold", "Nunito", "Avenir Next", system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  /* ---- the barn: a wall along the top (at most 15% of the height), then the floor, filled edge to edge.
+     Everything is sized from the screen with CSS grid and container units: two big columns with the tower beside
+     them on a tall phone, three columns with the tower in the corner on other portrait screens, one big row of
+     taller blocks on landscape screens. ---- */
+  #barn { position: fixed; inset: 0; overflow: hidden; touch-action: none; display: grid;
+    grid-template-rows: clamp(calc(64px + env(safe-area-inset-top, 0px)), 10%, 15%) minmax(0, 1fr); }
+  @media (min-aspect-ratio: 5 / 4) { #barn { grid-template-rows: clamp(calc(64px + env(safe-area-inset-top, 0px)), 14.5%, 15%) minmax(0, 1fr); } }
+  #wall { position: relative; overflow: hidden; container-type: size;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,0) 30%),
+      repeating-linear-gradient(90deg, var(--wall) 0 46px, var(--wall2) 46px 49px); }
+  #rafter { position: absolute; left: 0; right: 0; top: 0; height: 26px; background: var(--beam); box-shadow: 0 4px 0 rgba(0,0,0,.15); }
+  #rafter::before, #rafter::after { content: ""; position: absolute; top: 18px; width: 16px; height: 90px; background: var(--beam); }
+  #rafter::before { left: 12%; transform: skewX(24deg); }
+  #rafter::after { right: 12%; transform: skewX(-24deg); }
+  #window { position: absolute; left: 58%; bottom: 0; height: calc(100% - 34px); aspect-ratio: 92 / 80; border: 6px solid #f4e6c8; border-bottom: 0; border-radius: 999px 999px 0 0;
+    background: linear-gradient(180deg, #a9dcff, #d9f1ff 70%, #9fd38a 70%); box-shadow: inset 0 0 0 3px rgba(0,0,0,.08); }
+  #window::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: #f4e6c8; }
+  #window::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 6px; margin-top: -3px; background: #f4e6c8; }
+  @container (max-height: 76px) { #window { display: none; } }
+  #play { position: relative; container-type: size; min-height: 0; }
+  #floor { position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(120,70,20,.25), rgba(0,0,0,0) 22px),
+      repeating-linear-gradient(115deg, transparent 0 22px, rgba(190,140,40,.35) 22px 25px, transparent 25px 40px),
+      repeating-linear-gradient(65deg, transparent 0 31px, rgba(255,240,180,.35) 31px 33px, transparent 33px 50px),
+      var(--hay); }
+  #stage { position: absolute; inset: 0; box-sizing: border-box; display: grid; --g: 8px;
+    --pl: max(8px, env(safe-area-inset-left, 0px)); --pr: max(8px, env(safe-area-inset-right, 0px)); --pt: 8px; --pb: max(12px, env(safe-area-inset-bottom, 0px));
+    --iw: calc(100cqw - var(--pl) - var(--pr)); --ih: calc(100cqh - var(--pt) - var(--pb));
+    gap: var(--g); padding: var(--pt) var(--pr) var(--pb) var(--pl);
+    /* portrait (iPhone SE, tablets upright): three columns, two rows at the top; the tower stands bottom right, and
+       the spare hay is at the bottom left (so nothing is bare at the top before the first tap) */
+    --S0: min((var(--iw) - 2 * var(--g)) / 3, (var(--ih) - 2 * var(--g) - 88px) / 3.94);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: calc(var(--S0) * 1.97) calc(var(--S0) * 1.97) minmax(0, 1fr);
+    grid-template-areas: "s0 s1 s2" "s3 s4 tower" "free free tower"; }
+  @media (max-aspect-ratio: 13 / 25) {
+    /* tall phones: two big columns, three rows; the tower has its own band down the left */
+    #stage { grid-template-columns: calc(var(--iw) * .31) repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr));
+      grid-template-areas: "tower s0 s1" "tower s2 s3" "tower s4 free"; }
+  }
+  @media (min-aspect-ratio: 5 / 4) {
+    /* landscape (tablets on their side, desktop windows, phones on their side): one big row of taller blocks (up to
+       1.4:1) with big animals on them, the tower at the side; the wall takes a little more of the height */
+    #stage { --g: 8px; grid-template-columns: clamp(120px, calc(var(--iw) * .09), 240px) repeat(5, minmax(0, 1fr));
+      grid-template-rows: minmax(0, 1fr); grid-template-areas: "tower s0 s1 s2 s3 s4"; }
+    #free { display: none; }
+    /* the row sits up from the bottom edge (most of the spare height goes below it), so the animals peeking
+       over the blocks before the first tap reach well up the floor */
+    #stage .slot > * { --B: min(var(--S) * 1.4, max(var(--S), 100cqh - var(--S) - 4px)); --L: max(0px, (100cqh - var(--B) - var(--S) - 2px) * .9); }
+  }
+  @media (min-aspect-ratio: 5 / 4) and (max-aspect-ratio: 3 / 2) {
+    /* 4:3 on its side has more spare height: less of it below the row, and the peeking animals show more of themselves */
+    #stage .slot > * { --L: max(0px, (100cqh - var(--B) - var(--S) - 2px) * .65); --peek: 15%; }
+  }
+  #free { grid-area: free; pointer-events: none; }
+  #slots { display: contents; }
+
+  /* ---- floor blocks and their animals ---- */
+  /* each slot is one grid cell: the block (S wide, B tall) at the bottom, its animal standing on it, its drawing
+     filling the space above (draw.js gives each picture its own bounds) */
+  .slot { position: relative; container-type: size; min-width: 0; min-height: 0; }
+  .slot:nth-child(1) { grid-area: s0; } .slot:nth-child(2) { grid-area: s1; } .slot:nth-child(3) { grid-area: s2; }
+  .slot:nth-child(4) { grid-area: s3; } .slot:nth-child(5) { grid-area: s4; }
+  .slot > * { --S: min(100cqw, 100cqh / 1.97); --B: var(--S); --L: 0px; }
+  .block { position: absolute; left: calc(50% - var(--S) / 2); bottom: var(--L); width: var(--S); height: var(--B); padding: 0; margin: 0; border: 0;
+    background: none; color: inherit; font: inherit; pointer-events: none; }
+  .body { position: absolute; inset: 0; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--c, #ffd43b); box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18);
+    transform-origin: 50% 100%; }
+  .glyph { font-size: calc(var(--S) * .4); letter-spacing: .02em; line-height: 1; white-space: nowrap; }
+  .word { font-size: calc(var(--S) * .16); margin-top: calc(var(--S) * .04); opacity: .85; }
+  .word mark { background: none; color: #c2410c; }
+  .animal { position: absolute; left: 0; right: 0; bottom: calc(var(--L) + var(--B) + 2px);
+    height: min(100cqh - var(--L) - var(--B) - 2px, var(--S) * 1.6); pointer-events: none; }
+  .animal .pic, .tanimal .pic { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* before its block is tapped, the animal peeks out from behind it: a soft silhouette in a darker hay tone,
+     its lower part tucked behind the block (--peek), bobbing slowly; it is not a tap target of its own */
+  .slot > * { --peek: 45%; }
+  .animal.ghost { opacity: .8; }
+  .animal.ghost .art { transform-box: fill-box; transform: translateY(var(--peek)); }
+  .animal.ghost .art *:not([fill="none"]) { fill: #c39437 !important; }
+  .animal.ghost .art * { stroke: #c39437 !important; }
+  .animal.ghost .pic { animation: bob 4.5s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-5px); } }
+  .animal .pic, .tanimal .pic { transform-origin: 50% 92%; overflow: visible; }
+  .friend { position: absolute; width: 46px; height: 30px; bottom: -4px; right: -40px; animation: peek 2.4s ease-in-out forwards; pointer-events: none; }
+
+  .slot.invite .body { animation: glow 2.4s ease-in-out infinite; }
+  @keyframes glow { 0%, 100% { box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18), 0 0 0 0 rgba(255,246,200,.0); }
+    50% { box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18), 0 0 18px 10px rgba(255,246,200,.75); } }
+
+  .body.flip { animation: flip .62s cubic-bezier(.3,.7,.4,1); }
+  @keyframes flip { 0% { transform: none; } 35% { transform: translateY(-34px) rotate(170deg) scale(.95); } 70% { transform: translateY(0) rotate(360deg); }
+    84% { transform: scale(1.08, .9); } 100% { transform: none; } }
+  .body.arrive { animation: arrive .55s cubic-bezier(.3,.7,.4,1); }
+  @keyframes arrive { 0% { transform: translateY(-120px) scale(.6); opacity: 0; } 60% { transform: translateY(0) scale(1.05, .92); opacity: 1; } 100% { transform: none; } }
+  .body.nudge { animation: nudge .4s ease-out; }
+  @keyframes nudge { 30% { transform: scale(1.06, .94); } 60% { transform: scale(.97, 1.03); } }
+  .animal.pop .pic { animation: pop .55s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes pop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+
+  /* moves: each animal's signature, then a different little one on each repeat tap */
+  .mv .pic { animation: var(--anim) var(--dur, .9s) ease-in-out; }
+  .mv[data-move="march"] .pic { --anim: march; }
+  @keyframes march { 25% { transform: translateX(-6px) rotate(-4deg); } 50% { transform: translateX(6px) rotate(4deg); } 75% { transform: translateX(-4px) rotate(-3deg); } }
+  .mv[data-move="hop"] .pic, .mv[data-move="baa-bounce"] .pic { --anim: hop; }
+  @keyframes hop { 30% { transform: translateY(-26px) scale(.95, 1.06); } 55% { transform: translateY(0) scale(1.08, .9); } 75% { transform: translateY(-10px); } }
+  .mv[data-move="bounce"] .pic { --anim: bounce; --dur: 1.1s; }
+  @keyframes bounce { 20%, 60% { transform: translateY(-34px); } 40%, 80% { transform: translateY(0) scale(1.06, .92); } }
+  .mv[data-move="waddle"] .pic { --anim: waddle; }
+  @keyframes waddle { 20% { transform: rotate(-9deg); } 40% { transform: rotate(9deg); } 60% { transform: rotate(-7deg); } 80% { transform: rotate(6deg); } }
+  .mv[data-move="pulse"] .pic { --anim: pulse; --dur: 1.2s; }
+  @keyframes pulse { 25% { transform: scale(1.12, .86); } 50% { transform: translateY(-14px) scale(.92, 1.1); } 75% { transform: scale(1.06, .94); } }
+  .mv[data-move="wiggle-tail"] .pic, .mv[data-move="wiggle-spines"] .pic, .mv[data-move="snort-wiggle"] .pic { --anim: wiggle; }
+  @keyframes wiggle { 15%, 45%, 75% { transform: rotate(-6deg); } 30%, 60%, 90% { transform: rotate(6deg); } }
+  .mv[data-move="head-turn"] .pic { --anim: turn; --dur: 1.1s; }
+  @keyframes turn { 30% { transform: scaleX(-1); } 60% { transform: scaleX(-1) rotate(-6deg); } }
+  .mv[data-move="growl-stomp"] .pic, .mv[data-move="gallop"] .pic { --anim: stomp; }
+  @keyframes stomp { 20%, 60% { transform: translateY(-10px) rotate(-3deg); } 40%, 80% { transform: translateY(0) scale(1.06, .94); } }
+  .mv[data-move="moo-chew"] .pic, .mv[data-move="head-bob"] .pic { --anim: nod; }
+  @keyframes nod { 25%, 75% { transform: rotate(6deg) translateY(4px); } 50% { transform: rotate(-4deg); } }
+  .mv[data-move="head-butt"] .pic, .mv[data-move="pounce"] .pic { --anim: butt; }
+  @keyframes butt { 30% { transform: translateX(-10px) rotate(-6deg); } 55% { transform: translateX(14px) rotate(4deg) translateY(-8px); } 75% { transform: none; } }
+  .mv[data-move="roar"] .pic, .mv[data-move="trunk-swing"] .pic { --anim: roar; }
+  @keyframes roar { 30% { transform: scale(1.14); } 50% { transform: scale(1.1) rotate(3deg); } 70% { transform: scale(1.12) rotate(-3deg); } }
+  .mv[data-move="swing"] .pic, .mv[data-move="shaggy-sway"] .pic, .mv[data-move="mane-toss"] .pic { --anim: sway; --dur: 1.2s; }
+  @keyframes sway { 25% { transform: rotate(-10deg); } 50% { transform: rotate(9deg); } 75% { transform: rotate(-5deg); } }
+  .mv[data-move="tongue-flick"] .pic, .mv[data-move="hide-in-shell"] .pic, .mv[data-move="wing-flap"] .pic, .mv[data-move="spout"] .pic { --anim: nod; }
+  .mv[data-move="tongue-flick"] .p-tongue { animation: flick .9s ease-in-out; transform-origin: 8px 72px; }
+  @keyframes flick { 20%, 60% { transform: scaleX(1.8); } 40%, 80% { transform: scaleX(.2); } }
+  .mv[data-move="hide-in-shell"] .p-head { animation: tuck 1.2s ease-in-out; }
+  @keyframes tuck { 30%, 70% { transform: translateX(22px) scale(.6); } }
+  .mv[data-move="wing-flap"] .p-wing, .mv[data-move="wing-flap"] .p-wing2 { animation: flap .3s ease-in-out 3; }
+  .p-wing { transform-origin: 34px 60px; } .p-wing2 { transform-origin: 86px 60px; }
+  @keyframes flap { 50% { transform: rotate(-24deg); } }
+  .mv[data-move="wing-flap"] .p-wing2 { animation-name: flap2; }
+  @keyframes flap2 { 50% { transform: rotate(24deg); } }
+  .mv[data-move="spout"] .p-spout { animation: spout 1s ease-out; transform-origin: 46px 34px; }
+  @keyframes spout { 0% { transform: scaleY(.2); } 40% { transform: scaleY(1.6); } }
+  .mv.alt1 .pic { --anim: jump; --dur: .7s; }
+  @keyframes jump { 40% { transform: translateY(-30px) rotate(-8deg); } 70% { transform: translateY(0) scale(1.08, .9); } }
+  .mv.alt2 .pic { --anim: spin; --dur: .8s; }
+  @keyframes spin { 50% { transform: translateY(-16px) rotate(180deg) scale(.9); } 100% { transform: rotate(360deg); } }
+  .mv.alt3 .pic { --anim: squish; --dur: .7s; }
+  @keyframes squish { 30% { transform: scale(1.2, .75); } 60% { transform: scale(.88, 1.14); } }
+  .dance .pic { animation: dance 1.8s ease-in-out !important; }
+  @keyframes dance { 10% { transform: translateY(-20px) rotate(-12deg); } 25% { transform: translateY(0) rotate(10deg); } 40% { transform: translateY(-26px) rotate(-10deg) scale(1.08); }
+    55% { transform: translateY(0) rotate(12deg); } 70% { transform: translateY(-18px) rotate(340deg); } 85% { transform: translateY(0) rotate(360deg) scale(1.08, .92); } 100% { transform: rotate(360deg); } }
+
+  /* pair reactions */
+  .re-startle .pic { animation: startle .8s ease-out !important; }
+  @keyframes startle { 15% { transform: translate(calc(var(--dir) * -12px), -18px) rotate(calc(var(--dir) * -8deg)); } 40% { transform: translate(calc(var(--dir) * -14px), 0); }
+    55%, 75% { transform: translate(calc(var(--dir) * -14px), 0) rotate(3deg); } 65% { transform: translate(calc(var(--dir) * -14px), 0) rotate(-3deg); } }
+  .re-follow .pic { animation: follow 1.4s ease-in-out !important; }
+  @keyframes follow { 15%, 45% { transform: translateX(calc(var(--dir) * 10px)) rotate(-8deg); } 30%, 60% { transform: translateX(calc(var(--dir) * 22px)) rotate(8deg); } 80% { transform: translateX(calc(var(--dir) * 8px)); } }
+  .re-nuzzle .pic { animation: nuzzle 1s ease-in-out !important; }
+  @keyframes nuzzle { 40%, 60% { transform: translateX(calc(var(--dir) * 12px)) rotate(calc(var(--dir) * 10deg)); } }
+  .re-hop .pic { animation: hop .8s ease-in-out !important; }
+  @keyframes peek { 0% { transform: translateX(-30px); opacity: 0; } 20%, 80% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-30px); opacity: 0; } }
+
+  /* ---- the tower ---- */
+  #tower { grid-area: tower; position: relative; container-type: size; min-width: 0; min-height: 0; pointer-events: none; }
+  #tower > * { --T: min((100cqw - 24px) * .8, (100cqh - 44px) / 5.25, 160px); }
+  #tprobe { position: absolute; visibility: hidden; left: 0; top: 0; }
+  #tower .bale { position: absolute; left: 6px; right: 6px; bottom: 0; height: 38px; border-radius: 10px;
+    background: repeating-linear-gradient(90deg, #e9c55c 0 7px, #d9ad3e 7px 9px); box-shadow: inset 0 0 0 4px #c99a32, 0 5px 0 rgba(0,0,0,.15); }
+  #tower .stack { position: absolute; left: 12px; width: var(--T); bottom: 36px; display: flex; flex-direction: column-reverse; align-items: center; transform-origin: 50% 100%; }
+  #tower .stack.wobble { animation: wobble 1s ease-out; }
+  @keyframes wobble { 15% { transform: rotate(-3deg); } 35% { transform: rotate(2.5deg); } 55% { transform: rotate(-1.5deg); } 75% { transform: rotate(.8deg); } }
+  .tblock { width: var(--T); height: var(--T); border-radius: 10px; background: var(--c); display: grid; place-items: center;
+    font-size: calc(var(--T) * .4); box-shadow: inset 0 -5px 0 rgba(0,0,0,.16), inset 0 0 0 3px rgba(255,255,255,.35); }
+  /* the script places the tower's animal where there is most room: on top of the stack, or beside it */
+  .tanimal { position: absolute; aspect-ratio: 1 / 1; }
+  .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
+  #bale-bump.bump { animation: nudge .4s ease-out; }
+
+  /* ---- effects ---- */
+  #fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .puff { position: absolute; width: 96px; height: 68px; margin: -50px 0 0 -48px; animation: puff .75s ease-out forwards; }
+  @keyframes puff { 0% { transform: scale(.3) translateY(10px); opacity: .9; } 60% { opacity: .85; } 100% { transform: scale(1.25) translateY(-14px); opacity: 0; } }
+  .falling { position: absolute; animation: fall 1.3s cubic-bezier(.4,0,.6,1) forwards; }
+  @keyframes fall { 0% { transform: none; } 45% { transform: translate(calc(var(--dx) * .7), var(--dy)) rotate(var(--rot)); }
+    65% { transform: translate(calc(var(--dx) * .85), calc(var(--dy) - 30px)) rotate(calc(var(--rot) * 1.2)); }
+    85% { transform: translate(var(--dx), var(--dy)) rotate(calc(var(--rot) * 1.3)); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(calc(var(--rot) * 1.3)); opacity: 0; } }
+  .flyer { position: absolute; transition: transform .38s cubic-bezier(.4,.1,.4,1), width .38s, height .38s; z-index: 5; }
+  .flyer .body { transition: inherit; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .body.flip, .body.arrive { animation-duration: .3s; }
+    .mv .pic, .dance .pic { animation-duration: .5s !important; }
+    .slot.invite .body { animation-duration: 4s; }
+    .animal.ghost .pic { animation: none; }
+  }
+
+  /* ---- the grown-up corner ---- */
+  #corner { position: fixed; z-index: 20; top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 10px); width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%;
+    background: rgba(70, 40, 25, .28); color: rgba(255, 240, 220, .8); touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  #corner svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #corner .ring { fill: none; stroke: #fff4d8; stroke-width: 4; stroke-dasharray: 126; stroke-dashoffset: 126; transform: rotate(-90deg); transform-origin: 23px 23px; }
+  #corner.holding .ring { transition: stroke-dashoffset 3s linear; stroke-dashoffset: 0; }
+  #grownups { position: fixed; inset: 0; z-index: 30; background: #fbf4e6; color: #2f241c; overflow-y: auto; font-weight: 500;
+    padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  #grownups .inner { max-width: 560px; margin: 0 auto; }
+  #grownups h2 { font-size: 22px; margin: 8px 0 12px; }
+  #grownups h3 { font-size: 16px; margin: 20px 0 6px; }
+  #grownups p { margin: 6px 0; line-height: 1.4; font-size: 15px; }
+  #grownups button { font: 700 16px/1 system-ui, -apple-system, sans-serif; border-radius: 12px; border: 2px solid #c9b394; background: #fff; color: inherit; min-height: 44px; padding: 0 16px; }
+  #grownups button[aria-pressed="true"] { background: #ffe08a; border-color: #d9a520; }
+  #pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }
+  #pins button { padding: 0; }
+  #close { width: 100%; margin-top: 24px; min-height: 56px !important; background: #6b3a26 !important; color: #fff !important; border-color: #6b3a26 !important; }
+</style>
+</head>
+<body>
+<main id="barn" aria-label="Block Barn">
+  <div id="wall"><div id="rafter"></div><div id="window"></div></div>
+  <div id="play">
+    <div id="floor"></div>
+    <div id="stage">
+      <div id="tower" aria-hidden="true"><div class="bale" id="bale-bump"></div><div class="stack"></div><div class="tblock" id="tprobe"></div></div>
+      <div id="free"></div>
+      <div id="slots"></div>
+    </div>
+  </div>
+  <div id="fx"></div>
+</main>
+<button id="corner" type="button" aria-label="For grown-ups: press and hold for 3 seconds">
+  <svg viewBox="0 0 46 46" aria-hidden="true" focusable="false">
+    <circle class="ring" cx="23" cy="23" r="20"/>
+    <circle cx="16" cy="23" r="2.6" fill="currentColor"/><circle cx="23" cy="23" r="2.6" fill="currentColor"/><circle cx="30" cy="23" r="2.6" fill="currentColor"/>
+  </svg>
+</button>
+<div id="grownups" role="dialog" aria-modal="true" aria-labelledby="gu-title" hidden>
+  <div class="inner">
+    <h2 id="gu-title">For grown-ups</h2>
+    <p>Block Barn is made for a little one to play alone: tap a block to hear its letter and meet its animal, tap again to stack it, tap the tower to knock it down. Nothing here can be lost, and nothing leaves this device.</p>
+
+    <h3>Sound</h3>
+    <button id="sound" type="button" aria-pressed="true">Sound on</button>
+
+    <h3>Favourite letters</h3>
+    <p>Pinned letters come around more often (her name's letters, say).</p>
+    <div id="pins"></div>
+
+    <!-- recorder.js puts its list of voices here: record, hear it back, keep or redo, back to default. -->
+    <section id="voices" aria-label="Voices"></section>
+
+    <h3>Keep her in the game</h3>
+    <p>On iPhone or iPad, turn on Guided Access (Settings, Accessibility, Guided Access). Then triple-click the side or Home button while Block Barn is open to lock the device to it. Triple-click again and enter your passcode to leave.</p>
+
+    <h3>Keep your recordings</h3>
+    <p>On iPhone or iPad, add Block Barn to your Home Screen first (Share, then Add to Home Screen), then open it and record from the Home Screen icon. Safari and the Home Screen app keep separate recordings, and Safari may clear a website's saved data after a few weeks without a visit.</p>
+
+    <button id="close" type="button">Back to the barn</button>
+  </div>
+</div>
+<script type="module">
+import { createStudio } from '../sdk/studio-sdk.js';
+import { ANIMALS } from './animals.js';
+import { createRotation } from './rotation.js';
+import { createTower } from './tower.js';
+import { createVoice } from './voice.js';
+import { createRecorder, mountVoices } from './recorder.js';
+import { animalSVG, mouseSVG, puffSVG } from './draw.js';
+
+// Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
+const studio = createStudio({ game: 'block-barn', version: '0.1.0', endpoint: '' });
+void studio;
+
+const $ = (id) => document.getElementById(id);
+const BY = Object.fromEntries(ANIMALS.map((a) => [a.letter, a]));
+const LETTERS = ANIMALS.map((a) => a.letter);
+const COLORS = ['#ff7b7b', '#ffaa5c', '#ffd84d', '#7fdc8a', '#6cbcf7', '#bfa6ff'];
+const colorOf = (l) => COLORS[LETTERS.indexOf(l) % COLORS.length];
+const NOISE = { a: 'tip tap tip tap', b: 'grrr', c: 'moo', d: 'quack quack', e: 'toot toot', f: 'ribbit', g: 'maa', h: 'neigh',
+  l: 'roar', m: 'ooh ooh ah ah', o: 'hoo hoo', p: 'oink oink', s: 'baa', x: 'yip yip' };
+// Who reacts to whom: when the first arrives (or is tapped), the second, if out, reacts.
+const PAIRS = [['g', 'd', 'follow'], ['x', 'r', 'startle'], ['l', 'z', 'startle'], ['a', 'e', 'startle'], ['o', 'n', 'startle'],
+  ['c', 'p', 'nuzzle'], ['p', 'c', 'nuzzle'], ['h', 's', 'nuzzle'], ['f', 'd', 'hop'], ['w', 'j', 'hop'], ['b', 'm', 'hop'], ['k', 'r', 'hop']];
+const INVITE_AFTER = 8000; // ms of no taps before "Where's the ...?" (once per quiet spell)
+const NEAR = 44; // a tap this close to a target (CSS px) counts as on it
+const HOLD = 3000; // grown-up corner press-and-hold
+
+// ---------- settings (per-device conveniences only) ----------
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode: memory only */ } };
+let soundOn = load('block-barn.sound', true) !== false;
+let pins = new Set((load('block-barn.pins', []) || []).filter((l) => LETTERS.includes(l)));
+
+// ---------- sound effects (synthesised, soft, created on the first tap) ----------
+let ac = null, master = null, noiseBuf = null;
+function wakeAudio() {
+  if (!soundOn) return null;
+  if (!ac) {
+    try {
+      // iPhone: Web Audio follows the ring/silent switch unless the page's audio session is 'playback'.
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const comp = ac.createDynamicsCompressor();
+      master = ac.createGain();
+      master.gain.value = 0.5;
+      master.connect(comp);
+      comp.connect(ac.destination);
+      noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.6), ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    } catch { ac = null; return null; }
+  }
+  if (ac.state !== 'running') ac.resume().catch(() => {}); // 'suspended', or iOS's 'interrupted' after a call or Siri
+  return ac;
+}
+function env(g, t0, peak, attack, dur) {
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(peak, t0 + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+}
+function tone(f0, f1, dur, vol, at = 0, type = 'triangle') {
+  const c = wakeAudio(); if (!c) return;
+  const t0 = c.currentTime + 0.005 + at;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t0);
+  o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+  env(g, t0, vol, 0.01, dur);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function hush(dur, vol, freq, at = 0, attack = 0.02) {
+  const c = wakeAudio(); if (!c) return;
+  const t0 = c.currentTime + 0.005 + at;
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = noiseBuf;
+  f.type = 'lowpass'; f.frequency.value = freq;
+  env(g, t0, vol, attack, dur);
+  s.connect(f); f.connect(g); g.connect(master);
+  s.start(t0); s.stop(t0 + dur + 0.05);
+}
+const sfx = {
+  clack(at = 0, pitch = 1) { tone(560 * pitch, 320 * pitch, 0.09, 0.12, at); hush(0.06, 0.05, 2200, at, 0.004); },
+  pop() { tone(380, 720, 0.22, 0.08, 0, 'sine'); },
+  tumble(n) { for (let i = 0; i < n; i++) sfx.clack(0.08 + i * 0.11, 1.15 - i * 0.07); hush(0.5, 0.06, 500, 0.1, 0.05); },
+  puff() { hush(0.35, 0.07, 900, 0, 0.03); },
+  happy() { [523, 659, 784].forEach((f, i) => tone(f, f * 1.01, 0.22, 0.06, i * 0.12, 'sine')); },
+};
+
+// ---------- voice ----------
+// iPhone only lets speech and <audio> start inside a tap, at least the first time. So the first tap primes both,
+// synchronously in its pointerup handler: a silent utterance, and one shared <audio> element played on a tiny silent
+// WAV built here (a blob: URL, no file, no network). Every clip then plays through that same element.
+const sharedAudio = new Audio();
+let primed = false;
+function silentWav() {
+  const n = 400, b = new DataView(new ArrayBuffer(44 + n)); // 0.05 s of 8 kHz 8-bit mono silence
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) b.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); b.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+  b.setUint32(24, 8000, true); b.setUint32(28, 8000, true); b.setUint16(32, 1, true); b.setUint16(34, 8, true); str(36, 'data'); b.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) b.setUint8(44 + i, 128);
+  return URL.createObjectURL(new Blob([b.buffer], { type: 'audio/wav' }));
+}
+function prime() {
+  if (primed) return;
+  primed = true;
+  try {
+    const synth = window.speechSynthesis;
+    if (synth && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); }
+  } catch { /* no speech on this device */ }
+  try {
+    sharedAudio.src = silentWav();
+    const p = sharedAudio.play();
+    if (p && p.then) p.then(() => sharedAudio.pause(), () => {});
+  } catch { /* no audio element playback */ }
+}
+// A clip resolves when it has finished (or was paused or superseded), so the letter, name and noise play one after another.
+let activeClip = null;
+const clipPlayer = (url) => {
+  const me = { finish: null };
+  return {
+    play() {
+      if (activeClip && activeClip !== me && activeClip.finish) activeClip.finish();
+      activeClip = me;
+      sharedAudio.src = url;
+      return sharedAudio.play().then(() => new Promise((done) => {
+        if (activeClip !== me) return done();
+        const fin = () => {
+          sharedAudio.removeEventListener('ended', fin);
+          sharedAudio.removeEventListener('error', fin);
+          if (me.finish === fin) me.finish = null;
+          done();
+        };
+        me.finish = fin;
+        sharedAudio.addEventListener('ended', fin);
+        sharedAudio.addEventListener('error', fin);
+      }));
+    },
+    pause() {
+      if (activeClip === me) { activeClip = null; sharedAudio.pause(); }
+      if (me.finish) me.finish();
+    },
+  };
+};
+// Grown-ups' own recordings (recorder.js) come first, then bundled clips, then device speech.
+const recorder = createRecorder();
+const voice = createVoice({ audio: clipPlayer, synth: window.speechSynthesis || null, recordings: (key) => recorder.get(key), base: './' });
+let speaking = null; // the key being spoken, or null
+let talkId = 0;
+// A tap's lines (the letter, the name, the noise) are said with a pause between; a new tap cancels the rest.
+function talk(lines) {
+  const mine = ++talkId;
+  if (!soundOn) { voice.stop(); speaking = null; return; }
+  speaking = lines[0][0]; // set now, inside the tap, so the response is immediate
+  voice.sayAll(lines, (key) => { if (mine === talkId) speaking = key; }).then(() => { if (mine === talkId) speaking = null; });
+}
+function hush_voice() { talkId++; voice.stop(); speaking = null; stopHearing(); }
+// "Hear it" in the grown-up corner plays a recording through the same shared element as the barn's clips.
+let hearing = null;
+function stopHearing() { const h = hearing; hearing = null; if (h) h.pause(); }
+function hearBack(url) {
+  hush_voice();
+  const h = (hearing = clipPlayer(url));
+  return h.play().finally(() => { if (hearing === h) hearing = null; });
+}
+// The letter is said once, as the capital ("C."): some voices read a lone small "a." as the word "uh". The small
+// letter stays on the block. A recording or clip of letter-<x> replaces it.
+const letterLine = (l) => [`letter-${l}`, `${l.toUpperCase()}.`];
+const nameLines = (l) => {
+  const a = BY[l];
+  const out = [[`name-${l}`, a.name]];
+  if (a.sound === 'call' && NOISE[l]) out.push([`noise-${l}`, NOISE[l]]);
+  return out;
+};
+
+// ---------- the barn's state ----------
+let seedNow = Math.floor(Math.random() * 2 ** 31);
+let gen; // createRotation(seed, 1) used as a fixed seeded cycle through a..z
+let rng; // small seeded generator for invitations and surprises
+let floor = []; // the 5 letters on the floor, by slot
+const named = new Set(); // floor letters showing their animal
+const tower = createTower();
+let towerTop = null; // the animal sitting on top of the tower
+let picks = 0; // replacement count, for pinned letters
+let invited = null;
+let invitedThisQuiet = false;
+let quietMs = 0;
+let cornerOpen = false;
+let manualClock = false;
+const tapCount = {}; // per letter, to vary the animal's repeat animation
+
+function seeded(a) {
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function pickLetter() {
+  picks++;
+  const busy = new Set([...floor, ...tower.blocks()]);
+  const pinned = LETTERS.filter((l) => pins.has(l) && !busy.has(l));
+  if (pinned.length && picks % 3 === 0) return pinned[Math.floor(rng() * pinned.length)];
+  for (let i = 0; i < 26; i++) {
+    const l = gen.floor()[0];
+    gen.next(l);
+    if (!busy.has(l)) return l;
+  }
+  return LETTERS.find((l) => !busy.has(l));
+}
+function reseed(n) {
+  seedNow = n >>> 0;
+  gen = createRotation(seedNow, 1);
+  rng = seeded(seedNow ^ 0x9e3779b9);
+  floor = [];
+  picks = 0;
+  named.clear();
+  tower.tumble();
+  towerTop = null;
+  invited = null; invitedThisQuiet = false; quietMs = 0;
+  for (let i = 0; i < 5; i++) floor.push(pickLetter());
+  hush_voice();
+  renderAll(false);
+}
+
+// ---------- layout ----------
+// The CSS grid places and sizes everything from the screen; the script only reads the boxes back (for the flying and
+// tumbling blocks, the puffs and the hook) and hands the block and tower sizes to the effects layer.
+const slotsEl = $('slots'), towerEl = $('tower'), stackEl = towerEl.querySelector('.stack'), fx = $('fx');
+let layout = null;
+const rectOf = (el) => { const q = el.getBoundingClientRect(); return { x: q.left, y: q.top, w: q.width, h: q.height }; };
+function applyLayout() {
+  const block = slotsEl.querySelector('.block');
+  layout = { W: innerWidth, H: innerHeight, T: $('tprobe').getBoundingClientRect().width || 44, S: block ? block.getBoundingClientRect().width : 110,
+    tower: rectOf(towerEl), floorBox: null };
+  const root = document.documentElement.style;
+  root.setProperty('--S', `${layout.S}px`); // for blocks in flight (#fx sits outside the grid cells)
+  root.setProperty('--T', `${layout.T}px`);
+  placeTower();
+  layout.floorBox = emptyFloor();
+  return layout;
+}
+// The stack stands in the middle of a narrow tower zone, at the left of a wide one; the tower's animal goes where
+// there is most room, on top of the stack or beside it.
+function placeTower() {
+  const w = towerEl.clientWidth, h = towerEl.clientHeight, T = layout.T, n = tower.blocks().length;
+  const side = w - 12 - T - 8;
+  const middle = side < 0.6 * T;
+  const sx = middle ? (w - T) / 2 : 12;
+  stackEl.style.left = `${sx}px`;
+  const a = towerEl.querySelector('.tanimal');
+  if (!a) return;
+  const top = Math.min(h - 36 - n * T - 6, w - 12, 1.8 * T);
+  const beside = middle ? 0 : Math.min(side, h - 40, 1.6 * T);
+  if (top >= beside) {
+    const size = Math.max(top, 24);
+    Object.assign(a.style, { width: `${size}px`, left: `${Math.max(6, Math.min(w - 6 - size, sx + T / 2 - size / 2))}px`, bottom: `${36 + n * T + 2}px` });
+  } else {
+    Object.assign(a.style, { width: `${beside}px`, left: `${sx + T + 8}px`, bottom: '34px' });
+  }
+}
+/** The tower's own box (its bale, stack and animal), at least 88 px each way: the tower's tap target. */
+function towerBox() {
+  const rs = [$('bale-bump'), stackEl, towerEl.querySelector('.tanimal')].filter(Boolean).map((e) => e.getBoundingClientRect()).filter((r) => r.width && r.height);
+  let x0 = Math.min(...rs.map((r) => r.left)), x1 = Math.max(...rs.map((r) => r.right));
+  let y0 = Math.min(...rs.map((r) => r.top));
+  const y1 = Math.max(...rs.map((r) => r.bottom));
+  if (y1 - y0 < 88) y0 = y1 - 88;
+  if (x1 - x0 < 88) { const c = (x0 + x1) / 2; x0 = c - 44; x1 = c + 44; }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+/** A real stretch of bare hay: the free grid cell, or the tower zone above the tower, whichever is bigger. */
+function emptyFloor() {
+  const col = rectOf(towerEl), t = towerBox();
+  const cands = [{ x: col.x, y: col.y, w: col.w, h: Math.max(0, t.y - NEAR - 4 - col.y) }];
+  const f = rectOf($('free'));
+  if (f.w && f.h) cands.push(f);
+  return cands.reduce((a, b) => (Math.min(b.w, b.h) > Math.min(a.w, a.h) ? b : a));
+}
+
+// ---------- drawing ----------
+function wordHTML(l) {
+  const a = BY[l];
+  if (a.spell) return a.spell.replace(/\[(.)\]/, '<mark>$1</mark>');
+  const at = a.name.indexOf(l);
+  return at < 0 ? a.name : `${a.name.slice(0, at)}<mark>${l}</mark>${a.name.slice(at + 1)}`;
+}
+function makeSlot() {
+  const el = document.createElement('div');
+  el.className = 'slot';
+  el.innerHTML = '<div class="animal" hidden></div><button class="block" type="button" tabindex="-1"><div class="body"><div class="glyph"></div><div class="word" hidden></div></div></button>';
+  return el;
+}
+function renderSlot(k, anim) {
+  const el = slotsEl.children[k];
+  const l = floor[k];
+  const isNamed = named.has(l);
+  el.dataset.letter = l;
+  const block = el.querySelector('.block'), body = el.querySelector('.body'), animal = el.querySelector('.animal');
+  block.dataset.letter = l;
+  block.setAttribute('aria-label', `${l.toUpperCase()} ${l}${isNamed ? `, ${BY[l].name}` : ''}`);
+  body.style.setProperty('--c', colorOf(l));
+  el.querySelector('.glyph').textContent = `${l.toUpperCase()} ${l}`;
+  const word = el.querySelector('.word');
+  word.hidden = !isNamed;
+  if (isNamed) word.innerHTML = wordHTML(l);
+  el.classList.toggle('invite', invited === l);
+  if (animal.dataset.letter !== l) { animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
+  animal.hidden = false;
+  animal.classList.toggle('ghost', !isNamed); // unnamed: its silhouette peeks over the block
+  if (anim) restart(body, anim);
+}
+function renderTower(popTop) {
+  const blocks = tower.blocks();
+  towerEl.querySelector('.tanimal')?.remove();
+  stackEl.replaceChildren(...blocks.map((l) => {
+    const b = document.createElement('div');
+    b.className = 'tblock';
+    b.style.setProperty('--c', colorOf(l));
+    b.textContent = `${l.toUpperCase()} ${l}`;
+    return b;
+  }));
+  if (towerTop && blocks.length) {
+    const a = document.createElement('div');
+    a.className = 'tanimal';
+    a.dataset.move = BY[towerTop].move;
+    a.innerHTML = animalSVG(towerTop);
+    towerEl.append(a);
+    if (popTop) restart(a, 'pop');
+  }
+  if (layout) placeTower();
+}
+function renderAll(anim) {
+  for (let k = 0; k < 5; k++) renderSlot(k, anim ? 'arrive' : null);
+  renderTower(false);
+}
+function restart(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth; // restart the CSS animation
+  el.classList.add(cls);
+}
+const animalEl = (l) => { const k = floor.indexOf(l); return k < 0 || !named.has(l) ? null : slotsEl.children[k].querySelector('.animal'); };
+function moveAnimal(l, variant) {
+  const a = animalEl(l);
+  if (!a) return;
+  a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop');
+  void a.offsetWidth;
+  a.classList.add('mv');
+  if (variant) a.classList.add(`alt${variant}`);
+}
+function react(l) {
+  for (const [who, other, how] of PAIRS) {
+    if (who !== l) continue;
+    const a = animalEl(other);
+    if (!a) continue;
+    const me = slotsEl.children[floor.indexOf(l)].getBoundingClientRect(), them = a.getBoundingClientRect();
+    a.style.setProperty('--dir', me.left > them.left ? '1' : '-1');
+    setTimeout(() => { a.classList.remove('re-startle', 're-follow', 're-nuzzle', 're-hop'); void a.offsetWidth; a.classList.add(`re-${how}`); }, 450);
+    setTimeout(() => a.classList.remove(`re-${how}`), 2200);
+  }
+}
+function hiddenFriend(k) {
+  const el = slotsEl.children[k];
+  const m = document.createElement('div');
+  m.className = 'friend';
+  m.innerHTML = mouseSVG();
+  el.append(m);
+  setTimeout(() => m.remove(), 2600);
+}
+function puffAt(x, y) {
+  const p = document.createElement('div');
+  p.className = 'puff';
+  p.style.left = `${x}px`;
+  p.style.top = `${y}px`;
+  p.innerHTML = puffSVG();
+  fx.append(p);
+  setTimeout(() => p.remove(), 800);
+  sfx.puff();
+}
+
+// ---------- what a tap does ----------
+function clearInvite() {
+  if (invited === null) return;
+  const was = invited;
+  invited = null;
+  const k = floor.indexOf(was);
+  if (k >= 0) slotsEl.children[k].classList.remove('invite');
+}
+function nameBlock(k) {
+  const l = floor[k];
+  named.add(l);
+  renderSlot(k, 'flip');
+  const animal = slotsEl.children[k].querySelector('.animal');
+  restart(animal, 'pop');
+  setTimeout(() => moveAnimal(l, 0), 650);
+  talk([letterLine(l), ...nameLines(l)]);
+  sfx.clack(); sfx.pop();
+  react(l);
+  if (rng() < 0.14) hiddenFriend(k);
+}
+function tapAnimal(l) {
+  const n = (tapCount[l] = (tapCount[l] || 0) + 1);
+  moveAnimal(l, n % 4);
+  talk(nameLines(l));
+  react(l);
+}
+function stackBlock(k) {
+  const l = floor[k];
+  const before = tower.blocks();
+  const from = slotsEl.children[k].getBoundingClientRect();
+  named.delete(l);
+  const result = tower.add(l);
+  towerTop = l;
+  floor[k] = pickLetter();
+  delete tapCount[l];
+  talk([letterLine(l)]);
+  sfx.clack(0, 1.1);
+  fly(l, from, before.length);
+  if (result === 'tumble') {
+    towerTop = null;
+    renderTower(false);
+    tumbleDown([...before, l]);
+  } else {
+    renderTower(true);
+    restart(stackEl, 'wobble');
+  }
+  renderSlot(k, 'arrive');
+}
+function fly(l, from, height) {
+  applyLayout();
+  const t = layout.T;
+  const st = stackEl.getBoundingClientRect();
+  const tx = st.left, ty = st.bottom - (height + 1) * t;
+  const f = document.createElement('div');
+  f.className = 'flyer';
+  Object.assign(f.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+  f.style.setProperty('--S', `${from.width}px`);
+  f.innerHTML = `<div class="body" style="--c:${colorOf(l)}"><div class="glyph">${l.toUpperCase()} ${l}</div></div>`;
+  fx.append(f);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    f.style.transform = `translate(${tx - from.left}px, ${ty - from.top}px)`;
+    f.style.width = `${t}px`; f.style.height = `${t}px`;
+  }));
+  setTimeout(() => f.remove(), 420);
+}
+function tumbleDown(letters) {
+  applyLayout();
+  const t = layout.T;
+  const st = stackEl.getBoundingClientRect();
+  const baseY = st.bottom, cx = st.left;
+  const groundY = layout.H - 30 - t;
+  letters.forEach((l, k) => {
+    const b = document.createElement('div');
+    b.className = 'tblock falling';
+    b.style.setProperty('--c', colorOf(l));
+    b.textContent = `${l.toUpperCase()} ${l}`;
+    const y = baseY - (k + 1) * t;
+    Object.assign(b.style, { left: `${cx}px`, top: `${y}px`, width: `${t}px`, height: `${t}px` });
+    const dx = (20 + rng() * (layout.W * 0.45)) * (k % 2 ? 1 : 0.6);
+    b.style.setProperty('--dx', `${dx}px`);
+    b.style.setProperty('--dy', `${Math.max(0, groundY - y - rng() * 40)}px`);
+    b.style.setProperty('--rot', `${(rng() * 2 - 1) * 160}deg`);
+    b.style.animationDelay = `${k * 40}ms`;
+    fx.append(b);
+    setTimeout(() => b.remove(), 1500 + k * 40);
+  });
+  sfx.tumble(letters.length);
+  setTimeout(() => puffAt(layout.tower.x + layout.tower.w / 2, layout.tower.y + layout.tower.h - 20), 500);
+}
+function tapTower() {
+  applyLayout();
+  const was = tower.tumble();
+  if (was.length) {
+    towerTop = null;
+    renderTower(false);
+    tumbleDown(was);
+  } else {
+    restart($('bale-bump'), 'bump');
+    puffAt(layout.tower.x + layout.tower.w / 2, layout.tower.y + layout.tower.h - 30);
+  }
+}
+
+/** The tappable things (CSS px boxes), for routing and for the hook. */
+function hitBoxes() {
+  const out = [];
+  [...slotsEl.children].forEach((el, k) => {
+    const l = floor[k];
+    const r = el.querySelector('.block').getBoundingClientRect();
+    out.push({ kind: 'block', letter: l, k, x: r.left, y: r.top, w: r.width, h: r.height });
+    const a = el.querySelector('.animal');
+    if (named.has(l)) { const q = a.getBoundingClientRect(); out.push({ kind: 'animal', letter: l, k, x: q.left, y: q.top, w: q.width, h: q.height }); }
+  });
+  out.push({ kind: 'tower', ...towerBox() });
+  return out;
+}
+function distTo(b, x, y) {
+  const dx = Math.max(b.x - x, 0, x - (b.x + b.w)), dy = Math.max(b.y - y, 0, y - (b.y + b.h));
+  return Math.hypot(dx, dy);
+}
+function tapAt(x, y) {
+  quietMs = 0;
+  invitedThisQuiet = false;
+  const wasInvited = invited;
+  clearInvite();
+  let best = null, bestD = Infinity, bestC = Infinity;
+  for (const b of hitBoxes()) {
+    const d = distTo(b, x, y), c = Math.hypot(b.x + b.w / 2 - x, b.y + b.h / 2 - y);
+    if (d < bestD - 0.5 || (Math.abs(d - bestD) <= 0.5 && c < bestC)) { best = b; bestD = d; bestC = c; }
+  }
+  if (!best || bestD > NEAR) { puffAt(x, y); return; }
+  if (best.kind === 'tower') { tapTower(); return; }
+  const l = best.letter;
+  if (best.kind === 'animal') tapAnimal(l);
+  else if (!named.has(l)) nameBlock(best.k);
+  else stackBlock(best.k);
+  if (wasInvited && wasInvited === l && floor.includes(l)) {
+    setTimeout(() => { const a = animalEl(l); if (a) { a.classList.remove('mv', 'alt1', 'alt2', 'alt3'); restart(a, 'dance'); sfx.happy(); } }, 700);
+  }
+}
+
+// ---------- input: one tap per gesture, extra fingers ignored ----------
+// Fingers that land together (a palm, two fingers) are one tap. A finger left resting on the screen never blocks
+// the barn: any finger that lands REST ms or more after the current gesture began starts a fresh tap, and the
+// resting finger is then ignored. Ups and cancels are heard on the whole document, so a lost one can't stick.
+const barnEl = $('barn');
+const REST = 300;
+let gesture = null; // { id, x, y, start, fired, fingers }
+barnEl.addEventListener('pointerdown', (e) => {
+  if (cornerOpen) return;
+  e.preventDefault();
+  const now = performance.now();
+  if (gesture && now - gesture.start < REST) { gesture.fingers.add(e.pointerId); return; }
+  gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, start: now, fired: false, fingers: new Set([e.pointerId]) };
+  wakeAudio();
+});
+function endPointer(e, cancelled) {
+  if (!gesture || !gesture.fingers.has(e.pointerId)) return;
+  if (e.pointerId === gesture.id && !gesture.fired) {
+    gesture.fired = true;
+    if (!cancelled && !cornerOpen) { prime(); tapAt(gesture.x, gesture.y); }
+  }
+  gesture.fingers.delete(e.pointerId);
+  if (!gesture.fingers.size) gesture = null;
+}
+document.addEventListener('pointerup', (e) => endPointer(e, false));
+document.addEventListener('pointercancel', (e) => endPointer(e, true));
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+// ---------- the grown-up corner: press and hold 3 s ----------
+const cornerBtn = $('corner'), dialog = $('grownups');
+let holdTimer = 0;
+cornerBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (holdTimer) return;
+  cornerBtn.classList.add('holding');
+  holdTimer = setTimeout(() => { holdTimer = 0; cornerBtn.classList.remove('holding'); openCorner(); }, HOLD);
+});
+const letGo = (e) => {
+  if (!holdTimer) return;
+  clearTimeout(holdTimer); holdTimer = 0;
+  cornerBtn.classList.remove('holding');
+  if (e.type === 'pointerup') prime();
+  if (e.type === 'pointerup') { const r = cornerBtn.getBoundingClientRect(); puffAt(r.left + r.width / 2, r.bottom + 18); }
+};
+for (const t of ['pointerup', 'pointercancel', 'pointerleave']) cornerBtn.addEventListener(t, letGo);
+function openCorner() {
+  cornerOpen = true;
+  gesture = null;
+  hush_voice();
+  clearInvite();
+  renderPins();
+  dialog.hidden = false;
+  $('close').focus({ preventScroll: true });
+}
+function closeCorner() {
+  cornerOpen = false;
+  voicesList.close();
+  stopHearing();
+  dialog.hidden = true;
+  quietMs = 0; invitedThisQuiet = false;
+}
+$('close').addEventListener('click', closeCorner);
+// Recording starts only while the grown-up corner is open and showing (recorder.js checks this before the microphone).
+const voicesList = mountVoices($('voices'), { recorder, animals: ANIMALS, noises: NOISE, play: hearBack, stop: hush_voice, canRecord: () => cornerOpen && !dialog.hidden && document.visibilityState !== 'hidden' });
+const soundBtn = $('sound');
+function renderSound() { soundBtn.setAttribute('aria-pressed', String(soundOn)); soundBtn.textContent = soundOn ? 'Sound on' : 'Sound off'; }
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  save('block-barn.sound', soundOn);
+  if (!soundOn) { hush_voice(); if (ac) ac.suspend().catch(() => {}); }
+  renderSound();
+});
+function renderPins() {
+  const box = $('pins');
+  box.replaceChildren(...LETTERS.map((l) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = `${l.toUpperCase()} ${l}`;
+    b.setAttribute('aria-pressed', String(pins.has(l)));
+    b.setAttribute('aria-label', `Pin ${l.toUpperCase()} (${BY[l].name})`);
+    b.addEventListener('click', () => {
+      if (pins.has(l)) pins.delete(l); else pins.add(l);
+      save('block-barn.pins', [...pins]);
+      b.setAttribute('aria-pressed', String(pins.has(l)));
+    });
+    return b;
+  }));
+}
+
+// ---------- the quiet clock: "Where's the duck?" once per quiet spell ----------
+function advanceQuiet(ms) {
+  if (cornerOpen || document.visibilityState === 'hidden') return;
+  quietMs += ms;
+  if (quietMs >= INVITE_AFTER && !invitedThisQuiet && invited === null) invite();
+}
+function invite() {
+  invitedThisQuiet = true;
+  const fresh = floor.filter((l) => !named.has(l));
+  const from = fresh.length ? fresh : floor;
+  invited = from[Math.floor(rng() * from.length)];
+  slotsEl.children[floor.indexOf(invited)].classList.add('invite');
+  talk([[`where-${invited}`, `Where's the ${BY[invited].name}?`]]);
+}
+let lastTick = performance.now();
+setInterval(() => {
+  const now = performance.now(), dt = now - lastTick;
+  lastTick = now;
+  if (!manualClock) advanceQuiet(Math.min(dt, 1000));
+}, 250);
+
+// ---------- leaving the tab stops the voice ----------
+// ...and stops a recording in progress, so the microphone is never left on in the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hush_voice(); voicesList.close(); if (ac) ac.suspend().catch(() => {}); }
+});
+addEventListener('pagehide', () => { hush_voice(); voicesList.close(); });
+
+// ---------- start ----------
+for (let k = 0; k < 5; k++) slotsEl.append(makeSlot());
+applyLayout();
+addEventListener('resize', applyLayout);
+renderSound();
+reseed(seedNow);
+
+// ---- hal hook (test robot only; inert without ?hal) ----
+// A headless robot drives the barn through window.__hal with real taps; this block only reads the barn's own
+// state and boxes, advances its quiet clock, and reseeds it. The real-time quiet clock is switched off so the
+// robot decides when 8 s have passed. Nothing here touches the network: the SDK is in no-ingest mode above.
+if (new URLSearchParams(location.search).has('hal')) {
+  manualClock = true;
+  const box = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
+  window.__hal = {
+    state: () => ({ floor: [...floor], named: floor.filter((l) => named.has(l)), tower: tower.blocks(), corner: cornerOpen, speaking, invited }),
+    targets: () => {
+      const c = cornerBtn.getBoundingClientRect();
+      return [
+        ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
+        { kind: 'floor', ...box(applyLayout().floorBox) },
+        { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
+      ];
+    },
+    idle: (ms) => advanceQuiet(Number(ms) || 0),
+    seed: (n) => reseed(Number(n) || 0),
+  };
+}
+// ---- end hal hook ----
+</script>
+</body>
+</html>

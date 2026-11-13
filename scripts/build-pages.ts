@@ -11,7 +11,7 @@ mkdirSync(out, { recursive: true });
 const games = await loadGameLibrary(gamesDir);
 for (const g of games) {
   const src = join(gamesDir, g.slug);
-  const problems = complianceViolations(gameSources(src));
+  const problems = complianceViolations(gameSources(src), { childDirected: g.childDirected === true });
   if (problems.length > 0) throw new Error(`${g.slug} is not compliant:\n- ${problems.join('\n- ')}`);
   const dest = join(out, g.slug);
   mkdirSync(dest, { recursive: true });

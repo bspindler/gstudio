@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, halHookBlock, type Diff, type FileChange,
+  isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, kidVoice, kidAudio, kidFlash, kidExit, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, halHookBlock, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -621,5 +621,197 @@ describe('R18: candidate scope (outside-scope with scope)', () => {
   });
   it('without a scope nothing changes (rule stays path-safety only)', () => {
     expect(outsideScope(diff([A('packages/sdk/src/a.ts', 'x')]))).toEqual([]);
+  });
+});
+
+describe('Block Barn guards', () => {
+  it.each(['games/block-barn/recorder.js', 'games/block-barn/audio/name-c.m4a', 'games/block-barn/art/SOURCES.md'])('protects %s', (p) => {
+    expect(isProtectedPath(p)).toBe(true);
+  });
+  it.each(['games/block-barn/index.html', 'games/block-barn/animals.js'])('allows %s', (p) => {
+    expect(isProtectedPath(p)).toBe(false);
+  });
+  it('kid-asset: an added or renamed asset or binary under block-barn hits; code, pages, docs and styles do not', () => {
+    const src = A('games/block-barn/art/SOURCES.md', 'x.png CC0\n');
+    expect(kidAsset(diff([BIN('games/block-barn/art/x.png'), src])).map((v) => v.rule)).toEqual(['kid-asset']);
+    expect(kidAsset(diff([A('games/block-barn/a.m4a', 'x')])).map((v) => v.rule)).toEqual(['kid-asset']);
+    expect(kidAsset(diff([BIN('games/block-barn/blob.dat')]))).toHaveLength(1);
+    expect(kidAsset(diff([{ path: 'games/block-barn/b.png', oldPath: 'games/block-barn/a.png', status: 'R', before: null, after: null, binary: true }]))).toHaveLength(1);
+    for (const p of ['draw.js', 'x.html', 'x.md', 'x.css']) expect(kidAsset(diff([A(`games/block-barn/${p}`, 'x')])), p).toEqual([]);
+    expect(kidAsset(diff([BIN('games/other/art/x.png')]))).toEqual([]);
+    expect(rules(diff([BIN('games/block-barn/art/x.png'), src]))).toContain('kid-asset');
+  });
+  it('asset-source: m4a with studio-owned is accepted, unlisted m4a is rejected', () => {
+    const S = 'games/g/audio/SOURCES.md';
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), M(S, '| a.m4a | studio-owned |\n', '| a.m4a | studio-owned |\n')]))).toEqual([]);
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), M(S, '| b.m4a | studio-owned |\n', '| b.m4a | studio-owned |\n')]))).toHaveLength(1);
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a')]))).toHaveLength(1);
+  });
+  describe('hal-hook', () => {
+    const hook = '// ---- hal hook (test only)\nwindow.__hal = {};\n// ---- end hal hook ----';
+    const html = (mid: string, h = hook) => `<script>\n${mid}\n${h}\n</script>\n`;
+    const P = 'games/block-barn/index.html';
+    it('flags a changed block, allows edits outside it', () => {
+      expect(halHook(diff([M(P, html('a'), html('a', hook.replace('{}', '{x:1}')))])).map((v) => v.rule)).toEqual(['hal-hook']);
+      expect(halHook(diff([M(P, html('a'), html('b'))]))).toEqual([]);
+      expect(halHook(diff([D(P, html('a'))]))).toHaveLength(1);
+    });
+    it('flags an added __hal line in another block-barn file', () => {
+      expect(halHook(diff([A('games/block-barn/animals.js', 'window.__hal = 1;\n')])).map((v) => v.rule)).toEqual(['hal-hook']);
+      expect(halHook(diff([A('games/block-barn/animals.js', 'const a = 1;\n')]))).toEqual([]);
+    });
+  });
+  describe('child-directed', () => {
+    const Y = 'games/block-barn/game.yaml';
+    const y = (extra: string, flag = 'childDirected: true\n') => `id: block-barn\n${flag}${extra}`;
+    it('hits when the flag is removed, changed, or the file deleted', () => {
+      expect(childDirected(diff([M(Y, y(''), y('', ''))])).map((v) => v.rule)).toEqual(['child-directed']);
+      expect(childDirected(diff([M(Y, y(''), y('', 'childDirected: false\n'))]))).toHaveLength(1);
+      expect(childDirected(diff([D(Y, y(''))]))).toHaveLength(1);
+      expect(rules(diff([M(Y, y(''), y('', ''))]))).toContain('child-directed');
+    });
+    it('allows adding the flag, leaving it alone, or other games without it', () => {
+      expect(childDirected(diff([M(Y, y('version: 1\n'), y('version: 2\n'))]))).toEqual([]);
+      expect(childDirected(diff([M(Y, y('', ''), y(''))]))).toEqual([]);
+      expect(childDirected(diff([M('games/other/game.yaml', 'id: o\n', 'id: o\nversion: 2\n')]))).toEqual([]);
+      expect(childDirected(diff([D('games/other/game.yaml', 'id: o\n')]))).toEqual([]);
+    });
+  });
+  it('studio-owned: adding such a SOURCES.md line hits; an existing one does not', () => {
+    const S = 'games/g/audio/SOURCES.md';
+    expect(studioOwned(diff([A(S, '| a.m4a | Studio-Owned |\n')])).map((v) => v.rule)).toEqual(['studio-owned']);
+    expect(studioOwned(diff([M(S, '| a.m4a | studio-owned |\n', '| a.m4a | studio-owned |\n| b.png | CC0 |\n')]))).toEqual([]);
+    expect(studioOwned(diff([A('games/g/notes.md', 'studio-owned')]))).toEqual([]);
+    expect(rules(diff([A(S, '| a.m4a | studio-owned |\n')]))).toContain('studio-owned');
+  });
+  it('kid-recorder: recorder APIs outside recorder.js hit, in it or in other games do not', () => {
+    for (const api of ['navigator.mediaDevices.getUserMedia({audio:true})', 'new MediaRecorder(s)', 'indexedDB.open("x")']) {
+      expect(kidRecorder(diff([A('games/block-barn/index.html', `${api};\n`)])).map((v) => v.rule), api).toEqual(['kid-recorder']);
+    }
+    expect(kidRecorder(diff([A('games/block-barn/recorder.js', 'new MediaRecorder(s);\n')]))).toEqual([]);
+    expect(rules(diff([M('games/block-barn/recorder.js', 'a', 'new MediaRecorder(s);')]))).toEqual(['protected-path']);
+    expect(kidRecorder(diff([A('games/other/a.js', 'new MediaRecorder(s);\n')]))).toEqual([]);
+    expect(kidRecorder(diff([A('games/block-barn/a.js', 'const mediaRecorder = 1;\n')]))).toEqual([]);
+  });
+  it('a modified binary png under block-barn fails (its SOURCES.md is protected)', () => {
+    const png: FileChange = { path: 'games/block-barn/art/a.png', status: 'M', before: null, after: null, binary: true };
+    expect(rules(diff([png]))).toContain('asset-source');
+    expect(rules(diff([png, M('games/block-barn/art/SOURCES.md', '| a.png | CC0 |\n', '| a.png | CC0 |\n')]))).toContain('protected-path');
+  });
+  describe('child-directed bypasses', () => {
+    const Y = 'games/block-barn/game.yaml';
+    const before = 'id: block-barn\nchildDirected: true\n';
+    const hits = (after: string | null) => childDirected(diff([after === null ? D(Y, before) : M(Y, before, after)]));
+    it('hits nested, decoy, flow-style and unparseable rewrites', () => {
+      expect(hits('id: block-barn\nmeta:\n  childDirected: true\n')).toHaveLength(1);
+      expect(hits('id: x\nnote: |\n  childDirected: true\nchildDirected: false\n')).toHaveLength(1);
+      expect(hits('{ id: x, childDirected: false }\n')).toHaveLength(1);
+      expect(hits('id: [unclosed\nchildDirected: true\n')).toHaveLength(1);
+      expect(hits('id: x\nchildDirected: "true"\n')).toHaveLength(1);
+    });
+    it('allows re-formatting that keeps the top-level value', () => {
+      expect(hits('id: x\nchildDirected: true # kids\nversion: 3\n')).toEqual([]);
+      expect(hits('{ id: x, childDirected: true }\n')).toEqual([]);
+    });
+    it('hits a rename away from game.yaml, wherever it goes', () => {
+      const r = (to: string): FileChange => ({ path: to, oldPath: Y, status: 'R', before, after: before, binary: false });
+      expect(childDirected(diff([r('games/block-barn/game.yml')]))).toHaveLength(1);
+      expect(childDirected(diff([r('games/other/game.yaml')]))).toHaveLength(1);
+    });
+  });
+  it('renames cannot smuggle content past studio-owned or kid-recorder', () => {
+    const R = (from: string, to: string, text: string): FileChange => ({ path: to, oldPath: from, status: 'R', before: text, after: text, binary: false });
+    expect(kidRecorder(diff([R('games/other/rec.js', 'games/block-barn/rec.js', 'new MediaRecorder(s);\n')])).map((v) => v.rule)).toEqual(['kid-recorder']);
+    expect(kidRecorder(diff([R('games/block-barn/a.js', 'games/block-barn/b.js', 'const a = 1;\n')]))).toEqual([]);
+    expect(studioOwned(diff([R('games/g/a/SOURCES.md', 'games/g/b/SOURCES.md', '| a.m4a | studio-owned |\n')])).map((v) => v.rule)).toEqual(['studio-owned']);
+    expect(studioOwned(diff([R('games/g/a/SOURCES.md', 'games/g/b/SOURCES.md', '| a.png | CC0 |\n')]))).toEqual([]);
+  });
+});
+
+describe('final review: Block Barn bypasses', () => {
+  const BB = 'games/block-barn/';
+  const add = (file: string, line: string) => diff([A(file, `${line}\n`)]);
+  const ruleHits = (rule: string, d: Diff) => checkTripwires(d).filter((v) => v.rule === rule);
+  const REAL = readFileSync(new URL('../../../games/block-barn/index.html', import.meta.url), 'utf8');
+
+  it('C1 kid-recorder: recorder control, speech recognition and other capture outside recorder.js hit', () => {
+    for (const l of ["recorder.start('name-c');", 'await recorder.finish();', 'recorder.keep(k, b);', "recorder.reset('name-c');", 'const r2 = createRecorder();',
+      'mountVoices(el, o);', 'const sr = new webkitSpeechRecognition();', 'new SpeechRecognition()', 'navigator.mediaDevices.enumerateDevices();',
+      'navigator.getDisplayMedia({})', 'navigator.webkitGetUserMedia({})', 'ac.createMediaStreamSource(s)', 'canvas.captureStream()']) {
+      expect(kidRecorder(add(`${BB}index.html`, l)).map((v) => v.rule), l).toEqual(['kid-recorder']);
+      expect(kidRecorder(add('games/other/a.js', l)), l).toEqual([]);
+    }
+    expect(kidRecorder(add(`${BB}recorder.js`, "recorder.start('x'); navigator.mediaDevices;"))).toEqual([]);
+    // Lines already in the repo (the existing createRecorder()/mountVoices() calls) are not added.
+    expect(kidRecorder(diff([M(`${BB}index.html`, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(kidRecorder(add(`${BB}a.js`, 'const recorderStart = recorder.recording();'))).toEqual([]);
+  });
+
+  it('I1 kid-voice: a removed or changed localService line in voice.js hits; other lines and other files do not', () => {
+    const V = `${BB}voice.js`;
+    const real = readFileSync(new URL('../../../games/block-barn/voice.js', import.meta.url), 'utf8');
+    expect(real).toContain('localService');
+    expect(kidVoice(diff([M(V, real, real.replace('if (v.localService !== true) return -1;', ''))])).map((v) => v.rule)).toEqual(['kid-voice']);
+    expect(kidVoice(diff([M(V, real, real.replace('v.localService !== true', 'v.localService === false'))])).length).toBeGreaterThan(0);
+    expect(kidVoice(diff([D(V, real)])).map((v) => v.rule)).toContain('kid-voice');
+    expect(kidVoice(diff([{ path: `${BB}voice2.js`, oldPath: V, status: 'R', before: real, after: real, binary: false }])).length).toBeGreaterThan(0);
+    expect(ruleHits('kid-voice', diff([M(V, real, real.replace('if (v.localService !== true) return -1;', ''))]))).toHaveLength(1);
+    expect(kidVoice(diff([M(V, real, real.replace('rate: 0.7', 'rate: 0.75'))]))).toEqual([]);
+    expect(kidVoice(diff([M('games/other/voice.js', 'if (v.localService) x();\n', '')]))).toEqual([]);
+  });
+
+  it('I2 kid-audio: embedded media, new audio elements, filters, compressor settings and harsh waveforms hit', () => {
+    for (const l of ['const s = "data:audio/wav;base64,AAAA";', "img.src = 'data:image/png;base64,AA';", 'v.src = "data:video/mp4;base64,AA"', 'const a = new Audio(u);',
+      '<audio src="x.m4a" autoplay>', 'const u = URL.createObjectURL(b);', 'ac.createWaveShaper()', 'ac.createConvolver()', 'ac.audioWorklet.addModule(m); new AudioWorkletNode(ac, "x")',
+      'ac.createMediaElementSource(el)', 'const f = ac.createBiquadFilter();', 'const c = ac.createDynamicsCompressor();', 'comp.threshold.value = 0;', 'comp.ratio.value = 1;',
+      'comp.knee.value = 0;', "o.type = 'square';", 'o.type = "sawtooth";', "new OscillatorNode(ac, { type: 'square' })", 'new BiquadFilterNode(ac, { gain: 30 })']) {
+      expect(kidAudio(add(`${BB}index.html`, l)).map((v) => v.rule), l).toEqual(['kid-audio']);
+      expect(kidAudio(add('games/other/a.js', l)), l).toEqual([]);
+    }
+    for (const l of ["o.type = 'sine';", "o.type = 'triangle';", 'g.gain.value = 0.1;', 'const w = window.devicePixelRatio;']) expect(kidAudio(add(`${BB}index.html`, l)), l).toEqual([]);
+    // Today's code keeps passing: an unrelated edit to the real page adds none of it.
+    expect(kidAudio(diff([M(`${BB}index.html`, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(ruleHits('kid-audio', add(`${BB}draw.js`, 'const f = ac.createBiquadFilter();'))).toHaveLength(1);
+  });
+
+  it('I3 kid-flash: SVG animation elements and beginElement() hit', () => {
+    for (const l of ['<animate attributeName="opacity" values="0;1" dur="0.1s" repeatCount="indefinite"/>', '<set attributeName="fill" to="#fff" begin="0.1s"/>',
+      '<animateColor attributeName="fill" dur="0.1s"/>', '<animateTransform attributeName="transform" type="scale" dur="0.1s"/>', 'el.beginElement();']) {
+      expect(kidFlash(add(`${BB}draw.js`, l)).map((v) => v.rule), l).toEqual(['kid-flash']);
+      expect(kidFlash(add('games/other/draw.js', l)), l).toEqual([]);
+    }
+    for (const l of ['const settle = 1;', '<settings>', 'el.animate([{opacity:0},{opacity:1}], 400);']) expect(kidFlash(add(`${BB}draw.js`, l)), l).toEqual([]);
+    expect(ruleHits('kid-flash', add(`${BB}index.html`, '<set attributeName="x" to="1"/>'))).toHaveLength(1);
+  });
+
+  it('I4 kid-exit: links, navigation, popups and history changes hit', () => {
+    for (const l of ['<a href="../">home</a>', "location.assign('../');", "location.href = '/';", "location.replace('x')", "window.open('x')", "history.pushState({}, '', '?x')",
+      'history.replaceState(null, "")', 'history.back();', 'history.go(-1)', 'link.click();']) {
+      expect(kidExit(add(`${BB}index.html`, l)).map((v) => v.rule), l).toEqual(['kid-exit']);
+      expect(kidExit(add('games/other/a.js', l)), l).toEqual([]);
+    }
+    for (const l of ['location.reload();', "const q = new URLSearchParams(location.search);", "btn.addEventListener('click', f);"]) expect(kidExit(add(`${BB}index.html`, l)), l).toEqual([]);
+    expect(kidExit(diff([M(`${BB}index.html`, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(ruleHits('kid-exit', add(`${BB}draw.js`, "location.assign('../');"))).toHaveLength(1);
+  });
+
+  it('M4 hal-hook: code outside the hook block cannot read manualClock or navigator.webdriver', () => {
+    const P = `${BB}index.html`;
+    expect(REAL).toMatch(/let manualClock = false/);
+    for (const l of ['if (manualClock) score++;', 'if (navigator.webdriver) score++;', "const w = 'webdriver' in navigator;"]) {
+      expect(halHook(diff([M(P, REAL, REAL.replace('</body>', `<script>${l}</script>\n</body>`))])).map((v) => v.rule), l).toEqual(['hal-hook']);
+      expect(halHook(add(`${BB}draw.js`, l)).map((v) => v.rule), l).toEqual(['hal-hook']);
+    }
+    expect(halHook(diff([M(P, REAL, REAL.replace('let manualClock = false;', ''))])).map((v) => v.rule)).toEqual(['hal-hook']);
+    // The real page unchanged, or edited elsewhere, is fine (its existing manualClock statements are not added).
+    expect(halHook(diff([M(P, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(halHook(add('games/gearhold/a.js', 'if (manualClock) x();'))).toEqual([]);
+  });
+
+  it('the new rules are registered', () => {
+    expect(TRIPWIRE_RULES['kid-voice']).toBe(kidVoice);
+    expect(TRIPWIRE_RULES['kid-audio']).toBe(kidAudio);
+    expect(TRIPWIRE_RULES['kid-flash']).toBe(kidFlash);
+    expect(TRIPWIRE_RULES['kid-exit']).toBe(kidExit);
   });
 });

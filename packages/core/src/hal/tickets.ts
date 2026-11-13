@@ -45,6 +45,7 @@ const PROTECTED: RegExp[] = [
   /\.hal\.env\b/,
   /(?:^|[\s`'"(])(?:scripts\/hal(?:\.ts|\/)|packages\/core\/src\/hal|packages\/core\/test\/hal-|infra\/|\.github\/|\.data\/|docs\/superpowers)/,
   /\bgearhold\/levels\.d\.ts\b/,
+  /\bblock-barn\/(?:recorder\.js|audio\b)/i,
   /\bhal hook\b/i,
 ];
 // Heuristic: text that reads like a dependency, a new host or real money, but carries no `liability` field. In-game
