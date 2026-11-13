@@ -29,9 +29,12 @@ describe('countArrayItems', () => {
     expect(countArrayItems('const LEVELS = [1, 2', 'LEVELS')).toBeNull();
     expect(countArrayItems('const MYLEVELS = [1, 2]', 'LEVELS')).toBeNull();
   });
-  it('reads the real games: Tidepool has its 20 hand-authored levels, Gearhold its map list', () => {
+  // Counts track the games, never a number: new levels are Brian's call (he declines them), not a test's.
+  it('reads the real games: Tidepool its hand-authored levels, Gearhold its map list', () => {
     const real = (f: string) => readFileSync(new URL(`../../games/${f}`, import.meta.url), 'utf8');
-    expect(countArrayItems(real('tidepool-pals/levels.js'), 'RAW')).toBe(20);
+    const tide = real('tidepool-pals/levels.js');
+    expect(countArrayItems(tide, 'RAW')).toBe((tide.match(/^ {2}L\(\d+,/gm) ?? []).length);
+    expect(countArrayItems(tide, 'RAW')).toBeGreaterThanOrEqual(1);
     const gear = real('gearhold/levels.js');
     expect(countArrayItems(gear, 'LEVELS')).toBe((gear.match(/^ {4}name: /gm) ?? []).length);
     expect(countArrayItems(gear, 'LEVELS')).toBeGreaterThanOrEqual(3);

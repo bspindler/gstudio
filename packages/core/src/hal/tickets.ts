@@ -22,6 +22,13 @@ export type TicketResult = { ok: true; tickets: Ticket[]; rejected: RejectedTick
 
 export const MAX_TICKETS = 8;
 export const MAX_TITLE = 80;
+/** Cuts a title to MAX_TITLE at the last word break, with an ellipsis. */
+export function shortTitle(title: string): string {
+  if (title.length <= MAX_TITLE) return title;
+  const cut = title.slice(0, MAX_TITLE - 1);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > MAX_TITLE / 2 ? cut.slice(0, at) : cut).replace(/[\s,;:·-]+$/, '')}…`;
+}
 const KINDS: readonly string[] = ['fix', 'tuning', 'polish', 'feature'];
 
 // No "touch" (touch targets, touch input) and no "fix" (every ticket fixes something): only verbs that change a thing.
@@ -67,12 +74,13 @@ export function validateTickets(json: unknown, games: string[], measures: Record
   list.forEach((raw, i) => {
     const errors: string[] = [];
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) { rejected.push({ index: i + 1, reasons: ['not an object'] }); return; }
-    const k = raw as Record<string, unknown>;
+    // A long title is shortened at a word, never a reason to lose the ticket (it lost Hyperline work twice).
+    const k = { ...(raw as Record<string, unknown>) };
+    if (typeof k.title === 'string' && k.title.trim().length > MAX_TITLE) k.title = shortTitle(k.title.trim());
     const str = (f: string) => typeof k[f] === 'string' && (k[f] as string).trim() !== '';
     for (const f of ['id', 'game', 'title', 'why']) if (!str(f)) errors.push(`${f} must be a non-empty string`);
     for (const f of ['target', 'liability', 'fromNote']) if (k[f] !== undefined && !str(f)) errors.push(`${f} must be a non-empty string when present`);
     if (typeof k.kind !== 'string' || !KINDS.includes(k.kind)) errors.push(`kind must be one of ${KINDS.join(', ')}`);
-    if (typeof k.title === 'string' && k.title.length > MAX_TITLE) errors.push(`title is over ${MAX_TITLE} characters`);
     // A duplicate of a ticket already kept is rejected; the first one stays.
     if (str('id') && ids.has(k.id as string)) errors.push(`duplicate id ${k.id}`);
     if (str('title') && titles.has(norm(k.title as string))) errors.push(`duplicate title "${k.title}"`);
@@ -91,7 +99,7 @@ export function validateTickets(json: unknown, games: string[], measures: Record
     }
     ids.add(k.id as string);
     titles.add(norm(k.title as string));
-    out.push(raw as Ticket);
+    out.push(k as unknown as Ticket);
   });
   return { ok: true, tickets: out, rejected };
 }

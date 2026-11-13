@@ -767,4 +767,13 @@ describe('held features (ship it / drop it, and try it first)', () => {
     expect(sec).toContain('👍 Ship it');
     expect(sec).toContain('👎 Drop it');
   });
+  it('a held feature with a score drop says so on its card', async () => {
+    await seed(RUN, true, {});
+    const p = join(halDir, 'runs', RUN, 'report.json');
+    const r = JSON.parse(await readFile(p, 'utf8'));
+    r.changes.push({ ...heldChange, scoreNotes: ['gearhold-play: winnable regressed 16.67 (> 1)'] });
+    await writeFile(p, JSON.stringify(r));
+    const html = await (await get(mk(), '/')).text();
+    expect(html).toContain('Scores to know before you decide: gearhold-play: winnable regressed 16.67 (&gt; 1)');
+  });
 });

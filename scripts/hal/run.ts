@@ -631,7 +631,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
           if (main.diverged) why = 'origin/main moved again while the replayed commits were being checked';
           else warn(`origin/main moved while Hal had unpushed commits: Hal replayed ${rp.replayed} of its commits onto origin/main`
             + `${rp.dropped ? ` (${rp.dropped} dropped: origin already had them)` : ''} and ci:local passed, so ${HAL_MAIN} moved from `
-            + `${rp.from.slice(0, 12)} to ${rp.head.slice(0, 12)}. The commits are the same changes with new SHAs; they are still not on origin.`);
+            + `${rp.from.slice(0, 12)} to ${rp.head.slice(0, 12)}. The commits are the same changes with new SHAs; this run's push step sends them.`);
         }
       }
       if (main.diverged) {
