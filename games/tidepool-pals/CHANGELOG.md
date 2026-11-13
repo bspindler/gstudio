@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.6.0 (2026-11-13)
+- A calm pool panel under the board shows the pool you're restoring, its favourite pal and how much of the pool is cleaned up.
+
 ## 0.5.3 (2026-11-12)
 - The board now sits right under the goal bar instead of floating in the middle, so the spare water collects in one calm band above the tabs.
 

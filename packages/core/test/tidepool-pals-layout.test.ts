@@ -16,4 +16,16 @@ describe('tidepool-pals play layout', () => {
     expect(wrap).not.toContain('margin-top:auto');
     expect(html).toMatch(/<div class="playzone">[\s\S]*id="boardwrap"[\s\S]*id="hint"[\s\S]*<\/div>\s*<\/section>/);
   });
+
+  it('fills the band under the board with a calm pal-and-goal panel (no timers, no pressure)', () => {
+    expect(html).toMatch(/id="hint"[\s\S]*id="poolPanel"[\s\S]*<\/div>\s*<\/section>/);
+    const panel = html.match(/\.poolpanel\{([^}]*)\}/)![1];
+    expect(panel).toContain('min-height:0');
+    expect(panel).toContain('overflow:hidden');
+    const fn = html.match(/function renderPoolPanel\(\)\s*\{([\s\S]*?)\n\}/)![1];
+    expect(fn).toContain('poolProgress');
+    expect(fn).toContain('levels cleaned up');
+    expect(fn).not.toMatch(/setInterval|setTimeout|Date\.now|hurry|only \d|expires/i);
+    expect(html).toMatch(/startLevel[\s\S]*renderPoolPanel\(\);[\s\S]*armIdle\(\);\s*return true;/);
+  });
 });
