@@ -482,6 +482,17 @@ describe('runCandidate (temp git repo)', () => {
     });
   });
 
+  it("a held feature with a score drop is held anyway, the drop noted for Brian; a hard failure still discards", async () => {
+    const old = halHead();
+    const r = await runCandidate(ticket({ kind: 'feature' }), ctx({ pass: 'HAL-7', hold: true, cmds: { score: () => result(report('hyperline', 55, { flow: 60, fair: 60 })) } }));
+    expect(r.verdict).toBe('held');
+    expect(r.scoreNotes).toEqual(expect.arrayContaining([expect.stringMatching(/hyperline: fair regressed 10\.00/)]));
+    expect(halHead()).toBe(old);
+    gitSubs.length = 0; // the held run above committed; the next must not
+    const broken = { ...report('hyperline', 55, { flow: 60, fair: 60 }), hardFailures: ['level 3 cannot be finished'] };
+    expectDiscarded(await runCandidate(ticket({ kind: 'feature' }), ctx({ pass: 'HAL-8', hold: true, cmds: { score: () => result(broken) } })), old, /hard failure: level 3 cannot be finished/);
+  });
+
   it('a score regression past the tolerance is discarded; a target picks score mode', async () => {
     const old = halHead();
     expectDiscarded(await runCandidate(ticket(), ctx({ cmds: { score: () => result(report('hyperline', 60, { flow: 60, fair: 65 })) } })), old, /hyperline: fair regressed/);

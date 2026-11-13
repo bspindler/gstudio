@@ -185,6 +185,8 @@ export type CandidateResult = {
   summary?: string;
   /** Things Brian must act on even though the pass just discarded (e.g. a modified trust root). */
   warnings?: string[];
+  /** A held feature's score drops: noted for Brian on its card instead of discarding it (he decides new content). */
+  scoreNotes?: string[];
 };
 
 /** The scorers that judge a game: Gearhold has a static and a browser-played one. */
@@ -537,7 +539,10 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       try { after = await check<ScoreReport<unknown>>(`score ${s}`, (await cmd('score'))(wt.dir, s)); } catch (e) { if (e instanceof Discard) throw e; reasons.push(`score ${s} failed: ${msg(e)}`); continue; }
       res.scoresAfter[s] = after;
       const g = compareScores(before[s] ?? null, after, hasTarget(s) ? { mode: 'score', target } : { mode: 'polish' });
-      reasons.push(...g.reasons.map((r) => `${s}: ${r}`));
+      // A held feature (new content waits for Brian) is never discarded for a score drop or a missed gain: only he
+      // declines a new level. The drop goes on its card. Broken scores (hard failures, non-finite, missing) still discard.
+      const soft = (r: string) => ctx.hold === true && (/ regressed \d/.test(r) || /^no real gain/.test(r));
+      for (const r of g.reasons) (soft(r) ? (res.scoreNotes ??= []) : reasons).push(`${s}: ${r}`);
     }
     if (reasons.length) discard(...reasons);
     let sc: ScreensResult;

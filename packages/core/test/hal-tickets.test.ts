@@ -42,9 +42,17 @@ describe('validateTickets', () => {
     expect(why([t({ target: 'fun' })])).toEqual([expect.stringContaining('unknown measure')]);
     expect(why([t({ game: 'gearhold', target: 'inBand' })])).toHaveLength(1);
   });
-  it('rejects bad kinds, long titles, empty why; a duplicate id rejects only the later ticket', () => {
+  it('shortens a long title at a word instead of throwing the ticket away', () => {
+    const long = 'Hyperline sector-clear banner: the sector name flashes in neon with a synth chord as you cross';
+    const r = v([t({ title: long })]);
+    expect(r.ok && r.rejected).toEqual([]);
+    const title = r.ok ? r.tickets[0]!.title : '';
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(title.endsWith('…')).toBe(true);
+    expect(long.startsWith(title.slice(0, -1).trimEnd())).toBe(true);
+  });
+  it('rejects bad kinds, empty why; a duplicate id rejects only the later ticket', () => {
     expect(why([t({ kind: 'rewrite' as never })])).toHaveLength(1);
-    expect(why([t({ title: 'x'.repeat(81) })])).toHaveLength(1);
     expect(why([t({ title: 'x'.repeat(80) })])).toEqual([]);
     expect(why([t({ why: ' ' })])).toHaveLength(1);
     expect(kept([t(), t({ title: 'Other' })])).toEqual(['T1']);

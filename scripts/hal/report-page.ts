@@ -225,6 +225,7 @@ ${lead ? `<p class="lead">${esc(clip(lead, 700))}</p>` : ''}
 <a class="btn tonal try" href="/preview/${esc(encodeURIComponent(c.pass))}/${esc(encodeURIComponent(t.game))}/index.html" target="_blank" rel="noopener">▶ Try it</a>
 ${c.shots ? `<div class="grid2 shots">${shot('before')}${shot('after')}</div>${c.shotsOf ? `<p class="shots-of small muted">Showing ${esc(clip(c.shotsOf, 80))}, the part this change touched</p>` : ''}` : ''}
 ${scoreLine(c)}
+${c.scoreNotes?.length ? `<p class="small delta warn score-notes">Scores to know before you decide: ${esc(c.scoreNotes.map((n) => clip(n, 160)).join('; '))}. Hal kept it anyway: new content is your call.</p>` : ''}
 ${withState(heldState(c.pass, v.feedback), forms)}
 </article>`;
 }
