@@ -286,8 +286,8 @@ async function tidepool(run: Run) {
 }
 
 /**
- * Lanternkeep: real taps all the way. Play starts night 1, a tap on a tile then on the Glowcap card plants it,
- * Start begins the wave, and p / Escape pause and resume. The ?hal hook is only read (state, cellPoint).
+ * Lanternkeep: real taps all the way. Play starts night 1, p / Escape pause and resume, a tap on a tile then
+ * on the Glowcap card plants it, and Start begins the wave. The ?hal hook is only read (state, cellPoint).
  */
 async function lanternkeep(run: Run) {
   const G = 'lanternkeep', { context, page, errors } = await run.open(PHONE, '/lanternkeep/index.html?hal=1');
@@ -311,6 +311,15 @@ async function lanternkeep(run: Run) {
     const inPlay = await settled();
     run.add(G, 'tap Play starts night 1', inPlay, JSON.stringify(await st()));
     if (!inPlay) return;
+    // Keys first, before any creature exists: the first creature of a night opens a reveal card, which pauses
+    // the game itself and ignores keys, so testing later races the card (flaky "paused false").
+    await page.keyboard.press('p');
+    await wait(150);
+    const paused = (await st()).paused;
+    await page.keyboard.press('Escape');
+    await wait(150);
+    const resumed = !(await st()).paused;
+    run.add(G, 'p pauses and Escape resumes', paused && resumed, `paused ${paused}, resumed ${resumed}`);
     const before = await st();
     const pt = await page.evaluate(() => (window as any).__hal.cellPoint(3, 2));
     await page.touchscreen.tap(pt.x, pt.y);
@@ -322,14 +331,6 @@ async function lanternkeep(run: Run) {
     if (after.phase === 'ready') { await tapEl('#waveBtn'); await wait(300); }
     const waved = await st();
     run.add(G, 'the first wave starts', waved.phase === 'wave' && (waved.wave ?? 0) >= 1, `phase ${waved.phase}, wave ${waved.wave}`);
-    await settled();
-    await page.keyboard.press('p');
-    await wait(150);
-    const paused = (await st()).paused;
-    await page.keyboard.press('Escape');
-    await wait(150);
-    const resumed = !(await st()).paused;
-    run.add(G, 'p pauses and Escape resumes', paused && resumed, `paused ${paused}, resumed ${resumed}`);
   } finally {
     run.noErrors(G, errors);
     await context.close();
