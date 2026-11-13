@@ -23,12 +23,14 @@
     "new-game": "tsx scripts/new-game.ts",
     "build:pages": "tsx scripts/build-pages.ts",
     "demo:1b": "tsx scripts/demo-1b.ts",
-    "ci:local": "tsx scripts/ci-local.ts"
+    "ci:local": "tsx scripts/ci-local.ts",
+    "build:three": "node --import tsx scripts/build-three.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "esbuild": "0.28.2",
     "playwright": "^1.65.0",
+    "three": "0.186.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
