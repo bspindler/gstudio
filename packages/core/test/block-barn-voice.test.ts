@@ -218,15 +218,20 @@ describe('block-barn voice: the best installed English voice', () => {
   it('SPEECH is slow, natural and leaves room between parts', () => {
     expect(SPEECH).toEqual({ rate: 0.7, pitch: 1.0, gapMs: 700 });
   });
-  it('prefers Premium, then Enhanced, then Chrome\'s Google voices, then a local en-US/en-GB voice', () => {
+  it('prefers Premium, then Enhanced, then another local en-US/en-GB voice', () => {
     const all = [albert, sam, gUK, gUS, ava, amelie, zoe];
     expect(pickVoice(all as any)).toBe(zoe);
     expect(pickVoice(all.filter((x) => x !== zoe) as any)).toBe(ava);
-    expect(pickVoice([albert, sam, gUK, gUS] as any)).toBe(gUS);
-    expect(pickVoice([albert, sam, gUK] as any)).toBe(gUK);
+    expect(pickVoice([albert, sam, gUK, gUS] as any)).toBe(sam);
     expect(pickVoice([sam] as any)).toBe(sam);
     expect(pickVoice([vo('Daniel', 'en-GB')] as any)?.name).toBe('Daniel');
     expect(pickVoice([vo('Karen', 'en_US')] as any)?.name).toBe('Karen'); // Android spells it with an underscore
+  });
+  it('never picks an online voice (it would send the words to a server), even when it is the only English one', () => {
+    expect(pickVoice([gUS] as any)).toBeNull();
+    expect(pickVoice([gUK, amelie] as any)).toBeNull();
+    expect(pickVoice([vo('Some Voice (Premium)', 'en-US', false), vo('Other (Enhanced)', 'en-GB', false)] as any)).toBeNull();
+    expect(pickVoice([vo('Some Voice (Premium)', 'en-US', false), sam] as any)).toBe(sam);
   });
   it('passes over the macOS novelty voices for a plain one', () => {
     expect(pickVoice([albert, vo('Bad News'), vo('Zarvox'), sam] as any)).toBe(sam);
@@ -278,10 +283,10 @@ function timedSynth() {
   return s;
 }
 const gaps = (times: { start: number; end: number | null }[]) => times.slice(1).map((t, i) => t.start - (times[i]!.end ?? Infinity));
-const C_LINES: Array<[string, string | string[]]> = [['letter-c', ['C.', 'c.']], ['name-c', 'cow'], ['noise-c', 'moo']];
+const C_LINES: Array<[string, string]> = [['letter-c', 'C.'], ['name-c', 'cow'], ['noise-c', 'moo']];
 
 describe('block-barn voice: a tap\'s line in parts, with gaps', () => {
-  it('speaks the capital, the small letter, the name and the noise as separate utterances, at least 700 ms apart', async () => {
+  it('speaks the capital letter once, then the name and the noise, as separate utterances at least 700 ms apart', async () => {
     vi.useFakeTimers();
     const synth = timedSynth();
     const { v } = setup({ synth });
@@ -289,7 +294,7 @@ describe('block-barn voice: a tap\'s line in parts, with gaps', () => {
     const p = v.sayAll(C_LINES, (k: string) => keys.push(k));
     await vi.advanceTimersByTimeAsync(10000);
     await p;
-    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'c.', 'cow', 'moo']);
+    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'cow', 'moo']);
     for (const g of gaps(synth.times)) expect(g).toBeGreaterThanOrEqual(SPEECH.gapMs);
     expect(keys).toEqual(['letter-c', 'name-c', 'noise-c']);
     for (const u of synth.spoken) { expect(u.rate).toBe(0.7); expect(u.pitch).toBe(1.0); }
@@ -299,24 +304,24 @@ describe('block-barn voice: a tap\'s line in parts, with gaps', () => {
     const synth = timedSynth();
     const { v } = setup({ synth });
     const first = v.sayAll(C_LINES);
-    await vi.advanceTimersByTimeAsync(300 + 200); // "C." has ended; we are in the gap before "c."
+    await vi.advanceTimersByTimeAsync(300 + 200); // "C." has ended; we are in the gap before "cow"
     expect(synth.times.map((t: any) => t.text)).toEqual(['C.']);
-    const second = v.sayAll([['letter-d', ['D.', 'd.']]]);
+    const second = v.sayAll([['letter-d', 'D.'], ['name-d', 'duck']]);
     await vi.advanceTimersByTimeAsync(10000);
     await first; await second;
-    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'D.', 'd.']);
+    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'D.', 'duck']);
   });
   it('a plain say() during a gap also cancels the rest', async () => {
     vi.useFakeTimers();
     const synth = timedSynth();
     const { v } = setup({ synth });
     const first = v.sayAll(C_LINES);
-    await vi.advanceTimersByTimeAsync(300 + 1000 + 300 + 100); // in the gap after "c."
-    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'c.']);
+    await vi.advanceTimersByTimeAsync(300 + 700 + 300 + 100); // in the gap after "cow"
+    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'cow']);
     const second = v.say('where-d', "Where's the duck?");
     await vi.advanceTimersByTimeAsync(10000);
     await first; await second;
-    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'c.', "Where's the duck?"]);
+    expect(synth.times.map((t: any) => t.text)).toEqual(['C.', 'cow', "Where's the duck?"]);
   });
   it('stop() during a gap: nothing more, the promise resolves, no timer left behind', async () => {
     vi.useFakeTimers();
@@ -331,7 +336,7 @@ describe('block-barn voice: a tap\'s line in parts, with gaps', () => {
     await vi.advanceTimersByTimeAsync(10000);
     expect(synth.times.map((t: any) => t.text)).toEqual(['C.']);
   });
-  it('a letter recording replaces both letter parts; then the same gap before the name', async () => {
+  it('a letter recording replaces the spoken letter; then the same gap before the name', async () => {
     vi.useFakeTimers();
     const synth = timedSynth();
     const log: { what: string; at: number }[] = [];
@@ -345,7 +350,7 @@ describe('block-barn voice: a tap\'s line in parts, with gaps', () => {
     await vi.advanceTimersByTimeAsync(10000);
     await p;
     expect(log.map((x) => x.what)).toEqual(['play blob:mine', 'end blob:mine']);
-    expect(synth.times.map((t: any) => t.text)).toEqual(['cow', 'moo']); // no "C." or "c." from the device
+    expect(synth.times.map((t: any) => t.text)).toEqual(['cow', 'moo']); // no "C." from the device
     expect(synth.times[0].start - log[1]!.at).toBeGreaterThanOrEqual(SPEECH.gapMs);
   });
   it('bundled clips play as recorded, in the same order with the same gaps', async () => {

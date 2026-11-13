@@ -432,7 +432,7 @@ const recorder = createRecorder();
 const voice = createVoice({ audio: clipPlayer, synth: window.speechSynthesis || null, recordings: (key) => recorder.get(key), base: './' });
 let speaking = null; // the key being spoken, or null
 let talkId = 0;
-// A line is said in parts (capital, small letter, name, noise) with a pause between; a new tap cancels the rest.
+// A tap's lines (the letter, the name, the noise) are said with a pause between; a new tap cancels the rest.
 function talk(lines) {
   const mine = ++talkId;
   if (!soundOn) { voice.stop(); speaking = null; return; }
@@ -448,9 +448,9 @@ function hearBack(url) {
   const h = (hearing = clipPlayer(url));
   return h.play().finally(() => { if (hearing === h) hearing = null; });
 }
-// Capital and small letter as two utterances ("C." then "c."), so each is read as a letter name, never as one word.
-// A recording or clip of letter-<x> stands for both.
-const letterLine = (l) => [`letter-${l}`, [`${l.toUpperCase()}.`, `${l}.`]];
+// The letter is said once, as the capital ("C."): some voices read a lone small "a." as the word "uh". The small
+// letter stays on the block. A recording or clip of letter-<x> replaces it.
+const letterLine = (l) => [`letter-${l}`, `${l.toUpperCase()}.`];
 const nameLines = (l) => {
   const a = BY[l];
   const out = [[`name-${l}`, a.name]];

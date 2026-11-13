@@ -168,7 +168,7 @@ describe('block barn: grown-ups record their own voice', () => {
     await seedWith(page, 'c');
     await tap(page, await find(page, 'block', 'c'));
     await expect.poll(() => said(page)).toEqual(['C.']);
-    await release(page); // the letter is spoken, capital then small (no bundled clip yet); then the name is the recording
+    await release(page); // the capital letter is spoken (no bundled clip yet); then the name is the recording
     await expect.poll(() => playedRecordings(page), { timeout: 5000 }).toHaveLength(1);
     await expect.poll(() => said(page), { timeout: 8000 }).toContain('moo'); // the noise follows once the recording ends
     expect(await said(page)).not.toContain('cow');

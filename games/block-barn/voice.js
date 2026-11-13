@@ -7,22 +7,21 @@ export const SPEECH = { rate: 0.7, pitch: 1.0, gapMs: 700 };
 const NOVELTY = new Set(['albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical',
   'jester', 'organ', 'pipe organ', 'superstar', 'trinoids', 'whisper', 'wobble', 'zarvox', 'fred', 'junior', 'kathy', 'ralph', 'princess',
   'eddy', 'flo', 'grandma', 'grandpa', 'reed', 'rocko', 'sandy', 'shelley']);
-const GOOGLE = ['google us english', 'google uk english female'];
 
 const langOf = (v) => String(v.lang || '').toLowerCase().replace('_', '-');
 const baseName = (v) => String(v.name || '').toLowerCase().replace(/\s*\(.*$/, '').trim();
+// Only voices on the device: an online voice (Chrome's Google voices, for one) sends the words to a server.
 function rank(v) {
+  if (v.localService !== true) return -1;
   const name = String(v.name || '');
   if (/premium/i.test(name)) return 0;
   if (/enhanced/i.test(name)) return 1;
-  const g = GOOGLE.indexOf(name.toLowerCase());
-  if (g >= 0) return 2 + g;
   const lang = langOf(v);
-  if (v.localService && (lang === 'en-us' || lang === 'en-gb') && !NOVELTY.has(baseName(v))) return 4;
+  if ((lang === 'en-us' || lang === 'en-gb') && !NOVELTY.has(baseName(v))) return 2;
   return -1;
 }
 
-/** The warmest English voice installed: Premium, then Enhanced, then Chrome's Google voices, then a local en-US/en-GB one; null = browser default. */
+/** The warmest English voice on the device: Premium, then Enhanced, then another local en-US/en-GB one; null = browser default. */
 export function pickVoice(voices) {
   let best = null, bestRank = Infinity, bestLang = Infinity;
   for (const v of voices || []) {
@@ -121,9 +120,8 @@ export function createVoice(o) {
     });
   }
 
-  // One part of a line: its recording or clip if there is one (it stands for all of `texts`), else each text
-  // spoken in turn with a gap between.
-  async function one(key, texts, me) {
+  // One line: its recording or clip if there is one, else the device speaks `text`.
+  async function one(key, text, me) {
     const mine = { audio: null, finish() {} };
     current = mine;
     const rec = await lookup(key);
@@ -141,24 +139,14 @@ export function createVoice(o) {
       }
     }
     if (!synth) { if (current === mine) current = null; return; }
-    for (let i = 0; i < texts.length; i++) {
-      if (i > 0) {
-        await pause(me);
-        if (seq !== me) return;
-        current = mine;
-      }
-      await speak(texts[i], mine);
-      if (current !== mine || seq !== me) return;
-    }
+    await speak(text, mine);
     if (current === mine) current = null;
   }
 
-  const parts = (text) => (Array.isArray(text) ? text : [text]);
-
-  /** Says one line; `text` may be several parts (e.g. ['C.', 'c.']) spoken with gaps; a recording or clip replaces them all. */
+  /** Says one line (its recording, its clip, or the device voice). */
   async function say(key, text) {
     halt();
-    await one(key, parts(text), seq);
+    await one(key, text, seq);
   }
 
   /** Says lines in order with a gap between each; any later say, sayAll or stop cancels the rest. */
@@ -170,7 +158,7 @@ export function createVoice(o) {
       if (seq !== me) return;
       const [key, text] = lines[i];
       if (onLine) onLine(key);
-      await one(key, parts(text), me);
+      await one(key, text, me);
       if (seq !== me) return;
     }
   }

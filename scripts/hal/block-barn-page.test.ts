@@ -232,7 +232,7 @@ describe('block barn page', () => {
     });
   }
 
-  it('tapping block C names it and starts speaking within 100 ms: "C.", then "c.", then "cow", 700 ms apart, slow and natural', async () => {
+  it('tapping block C names it and starts speaking within 100 ms: "C." (once), then "cow", then "moo", 700 ms apart, slow and natural', async () => {
     const { page } = await open();
     await seedWith(page, 'c');
     await page.evaluate(() => {
@@ -255,7 +255,7 @@ describe('block barn page', () => {
     expect((await said(page)).filter((x) => x !== '<cancel>')).toEqual(['C.']); // the capital on its own; the rest waits for it to end
     await page.evaluate(() => (window as any).__fakeSpeech.release());
     await page.waitForFunction(() => (window as any).__fakeSpeech.log.includes('moo'), null, { timeout: 5000 });
-    expect((await said(page)).filter((x) => x !== '<cancel>')).toEqual(['C.', 'c.', 'cow', 'moo']);
+    expect((await said(page)).filter((x) => x !== '<cancel>')).toEqual(['C.', 'cow', 'moo']); // the small letter is shown, not spoken
     const times: { text: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__fakeSpeech.times);
     for (let i = 1; i < times.length; i++) expect(times[i]!.start - times[i - 1]!.end, `gap before ${times[i]!.text}`).toBeGreaterThanOrEqual(700);
     const calls: { text: string; rate: number; pitch: number }[] = await page.evaluate(() => (window as any).__fakeSpeech.calls);
@@ -269,13 +269,13 @@ describe('block barn page', () => {
     await tapBlock(page, 'c');
     await page.waitForFunction(() => (window as any).__fakeSpeech.times.some((t: any) => t.text === 'C.' && t.end !== null));
     const other = (await state(page)).floor.find((l) => l !== 'c')!;
-    await tapBlock(page, other); // inside the 700 ms gap before "c."
-    await page.waitForFunction((l) => (window as any).__fakeSpeech.log.includes(`${l}.`), other, { timeout: 5000 });
+    await tapBlock(page, other); // inside the 700 ms gap before "cow"
+    await page.waitForFunction((l) => (window as any).__fakeSpeech.log.includes(`${l.toUpperCase()}.`), other, { timeout: 5000 });
     await page.waitForTimeout(2500);
     const log = (await said(page)).filter((x) => x !== '<cancel>');
     expect(log[0]).toBe('C.');
-    expect(log).not.toContain('c.');
     expect(log).not.toContain('cow');
+    expect(log).not.toContain('moo');
     expect(log).toContain(`${other.toUpperCase()}.`);
   });
 
