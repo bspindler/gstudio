@@ -257,8 +257,8 @@ const hash = (i, k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.54
 
 export function cameraFor(st, W, H) {
   const rx = st.rx, f = st.flipT;
-  const eye = [rx - 5.6 + st.shakeX, 3.1 + st.lift - f * 1.5 + st.shakeY, 0];
-  const target = [rx + 6.5, 0.55 + st.lift * 0.85 + f * 2.4, 0];
+  const eye = [rx - 8 + st.shakeX, 4.4 + st.lift - f * 1.5 + st.shakeY, 0];
+  const target = [rx + 8, 1.3 + st.lift * 0.85 + f * 2.4, 0];
   return makeCamera(eye, target, W > H ? 50 : 64, W, H);
 }
 
