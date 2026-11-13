@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1b1530">
+<title>Lanternkeep</title>
+<style>
+  :root {
+    --night: #1b1530;
+    --night-2: #251d40;
+    --panel: #2c2348;
+    --line: #463a6b;
+    --text: #f6ead0;
+    --muted: #b9acd6;
+    --lantern: #ffb85c;
+    --gold: #ffd36b;
+    --life: #ff8f7a;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(120% 80% at 50% 100%, #2a2046 0%, var(--night) 60%);
+    background-color: var(--night);
+    color: var(--text);
+    font: 16px/1.35 var(--sans);
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  .app {
+    position: relative;
+    height: 100%;
+    max-width: 540px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: max(8px, env(safe-area-inset-top)) 10px max(8px, env(safe-area-inset-bottom));
+    gap: 8px;
+  }
+
+  /* HUD */
+  .hud { display: flex; align-items: center; gap: 14px; min-height: 40px; padding: 0 4px; }
+  .stat { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .stat svg { width: 18px; height: 18px; }
+  .stat.lives { color: var(--life); }
+  .stat.gold { color: var(--gold); }
+  .hud .spacer { flex: 1; }
+  .wave-btn {
+    min-height: 40px; padding: 0 14px; border-radius: 12px; font-weight: 800; font-size: 14px; white-space: nowrap;
+    border: 1px solid var(--lantern); background: var(--lantern); color: var(--night);
+  }
+  .wave-btn .cost { color: #6a4300; margin-left: 4px; }
+  .wave-btn:disabled { background: transparent; border-color: transparent; color: var(--muted); font-weight: 600; cursor: default; padding: 0 4px; }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--night-2); display: grid; place-items: center; font-weight: 800; font-size: 14px;
+  }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .icon-btn[aria-pressed="true"] { background: var(--lantern); color: var(--night); border-color: var(--lantern); }
+
+  /* board */
+  .stage { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; }
+  #board { display: block; border-radius: 14px; box-shadow: 0 0 0 1px #000a, 0 12px 40px #0008; touch-action: none; }
+  .toast {
+    position: absolute; left: 50%; top: 12px; transform: translateX(-50%); max-width: calc(100% - 24px);
+    background: #120c22e6; border: 1px solid var(--line); padding: 8px 14px; border-radius: 18px;
+    font-size: 14px; text-align: center; pointer-events: none;
+  }
+
+  /* context bar */
+  .bar {
+    min-height: 60px; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  }
+  .bar-text { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); }
+  .bar-text b { color: var(--text); font-family: var(--serif); font-size: 17px; font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .act {
+    border-radius: 12px; padding: 0 14px; min-height: 44px; font-weight: 700; white-space: nowrap;
+    background: var(--night-2); border: 1px solid var(--line);
+  }
+  .act.primary { background: var(--lantern); color: var(--night); border-color: var(--lantern); }
+  .act:disabled { opacity: .45; cursor: default; }
+  .act .cost { color: var(--gold); margin-left: 6px; }
+  .act.primary .cost { color: #6a4300; }
+
+  /* tray */
+  .tray { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .card {
+    position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 6px 4px 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--night-2);
+    min-height: 84px;
+  }
+  .card canvas { width: 44px; height: 44px; }
+  .card .name { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .card .price { font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .card.poor .price { color: #8d7f9e; }
+  .card.poor canvas { opacity: .5; }
+  .card.ready { border-color: var(--lantern); box-shadow: 0 0 0 1px var(--lantern) inset; }
+  .card.locked { opacity: .4; }
+  .card.locked .price { color: var(--muted); font-weight: 600; font-size: 12px; }
+
+  /* screens */
+  .screen {
+    position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center;
+    padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+    background: radial-gradient(90% 60% at 50% 38%, #3a2a4ecc 0%, #1b1530f2 55%, #140f24 100%);
+    overflow-y: auto;
+  }
+  .screen h1, .screen h2 { font-family: var(--serif); font-weight: 600; margin: 0; letter-spacing: .01em; }
+  .screen p { margin: 0; color: var(--muted); max-width: 34ch; text-align: center; }
+  .big { border: none; border-radius: 999px; padding: 0 34px; min-height: 52px; font-weight: 800; font-size: 18px; background: var(--lantern); color: var(--night); }
+  .quiet { border: 1px solid var(--line); border-radius: 999px; padding: 0 22px; min-height: 46px; font-weight: 700; background: transparent; }
+
+  #title { justify-content: center; gap: 18px; text-align: center; background: radial-gradient(90% 60% at 50% 38%, #3a2a4e 0%, #1b1530 55%, #140f24 100%); }
+  #title h1 { font-size: clamp(44px, 13vw, 64px); line-height: 1; }
+  .lamp { position: relative; width: 120px; height: 170px; margin-bottom: 6px; }
+  .lamp::before {
+    content: ""; position: absolute; inset: -90px; border-radius: 50%;
+    background: radial-gradient(closest-side, #ffb85c66, #ffb85c00);
+    animation: breathe 3.2s ease-in-out infinite;
+  }
+  .lamp .hook { position: absolute; left: 50%; top: 0; width: 4px; height: 30px; background: #5a4630; transform: translateX(-50%); }
+  .lamp .cap { position: absolute; left: 50%; top: 28px; width: 56px; height: 10px; border-radius: 4px; background: #6b5232; transform: translateX(-50%); }
+  .lamp .body {
+    position: absolute; left: 50%; top: 36px; width: 84px; height: 112px; transform: translateX(-50%);
+    border-radius: 44% 44% 40% 40%;
+    background: radial-gradient(60% 55% at 50% 45%, #fff3c4 0%, #ffcf7a 35%, #ff9e3d 80%, #c96a1e 100%);
+    box-shadow: 0 0 60px #ffb85caa;
+  }
+  .lamp .body::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background: repeating-linear-gradient(90deg, #0000 0 26px, #a5541a55 26px 28px);
+  }
+  .lamp .foot { position: absolute; left: 50%; bottom: 14px; width: 40px; height: 10px; border-radius: 4px; background: #6b5232; transform: translateX(-50%); }
+  @keyframes breathe { 0%, 100% { opacity: .75; transform: scale(.96); } 50% { opacity: 1; transform: scale(1.04); } }
+  @media (prefers-reduced-motion: reduce) { .lamp::before { animation: none; } }
+
+  #levels { gap: 14px; background: radial-gradient(90% 60% at 50% 38%, #2f2446 0%, #1b1530 60%, #140f24 100%); }
+  #levels header { width: 100%; max-width: 440px; display: flex; align-items: center; justify-content: space-between; }
+  #levels h2 { font-size: 30px; }
+  .star-total { color: var(--gold); font-weight: 800; display: flex; gap: 6px; align-items: center; }
+  .level-list { width: 100%; max-width: 440px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .lvl {
+    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px; align-items: center;
+    text-align: left; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: #2c2348d9; min-height: 72px;
+  }
+  .lvl .n { grid-row: span 2; font-family: var(--serif); font-size: 28px; color: var(--lantern); width: 28px; text-align: center; }
+  .lvl .nm { font-weight: 700; font-size: 14px; }
+  .lvl .st { color: var(--gold); letter-spacing: 2px; font-size: 14px; }
+  .lvl .st .off { color: #5c5078; }
+  .lvl:disabled { opacity: .45; cursor: default; }
+  .lvl:disabled .n { color: var(--muted); }
+
+  #pause, #end { justify-content: center; gap: 14px; text-align: center; }
+  #pause h2, #end h2 { font-size: 34px; }
+  .menu { display: flex; flex-direction: column; gap: 10px; width: min(280px, 100%); margin-top: 6px; }
+  .stars-big { font-size: 48px; letter-spacing: 8px; color: var(--gold); line-height: 1; min-height: 52px; }
+  .stars-big .off { color: #4a3f66; }
+  .stars-big span { display: inline-block; transform: scale(0); animation: pop .35s ease-out forwards; }
+  .stars-big span:nth-child(2) { animation-delay: .25s; }
+  .stars-big span:nth-child(3) { animation-delay: .5s; }
+  @keyframes pop { 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .stars-big span { animation: none; transform: none; } }
+  .tally { display: flex; gap: 22px; color: var(--muted); font-size: 14px; }
+  .tally b { display: block; color: var(--text); font-size: 20px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 23.1 8.4 21.6 11.8 19.5 16.4 12 21 12 21z"/></symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"/><circle cx="12" cy="12" r="5.5" fill="none" stroke="#7a5200" stroke-width="1.6"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"/><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5L2.5 9.4l6.6-.9z"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <header class="hud">
+    <span class="stat lives" aria-label="Lives"><svg><use href="#i-heart"/></svg><span id="lives">20</span></span>
+    <span class="stat gold" aria-label="Gold"><svg><use href="#i-coin"/></svg><span id="gold">0</span></span>
+    <span class="spacer"></span>
+    <button class="wave-btn" id="waveBtn"></button>
+    <button class="icon-btn" id="speed" aria-pressed="false" aria-label="Double speed">2×</button>
+    <button class="icon-btn" id="pauseBtn" aria-label="Pause"><svg><use href="#i-pause"/></svg></button>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="board" aria-label="Garden board"></canvas>
+    <div class="toast" id="toast" hidden></div>
+  </div>
+
+  <div class="bar" id="bar">
+    <div class="bar-text" id="barText"></div>
+    <button class="act" id="actA" hidden></button>
+    <button class="act primary" id="actB" hidden></button>
+  </div>
+
+  <nav class="tray" id="tray" aria-label="Plants"></nav>
+
+  <section class="screen" id="title">
+    <div class="lamp" aria-hidden="true"><div class="hook"></div><div class="cap"></div><div class="body"></div><div class="foot"></div></div>
+    <h1>Lanternkeep</h1>
+    <p>Night creatures follow the garden paths toward your lantern. Grow glowing plants to keep the light burning.</p>
+    <button class="big" id="playBtn">Play</button>
+  </section>
+
+  <section class="screen" id="levels" hidden>
+    <header>
+      <h2>The garden</h2>
+      <span class="star-total" aria-label="Stars earned"><svg width="20" height="20"><use href="#i-star"/></svg><span id="starTotal">0</span></span>
+    </header>
+    <div class="level-list" id="levelList"></div>
+  </section>
+
+  <section class="screen" id="pause" hidden>
+    <h2>Paused</h2>
+    <div class="menu">
+      <button class="big" id="resumeBtn">Resume</button>
+      <button class="quiet" id="restartBtn">Restart level</button>
+      <button class="quiet" id="soundBtn">Sound on</button>
+      <button class="quiet" id="toLevelsBtn">All levels</button>
+    </div>
+  </section>
+
+  <section class="screen" id="end" hidden>
+    <div class="stars-big" id="endStars"></div>
+    <h2 id="endTitle">Lantern held</h2>
+    <p id="endDetail"></p>
+    <div class="tally">
+      <span><b id="endKills">0</b>creatures</span>
+      <span><b id="endLives">0</b>lives left</span>
+      <span><b id="endBonus">0</b>early gold</span>
+    </div>
+    <div class="menu">
+      <button class="big" id="nextBtn">Next level</button>
+      <button class="quiet" id="retryBtn">Play again</button>
+      <button class="quiet" id="endLevelsBtn">All levels</button>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
+import {
+  COLS, DT, EARLY_GOLD_PER_SECOND, ROWS, TOWERS, TOWER_ORDER,
+  callWave, canBuild, canCallWave, coverage, createGame, place, refundFor, sell, starsFor, step, stats, towerAt, upgrade, upgradeCost,
+} from './lib/sim.js';
+import { LEVELS } from './lib/levels.js';
+import { SAVE_KEY, isUnlocked, parseSave, recordStars, totalStars } from './lib/save.js';
+import { createRenderer, paintIcon } from './render.js';
+import { createAudio } from './audio.js';
+
+// Keep version the same as in game.yaml and CHANGELOG.md.
+const studio = createStudio({
+  game: 'lanternkeep', version: '0.1.0',
+  endpoint: resolveEndpoint(location, window.STUDIO_CONFIG),
+});
+
+const $ = (id) => document.getElementById(id);
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const renderer = createRenderer($('board'), { reducedMotion });
+const audio = createAudio();
+
+// ---------- progress ----------
+let save = (() => { try { return parseSave(localStorage.getItem(SAVE_KEY)); } catch { return parseSave(null); } })();
+function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* private mode: progress lasts this visit */ } }
+audio.setOn(save.sound);
+
+// ---------- state ----------
+let levelIndex = 0;
+let g = null;
+let running = false; // a level is on screen
+let paused = false;
+let speed = save.speed;
+let acc = 0;
+let last = performance.now();
+let time = 0;
+let prev = new Map();
+let selTile = null; // { c, r } of an empty tile
+let selTowerId = null;
+let endShown = false;
+let endTimer = 0;
+
+// ---------- screens ----------
+function show(id) {
+  for (const s of ['title', 'levels', 'pause', 'end']) $(s).hidden = s !== id;
+}
+
+const starRow = (n) => '★'.repeat(n) + `<span class="off">${'★'.repeat(3 - n)}</span>`;
+
+function renderLevels() {
+  $('starTotal').textContent = String(totalStars(save));
+  const list = $('levelList');
+  list.textContent = '';
+  LEVELS.forEach((lvl, i) => {
+    const b = document.createElement('button');
+    b.className = 'lvl';
+    const open = isUnlocked(save, i);
+    b.disabled = !open;
+    const st = save.stars[i] ?? 0;
+    b.innerHTML = `<span class="n">${i + 1}</span><span class="nm"></span><span class="st"></span>`;
+    b.querySelector('.nm').textContent = lvl.name;
+    b.querySelector('.st').innerHTML = open ? starRow(st) : 'Locked';
+    b.setAttribute('aria-label', `Level ${i + 1}, ${lvl.name}, ${open ? `${st} of 3 stars` : 'locked'}`);
+    b.addEventListener('click', () => startLevel(i));
+    list.appendChild(b);
+  });
+}
+
+// ---------- tray ----------
+const cards = {};
+for (const type of TOWER_ORDER) {
+  const b = document.createElement('button');
+  b.className = 'card';
+  b.innerHTML = '<canvas></canvas><span class="name"></span><span class="price"></span>';
+  b.querySelector('.name').textContent = TOWERS[type].name;
+  b.addEventListener('click', () => onCard(type));
+  $('tray').appendChild(b);
+  cards[type] = b;
+}
+
+function firstLevelWith(type) {
+  return LEVELS.findIndex((l) => l.towers.includes(type)) + 1;
+}
+
+function refreshTray() {
+  for (const type of TOWER_ORDER) {
+    const b = cards[type];
+    const locked = !g.level.towers.includes(type);
+    const cost = TOWERS[type].tiers[0].cost;
+    b.classList.toggle('locked', locked);
+    b.classList.toggle('poor', !locked && g.gold < cost);
+    b.classList.toggle('ready', !locked && !!selTile && g.gold >= cost);
+    const price = locked ? `Level ${firstLevelWith(type)}` : String(cost);
+    const el = b.querySelector('.price');
+    if (el.textContent !== price) {
+      el.textContent = price;
+      b.setAttribute('aria-label', locked ? `${TOWERS[type].name}, unlocks at level ${firstLevelWith(type)}` : `${TOWERS[type].name}, ${cost} gold`);
+    }
+  }
+}
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+}
+
+function onCard(type) {
+  audio.unlock();
+  if (!running) return;
+  if (!g.level.towers.includes(type)) { toast(`${TOWERS[type].name} grows from level ${firstLevelWith(type)}.`); audio.nope(); return; }
+  if (!selTile) { toast(`${TOWERS[type].name}: ${TOWERS[type].blurb} Tap a mossy tile first.`); return; }
+  const why = place(g, type, selTile.c, selTile.r);
+  if (why === 'gold') { toast(`Needs ${TOWERS[type].tiers[0].cost - g.gold} more gold.`); audio.nope(); return; }
+  if (why) { audio.nope(); return; }
+  audio.place();
+  const tw = towerAt(g, selTile.c, selTile.r);
+  selTile = null;
+  selTowerId = tw ? tw.id : null;
+}
+
+// ---------- context bar ----------
+const PLURAL = { moth: 'moths', firefly: 'fireflies', beetle: 'shell beetles', wisp: 'wisps', toad: 'gloom toads' };
+const SINGULAR = { moth: 'moth', firefly: 'firefly', beetle: 'shell beetle', wisp: 'wisp', toad: 'gloom toad' };
+function enemyList(wave) {
+  const n = {};
+  for (const [type, count] of wave) n[type] = (n[type] ?? 0) + count;
+  return Object.entries(n).map(([t, c]) => `${c} ${c > 1 ? PLURAL[t] : SINGULAR[t]}`).join(', ');
+}
+
+let barKey = '';
+function setBar(key, html, a, b) {
+  if (key === barKey) return;
+  barKey = key;
+  $('barText').innerHTML = html;
+  for (const [el, spec] of [[$('actA'), a], [$('actB'), b]]) {
+    el.hidden = !spec;
+    if (!spec) continue;
+    el.innerHTML = spec.label + (spec.cost != null ? `<span class="cost">${spec.cost}</span>` : '');
+    el.disabled = !!spec.disabled;
+    el.onclick = spec.run ?? null;
+  }
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+function startWave() {
+  audio.unlock();
+  callWave(g);
+  audio.events([{ e: 'wave' }]);
+}
+
+function refreshBar() {
+  const tw = selTowerId != null ? g.towers.find((t) => t.id === selTowerId) : null;
+  if (tw) {
+    const def = TOWERS[tw.type];
+    const s = stats(tw);
+    const up = upgradeCost(tw);
+    const refund = refundFor(g, tw);
+    const affordable = up != null && g.gold >= up;
+    const what = def.kind === 'aura' ? `Slows ${Math.round(s.slow * 100)}%` : def.kind === 'beam' ? `${s.dmg}, through armour` : def.kind === 'splash' ? `Bursts for ${s.dmg}` : `Hits for ${s.dmg}`;
+    setBar(`t${tw.id}:${tw.tier}:${affordable}:${refund}`,
+      `<b>${esc(def.name)}</b>Level ${tw.tier + 1} of 3. ${what}.`,
+      { label: 'Sell', cost: refund, run: () => { sell(g, tw.id); audio.sell(); selTowerId = null; } },
+      up == null
+        ? { label: 'Fully grown', disabled: true }
+        : { label: 'Upgrade', cost: up, disabled: !affordable, run: () => { if (upgrade(g, tw.id) === '') audio.upgrade(); } });
+    return;
+  }
+  if (selTile) {
+    setBar('tile', '<b>Plant here</b>Pick a plant below.', { label: 'Cancel', run: () => { selTile = null; } }, null);
+    return;
+  }
+  if (g.phase === 'ready') {
+    const intro = g.towers.length === 0 && levelIndex === 0 ? 'Tap the glowing tile, then plant a Glowcap.' : g.level.intro;
+    setBar(`ready:${intro}`, `<b>${esc(g.level.name)}</b>${esc(intro)}`, null, null);
+    return;
+  }
+  if (g.phase === 'wave') {
+    const next = g.level.waves[g.waveIndex + 1];
+    if (canCallWave(g) && next) {
+      const secs = Math.max(0, Math.ceil(g.countdown ?? 0));
+      setBar(`call${g.waveIndex}:${secs}`, `<b>Wave ${g.waveIndex + 2} in ${secs}s</b>Next: ${esc(enemyList(next))}`, null, null);
+      return;
+    }
+    const lastWave = g.waveIndex === g.waveCount - 1;
+    setBar(`wave${g.waveIndex}`, `<b>Wave ${g.waveIndex + 1} of ${g.waveCount}</b>${lastWave ? 'The last wave. Hold on.' : 'Tap a plant to upgrade it.'}`, null, null);
+    return;
+  }
+  setBar(g.phase, '', null, null);
+}
+
+// ---------- HUD ----------
+const hudCache = {};
+function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
+function refreshHud() {
+  setText('lives', String(g.lives));
+  setText('gold', String(g.gold));
+  // One always-visible button starts the level and calls waves early, so a selected plant never hides it.
+  let label, enabled;
+  if (g.phase === 'ready') { label = 'Start wave'; enabled = true; }
+  else if (canCallWave(g)) {
+    const bonus = Math.ceil(g.countdown ?? 0) * EARLY_GOLD_PER_SECOND;
+    label = bonus > 0 ? `Next wave<span class="cost">+${bonus}</span>` : 'Next wave';
+    enabled = true;
+  } else { label = `Wave ${Math.max(1, g.waveIndex + 1)} of ${g.waveCount}`; enabled = false; }
+  if (hudCache.waveBtn !== label) {
+    hudCache.waveBtn = label;
+    $('waveBtn').innerHTML = label;
+    $('waveBtn').disabled = !enabled;
+  }
+  $('speed').setAttribute('aria-pressed', String(speed === 2));
+}
+
+// ---------- level flow ----------
+function startLevel(i) {
+  audio.unlock();
+  levelIndex = i;
+  g = createGame(LEVELS[i]);
+  prev = new Map();
+  selTile = null;
+  selTowerId = null;
+  endShown = false;
+  endTimer = 0;
+  acc = 0;
+  barKey = '';
+  for (const k of Object.keys(hudCache)) delete hudCache[k];
+  renderer.clearFx();
+  running = true;
+  paused = false;
+  show(null);
+  fit();
+  for (const t of TOWER_ORDER) paintIcon(cards[t].querySelector('canvas'), t);
+  studio.track('level_start', { level: i + 1 });
+}
+
+function finish() {
+  endShown = true;
+  const won = g.phase === 'won';
+  const stars = won ? starsFor(g) : 0;
+  studio.track('level_end', { level: levelIndex + 1, result: won ? 'win' : 'lose', stars, wave: g.waveIndex + 1, lives: g.lives });
+  if (won) { save = recordStars(save, levelIndex, stars); persist(); }
+  $('endStars').innerHTML = won ? '<span>★</span>'.repeat(stars) + '<span class="off">★</span>'.repeat(3 - stars) : '';
+  $('endTitle').textContent = won ? (stars === 3 ? 'Not a moth got through' : 'Lantern held') : 'The light went out';
+  $('endDetail').textContent = won
+    ? (stars < 3 ? 'Keep 18 or more lives for three stars.' : levelIndex === LEVELS.length - 1 ? 'Every path is safe. The garden sleeps.' : `${LEVELS[levelIndex + 1].name} is open.`)
+    : `You held ${g.waveIndex} of ${g.waveCount} waves. Plants by the bends see creatures longest, and one upgrade often beats a new plant.`;
+  $('endKills').textContent = String(g.stats.kills);
+  $('endLives').textContent = String(g.lives);
+  $('endBonus').textContent = String(g.stats.earlyBonus);
+  const hasNext = won && levelIndex < LEVELS.length - 1;
+  $('nextBtn').hidden = !hasNext;
+  $('retryBtn').className = hasNext ? 'quiet' : 'big';
+  $('retryBtn').textContent = won ? 'Play again' : 'Try again';
+  show('end');
+  studio.feedback.maybePrompt();
+}
+
+// ---------- input ----------
+$('board').addEventListener('pointerdown', (ev) => {
+  ev.preventDefault();
+  audio.unlock();
+  if (!running || paused || endShown) return;
+  const cell = renderer.cellAt(ev.clientX, ev.clientY);
+  if (!cell) return;
+  const tw = towerAt(g, cell.c, cell.r);
+  if (tw) { selTowerId = selTowerId === tw.id ? null : tw.id; selTile = null; return; }
+  selTowerId = null;
+  selTile = canBuild(g, cell.c, cell.r) && !(selTile && selTile.c === cell.c && selTile.r === cell.r) ? cell : null;
+});
+
+function resume() { paused = false; last = performance.now(); show(null); }
+$('waveBtn').addEventListener('click', () => { if (running && !paused && !endShown && canCallWave(g)) startWave(); });
+$('speed').addEventListener('click', () => { speed = speed === 2 ? 1 : 2; save = { ...save, speed }; persist(); });
+$('pauseBtn').addEventListener('click', () => { if (running && !endShown) { paused = true; show('pause'); } });
+$('resumeBtn').addEventListener('click', resume);
+$('restartBtn').addEventListener('click', () => startLevel(levelIndex));
+function soundLabel() { $('soundBtn').textContent = save.sound ? 'Sound on' : 'Sound off'; }
+$('soundBtn').addEventListener('click', () => {
+  save = { ...save, sound: !save.sound };
+  audio.setOn(save.sound);
+  persist();
+  soundLabel();
+});
+soundLabel();
+const toLevels = () => { running = false; paused = false; renderLevels(); show('levels'); };
+$('toLevelsBtn').addEventListener('click', toLevels);
+$('endLevelsBtn').addEventListener('click', toLevels);
+$('nextBtn').addEventListener('click', () => startLevel(levelIndex + 1));
+$('retryBtn').addEventListener('click', () => startLevel(levelIndex));
+$('playBtn').addEventListener('click', () => {
+  audio.unlock();
+  // A brand-new player goes straight into the first level; returning players pick from the garden.
+  if (totalStars(save) === 0) startLevel(0);
+  else toLevels();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && running && !endShown && g.phase === 'wave') { paused = true; show('pause'); }
+});
+addEventListener('keydown', (ev) => {
+  if (!running || endShown) return;
+  if (ev.key === 'Escape' || ev.key === 'p') { if (paused) resume(); else { paused = true; show('pause'); } }
+  else if (ev.key === ' ' && !paused && canCallWave(g)) { ev.preventDefault(); startWave(); }
+});
+
+// ---------- layout ----------
+function fit() {
+  const st = $('stage');
+  renderer.resize(g, st.clientWidth, st.clientHeight);
+}
+addEventListener('resize', () => { if (running) fit(); });
+
+// ---------- loop ----------
+// On the first level, until something is planted, glow the tile where a Glowcap sees the most path.
+function hintTile() {
+  if (levelIndex !== 0 || g.towers.length > 0 || selTile) return null;
+  let best = null;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (!canBuild(g, c, r)) continue;
+    const v = coverage(g, c, r, TOWERS.glowcap.tiers[0].range);
+    if (!best || v > best.v) best = { c, r, v };
+  }
+  return best;
+}
+
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (running && g) {
+    if (!paused && !endShown) {
+      time += dt;
+      acc += dt * speed;
+      let steps = 0;
+      while (acc >= DT && steps < 8) {
+        prev = new Map(g.enemies.map((e) => [e.id, { x: e.x, y: e.y }]));
+        const ev = step(g);
+        if (ev.length) {
+          renderer.addEvents(ev);
+          audio.events(ev);
+          for (const e of ev) {
+            if (e.e === 'leak' && navigator.vibrate) navigator.vibrate(25);
+            if (e.e === 'won') audio.won(e.stars);
+            if (e.e === 'lost') audio.lost();
+          }
+        }
+        acc -= DT;
+        steps += 1;
+      }
+      if (steps === 8) acc = 0;
+      renderer.tickFx(dt);
+      if (g.phase === 'won' || g.phase === 'lost') {
+        endTimer += dt;
+        if (endTimer > 1.2) finish();
+      }
+    }
+    if (selTowerId != null && !g.towers.some((t) => t.id === selTowerId)) selTowerId = null;
+    if (selTile && !canBuild(g, selTile.c, selTile.r)) selTile = null;
+    const selTower = selTowerId != null ? g.towers.find((t) => t.id === selTowerId) : null;
+    renderer.draw(g, { alpha: Math.min(1, acc / DT), prev, time, sel: selTile, selTower, hint: hintTile() });
+    refreshHud();
+    refreshTray();
+    refreshBar();
+  }
+  requestAnimationFrame(frame);
+}
+
+show('title');
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
