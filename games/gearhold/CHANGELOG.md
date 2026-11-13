@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.3.3 (2026-11-13)
 - A brass tick now flashes at the screen edge to show which direction damage came from.
 - Picking up the gear key now gives a brass glow around the screen edge and a clockwork ratchet-and-bell chime.
+- Wrecked clockwork foes now burst into a puff of brass steam and tumbling cogs.
 
 ## 0.3.2 (2026-11-12)
 - A small brass compass on the HUD now points to the gear key, then to the exit arch once you hold the key.
