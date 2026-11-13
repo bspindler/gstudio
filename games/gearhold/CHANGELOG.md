@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.3.3 (2026-11-13)
+- A brass tick now flashes at the screen edge to show which direction damage came from.
+
 ## 0.3.2 (2026-11-12)
 - A small brass compass on the HUD now points to the gear key, then to the exit arch once you hold the key.
 
