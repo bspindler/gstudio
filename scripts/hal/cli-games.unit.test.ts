@@ -53,7 +53,7 @@ describe('game slugs for subcommands', () => {
     for (const games of [...seen.ops, ...seen.run]) {
       expect(games).toContain('gearhold');
       expect(games).not.toContain('gearhold-play');
-      expect([...games].sort()).toEqual(['block-barn', 'gearhold', 'hyperline', 'tidepool-pals']);
+      expect([...games].sort()).toEqual(['block-barn', 'gearhold', 'hyperline', 'lanternkeep', 'tidepool-pals']);
     }
     expect(seen.ops).toHaveLength(1);
     expect(seen.run).toHaveLength(1);
