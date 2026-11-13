@@ -85,6 +85,14 @@ About 500 Hal tests and a lot of custom git plumbing (replay, push triage) built
 nobody has seen them together over weeks of real nights. The push triage and the replay are the likeliest to
 surprise, because they rewrite history.
 
+## 9. Block Barn (added 2026-11-13)
+
+Block Barn is a child-directed toddler game (age 2+, plays alone) and is on the shelf. Hal scores it with five measures
+(responsive, noDeadEnds, bigTargets, alphabet, calm) and the planner has a Block Barn section with the anti-goals and the
+locked files (`recorder.js`, `audio/**`, every `SOURCES.md`, the `childDirected` flag, new non-code assets).
+**Open:** a real-iPhone check that speech and sound effects unlock; Brian's recordings (`docs/block-barn-recording.md`);
+HTTPS hosting, needed for in-game recording.
+
 ## 8. Smaller issues
 
 - A CI-triggered undo tells players a change "failed an automated check", internal detail they don't need.
