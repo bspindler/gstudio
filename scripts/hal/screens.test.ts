@@ -9,7 +9,7 @@ describe('runScreens', () => {
   it('writes changing phone-size PNGs and an errors list for each game', async () => {
     const outDir = await mkdtemp(join(tmpdir(), 'hal-screens-'));
     const results = await runScreens({ outDir });
-    expect(results.map((r) => r.game).sort()).toEqual(['gearhold', 'hyperline', 'tidepool-pals']);
+    expect(results.map((r) => r.game).sort()).toEqual(['gearhold', 'hyperline', 'lanternkeep', 'tidepool-pals']);
     // Fonts are bundled in each game folder, so no game should try to reach another host.
     for (const r of results) expect(r.blockedRequests, `${r.game} outbound requests`).toEqual([]);
     for (const r of results) {
@@ -28,7 +28,7 @@ describe('runScreens', () => {
 describe('shootGame', () => {
   it('writes a 390x844 JPEG of each game in gameplay', async () => {
     const outDir = await mkdtemp(join(tmpdir(), 'hal-shoot-'));
-    for (const game of ['gearhold', 'tidepool-pals', 'hyperline']) {
+    for (const game of ['gearhold', 'tidepool-pals', 'hyperline', 'lanternkeep']) {
       const out = join(outDir, game, 'after.jpg');
       await shootGame(repo, game, out);
       const buf = await readFile(out);

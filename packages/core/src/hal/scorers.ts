@@ -6,6 +6,7 @@ import { AUTHORED } from '../../../../games/tidepool-pals/levels.js';
 import { SECTORS, SECTOR_LEN } from '../../../../games/hyperline/lib/world.js';
 import { GEARHOLD_PLAY_DEFAULTS, scoreGearholdPlay, type PlayRecord } from './gearhold-play-score.js';
 import { scoreHyperline } from './hyperline-score.js';
+import { LANTERNKEEP_DEFAULTS, scoreLanternkeep } from './lanternkeep-score.js';
 import { scoreTidepool } from './tidepool-score.js';
 import type { ScoreReport } from './types.js';
 
@@ -54,7 +55,18 @@ const gearhold: Scorer = {
   score: () => scoreGearhold(),
 };
 
-export const SCORERS: Record<string, Scorer> = { 'tidepool-pals': tidepool, hyperline, gearhold };
+// Lanternkeep has no randomness of its own: seeds vary the bot's tile picks, and each seed plays four styles.
+const lanternkeep: Scorer = {
+  game: 'lanternkeep',
+  defaults: { ...LANTERNKEEP_DEFAULTS },
+  validate(r) {
+    if (!Number.isInteger(r.seeds) || (r.seeds as number) < 1) return '--seeds must be a positive integer';
+    return null;
+  },
+  score: (r) => scoreLanternkeep({ seeds: r.seeds as number }),
+};
+
+export const SCORERS: Record<string, Scorer> = { 'tidepool-pals': tidepool, hyperline, gearhold, lanternkeep };
 
 /** Plays `levels` levels (0-based, 0..levels-1) x `seeds` seeds in a browser; injected so core never imports Playwright. */
 export type GearholdPlayRunner = (o: { levels: number[]; seeds: number; seedBase: number }) => Promise<{ records: PlayRecord[]; errors: string[] }>;
