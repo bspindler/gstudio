@@ -64,11 +64,12 @@
     --pl: max(8px, env(safe-area-inset-left, 0px)); --pr: max(8px, env(safe-area-inset-right, 0px)); --pt: 8px; --pb: max(12px, env(safe-area-inset-bottom, 0px));
     --iw: calc(100cqw - var(--pl) - var(--pr)); --ih: calc(100cqh - var(--pt) - var(--pb));
     gap: var(--g); padding: var(--pt) var(--pr) var(--pb) var(--pl);
-    /* portrait (iPhone SE, tablets upright): three columns, two rows; the tower stands top right */
+    /* portrait (iPhone SE, tablets upright): three columns, two rows at the top; the tower stands bottom right, and
+       the spare hay is at the bottom left (so nothing is bare at the top before the first tap) */
     --S0: min((var(--iw) - 2 * var(--g)) / 3, (var(--ih) - 2 * var(--g) - 88px) / 3.94);
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: minmax(0, 1fr) calc(var(--S0) * 1.97) calc(var(--S0) * 1.97);
-    grid-template-areas: "free free tower" "s0 s1 tower" "s2 s3 s4"; }
+    grid-template-rows: calc(var(--S0) * 1.97) calc(var(--S0) * 1.97) minmax(0, 1fr);
+    grid-template-areas: "s0 s1 s2" "s3 s4 tower" "free free tower"; }
   @media (max-aspect-ratio: 13 / 25) {
     /* tall phones: two big columns, three rows; the tower has its own band down the left */
     #stage { grid-template-columns: calc(var(--iw) * .31) repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr));
@@ -80,8 +81,13 @@
     #stage { --g: 8px; grid-template-columns: clamp(120px, calc(var(--iw) * .09), 240px) repeat(5, minmax(0, 1fr));
       grid-template-rows: minmax(0, 1fr); grid-template-areas: "tower s0 s1 s2 s3 s4"; }
     #free { display: none; }
-    /* the row sits a little up from the bottom edge, so any spare height is shared above and below it */
-    #stage .slot > * { --B: min(var(--S) * 1.4, max(var(--S), 100cqh - var(--S) - 4px)); --L: max(0px, (100cqh - var(--B) - var(--S) - 2px) / 2); }
+    /* the row sits up from the bottom edge (most of the spare height goes below it), so the animals peeking
+       over the blocks before the first tap reach well up the floor */
+    #stage .slot > * { --B: min(var(--S) * 1.4, max(var(--S), 100cqh - var(--S) - 4px)); --L: max(0px, (100cqh - var(--B) - var(--S) - 2px) * .9); }
+  }
+  @media (min-aspect-ratio: 5 / 4) and (max-aspect-ratio: 3 / 2) {
+    /* 4:3 on its side has more spare height: less of it below the row, and the peeking animals show more of themselves */
+    #stage .slot > * { --L: max(0px, (100cqh - var(--B) - var(--S) - 2px) * .65); --peek: 15%; }
   }
   #free { grid-area: free; pointer-events: none; }
   #slots { display: contents; }
@@ -104,6 +110,15 @@
   .animal { position: absolute; left: 0; right: 0; bottom: calc(var(--L) + var(--B) + 2px);
     height: min(100cqh - var(--L) - var(--B) - 2px, var(--S) * 1.6); pointer-events: none; }
   .animal .pic, .tanimal .pic { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* before its block is tapped, the animal peeks out from behind it: a soft silhouette in a darker hay tone,
+     its lower part tucked behind the block (--peek), bobbing slowly; it is not a tap target of its own */
+  .slot > * { --peek: 45%; }
+  .animal.ghost { opacity: .8; }
+  .animal.ghost .art { transform-box: fill-box; transform: translateY(var(--peek)); }
+  .animal.ghost .art *:not([fill="none"]) { fill: #c39437 !important; }
+  .animal.ghost .art * { stroke: #c39437 !important; }
+  .animal.ghost .pic { animation: bob 4.5s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-5px); } }
   .animal .pic, .tanimal .pic { transform-origin: 50% 92%; overflow: visible; }
   .friend { position: absolute; width: 46px; height: 30px; bottom: -4px; right: -40px; animation: peek 2.4s ease-in-out forwards; pointer-events: none; }
 
@@ -211,6 +226,7 @@
     .body.flip, .body.arrive { animation-duration: .3s; }
     .mv .pic, .dance .pic { animation-duration: .5s !important; }
     .slot.invite .body { animation-duration: 4s; }
+    .animal.ghost .pic { animation: none; }
   }
 
   /* ---- the grown-up corner ---- */
@@ -578,14 +594,9 @@ function renderSlot(k, anim) {
   word.hidden = !isNamed;
   if (isNamed) word.innerHTML = wordHTML(l);
   el.classList.toggle('invite', invited === l);
-  if (isNamed) {
-    if (animal.dataset.letter !== l) { animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
-    animal.hidden = false;
-  } else {
-    animal.hidden = true;
-    animal.dataset.letter = '';
-    animal.innerHTML = '';
-  }
+  if (animal.dataset.letter !== l) { animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
+  animal.hidden = false;
+  animal.classList.toggle('ghost', !isNamed); // unnamed: its silhouette peeks over the block
   if (anim) restart(body, anim);
 }
 function renderTower(popTop) {
@@ -617,7 +628,7 @@ function restart(el, cls) {
   void el.offsetWidth; // restart the CSS animation
   el.classList.add(cls);
 }
-const animalEl = (l) => { const k = floor.indexOf(l); return k < 0 ? null : slotsEl.children[k].querySelector('.animal'); };
+const animalEl = (l) => { const k = floor.indexOf(l); return k < 0 || !named.has(l) ? null : slotsEl.children[k].querySelector('.animal'); };
 function moveAnimal(l, variant) {
   const a = animalEl(l);
   if (!a) return;
@@ -766,7 +777,7 @@ function hitBoxes() {
     const r = el.querySelector('.block').getBoundingClientRect();
     out.push({ kind: 'block', letter: l, k, x: r.left, y: r.top, w: r.width, h: r.height });
     const a = el.querySelector('.animal');
-    if (!a.hidden) { const q = a.getBoundingClientRect(); out.push({ kind: 'animal', letter: l, k, x: q.left, y: q.top, w: q.width, h: q.height }); }
+    if (named.has(l)) { const q = a.getBoundingClientRect(); out.push({ kind: 'animal', letter: l, k, x: q.left, y: q.top, w: q.width, h: q.height }); }
   });
   out.push({ kind: 'tower', ...towerBox() });
   return out;

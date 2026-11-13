@@ -178,6 +178,20 @@ describe('block barn page', () => {
     return { slots, tower, stackBlocks: blocks, towerAnimalBox: ta ? box(ta.getBoundingClientRect()) : null, wall: document.getElementById('floor')!.getBoundingClientRect().top };
   });
 
+  /** The share of the floor below the wall that `rects` cover (4 px sampling), and the tallest bare horizontal band. */
+  function fill(rects: Box[], wall: number, W: number, H: number): { share: number; band: number } {
+    let hit = 0, all = 0;
+    for (let y = wall + 2; y < H; y += 4) for (let x = 2; x < W; x += 4) {
+      all++;
+      if (rects.some((t) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h)) hit++;
+    }
+    let run = 0, worst = 0;
+    for (let y = wall; y < H; y += 2) {
+      if (rects.some((t) => y >= t.y && y < t.y + t.h)) run = 0; else { run += 2; worst = Math.max(worst, run); }
+    }
+    return { share: hit / all, band: worst };
+  }
+
   for (const [kind, W, H] of SIZES) {
     it(`fills the barn at ${W}x${H} (${kind}): drawn content covers half the floor with no empty band; big blocks, animals and tower`, async () => {
       const contextOptions = kind === 'desktop'
@@ -195,6 +209,14 @@ describe('block barn page', () => {
           const dx = Math.max(t.x - fc.x, 0, fc.x - (t.x + t.w)), dy = Math.max(t.y - fc.y, 0, fc.y - (t.y + t.h));
           expect(Math.hypot(dx, dy), `floor centre is clear of ${t.kind} ${t.letter ?? ''}`).toBeGreaterThan(44);
         }
+        // Before any tap (her first look): every animal peeks over its block as a silhouette, which is drawn content
+        // but not a tap target, and there is no bare band taller than 20% of the floor.
+        expect(t0.filter((t) => t.kind === 'animal'), 'silhouettes are not targets').toHaveLength(0);
+        const d0 = await drawn(page);
+        expect(d0.slots.every((x) => !!x.art), 'every block has its animal peeking').toBe(true);
+        for (const sl of d0.slots) expect(sl.art!.y, `the ${sl.letter} silhouette shows above its block`).toBeLessThan(sl.block.y - 0.25 * sl.block.w);
+        const f0 = fill([...d0.slots.map((x) => x.block), ...d0.slots.map((x) => x.art!), ...d0.tower], d0.wall, W, H);
+        expect(f0.band, `seed ${seed}, before any tap: tallest empty band`).toBeLessThanOrEqual(0.2 * (H - d0.wall));
 
         // A full tower (five; the sixth tumbles), then all five floor blocks named: the fullest the barn gets.
         for (let i = 0; i < 5; i++) {
@@ -210,20 +232,10 @@ describe('block barn page', () => {
         const where = `seed ${seed}`;
         expect(d.wall, 'barn wall height').toBeLessThanOrEqual(0.15 * H + 0.5);
 
-        // Drawn content covers at least half the floor (4 px sampling) ...
-        const rects: Box[] = [...d.slots.map((x) => x.block), ...d.slots.map((x) => x.art!), ...d.tower];
-        let hit = 0, all = 0;
-        for (let y = d.wall + 2; y < H; y += 4) for (let x = 2; x < W; x += 4) {
-          all++;
-          if (rects.some((t) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h)) hit++;
-        }
-        expect(hit / all, `${where}: share of the floor drawn on`).toBeGreaterThanOrEqual(0.5);
-        // ... and no horizontal band of bare hay taller than 20% of the floor.
-        let run = 0, worst = 0;
-        for (let y = d.wall; y < H; y += 2) {
-          if (rects.some((t) => y >= t.y && y < t.y + t.h)) run = 0; else { run += 2; worst = Math.max(worst, run); }
-        }
-        expect(worst, `${where}: tallest empty band`).toBeLessThanOrEqual(0.2 * (H - d.wall));
+        // Drawn content covers at least half the floor, with no horizontal band of bare hay taller than 20% of it.
+        const f1 = fill([...d.slots.map((x) => x.block), ...d.slots.map((x) => x.art!), ...d.tower], d.wall, W, H);
+        expect(f1.share, `${where}: share of the floor drawn on`).toBeGreaterThanOrEqual(0.5);
+        expect(f1.band, `${where}: tallest empty band`).toBeLessThanOrEqual(0.2 * (H - d.wall));
 
         for (const sl of d.slots) {
           const b = sl.block;
