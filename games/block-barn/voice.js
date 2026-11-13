@@ -21,7 +21,7 @@ function rank(v) {
   return -1;
 }
 
-/** The warmest English voice on the device: Premium, then Enhanced, then another local en-US/en-GB one; null = browser default. */
+/** The warmest English voice on the device: Premium, then Enhanced, then another local en-US/en-GB one; null = none (then the barn stays silent rather than use the browser default). */
 export function pickVoice(voices) {
   let best = null, bestRank = Infinity, bestLang = Infinity;
   for (const v of voices || []) {
@@ -35,7 +35,7 @@ export function pickVoice(voices) {
   return best;
 }
 
-// Voice order: parent recording > bundled clip > device speech > silence.
+// Voice order: parent recording > bundled clip > device speech (an on-device voice only) > silence.
 // Pure: every browser dependency is injected.
 export function createVoice(o) {
   const { audio, synth, recordings, base } = o;
@@ -78,40 +78,54 @@ export function createVoice(o) {
     try { return (await recordings(key)) || null; } catch (e) { return null; }
   }
 
+  // Device speech only ever uses a chosen on-device voice: the browser's default voice can be an online one, which
+  // would send the words to a server. With none picked yet, wait (at most 1.5 s) for the voice list, then pick again;
+  // still none, and this line stays silent. Recordings and clips are unaffected.
   function speak(text, mine) {
     return new Promise((resolve) => {
       mine.finish = resolve;
       let retried = false;
+      let waited = false;
+      // Runs `next` once voiceschanged fires or 1.5 s pass (at once if the list has already arrived); stop() cancels it.
+      const afterVoices = (next) => {
+        if (voicesChanged || !synth.addEventListener) return next();
+        let done = false;
+        let timer = null;
+        const cleanup = () => {
+          done = true;
+          clearTimeout(timer);
+          if (synth.removeEventListener) synth.removeEventListener('voiceschanged', go);
+        };
+        const go = () => {
+          if (done) return;
+          cleanup();
+          mine.cancelWait = null;
+          if (current === mine) next();
+        };
+        mine.cancelWait = cleanup;
+        synth.addEventListener('voiceschanged', go, { once: true });
+        timer = setTimeout(go, 1500);
+      };
       const attempt = () => {
         if (current !== mine) return resolve();
+        if (!chosen) choose();
+        if (!chosen) {
+          if (waited || voicesChanged || !synth.addEventListener) return resolve(); // no local voice: silent
+          waited = true;
+          return afterVoices(() => { choose(); attempt(); });
+        }
         let u;
         try {
           u = utter(text);
           u.rate = SPEECH.rate;
           u.pitch = SPEECH.pitch;
-          if (!chosen) choose();
-          if (chosen) { u.voice = chosen; u.lang = chosen.lang; }
+          u.voice = chosen;
+          u.lang = chosen.lang;
           u.onend = () => resolve();
           u.onerror = () => {
             if (retried || current !== mine) return resolve();
             retried = true;
-            if (voicesChanged || !synth.addEventListener) return attempt();
-            let done = false;
-            let timer = null;
-            const cleanup = () => {
-              done = true;
-              clearTimeout(timer);
-              if (synth.removeEventListener) synth.removeEventListener('voiceschanged', go);
-            };
-            const go = () => {
-              if (done) return;
-              cleanup();
-              mine.cancelWait = null;
-              if (current === mine) attempt();
-            };
-            mine.cancelWait = cleanup;
-            synth.addEventListener('voiceschanged', go, { once: true });
-            timer = setTimeout(go, 1500);
+            afterVoices(attempt);
           };
           synth.speak(u);
         } catch (e) { resolve(); }

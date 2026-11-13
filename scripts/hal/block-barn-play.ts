@@ -12,7 +12,8 @@
 //     brightness property that repeats, or goes back and forth, faster than BLOCK_BARN_RULES.flashMs is a flash), and
 //     the Web Audio graph is recorded (gain nodes however made, their values and automation, connections, source start
 //     and stop times) so the effective gain of everything sounding at once can be computed.
-//   - Speech is a fake that records what is said and ends each line at once, so runs are quiet and repeatable.
+//   - Speech is a fake that records what is said and ends each line at once, so runs are quiet and repeatable. It offers
+//     an online voice and a local one; a line in any voice but an on-device one is an error (the score is rejected).
 // Page and console errors, blocked requests, a page that leaves the barn, and a viewport run over VIEW_DEADLINE_MS go
 // to `errors` / `page.leftBarn`. A browser that can't launch throws "browser unavailable: ..."; the CLI exits 1 on it.
 // Run it with `npm run hal -- score --game block-barn`.
@@ -78,11 +79,23 @@ function instrument(flashMs: number, gapMs: number): void {
   const realTimeout = w.setTimeout, realRaf = w.requestAnimationFrame;
   w.setTimeout = function (fn: unknown, ms?: number, ...rest: unknown[]) { const t = vnow + Math.max(0, Number(ms) || 0) / 1000; return realTimeout.call(this, at(fn, () => t), ms, ...rest); };
   if (realRaf) w.requestAnimationFrame = function (fn: FrameRequestCallback) { const t = vnow; return realRaf.call(this, at(fn, () => Math.max(t, tapAt))); };
-  // Speech: record each spoken line and end it at once.
-  const spoken: string[] = [];
+  // Speech: record each spoken line and end it at once. The device offers an online English voice (it would send the
+  // words to a server) and a local one; a line spoken in anything but an on-device voice is a hard failure.
+  const spoken: string[] = [], offDevice: string[] = [];
+  const voices = [
+    { name: 'Google US English', lang: 'en-US', localService: false, voiceURI: 'Google US English', default: true },
+    { name: 'Samantha', lang: 'en-US', localService: true, voiceURI: 'Samantha', default: false },
+  ];
+  w.SpeechSynthesisUtterance = class { text: string; volume = 1; rate = 1; pitch = 1; voice: unknown = null; lang = ''; onend: unknown = null; onerror: unknown = null; constructor(t: unknown) { this.text = String(t ?? ''); } };
   const fake = {
-    speak(u: any) { const t = String(u?.text ?? ''); if (!t.trim()) return; spoken.push(t); setTimeout(() => u.onend?.({}), 10); },
-    cancel() {}, pause() {}, resume() {}, getVoices: () => [], addEventListener() {}, removeEventListener() {}, speaking: false, pending: false, paused: false,
+    speak(u: any) {
+      const t = String(u?.text ?? '');
+      if (!t.trim()) return;
+      spoken.push(t);
+      if (u?.voice?.localService !== true) offDevice.push(`${u?.voice?.name ?? '(browser default)'}: ${t}`);
+      setTimeout(() => u.onend?.({}), 10);
+    },
+    cancel() {}, pause() {}, resume() {}, getVoices: () => voices.slice(), addEventListener() {}, removeEventListener() {}, speaking: false, pending: false, paused: false,
   };
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => fake });
   // Media: a clip that really starts playing (blob: is the silent priming sound or a parent's recording).
@@ -333,7 +346,7 @@ function instrument(flashMs: number, gapMs: number): void {
   addEventListener('pointerup', (e) => { if (!e.isTrusted || !probe || current !== e) return; finish(); probe.up = true; probe.end = performance.now() - probe.t0; });
 
   // `hold(ms)`: the runner is holding a finger down for ms; the virtual clock moves on by that much.
-  w.__bbPlay = { spoken, played, flashes, audio, reset() { probe = null; }, probe: () => probe, hold(ms: number) { held += Number(ms) || 0; tapAt += (Number(ms) || 0) / 1000; vnow = tapAt; } };
+  w.__bbPlay = { spoken, offDevice, played, flashes, audio, reset() { probe = null; }, probe: () => probe, hold(ms: number) { held += Number(ms) || 0; tapAt += (Number(ms) || 0) / 1000; vnow = tapAt; } };
 }
 
 /** The runner's in-page instrumentation as an init script (exported for tests). */
@@ -526,14 +539,15 @@ async function alphabet(b: Barn, steps: number): Promise<Pick<BlockBarnPage, 'le
   return { letters: [...letters].sort(), voiced: [...voiced].sort(), pictured: [...drawn].sort() };
 }
 
-type Opened = { page: Page; close(): Promise<void>; failed(): string; navigations(): number };
+type Opened = { page: Page; viewport: BlockBarnViewport; close(): Promise<void>; failed(): string; navigations(): number; popups(): number };
 async function openBarn(browser: Browser, origin: string, viewport: BlockBarnViewport, initScript?: string): Promise<Opened> {
   const { context, blockedRequests, consoleErrors } = await newHalContext(browser, { contextOptions: CONTEXT[viewport] });
   const pageErrors: string[] = [];
   await context.addInitScript({ content: instrumentScript() });
   if (initScript) await context.addInitScript({ content: initScript });
   const page = await context.newPage();
-  let navigations = 0;
+  let navigations = 0, popups = 0;
+  context.on('page', () => { popups++; }); // a popup or new tab leaves the barn too
   page.on('framenavigated', (f) => { if (f === page.mainFrame()) navigations++; });
   page.on('pageerror', (e) => pageErrors.push(String(e)));
   page.on('crash', () => pageErrors.push('page crashed'));
@@ -542,8 +556,10 @@ async function openBarn(browser: Browser, origin: string, viewport: BlockBarnVie
   await page.evaluate((s) => (window as any).__hal.seed(s), BLOCK_BARN_SEED);
   return {
     page,
+    viewport,
     close: () => context.close().catch(() => {}),
     navigations: () => navigations,
+    popups: () => popups,
     failed: () => (pageErrors.length ? `${viewport}: page error: ${pageErrors[0]}`
       : consoleErrors.length ? `${viewport}: console error: ${consoleErrors[0]}`
       : blockedRequests.length ? `${viewport}: outbound request blocked: ${blockedRequests[0]}` : ''),
@@ -567,11 +583,12 @@ export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], 
   const records: BlockBarnRecord[] = [], errors: string[] = [];
   const page: BlockBarnPage = { letters: [], voiced: [], pictured: [], flashes: 0, masterGain: 0, peakGain: 0, leftBarn: false, targets: [] };
   const facts = async (o: Opened) => {
-    const f = await bounded(o.page.evaluate(() => { const b = (window as any).__bbPlay; const a = b.audio(); return { flashes: (b.flashes as string[]).length, masterGain: a.masterGain as number, peakGain: a.peakGain as number }; }), 30_000);
+    const f = await bounded(o.page.evaluate(() => { const b = (window as any).__bbPlay; const a = b.audio(); return { flashes: (b.flashes as string[]).length, masterGain: a.masterGain as number, peakGain: a.peakGain as number, offDevice: [...b.offDevice] as string[] }; }), 30_000);
+    if (f.offDevice.length) errors.push(`${o.viewport}: speech in a voice that is not on the device: ${f.offDevice[0]}`);
     page.flashes += f.flashes;
     page.masterGain = Math.max(page.masterGain, r4(f.masterGain));
     page.peakGain = Math.max(page.peakGain, r4(f.peakGain));
-    if (o.navigations() !== 1 || !new URL(o.page.url()).pathname.endsWith('/block-barn/index.html')) page.leftBarn = true;
+    if (o.navigations() !== 1 || o.popups() > 0 || !new URL(o.page.url()).pathname.endsWith('/block-barn/index.html')) page.leftBarn = true;
   };
   try {
     browser = await launchBrowser(); // throws "browser unavailable: ..."

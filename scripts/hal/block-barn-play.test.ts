@@ -111,6 +111,23 @@ describe('runBlockBarnPlay', () => {
     expect(Date.now() - t0).toBeLessThan(60_000);
   }, 120_000);
 
+  it('speech in an online voice (or no chosen voice: the browser default) is a hard failure', async () => {
+    const online = `(() => { const s = window.speechSynthesis; const speak = s.speak.bind(s);
+      s.speak = (u) => { if (String(u.text).trim()) u.voice = s.getVoices().find((v) => v.localService === false); speak(u); }; })();`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: online });
+    expect(r.errors).toContainEqual(expect.stringMatching(/^390x844: speech in a voice that is not on the device: .*Google/));
+    const none = `(() => { const s = window.speechSynthesis; const speak = s.speak.bind(s); s.speak = (u) => { u.voice = null; speak(u); }; })();`;
+    const n = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: none });
+    expect(n.errors).toContainEqual(expect.stringMatching(/^390x844: speech in a voice that is not on the device: \(browser default\)/));
+  }, 200_000);
+
+  it('a popup counts as leaving the barn', async () => {
+    const popup = `(() => { let done = false; window.addEventListener('pointerup', (e) => { if (!e.isTrusted || done) return; done = true; window.open('about:blank'); }, true); })();`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: popup });
+    expect(r.page.leftBarn).toBe(true);
+    expect(scoreBlockBarn(r.records, r.page).measures.noDeadEnds).toBe(0);
+  }, 200_000);
+
   it('a page error is a hard failure, not a score', async () => {
     const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: "setTimeout(() => { throw new Error('injected boom'); }, 50);" });
     expect(r.errors).toEqual([expect.stringMatching(/390x844: page error: .*injected boom/)]);

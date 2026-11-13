@@ -19,13 +19,15 @@ function setup(o: { clips?: string[]; rec?: (k: string) => Promise<string | null
   return { v, log, audios };
 }
 
+const LOCAL = { name: 'Samantha', lang: 'en-US', localService: true, voiceURI: 'Samantha', default: false };
 function fakeSynth(opts: { voices?: any[]; script?: Array<'end' | 'error' | 'hold'> } = {}) {
   const spoken: any[] = [];
   const listeners: Record<string, Array<() => void>> = {};
   const script = opts.script ?? [];
   const s: any = {
     spoken, cancels: 0,
-    getVoices: () => opts.voices ?? [],
+    // A local English voice by default: voice.js speaks only with an on-device voice.
+    getVoices: () => opts.voices ?? [LOCAL],
     speak(u: any) { spoken.push(u); const m = script.shift() ?? 'end'; if (m === 'end') u.onend?.(); else if (m === 'error') u.onerror?.({}); },
     cancel() { s.cancels++; },
     addEventListener(n: string, f: () => void, opt?: { once?: boolean }) {
@@ -124,11 +126,62 @@ describe('block-barn voice', () => {
     v.stop();
     await expect(p).resolves.toBeUndefined();
   });
-  it('still calls speak with no voices', async () => {
+  it('with no voices yet, waits for voiceschanged and speaks with the local voice it brings', async () => {
+    vi.useFakeTimers();
+    const list: any[] = [];
+    const synth = fakeSynth({ voices: list });
+    const { v } = setup({ synth });
+    const p = v.say('name-i', 'iguana');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(synth.spoken).toHaveLength(0);
+    list.push(LOCAL);
+    synth.fire('voiceschanged');
+    await vi.advanceTimersByTimeAsync(0);
+    await p;
+    expect(synth.spoken).toHaveLength(1);
+    expect(synth.spoken[0].voice).toBe(LOCAL);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('with no voices and no voiceschanged, waits at most 1.5 s, then stays silent (never the browser default)', async () => {
+    vi.useFakeTimers();
     const synth = fakeSynth({ voices: [] });
     const { v } = setup({ synth });
+    const p = v.say('name-i', 'iguana');
+    await vi.advanceTimersByTimeAsync(1600);
+    await expect(p).resolves.toBeUndefined();
+    expect(synth.spoken).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(synth.listenerCount('voiceschanged')).toBe(1);
+  });
+  it('only online voices after voiceschanged: silent at once, no wait', async () => {
+    const synth = fakeSynth({ voices: [{ name: 'Google US English', lang: 'en-US', localService: false }] });
+    const { v } = setup({ synth });
+    synth.fire('voiceschanged');
     await v.say('name-i', 'iguana');
-    expect(synth.spoken).toHaveLength(1);
+    expect(synth.spoken).toHaveLength(0);
+  });
+  it('stop() during the wait for voices: nothing is spoken later', async () => {
+    vi.useFakeTimers();
+    const list: any[] = [];
+    const synth = fakeSynth({ voices: list });
+    const { v } = setup({ synth });
+    const p = v.say('name-i', 'iguana');
+    await vi.advanceTimersByTimeAsync(100);
+    v.stop();
+    await p;
+    list.push(LOCAL);
+    synth.fire('voiceschanged');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(synth.spoken).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('clips and recordings still play with no local voice', async () => {
+    const synth = fakeSynth({ voices: [] });
+    const { v, log } = setup({ clips: ['name-b'], rec: async (k) => (k === 'name-a' ? 'blob:rec' : null), synth });
+    await v.say('name-b', 'bear');
+    await v.say('name-a', 'ant');
+    expect(log.filter((l) => l.startsWith('play'))).toEqual(['play ./audio/name-b.m4a', 'play blob:rec']);
+    expect(synth.spoken).toHaveLength(0);
   });
   it('retries once after voiceschanged when speech errors', async () => {
     const synth = fakeSynth({ script: ['error', 'end'] });
@@ -258,11 +311,16 @@ describe('block-barn voice: the best installed English voice', () => {
     expect(synth.spoken[1].voice).toBe(ava);
     expect(synth.spoken[1].lang).toBe('en-US');
   });
-  it('with no voice picked, it leaves the browser default (no voice set)', async () => {
-    const synth = fakeSynth({ voices: [] });
+  it('with no voice picked, it never falls back to the browser default (which can be online): every utterance has a local voice', async () => {
+    const synth = fakeSynth({ voices: [gUS, gUK] });
     const { v } = setup({ synth });
+    synth.fire('voiceschanged');
     await v.say('name-a', 'ant');
-    expect(synth.spoken[0].voice ?? null).toBeNull();
+    expect(synth.spoken).toHaveLength(0);
+    synth.getVoices = () => [gUS, sam];
+    synth.fire('voiceschanged');
+    await v.say('name-a', 'ant');
+    expect(synth.spoken.map((u: any) => u.voice)).toEqual([sam]);
   });
 });
 
