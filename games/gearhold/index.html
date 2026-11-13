@@ -37,6 +37,7 @@
   #hitdir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; }
   #hitdir i { position: absolute; left: -9px; top: -39vmin; width: 18px; height: 34px; background: linear-gradient(180deg, #ffd27a, #d9a441 55%, #7a5418); clip-path: polygon(50% 0, 100% 100%, 50% 80%, 0 100%); filter: drop-shadow(0 0 5px rgba(255,190,60,.7)); }
   #hurt { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 35%, rgba(255,30,10,.75)); opacity: 0; }
+  #keyglow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 50%, rgba(217,164,65,.55) 85%, rgba(255,205,100,.85)); box-shadow: inset 0 0 40px rgba(217,164,65,.6); opacity: 0; }
   #glow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(255,220,120,.05), rgba(255,200,90,.3)); opacity: 0; }
 
   #hud {
@@ -131,6 +132,7 @@
   <div id="vignette"></div>
   <div id="hurt"></div>
   <div id="hitdir" aria-hidden="true"><i></i></div>
+  <div id="keyglow"></div>
   <div id="glow"></div>
   <div id="hud" hidden>
     <div class="panel hp" id="hpbox"><span class="label">Integrity</span><b id="hp">100</b><div class="bar"><i id="hpbar"></i></div></div>
@@ -243,6 +245,11 @@ const sfx = {
   hit() { tone(1800, 1000, 0.05, 'square', 0.035); },
   boom() { noise(0.9, 0.5, 520); noise(0.25, 0.3, 2400); tone(110, 28, 0.6, 'sawtooth', 0.14); },
   pickup() { tone(520, 1040, 0.09, 'triangle', 0.1); tone(780, 1560, 0.12, 'triangle', 0.08, 0.07); },
+  // Clockwork ratchet: three quick brass clicks climbing, then a soft bell.
+  keyChime() {
+    [0, 0.06, 0.12].forEach((d, i) => { tone(2200 + i * 350, 1500 + i * 250, 0.03, 'square', 0.03, d); noise(0.025, 0.05, 4000, 'highpass'); });
+    tone(1046, 1040, 0.5, 'sine', 0.07, 0.19); tone(2093, 2085, 0.35, 'sine', 0.025, 0.19);
+  },
   door() { noise(0.8, 0.09, 300); tone(90, 70, 0.7, 'sawtooth', 0.03); },
   bite() { noise(0.1, 0.18, 2400); tone(300, 120, 0.08, 'square', 0.05); },
   locked() { tone(150, 130, 0.14, 'square', 0.07); tone(120, 100, 0.18, 'square', 0.07, 0.15); },
@@ -280,7 +287,7 @@ const viewLook = () => P.look + P.kick;
 let level = 0, mw = 0, mh = 0, grid = [], doorOpen = new Float32Array(0), doorMoving = new Uint8Array(0);
 let enemies = [], items = [], shots = [], fx = [], foes = 0;
 let hitFx = 0, hitDeg = 0;
-let kills = 0, levelTime = 0, noiseRadius = 0, msgTime = 0, lockedNag = 0, hurtFx = 0, glowFx = 0, shake = 0;
+let kills = 0, levelTime = 0, noiseRadius = 0, msgTime = 0, lockedNag = 0, hurtFx = 0, glowFx = 0, keyFx = 0, shake = 0;
 let mode = 'title';
 let mood = LEVELS[0].mood;
 let wallH = new Float32Array(0);
@@ -883,7 +890,7 @@ function updateWorld(dt) {
     else if (it.kind === 'k') { P.key = true; say('Gear key. Locked doors will open now. Checkpoint saved.'); }
     else if (it.kind === 'w') { P.scatter = true; P.weapon = 1; P.shells = Math.min(50, P.shells + 8); say(coarse ? 'Scatter cannon! Tap SWAP to switch.' : 'Scatter cannon! Press 1 / 2 to switch.'); }
     items.splice(i, 1); sfx.pickup(); glowFx = 1;
-    if (it.kind === 'k') saveCheckpoint();
+    if (it.kind === 'k') { keyFx = 1; sfx.keyChime(); saveCheckpoint(); }
   }
 
   for (let y = py0 - 1; y <= py0 + 1; y++) for (let x = px0 - 1; x <= px0 + 1; x++) {
@@ -1046,11 +1053,12 @@ function update(dt) {
   noiseRadius = Math.max(0, noiseRadius - dt * 30);
   lockedNag -= dt;
   msgTime -= dt; if (msgTime <= 0) $('msg').hidden = true;
-  hurtFx = Math.max(0, hurtFx - dt * 1.8); glowFx = Math.max(0, glowFx - dt * 3);
+  hurtFx = Math.max(0, hurtFx - dt * 1.8); glowFx = Math.max(0, glowFx - dt * 3); keyFx = Math.max(0, keyFx - dt * 1.4);
   $('hurt').style.opacity = String(hurtFx);
   hitFx = Math.max(0, hitFx - dt * 1.2);
   $('hitdir').style.opacity = String(Math.min(1, hitFx * 1.5));
   $('glow').style.opacity = String(glowFx);
+  $('keyglow').style.opacity = String(keyFx);
   updateHud();
   updateCompass();
 }
@@ -1097,7 +1105,7 @@ function showOverlay(title, tag, detail, stats, buttons) {
   $('hud').hidden = true;
   $('touchui').hidden = true;
   $('msg').hidden = true;
-  $('hurt').style.opacity = '0';
+  $('hurt').style.opacity = '0'; keyFx = 0; $('keyglow').style.opacity = '0';
   hitFx = 0; $('hitdir').style.opacity = '0';
 }
 

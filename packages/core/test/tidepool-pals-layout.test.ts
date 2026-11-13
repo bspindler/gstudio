@@ -22,10 +22,21 @@ describe('tidepool-pals play layout', () => {
     const panel = html.match(/\.poolpanel\{([^}]*)\}/)![1];
     expect(panel).toContain('min-height:0');
     expect(panel).toContain('overflow:hidden');
+    // a compact strip: sized by its content, not stretched to fill the band
+    expect(panel).toContain('flex:0 0 auto');
+    expect(panel).not.toContain('container-type');
+    expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
     const fn = html.match(/function renderPoolPanel\(\)\s*\{([\s\S]*?)\n\}/)![1];
     expect(fn).toContain('poolProgress');
     expect(fn).toContain('levels cleaned up');
     expect(fn).not.toMatch(/setInterval|setTimeout|Date\.now|hurry|only \d|expires/i);
     expect(html).toMatch(/startLevel[\s\S]*renderPoolPanel\(\);[\s\S]*armIdle\(\);\s*return true;/);
+  });
+
+  it('wiggles the strip pal once on a level win, in code, without growing the strip', () => {
+    expect(html.match(/\.pp \.ppal svg\.happy\{([^}]*)\}/)![1]).toContain('palhappy');
+    expect(html).toContain('@keyframes palhappy');
+    expect(html.match(/function win\(\)\s*\{([\s\S]*?)\n\}/)![1]).toContain('wigglePal()');
+    expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
   });
 });
