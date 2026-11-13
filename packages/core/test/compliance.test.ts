@@ -156,6 +156,35 @@ const { purchase } = createStudio({ gameSlug: 'kid', endpoint: '' });
     expect(complianceViolations(kid.replace("endpoint: ''", 'endpoint: ""'), opt)).toEqual([]);
   });
 
+  it("a decoy endpoint: '' elsewhere does not vouch for a createStudio call without it", () => {
+    const decoy = kid.replace("createStudio({ gameSlug: 'kid', endpoint: '' })", "createStudio({ gameSlug: 'kid', endpoint: window.E })").replace('</script>', "const cfg = { endpoint: '' };\n</script>");
+    const v = complianceViolations(decoy, opt);
+    expect(v).toHaveLength(1);
+    expect(v[0]).toMatch(/createStudio exactly once/i);
+  });
+
+  it('two createStudio calls are a violation, even if both pass endpoint: \'\'', () => {
+    const two = kid.replace('</script>', "const s2 = createStudio({ gameSlug: 'kid', endpoint: '' });\n</script>");
+    const v = complianceViolations(two, opt);
+    expect(v).toHaveLength(1);
+    expect(v[0]).toMatch(/createStudio exactly once/i);
+    expect(complianceViolations(kid.replace('createStudio(', 'createStudi0('), opt).some((m) => /createStudio exactly once/i.test(m))).toBe(true);
+  });
+
+  it("a commented-out createStudio with endpoint: '' does not count", () => {
+    const c = kid.replace("createStudio({ gameSlug: 'kid', endpoint: '' })", "createStudio({ gameSlug: 'kid', endpoint: window.E }) // createStudio({ endpoint: '' })");
+    expect(complianceViolations(c, opt)).toHaveLength(1);
+  });
+
+  it("commented-out track( is fine; a commented-out endpoint: '' is not the call's endpoint", () => {
+    expect(complianceViolations(kidWith("<script>// track('level_start', {});\n/* track('x') */</script>"), opt)).toEqual([]);
+    expect(complianceViolations(kidWith('<!-- <script>track("x")</script> -->'), opt)).toEqual([]);
+    const c = kid.replace("{ gameSlug: 'kid', endpoint: '' }", "{ gameSlug: 'kid' /* endpoint: '' */ }");
+    const v = complianceViolations(c, opt);
+    expect(v).toHaveLength(1);
+    expect(v[0]).toMatch(/child-directed/i);
+  });
+
   it('leaves ordinary games unchanged without the option', () => {
     expect(complianceViolations(kid).length).toBeGreaterThan(0);
     expect(complianceViolations(clean, { childDirected: false })).toEqual([]);

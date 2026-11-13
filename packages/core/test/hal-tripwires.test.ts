@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
+  isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, kidVoice, kidAudio, kidFlash, kidExit, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -712,5 +712,93 @@ describe('Block Barn guards', () => {
     expect(kidRecorder(diff([R('games/block-barn/a.js', 'games/block-barn/b.js', 'const a = 1;\n')]))).toEqual([]);
     expect(studioOwned(diff([R('games/g/a/SOURCES.md', 'games/g/b/SOURCES.md', '| a.m4a | studio-owned |\n')])).map((v) => v.rule)).toEqual(['studio-owned']);
     expect(studioOwned(diff([R('games/g/a/SOURCES.md', 'games/g/b/SOURCES.md', '| a.png | CC0 |\n')]))).toEqual([]);
+  });
+});
+
+describe('final review: Block Barn bypasses', () => {
+  const BB = 'games/block-barn/';
+  const add = (file: string, line: string) => diff([A(file, `${line}\n`)]);
+  const ruleHits = (rule: string, d: Diff) => checkTripwires(d).filter((v) => v.rule === rule);
+  const REAL = readFileSync(new URL('../../../games/block-barn/index.html', import.meta.url), 'utf8');
+
+  it('C1 kid-recorder: recorder control, speech recognition and other capture outside recorder.js hit', () => {
+    for (const l of ["recorder.start('name-c');", 'await recorder.finish();', 'recorder.keep(k, b);', "recorder.reset('name-c');", 'const r2 = createRecorder();',
+      'mountVoices(el, o);', 'const sr = new webkitSpeechRecognition();', 'new SpeechRecognition()', 'navigator.mediaDevices.enumerateDevices();',
+      'navigator.getDisplayMedia({})', 'navigator.webkitGetUserMedia({})', 'ac.createMediaStreamSource(s)', 'canvas.captureStream()']) {
+      expect(kidRecorder(add(`${BB}index.html`, l)).map((v) => v.rule), l).toEqual(['kid-recorder']);
+      expect(kidRecorder(add('games/other/a.js', l)), l).toEqual([]);
+    }
+    expect(kidRecorder(add(`${BB}recorder.js`, "recorder.start('x'); navigator.mediaDevices;"))).toEqual([]);
+    // Lines already in the repo (the existing createRecorder()/mountVoices() calls) are not added.
+    expect(kidRecorder(diff([M(`${BB}index.html`, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(kidRecorder(add(`${BB}a.js`, 'const recorderStart = recorder.recording();'))).toEqual([]);
+  });
+
+  it('I1 kid-voice: a removed or changed localService line in voice.js hits; other lines and other files do not', () => {
+    const V = `${BB}voice.js`;
+    const real = readFileSync(new URL('../../../games/block-barn/voice.js', import.meta.url), 'utf8');
+    expect(real).toContain('localService');
+    expect(kidVoice(diff([M(V, real, real.replace('if (v.localService !== true) return -1;', ''))])).map((v) => v.rule)).toEqual(['kid-voice']);
+    expect(kidVoice(diff([M(V, real, real.replace('v.localService !== true', 'v.localService === false'))])).length).toBeGreaterThan(0);
+    expect(kidVoice(diff([D(V, real)])).map((v) => v.rule)).toContain('kid-voice');
+    expect(kidVoice(diff([{ path: `${BB}voice2.js`, oldPath: V, status: 'R', before: real, after: real, binary: false }])).length).toBeGreaterThan(0);
+    expect(ruleHits('kid-voice', diff([M(V, real, real.replace('if (v.localService !== true) return -1;', ''))]))).toHaveLength(1);
+    expect(kidVoice(diff([M(V, real, real.replace('rate: 0.7', 'rate: 0.75'))]))).toEqual([]);
+    expect(kidVoice(diff([M('games/other/voice.js', 'if (v.localService) x();\n', '')]))).toEqual([]);
+  });
+
+  it('I2 kid-audio: embedded media, new audio elements, filters, compressor settings and harsh waveforms hit', () => {
+    for (const l of ['const s = "data:audio/wav;base64,AAAA";', "img.src = 'data:image/png;base64,AA';", 'v.src = "data:video/mp4;base64,AA"', 'const a = new Audio(u);',
+      '<audio src="x.m4a" autoplay>', 'const u = URL.createObjectURL(b);', 'ac.createWaveShaper()', 'ac.createConvolver()', 'ac.audioWorklet.addModule(m); new AudioWorkletNode(ac, "x")',
+      'ac.createMediaElementSource(el)', 'const f = ac.createBiquadFilter();', 'const c = ac.createDynamicsCompressor();', 'comp.threshold.value = 0;', 'comp.ratio.value = 1;',
+      'comp.knee.value = 0;', "o.type = 'square';", 'o.type = "sawtooth";', "new OscillatorNode(ac, { type: 'square' })", 'new BiquadFilterNode(ac, { gain: 30 })']) {
+      expect(kidAudio(add(`${BB}index.html`, l)).map((v) => v.rule), l).toEqual(['kid-audio']);
+      expect(kidAudio(add('games/other/a.js', l)), l).toEqual([]);
+    }
+    for (const l of ["o.type = 'sine';", "o.type = 'triangle';", 'g.gain.value = 0.1;', 'const w = window.devicePixelRatio;']) expect(kidAudio(add(`${BB}index.html`, l)), l).toEqual([]);
+    // Today's code keeps passing: an unrelated edit to the real page adds none of it.
+    expect(kidAudio(diff([M(`${BB}index.html`, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(ruleHits('kid-audio', add(`${BB}draw.js`, 'const f = ac.createBiquadFilter();'))).toHaveLength(1);
+  });
+
+  it('I3 kid-flash: SVG animation elements and beginElement() hit', () => {
+    for (const l of ['<animate attributeName="opacity" values="0;1" dur="0.1s" repeatCount="indefinite"/>', '<set attributeName="fill" to="#fff" begin="0.1s"/>',
+      '<animateColor attributeName="fill" dur="0.1s"/>', '<animateTransform attributeName="transform" type="scale" dur="0.1s"/>', 'el.beginElement();']) {
+      expect(kidFlash(add(`${BB}draw.js`, l)).map((v) => v.rule), l).toEqual(['kid-flash']);
+      expect(kidFlash(add('games/other/draw.js', l)), l).toEqual([]);
+    }
+    for (const l of ['const settle = 1;', '<settings>', 'el.animate([{opacity:0},{opacity:1}], 400);']) expect(kidFlash(add(`${BB}draw.js`, l)), l).toEqual([]);
+    expect(ruleHits('kid-flash', add(`${BB}index.html`, '<set attributeName="x" to="1"/>'))).toHaveLength(1);
+  });
+
+  it('I4 kid-exit: links, navigation, popups and history changes hit', () => {
+    for (const l of ['<a href="../">home</a>', "location.assign('../');", "location.href = '/';", "location.replace('x')", "window.open('x')", "history.pushState({}, '', '?x')",
+      'history.replaceState(null, "")', 'history.back();', 'history.go(-1)', 'link.click();']) {
+      expect(kidExit(add(`${BB}index.html`, l)).map((v) => v.rule), l).toEqual(['kid-exit']);
+      expect(kidExit(add('games/other/a.js', l)), l).toEqual([]);
+    }
+    for (const l of ['location.reload();', "const q = new URLSearchParams(location.search);", "btn.addEventListener('click', f);"]) expect(kidExit(add(`${BB}index.html`, l)), l).toEqual([]);
+    expect(kidExit(diff([M(`${BB}index.html`, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(ruleHits('kid-exit', add(`${BB}draw.js`, "location.assign('../');"))).toHaveLength(1);
+  });
+
+  it('M4 hal-hook: code outside the hook block cannot read manualClock or navigator.webdriver', () => {
+    const P = `${BB}index.html`;
+    expect(REAL).toMatch(/let manualClock = false/);
+    for (const l of ['if (manualClock) score++;', 'if (navigator.webdriver) score++;', "const w = 'webdriver' in navigator;"]) {
+      expect(halHook(diff([M(P, REAL, REAL.replace('</body>', `<script>${l}</script>\n</body>`))])).map((v) => v.rule), l).toEqual(['hal-hook']);
+      expect(halHook(add(`${BB}draw.js`, l)).map((v) => v.rule), l).toEqual(['hal-hook']);
+    }
+    expect(halHook(diff([M(P, REAL, REAL.replace('let manualClock = false;', ''))])).map((v) => v.rule)).toEqual(['hal-hook']);
+    // The real page unchanged, or edited elsewhere, is fine (its existing manualClock statements are not added).
+    expect(halHook(diff([M(P, REAL, REAL.replace('</body>', '<p>hi</p>\n</body>'))]))).toEqual([]);
+    expect(halHook(add('games/gearhold/a.js', 'if (manualClock) x();'))).toEqual([]);
+  });
+
+  it('the new rules are registered', () => {
+    expect(TRIPWIRE_RULES['kid-voice']).toBe(kidVoice);
+    expect(TRIPWIRE_RULES['kid-audio']).toBe(kidAudio);
+    expect(TRIPWIRE_RULES['kid-flash']).toBe(kidFlash);
+    expect(TRIPWIRE_RULES['kid-exit']).toBe(kidExit);
   });
 });

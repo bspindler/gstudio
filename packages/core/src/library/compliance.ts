@@ -24,8 +24,10 @@ export function complianceViolations(html: string, o: { childDirected?: boolean 
   if (!/import\s*\{[^}]*createStudio[^}]*\}\s*from\s*['"][^'"]*studio-sdk\.js['"]/.test(html))
     v.push("The game must import createStudio from the studio SDK (studio-sdk.js); it is how events, purchases and feedback work.");
   if (kid) {
-    if (!/endpoint\s*:\s*(['"])\1/.test(code))
-      v.push("This game is child-directed, so it must call createStudio with endpoint: '' (the SDK then sends nothing).");
+    // Exactly one call, and endpoint: '' inside that call's own argument object (a decoy object elsewhere does not count).
+    const calls = code.match(/\bcreateStudio\s*\(/g) ?? [];
+    if (calls.length !== 1 || !/\bcreateStudio\s*\(\s*\{[^}]*\bendpoint\s*:\s*(['"])\1[^}]*\}\s*\)/.test(code))
+      v.push("This game is child-directed, so it must call createStudio exactly once, with endpoint: '' in that call (the SDK then sends nothing).");
     if (code.includes('resolveEndpoint('))
       v.push('This game is child-directed, so it must not use resolveEndpoint( ; events are never sent.');
     if (/\btrack\s*\(/.test(code))
