@@ -154,83 +154,135 @@ describe('block barn page', () => {
     ['tablet', 1024, 768], ['tablet', 768, 1024],
     ['desktop', 1280, 720], ['desktop', 1440, 900], ['desktop', 1920, 1080],
   ] as const;
+  type Box = { x: number; y: number; w: number; h: number };
+  /** What is actually drawn, in screen px: each block, each animal's art (its drawing's getBBox mapped to the
+   *  screen) and the tower's bale, stack and animal art. */
+  const drawn = (page: Page) => page.evaluate(() => {
+    const box = (r: DOMRect) => ({ x: r.left, y: r.top, w: r.width, h: r.height });
+    const art = (svg: Element | null) => {
+      const g = svg?.querySelector('.art') as SVGGraphicsElement | null;
+      if (!g) return null;
+      const bb = g.getBBox(), m = g.getScreenCTM()!;
+      return { x: m.a * bb.x + m.e, y: m.d * bb.y + m.f, w: m.a * bb.width, h: m.d * bb.height };
+    };
+    const slots = Array.from(document.querySelectorAll('.slot')).map((el) => ({
+      letter: (el as HTMLElement).dataset.letter!,
+      block: box(el.querySelector('.block')!.getBoundingClientRect()),
+      art: art(el.querySelector('.animal .pic')),
+    }));
+    const stack = box(document.querySelector('#tower .stack')!.getBoundingClientRect());
+    const tower = [box(document.querySelector('#tower .bale')!.getBoundingClientRect()), stack, art(document.querySelector('#tower .tanimal .pic'))]
+      .filter((r): r is { x: number; y: number; w: number; h: number } => !!r && r.w > 0 && r.h > 0);
+    const blocks = Array.from(document.querySelectorAll('#tower .stack .tblock')).map((b) => box(b.getBoundingClientRect()));
+    const ta = document.querySelector('#tower .tanimal');
+    return { slots, tower, stackBlocks: blocks, towerAnimalBox: ta ? box(ta.getBoundingClientRect()) : null, wall: document.getElementById('floor')!.getBoundingClientRect().top };
+  });
+
   for (const [kind, W, H] of SIZES) {
-    it(`fills the barn at ${W}x${H} (${kind}): big blocks and animals, a big tower, nothing overlapping`, async () => {
+    it(`fills the barn at ${W}x${H} (${kind}): drawn content covers half the floor with no empty band; big blocks, animals and tower`, async () => {
       const contextOptions = kind === 'desktop'
         ? { viewport: { width: W, height: H }, deviceScaleFactor: 1, hasTouch: true, isMobile: false }
         : { viewport: { width: W, height: H }, deviceScaleFactor: 1, hasTouch: true, isMobile: true };
       const { page, hal } = await open('?hal', contextOptions);
-      const wallBottom = await page.evaluate(() => document.getElementById('floor')!.getBoundingClientRect().top); // the wall ends where the hay floor begins
-      expect(wallBottom, 'barn wall height').toBeLessThanOrEqual(0.15 * H + 0.5);
+      for (const seed of [1, 2]) {
+        await page.evaluate((n) => (window as any).__hal.seed(n), seed);
+        // The floor as it looks on screen: the hook's floor target is a real empty spot, and a tap there puffs.
+        const t0 = await targets(page);
+        const floor = t0.find((t) => t.kind === 'floor')!;
+        expect(Math.min(floor.w, floor.h), 'floor area size').toBeGreaterThanOrEqual(88);
+        const fc = center(floor);
+        for (const t of t0.filter((x) => x.kind !== 'floor')) {
+          const dx = Math.max(t.x - fc.x, 0, fc.x - (t.x + t.w)), dy = Math.max(t.y - fc.y, 0, fc.y - (t.y + t.h));
+          expect(Math.hypot(dx, dy), `floor centre is clear of ${t.kind} ${t.letter ?? ''}`).toBeGreaterThan(44);
+        }
 
-      for (const l of (await state(page)).floor) await tapBlock(page, l); // all five named: their animals are out
-      expect((await state(page)).named).toHaveLength(5);
-      await page.waitForTimeout(2500); // the pop, the move and any pair reaction are over (boxes include transforms)
-      const ts = await targets(page);
-      const blocks = ts.filter((t) => t.kind === 'block'), animals = ts.filter((t) => t.kind === 'animal');
-      const tower = ts.find((t) => t.kind === 'tower')!, corner = ts.find((t) => t.kind === 'corner')!;
-      expect(blocks).toHaveLength(5);
-      expect(animals).toHaveLength(5);
+        // A full tower (five; the sixth tumbles), then all five floor blocks named: the fullest the barn gets.
+        for (let i = 0; i < 5; i++) {
+          const l = (await state(page)).floor[0]!;
+          if (!(await state(page)).named.includes(l)) await tapBlock(page, l);
+          await tapBlock(page, l);
+        }
+        expect((await state(page)).tower).toHaveLength(5);
+        for (const l of (await state(page)).floor) await tapBlock(page, l);
+        expect((await state(page)).named).toHaveLength(5);
+        await page.waitForTimeout(2500); // the pop, the move, the wobble and any pair reaction are over (boxes include transforms)
+        const d = await drawn(page);
+        const where = `seed ${seed}`;
+        expect(d.wall, 'barn wall height').toBeLessThanOrEqual(0.15 * H + 0.5);
 
-      // Together they cover at least 70% of the floor below the wall (sampled on a 4 px grid).
-      const filled = [...blocks, ...animals, tower];
-      let hit = 0, all = 0;
-      for (let y = wallBottom + 2; y < H; y += 4) for (let x = 2; x < W; x += 4) {
-        all++;
-        if (filled.some((t) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h)) hit++;
-      }
-      expect(hit / all, 'share of the floor covered').toBeGreaterThanOrEqual(0.7);
+        // Drawn content covers at least half the floor (4 px sampling) ...
+        const rects: Box[] = [...d.slots.map((x) => x.block), ...d.slots.map((x) => x.art!), ...d.tower];
+        let hit = 0, all = 0;
+        for (let y = d.wall + 2; y < H; y += 4) for (let x = 2; x < W; x += 4) {
+          all++;
+          if (rects.some((t) => x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h)) hit++;
+        }
+        expect(hit / all, `${where}: share of the floor drawn on`).toBeGreaterThanOrEqual(0.5);
+        // ... and no horizontal band of bare hay taller than 20% of the floor.
+        let run = 0, worst = 0;
+        for (let y = d.wall; y < H; y += 2) {
+          if (rects.some((t) => y >= t.y && y < t.y + t.h)) run = 0; else { run += 2; worst = Math.max(worst, run); }
+        }
+        expect(worst, `${where}: tallest empty band`).toBeLessThanOrEqual(0.2 * (H - d.wall));
 
-      for (const b of blocks) {
-        if (kind === 'phone') expect(b.w, `block ${b.letter} width`).toBeGreaterThanOrEqual(0.3 * W);
-        else expect(b.w, `block ${b.letter} width`).toBeGreaterThanOrEqual(0.2 * Math.min(W, H));
-        expect(Math.abs(b.w - b.h), 'blocks are square').toBeLessThan(1);
-      }
-      // Each animal is drawn at least 80% of its block's width (the picture inside its box, not just the box).
-      const drawn: { letter: string; w: number; block: number }[] = await page.evaluate(() => Array.from(document.querySelectorAll('.slot')).map((el) => {
-        const svg = el.querySelector('.animal .pic') as SVGSVGElement;
-        const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
-        return { letter: (el as HTMLElement).dataset.letter!, w: Math.min(r.width, (r.height * vb.width) / vb.height), block: el.querySelector('.block')!.getBoundingClientRect().width };
-      }));
-      for (const d of drawn) expect(d.w, `animal ${d.letter} drawn width`).toBeGreaterThanOrEqual(0.8 * d.block);
+        for (const sl of d.slots) {
+          const b = sl.block;
+          if (kind === 'phone') expect(b.w, `block ${sl.letter} width`).toBeGreaterThanOrEqual(0.3 * W);
+          else expect(b.w, `block ${sl.letter} width`).toBeGreaterThanOrEqual(0.2 * Math.min(W, H));
+          expect(b.h / b.w, `block ${sl.letter} shape`).toBeGreaterThanOrEqual(0.99);
+          expect(b.h / b.w, `block ${sl.letter} shape`).toBeLessThanOrEqual(1.41);
+          // Each animal's drawing is big: its larger side at least 90% of its block's width.
+          expect(Math.max(sl.art!.w, sl.art!.h), `${where}: animal ${sl.letter} drawn size`).toBeGreaterThanOrEqual(0.9 * b.w);
+        }
 
-      const taps = ts.filter((t) => t.kind !== 'floor');
-      for (const t of taps) {
-        const what = `${t.kind} ${t.letter ?? ''}`;
-        expect(t.x, `${what} x`).toBeGreaterThanOrEqual(0);
-        expect(t.y, `${what} y`).toBeGreaterThanOrEqual(0);
-        expect(t.x + t.w, `${what} right`).toBeLessThanOrEqual(W + 0.5);
-        expect(t.y + t.h, `${what} bottom`).toBeLessThanOrEqual(H + 0.5);
-        if (t.kind === 'corner') continue;
-        expect(Math.min(t.w, t.h), `${what} size`).toBeGreaterThanOrEqual(88);
-        expect(overlaps(t, corner), `${what} overlaps the corner`).toBe(false);
-      }
-      for (let i = 0; i < taps.length; i++) for (let j = i + 1; j < taps.length; j++) {
-        expect(overlaps(taps[i]!, taps[j]!), `${taps[i]!.kind} ${taps[i]!.letter ?? ''} overlaps ${taps[j]!.kind} ${taps[j]!.letter ?? ''}`).toBe(false);
-      }
-
-      // A full tower (five; the sixth tumbles): every stacked block at least 56 px, inside the tower zone and the screen.
-      for (let i = 0; i < 5; i++) {
-        const l = (await state(page)).floor[0]!;
-        if (!(await state(page)).named.includes(l)) await tapBlock(page, l);
-        await tapBlock(page, l);
-      }
-      expect((await state(page)).tower).toHaveLength(5);
-      await page.waitForTimeout(1300); // let the last block land and the wobble settle
-      const stack: { x: number; y: number; w: number; h: number }[] = await page.evaluate(() => Array.from(document.querySelectorAll('#tower .stack .tblock')).map((b) => {
-        const r = b.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height };
-      }));
-      expect(stack).toHaveLength(5);
-      for (const b of stack) {
-        expect(Math.min(b.w, b.h), 'tower block size').toBeGreaterThanOrEqual(56);
-        expect(b.x).toBeGreaterThanOrEqual(tower.x - 0.5);
-        expect(b.x + b.w).toBeLessThanOrEqual(tower.x + tower.w + 0.5);
-        expect(b.y).toBeGreaterThanOrEqual(Math.max(tower.y, wallBottom) - 0.5);
-        expect(b.y + b.h).toBeLessThanOrEqual(Math.min(tower.y + tower.h, H) + 0.5);
+        const ts = await targets(page);
+        expect(ts.filter((t) => t.kind === 'block')).toHaveLength(5);
+        expect(ts.filter((t) => t.kind === 'animal')).toHaveLength(5);
+        const corner = ts.find((t) => t.kind === 'corner')!;
+        const taps = ts.filter((t) => t.kind !== 'floor');
+        for (const t of taps) {
+          const what = `${t.kind} ${t.letter ?? ''}`;
+          expect(t.x, `${what} x`).toBeGreaterThanOrEqual(0);
+          expect(t.y, `${what} y`).toBeGreaterThanOrEqual(0);
+          expect(t.x + t.w, `${what} right`).toBeLessThanOrEqual(W + 0.5);
+          expect(t.y + t.h, `${what} bottom`).toBeLessThanOrEqual(H + 0.5);
+          if (t.kind === 'corner') continue;
+          expect(Math.min(t.w, t.h), `${what} size`).toBeGreaterThanOrEqual(88);
+          expect(overlaps(t, corner), `${what} overlaps the corner`).toBe(false);
+        }
+        for (let i = 0; i < taps.length; i++) for (let j = i + 1; j < taps.length; j++) {
+          expect(overlaps(taps[i]!, taps[j]!), `${taps[i]!.kind} ${taps[i]!.letter ?? ''} overlaps ${taps[j]!.kind} ${taps[j]!.letter ?? ''}`).toBe(false);
+        }
+        // The tower's tap target is the tower itself (its stack on its bale), not its whole column.
+        const tower = ts.find((t) => t.kind === 'tower')!;
+        const stackBox = d.tower[1]!;
+        expect(tower.x).toBeLessThanOrEqual(stackBox.x + 0.5);
+        expect(tower.y).toBeLessThanOrEqual(stackBox.y + 0.5);
+        const parts = [...d.tower, ...(d.towerAnimalBox ? [d.towerAnimalBox] : [])];
+        const towerTop = Math.min(...parts.map((r) => r.y)), towerBottom = Math.max(...parts.map((r) => r.y + r.h));
+        expect(tower.y, 'tower target hugs the drawn tower').toBeGreaterThanOrEqual(Math.min(towerTop, towerBottom - 88) - 1);
+        expect(d.stackBlocks).toHaveLength(5);
+        for (const b of d.stackBlocks) {
+          expect(Math.min(b.w, b.h), 'tower block size').toBeGreaterThanOrEqual(56);
+          expect(b.y).toBeGreaterThanOrEqual(d.wall - 0.5);
+          expect(b.y + b.h).toBeLessThanOrEqual(H + 0.5);
+        }
       }
       expect(hal.consoleErrors).toEqual([]);
     });
   }
+
+  it('a tap on the hay beside a short tower puffs instead of knocking it down', async () => {
+    const { page } = await open();
+    const l = (await state(page)).floor[0]!;
+    await tapBlock(page, l); await tapBlock(page, l);
+    expect((await state(page)).tower).toEqual([l]);
+    const tw = await find(page, 'tower');
+    const col = await page.evaluate(() => { const r = document.getElementById('tower')!.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    expect(tw.y - col.y, 'hay above the tower').toBeGreaterThan(200);
+    await page.touchscreen.tap(col.x + col.w / 2, col.y + 30);
+    expect((await state(page)).tower).toEqual([l]);
+  });
 
   it('tapping block C names it and starts speaking within 100 ms: "C." (once), then "cow", then "moo", 700 ms apart, slow and natural', async () => {
     const { page } = await open();

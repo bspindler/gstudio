@@ -308,11 +308,25 @@ const PICS = {
     ${eyes(46, 74, 58, 7)}`,
 };
 
-/** The SVG markup for an animal (letter a..z). */
+// Each drawing's own bounds (its getBBox, in the 120x120 picture's units), so the picture fills its box: a tall
+// horse fills the height, a long iguana the width. Strokes and the shadow fit inside the 2-unit margin.
+const BOUNDS = {
+  a: [10, 16, 100, 102], b: [15, 15, 90, 103], c: [1.2, 6, 117.7, 112], d: [5.8, 20, 96.3, 98], e: [0, 18, 120, 100],
+  f: [12, 21, 96, 97], g: [0.7, 11.6, 118.5, 106.4], h: [26, 6, 68, 112], i: [-8, 56, 120, 62], j: [18, 14, 84, 102],
+  k: [26, 2, 88, 116], l: [8, 6, 104, 112], m: [2, 16, 116, 102], n: [6, 66, 110, 52], o: [15.9, 8, 88.3, 110],
+  p: [16, 8, 88, 110], q: [10, 7.8, 100.2, 110.2], r: [24, 0, 72, 118], s: [14, 10, 92, 108], t: [4, 44, 108, 74],
+  u: [10, 16, 100, 102], v: [8.4, 12, 103.2, 106], w: [10, 10, 108, 108], x: [15.7, 6, 88.6, 112], y: [8, 8, 104, 110],
+  z: [26, 4, 68, 114],
+};
+const M = 2;
+
+/** The SVG markup for an animal (letter a..z): its drawing (.art) fills the box, standing on its bottom edge. */
 export function animalSVG(letter) {
   const pic = PICS[letter];
   if (!pic) throw new Error(`no picture for ${letter}`);
-  return `<svg class="pic" viewBox="-10 -4 140 124" aria-hidden="true" focusable="false">${pic()}</svg>`;
+  const [x, y, w, h] = BOUNDS[letter];
+  const vb = `${x - M} ${y - M} ${w + 2 * M} ${h + 2 * M}`;
+  return `<svg class="pic" viewBox="${vb}" preserveAspectRatio="xMidYMax meet" aria-hidden="true" focusable="false"><g class="art">${pic()}</g></svg>`;
 }
 
 /** Letters that have a picture (all 26). */
