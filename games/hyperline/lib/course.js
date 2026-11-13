@@ -158,12 +158,25 @@ export const PATTERNS = [
       const o = [{ t: 'gate', x: gx, w: GATE_W, y: GATE_LO, h: GATE_HI }, { t: 'chip', x: gx + GATE_W / 2, y: (GATE_LO + GATE_HI) / 2 }];
       return { o, len: 1 + GATE_W + 1 };
     } },
+
+  // Sector 7: sweep columns. Two or three slot gates a jump apart: thread one, land, jump again.
+  { id: 'sweep', sector: 7, weight: (s) => (s === 7 ? 2.6 : 1.2),
+    build(x, d, r) {
+      const v = speedAt(x), n = 2 + (d > 0.5 && r() < 0.4 ? 1 : 0);
+      const gap = v * AIR + 1 + r() * 1.5;
+      const o = [];
+      for (let i = 0; i < n; i++) {
+        const gx = x + 1 + i * gap;
+        o.push({ t: 'gate', x: gx, w: GATE_W, y: GATE_LO, h: GATE_HI }, { t: 'chip', x: gx + GATE_W / 2, y: (GATE_LO + GATE_HI) / 2 });
+      }
+      return { o, len: 1 + (n - 1) * gap + GATE_W + 0.32 * v + 1 };
+    } },
 ];
 
 const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

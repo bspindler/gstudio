@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createCourse, extendCourse, INTRO, type Course, type Obj } from '../../../games/hyperline/lib/course.js';
+import { createCourse, extendCourse, INTRO, PATTERNS, type Course, type Obj } from '../../../games/hyperline/lib/course.js';
 import { createRunner, step } from '../../../games/hyperline/lib/sim.js';
 import { GATE_HI, GATE_LO, GATE_W, GRAV, JV, PS, SECTOR_LEN, sectorInfo } from '../../../games/hyperline/lib/world.js';
 import { clearable } from '../src/hal/hyperline-bot.js';
@@ -25,7 +25,26 @@ describe('hyperline slot gates', () => {
   it('SLOT GATES is sector 7 for players and introduces the gate', () => {
     expect(INTRO[6]).toBe('gate');
     expect(sectorInfo(6).name).toBe('SLOT GATES');
-    expect(sectorInfo(7).name).toBe('HYPERCORE');
+    expect(sectorInfo(7).name).toBe('SWEEP COLUMNS');
+    expect(sectorInfo(8).name).toBe('HYPERCORE');
+  });
+
+  it('SWEEP COLUMNS opens with a row of gates, first seen in sector 8, and the bot clears it', () => {
+    expect(INTRO[7]).toBe('sweep');
+    for (const seed of [1, 2, 3, 99]) {
+      const c = createCourse(seed); extendCourse(c, 2100);
+      const first = c.objs.find((o) => o.p === 'sweep');
+      expect(first).toBeDefined();
+      expect(first!.x).toBeGreaterThanOrEqual(7 * SECTOR_LEN);
+      expect(first!.x).toBeLessThan(7 * SECTOR_LEN + 40);
+      expect(c.objs.filter((o) => o.p === 'sweep' && o.g === first!.g && o.t === 'gate').length).toBeGreaterThanOrEqual(2);
+    }
+    const p = PATTERNS.find((q) => q.id === 'sweep')!;
+    for (const d of [0.2, 1]) {
+      let k = 0.1;
+      const { o, len } = p.build(14, d, () => (k = (k + 0.37) % 1));
+      expect(clearable(bare(o), 14 + len + 5)).toBe(true);
+    }
   });
 
   it('the slot is a real gap: a jump fits through, but its apex is too tall to sail over', () => {
