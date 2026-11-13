@@ -186,3 +186,15 @@
 - [ ] **Step 1: Failing tests:** speech utterances use rate 0.7 and pitch 1.0; the chosen voice is the Premium one when the list has Premium, Enhanced and plain English voices, Enhanced when no Premium, never a non-English voice; the choice is re-made after `voiceschanged`; a tap on C speaks "C", then "c", then "cow" as three utterances with gaps of at least 700 ms between the end of one and the start of the next; a new tap during a gap cancels the rest of the sequence (nothing from the old tap speaks later). Recordings and clips are unaffected (they play as recorded, in the same order with the same gaps).
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS (voice + page tests).
 - [ ] **Step 5:** Commit `feat(block-barn): slower, warmer device speech; best installed voice`.
+
+### Task 11: Fill the barn (Brian's playtest, 2026-11-13)
+
+Brian: "the blocks and the animal pics are too small; 80% of the barn is unfilled".
+
+**Files:**
+- Modify: `games/block-barn/index.html` (layout), `games/block-barn/draw.js` only if art needs re-proportioning
+- Test: `scripts/hal/block-barn-page.test.ts`
+
+- [ ] **Step 1: Failing tests** at 390x844, 375x667, 430x932 and 1024x768 (and 768x1024): the barn wall/header takes at most 15% of the height; the five floor blocks plus their animals and the tower zone together cover at least 70% of the screen area below the wall; each floor block is at least 30% of the screen width on a portrait phone (e.g. about 120 px or more at 390 wide) and as large as the space allows on a tablet; each animal is drawn at least 80% of its block's width; nothing overlaps another target or the corner; targets stay at least 88 px (the old floor, still enforced); stacked tower blocks are at least 56 px on every listed size.
+- [ ] **Step 2:** FAIL. **Step 3:** Size everything from the viewport (CSS grid / clamp() / container units), not fixed px: e.g. two big columns on portrait phones, a wider row on tablets; the tower in its own band. Screenshot every listed size and look at them.
+- [ ] **Step 4:** PASS. **Step 5:** Commit `feat(block-barn): fill the barn: big blocks and animals on every screen`.
