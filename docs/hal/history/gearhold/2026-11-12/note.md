@@ -70,3 +70,19 @@ Changes:
 - HAL-027 tuning(gearhold): Move Terrace of Dials' gear key to the far southwest room to lengthen it: **discarded** (implementer output does not match the contract)
 - HAL-028 tuning(gearhold): Guard Terrace of Dials' exit room with a pair of drones that arrive late: **discarded** (implementer output does not match the contract)
 - HAL-030 feature(gearhold): Add Gearhold level 4 built around one new clockwork hazard: **discarded** (implementer output does not match the contract)
+
+## Run run-2026-11-12T20-59-42-131Z
+
+**Gearhold:** the run tried it but built nothing. The level 4 ticket (a clock-hand sweeper room after Kiln Heart) was rejected for an over-long title before any build. Gearhold's identity, a clockwork dungeon of dials and timed threats, is untouched. It is stagnated, so I'm holding further Gearhold work until you choose between fixing the contract first and giving it a specific direction.
+
+## Run run-2026-11-13T06-00-05-835Z
+
+**Gearhold:** a brass clockwork citadel. Tonight's work fits it.
+
+- **Merged 0.3.2 (HAL-033):** a code-drawn brass compass on the HUD points to the key, then the exit. It adds no assets and touches no simulation. Scores held at 100 / 83.05.
+- **Discarded (HAL-034):** level 4, Press Gallery, with slamming gear presses that never crush. This was the first change ever to lift gearhold-play tension (0 to 21.3), but it cost 16.67 winnability.
+- **Next:** retune the press beat for longer open windows, then retry. The implementer contract problem from last night didn't recur: both Gearhold tickets were built cleanly.
+
+Changes:
+- HAL-033 polish(gearhold): Gearhold: a brass compass tick on the HUD pointing to the gear key: **merged** (0.3.2)
+- HAL-034 feature(gearhold): Add Gearhold level 4 built around one new clockwork hazard: **discarded** (0.4.0) (gearhold-play: winnable regressed 16.67 (> 1))

@@ -122,6 +122,56 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-12T20-59-42-131Z",
+      "at": "2026-11-12T21:01:20.462Z",
+      "scorers": {
+        "gearhold": {
+          "fitness": 100,
+          "measures": {
+            "safeStarts": 100,
+            "supplied": 100,
+            "rising": 100,
+            "challenge": 100
+          }
+        },
+        "gearhold-play": {
+          "fitness": 83.05,
+          "measures": {
+            "winnable": 66.67,
+            "fairDamage": 98.84,
+            "pace": 66.67,
+            "feel": 100,
+            "tension": 0
+          }
+        }
+      }
+    },
+    {
+      "run": "run-2026-11-13T06-00-05-835Z",
+      "at": "2026-11-13T06:22:09.796Z",
+      "scorers": {
+        "gearhold": {
+          "fitness": 100,
+          "measures": {
+            "safeStarts": 100,
+            "supplied": 100,
+            "rising": 100,
+            "challenge": 100
+          }
+        },
+        "gearhold-play": {
+          "fitness": 83.05,
+          "measures": {
+            "winnable": 66.67,
+            "fairDamage": 98.84,
+            "pace": 66.67,
+            "feel": 100,
+            "tension": 0
+          }
+        }
+      }
     }
   ]
 }

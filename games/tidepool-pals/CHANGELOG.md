@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.5.3 (2026-11-12)
+- The board now sits right under the goal bar instead of floating in the middle, so the spare water collects in one calm band above the tabs.
+
 ## 0.5.2 (2026-11-12)
 - Sound now plays on iPhone even when the ring/silent switch is set to silent. Use the in-game sound setting to turn it off.
 

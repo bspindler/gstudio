@@ -72,6 +72,21 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-13T06-00-05-835Z",
+      "at": "2026-11-13T06:22:09.796Z",
+      "scorers": {
+        "tidepool-pals": {
+          "fitness": 88.85,
+          "measures": {
+            "inBand": 90,
+            "noWalls": 89.66,
+            "goalReach": 86.9,
+            "tension": 39.19
+          }
+        }
+      }
     }
   ]
 }

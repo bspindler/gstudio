@@ -63,3 +63,15 @@ Changes:
 Changes:
 - HAL-026 fix(tidepool-pals): Scale the Tidepool board to fill the empty height between goal bar and tab bar: **merged** (0.5.0)
 - HAL-029 tuning(tidepool-pals): Trim 1-2 moves on the Tidepool levels the scorer wins with the most moves left: **merged** (0.5.0)
+
+## Run run-2026-11-13T06-00-05-835Z
+
+**Tidepool Pals:** a cosy, kind, no-timer reef puzzler. Tonight kept that intact.
+
+- **Merged 0.5.3 (HAL-032):** the board is pinned under the goal bar, with the level label beneath it. Leftover water forms one band above the tabs, where the bubbles drift. Tiles, rules and board size are untouched. Fitness is unchanged at 88.85.
+- **Honest caveat:** this moves the empty space; it doesn't fill it. The board is width-bound, so filling the space would mean taller boards (a level change) or putting something useful in the band.
+- **Discarded (HAL-035):** a hand-made bay level combining litter clearing with a pal rescue. It scored in band (inBand 90.3, noWalls 90.0, goalReach 86.4, 45% win rate) but was blocked by a protected test pinning 20 levels. On retry it should be appended, not swapped in for generated level 21.
+
+Changes:
+- HAL-032 fix(tidepool-pals): Anchor the Tidepool board right under the goal bar, not centred in the water: **merged** (0.5.3)
+- HAL-035 feature(tidepool-pals): Add a new hand-made Tidepool Pals level after the last existing one: **discarded** (0.6.0) (implementer blocked: scripts/hal/git.unit.test.ts:34 hard-codes 20 Tidepool levels, so adding the requested 21st level fails it. The file is protected under scripts/hal/**, so I can't edit it; Hal needs to update the expected count to 21.)
