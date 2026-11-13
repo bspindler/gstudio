@@ -27,13 +27,22 @@ function fakeSpeech(): void {
   const log: string[] = [];
   let hold = true;
   const pending: any[] = [];
+  const w = window as any;
+  const calls: { text: string; volume: number; sync: boolean }[] = [];
+  const plays: { src: string; sync: boolean }[] = [];
+  const realPlay = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { plays.push({ src: this.src, sync: w.__sync === true }); return realPlay.call(this); };
   const fake = {
-    speak(u: any) { log.push(u.text); pending.push(u); if (!hold) setTimeout(() => u.onend?.(), 10); },
+    speak(u: any) {
+      calls.push({ text: u.text, volume: u.volume, sync: w.__sync === true });
+      if (u.text.trim() === '') return; // the silent priming utterance
+      log.push(u.text); pending.push(u); if (!hold) setTimeout(() => u.onend?.(), 10);
+    },
     cancel() { log.push('<cancel>'); pending.length = 0; },
     getVoices: () => [], addEventListener() {}, removeEventListener() {}, pause() {}, resume() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => fake });
-  (window as any).__fakeSpeech = { log, release() { hold = false; for (const u of pending.splice(0)) u.onend?.(); } };
+  (window as any).__fakeSpeech = { log, calls, plays, release() { hold = false; for (const u of pending.splice(0)) u.onend?.(); } };
 }
 
 async function open(query = '?hal', contextOptions = PHONE): Promise<{ page: Page; hal: HalContext }> {
@@ -72,6 +81,16 @@ async function seedWith(page: Page, letter: string): Promise<void> {
 
 async function touch(page: Page, cdp: CDPSession, type: 'touchStart' | 'touchEnd', points: { x: number; y: number }[]) {
   await cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
+}
+
+/** Dispatches a synthetic pointer event on the barn (or `on`), with window.__sync true only while it runs. */
+async function pointer(page: Page, type: 'pointerdown' | 'pointerup' | 'pointercancel', id: number, at: { x: number; y: number }, on = '#barn') {
+  await page.evaluate(({ type, id, at, on }) => {
+    const w = window as any;
+    w.__sync = true;
+    document.querySelector(on)!.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: id, isPrimary: true, pointerType: 'touch', clientX: at.x, clientY: at.y }));
+    w.__sync = false;
+  }, { type, id, at, on });
 }
 
 function overlaps(a: Target, b: Target): boolean {
@@ -248,6 +267,58 @@ describe('block barn page', () => {
     await expect(page.getByRole('dialog').isVisible()).resolves.toBe(true);
     await page.getByRole('button', { name: /back to the barn/i }).tap();
     expect((await state(page)).corner).toBe(false);
+  });
+
+  it('the first tap primes speech and one audio element synchronously in its pointerup; later taps do not re-prime', async () => {
+    const { page } = await open();
+    const l = (await state(page)).floor[0]!;
+    const c = center(await find(page, 'block', l));
+    const fake = () => page.evaluate(() => { const f = (window as any).__fakeSpeech; return { calls: [...f.calls], plays: [...f.plays] }; });
+    await pointer(page, 'pointerdown', 11, c);
+    expect((await fake()).calls).toHaveLength(0); // nothing primes on the way down
+    await pointer(page, 'pointerup', 11, c);
+    const first = await fake();
+    const primes = first.calls.filter((x) => x.text.trim() === '');
+    expect(primes).toHaveLength(1);
+    expect(primes[0]).toMatchObject({ sync: true, volume: 0 });
+    expect(first.calls[0]!.text.trim()).toBe(''); // primed before the letter is spoken
+    expect(first.plays).toHaveLength(1);
+    expect(first.plays[0]!.sync).toBe(true);
+    expect(first.plays[0]!.src.startsWith('blob:')).toBe(true);
+    expect((await state(page)).named).toContain(l);
+    await tapBlock(page, (await state(page)).floor[1]!);
+    await pointer(page, 'pointerdown', 12, c);
+    await pointer(page, 'pointerup', 12, c);
+    const later = await fake();
+    expect(later.calls.filter((x) => x.text.trim() === '')).toHaveLength(1);
+    expect(later.plays).toHaveLength(1);
+  });
+
+  it('a finger resting on the screen does not block taps from another finger', async () => {
+    const { page } = await open();
+    const f = center(await find(page, 'floor'));
+    await pointer(page, 'pointerdown', 50, f); // a thumb gripping the phone, never lifted
+    await page.waitForTimeout(350);
+    const l = (await state(page)).floor[0]!;
+    await tapBlock(page, l);
+    expect((await state(page)).named).toContain(l);
+    await tapBlock(page, l);
+    expect((await state(page)).tower).toEqual([l]);
+  });
+
+  it('a cancelled pointer, or an up that lands on the corner, does not leave the barn dead', async () => {
+    const { page } = await open();
+    const f = center(await find(page, 'floor'));
+    await pointer(page, 'pointerdown', 60, f);
+    await pointer(page, 'pointercancel', 60, f);
+    const a = (await state(page)).floor[0]!;
+    await tapBlock(page, a);
+    expect((await state(page)).named).toContain(a);
+    await pointer(page, 'pointerdown', 70, f);
+    await pointer(page, 'pointerup', 70, f, '#corner');
+    const b = (await state(page)).floor[1]!;
+    await tapBlock(page, b);
+    expect((await state(page)).named).toContain(b);
   });
 
   it('a hidden tab stops speaking', async () => {

@@ -147,12 +147,12 @@
   #tower { position: absolute; pointer-events: none; }
   #tower .bale { position: absolute; left: 6px; right: 6px; bottom: 0; height: 38px; border-radius: 10px;
     background: repeating-linear-gradient(90deg, #e9c55c 0 7px, #d9ad3e 7px 9px); box-shadow: inset 0 0 0 4px #c99a32, 0 5px 0 rgba(0,0,0,.15); }
-  #tower .stack { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; flex-direction: column-reverse; align-items: center; transform-origin: 50% 100%; }
+  #tower .stack { position: absolute; left: 12px; width: var(--T); bottom: 36px; display: flex; flex-direction: column-reverse; align-items: center; transform-origin: 50% 100%; }
   #tower .stack.wobble { animation: wobble 1s ease-out; }
   @keyframes wobble { 15% { transform: rotate(-3deg); } 35% { transform: rotate(2.5deg); } 55% { transform: rotate(-1.5deg); } 75% { transform: rotate(.8deg); } }
   .tblock { width: var(--T); height: var(--T); border-radius: 10px; background: var(--c); display: grid; place-items: center;
     font-size: calc(var(--T) * .4); box-shadow: inset 0 -5px 0 rgba(0,0,0,.16), inset 0 0 0 3px rgba(255,255,255,.35); }
-  .tanimal { position: relative; width: calc(var(--T) * 1.3); height: calc(var(--T) * 1.25); }
+  .tanimal { position: absolute; left: calc(var(--T) + 16px); bottom: 34px; width: min(calc(var(--T) * 1.3), calc(100% - var(--T) - 18px)); aspect-ratio: 1 / 1; }
   .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
   #bale-bump.bump { animation: nudge .4s ease-out; }
 
@@ -320,12 +320,58 @@ const sfx = {
 };
 
 // ---------- voice ----------
-// A clip resolves when it has finished (or was paused), so the letter, name and noise play one after another.
+// iPhone only lets speech and <audio> start inside a tap, at least the first time. So the first tap primes both,
+// synchronously in its pointerup handler: a silent utterance, and one shared <audio> element played on a tiny silent
+// WAV built here (a blob: URL, no file, no network). Every clip then plays through that same element.
+const sharedAudio = new Audio();
+let primed = false;
+function silentWav() {
+  const n = 400, b = new DataView(new ArrayBuffer(44 + n)); // 0.05 s of 8 kHz 8-bit mono silence
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) b.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); b.setUint32(4, 36 + n, true); str(8, 'WAVEfmt '); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+  b.setUint32(24, 8000, true); b.setUint32(28, 8000, true); b.setUint16(32, 1, true); b.setUint16(34, 8, true); str(36, 'data'); b.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) b.setUint8(44 + i, 128);
+  return URL.createObjectURL(new Blob([b.buffer], { type: 'audio/wav' }));
+}
+function prime() {
+  if (primed) return;
+  primed = true;
+  try {
+    const synth = window.speechSynthesis;
+    if (synth && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; synth.speak(u); }
+  } catch { /* no speech on this device */ }
+  try {
+    sharedAudio.src = silentWav();
+    const p = sharedAudio.play();
+    if (p && p.then) p.then(() => sharedAudio.pause(), () => {});
+  } catch { /* no audio element playback */ }
+}
+// A clip resolves when it has finished (or was paused or superseded), so the letter, name and noise play one after another.
+let activeClip = null;
 const clipPlayer = (url) => {
-  const a = new Audio(url);
+  const me = { finish: null };
   return {
-    play: () => a.play().then(() => new Promise((done) => { a.onended = done; a.onpause = done; a.onerror = done; })),
-    pause: () => a.pause(),
+    play() {
+      if (activeClip && activeClip !== me && activeClip.finish) activeClip.finish();
+      activeClip = me;
+      sharedAudio.src = url;
+      return sharedAudio.play().then(() => new Promise((done) => {
+        if (activeClip !== me) return done();
+        const fin = () => {
+          sharedAudio.removeEventListener('ended', fin);
+          sharedAudio.removeEventListener('error', fin);
+          if (me.finish === fin) me.finish = null;
+          done();
+        };
+        me.finish = fin;
+        sharedAudio.addEventListener('ended', fin);
+        sharedAudio.addEventListener('error', fin);
+      }));
+    },
+    pause() {
+      if (activeClip === me) { activeClip = null; sharedAudio.pause(); }
+      if (me.finish) me.finish();
+    },
   };
 };
 const voice = createVoice({ audio: clipPlayer, synth: window.speechSynthesis || null, recordings: async () => null, base: './' });
@@ -436,13 +482,14 @@ function computeLayout() {
     for (let k = 0; k < 3; k++) slots.push({ x: x0 + k * (S + gap), y: y1 });
     for (let k = 0; k < 2; k++) slots.push({ x: W / 2 - S - gap / 2 + k * (S + gap), y: y2 });
     const aTop = y1 - aH;
-    const top = corner.y + corner.h + 14;
+    // The tower stands left of the corner, so it may use the full height above the animals.
+    const top = i.t + 10;
     tz = { x: L, y: top, w: Math.min(150, (R - L) * 0.4), h: aTop - 12 - top };
     floorTop = Math.max(top + 60, aTop - 170);
     const fx0 = tz.x + tz.w + NEAR + 4;
     fb = { x: fx0, y: floorTop + 10, w: R - fx0, h: aTop - NEAR - 4 - (floorTop + 10) };
   }
-  const T = Math.max(20, Math.min(64, tz.w * 0.42, (tz.h - 40 - 8) / 6.3));
+  const T = Math.max(20, Math.min(64, tz.w * 0.42, (tz.h - 40 - 4) / 5)); // five stacked (the 6th tumbles); its animal sits beside
   return { W, H, S, T, slots, tower: tz, floorBox: fb, floorTop, corner, wide };
 }
 function applyLayout() {
@@ -502,6 +549,7 @@ function renderSlot(k, anim) {
 }
 function renderTower(popTop) {
   const blocks = tower.blocks();
+  towerEl.querySelector('.tanimal')?.remove();
   stackEl.replaceChildren(...blocks.map((l) => {
     const b = document.createElement('div');
     b.className = 'tblock';
@@ -514,7 +562,7 @@ function renderTower(popTop) {
     a.className = 'tanimal';
     a.dataset.move = BY[towerTop].move;
     a.innerHTML = animalSVG(towerTop);
-    stackEl.append(a);
+    towerEl.append(a);
     if (popTop) restart(a, 'pop');
   }
 }
@@ -616,7 +664,7 @@ function stackBlock(k) {
 }
 function fly(l, from, height) {
   const t = layout.T;
-  const tx = layout.tower.x + layout.tower.w / 2 - t / 2, ty = layout.tower.y + layout.tower.h - 36 - (height + 1) * t;
+  const tx = layout.tower.x + 12, ty = layout.tower.y + layout.tower.h - 36 - (height + 1) * t;
   const f = document.createElement('div');
   f.className = 'flyer';
   Object.assign(f.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
@@ -631,7 +679,7 @@ function fly(l, from, height) {
 function tumbleDown(letters) {
   const t = layout.T;
   const baseY = layout.tower.y + layout.tower.h - 36;
-  const cx = layout.tower.x + layout.tower.w / 2 - t / 2;
+  const cx = layout.tower.x + 12;
   const groundY = layout.H - 30 - t;
   letters.forEach((l, k) => {
     const b = document.createElement('div');
@@ -703,26 +751,31 @@ function tapAt(x, y) {
 }
 
 // ---------- input: one tap per gesture, extra fingers ignored ----------
+// Fingers that land together (a palm, two fingers) are one tap. A finger left resting on the screen never blocks
+// the barn: any finger that lands REST ms or more after the current gesture began starts a fresh tap, and the
+// resting finger is then ignored. Ups and cancels are heard on the whole document, so a lost one can't stick.
 const barnEl = $('barn');
-let gesture = null; // { id, x, y, fired, fingers }
+const REST = 300;
+let gesture = null; // { id, x, y, start, fired, fingers }
 barnEl.addEventListener('pointerdown', (e) => {
   if (cornerOpen) return;
   e.preventDefault();
-  if (gesture) { gesture.fingers.add(e.pointerId); return; }
-  gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, fired: false, fingers: new Set([e.pointerId]) };
+  const now = performance.now();
+  if (gesture && now - gesture.start < REST) { gesture.fingers.add(e.pointerId); return; }
+  gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, start: now, fired: false, fingers: new Set([e.pointerId]) };
   wakeAudio();
 });
 function endPointer(e, cancelled) {
   if (!gesture || !gesture.fingers.has(e.pointerId)) return;
   if (e.pointerId === gesture.id && !gesture.fired) {
     gesture.fired = true;
-    if (!cancelled && !cornerOpen) tapAt(gesture.x, gesture.y);
+    if (!cancelled && !cornerOpen) { prime(); tapAt(gesture.x, gesture.y); }
   }
   gesture.fingers.delete(e.pointerId);
   if (!gesture.fingers.size) gesture = null;
 }
-barnEl.addEventListener('pointerup', (e) => endPointer(e, false));
-barnEl.addEventListener('pointercancel', (e) => endPointer(e, true));
+document.addEventListener('pointerup', (e) => endPointer(e, false));
+document.addEventListener('pointercancel', (e) => endPointer(e, true));
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 
@@ -739,6 +792,7 @@ const letGo = (e) => {
   if (!holdTimer) return;
   clearTimeout(holdTimer); holdTimer = 0;
   cornerBtn.classList.remove('holding');
+  if (e.type === 'pointerup') prime();
   if (e.type === 'pointerup') { const r = cornerBtn.getBoundingClientRect(); puffAt(r.left + r.width / 2, r.bottom + 18); }
 };
 for (const t of ['pointerup', 'pointercancel', 'pointerleave']) cornerBtn.addEventListener(t, letGo);
