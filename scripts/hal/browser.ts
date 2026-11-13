@@ -65,9 +65,10 @@ async function hasWebGL2(browser: Browser): Promise<boolean> {
 /**
  * Launches headless Chromium with WebGL 2: the default GPU first, then software GL (swiftshader).
  * Throws an Error whose message starts with "browser unavailable:" when neither works; callers exit 1 on it
- * and never turn it into a score.
+ * and never turn it into a score. `args` are extra Chromium switches added to every try (for example Block Barn's
+ * recorder test passes the fake-microphone switches); without them the launch is unchanged.
  */
-export async function launchBrowser(): Promise<Browser> {
+export async function launchBrowser(opts: { args?: string[] } = {}): Promise<Browser> {
   const reasons: string[] = [];
   const tries: { name: string; args: string[] }[] = [
     { name: 'gpu', args: [] },
@@ -76,7 +77,7 @@ export async function launchBrowser(): Promise<Browser> {
   for (const t of tries) {
     let browser: Browser | undefined;
     try {
-      browser = await chromium.launch({ args: t.args });
+      browser = await chromium.launch({ args: [...t.args, ...(opts.args ?? [])] });
       if (await hasWebGL2(browser)) return browser;
       reasons.push(`${t.name}: no WebGL 2`);
     } catch (e) {

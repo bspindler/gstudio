@@ -219,7 +219,7 @@
     <p>Pinned letters come around more often (her name's letters, say).</p>
     <div id="pins"></div>
 
-    <!-- Task 6: the recorder (recorder.js) puts its list of voices here: record, hear it back, keep or redo, back to default. -->
+    <!-- recorder.js puts its list of voices here: record, hear it back, keep or redo, back to default. -->
     <section id="voices" aria-label="Voices"></section>
 
     <h3>Keep her in the game</h3>
@@ -237,6 +237,7 @@ import { ANIMALS } from './animals.js';
 import { createRotation } from './rotation.js';
 import { createTower } from './tower.js';
 import { createVoice } from './voice.js';
+import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
@@ -374,7 +375,9 @@ const clipPlayer = (url) => {
     },
   };
 };
-const voice = createVoice({ audio: clipPlayer, synth: window.speechSynthesis || null, recordings: async () => null, base: './' });
+// Grown-ups' own recordings (recorder.js) come first, then bundled clips, then device speech.
+const recorder = createRecorder();
+const voice = createVoice({ audio: clipPlayer, synth: window.speechSynthesis || null, recordings: (key) => recorder.get(key), base: './' });
 let speaking = null; // the key being spoken, or null
 let talkId = 0;
 function talk(lines) {
@@ -390,7 +393,15 @@ function talk(lines) {
     if (mine === talkId) speaking = null;
   })();
 }
-function hush_voice() { talkId++; voice.stop(); speaking = null; }
+function hush_voice() { talkId++; voice.stop(); speaking = null; stopHearing(); }
+// "Hear it" in the grown-up corner plays a recording through the same shared element as the barn's clips.
+let hearing = null;
+function stopHearing() { const h = hearing; hearing = null; if (h) h.pause(); }
+function hearBack(url) {
+  hush_voice();
+  const h = (hearing = clipPlayer(url));
+  return h.play().finally(() => { if (hearing === h) hearing = null; });
+}
 const letterLine = (l) => [`letter-${l}`, `${l.toUpperCase()} ${l}`];
 const nameLines = (l) => {
   const a = BY[l];
@@ -807,10 +818,13 @@ function openCorner() {
 }
 function closeCorner() {
   cornerOpen = false;
+  voicesList.close();
+  stopHearing();
   dialog.hidden = true;
   quietMs = 0; invitedThisQuiet = false;
 }
 $('close').addEventListener('click', closeCorner);
+const voicesList = mountVoices($('voices'), { recorder, animals: ANIMALS, noises: NOISE, play: hearBack, stop: hush_voice });
 const soundBtn = $('sound');
 function renderSound() { soundBtn.setAttribute('aria-pressed', String(soundOn)); soundBtn.textContent = soundOn ? 'Sound on' : 'Sound off'; }
 soundBtn.addEventListener('click', () => {

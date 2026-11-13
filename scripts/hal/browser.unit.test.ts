@@ -14,6 +14,17 @@ describe('browser unavailable', () => {
     await expect(launchBrowser()).rejects.toThrow(/^browser unavailable: gpu: Executable doesn't exist at \/nowhere; swiftshader: /);
   });
 
+  it('launchBrowser adds extra args to every try (gpu and swiftshader)', async () => {
+    const { chromium } = await import('playwright');
+    const launch = vi.mocked(chromium.launch);
+    launch.mockClear();
+    await expect(launchBrowser({ args: ['--use-fake-device-for-media-stream'] })).rejects.toThrow(/^browser unavailable:/);
+    expect(launch.mock.calls.map((c) => c[0]?.args)).toEqual([
+      ['--use-fake-device-for-media-stream'],
+      ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-fake-device-for-media-stream'],
+    ]);
+  });
+
   it('runGearholdPlay rejects instead of returning records', async () => {
     await expect(runGearholdPlay({ levels: [0], seeds: 1 })).rejects.toThrow(/^browser unavailable:/);
   });
