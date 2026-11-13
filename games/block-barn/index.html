@@ -187,6 +187,9 @@
   /* neighbours turn to look: slow, small, no flashing; the whole drawing leans toward the newly named animal */
   .animal.look .art { transform-box: fill-box; transform-origin: 50% 100%; animation: look 2s ease-in-out; }
   @keyframes look { 25%, 70% { transform: translateX(calc(var(--dir) * 4px)) rotate(calc(var(--dir) * 4deg)); } }
+  /* the one or two nearest neighbours then lean in for a slow, soft nuzzle and settle back */
+  .animal.look.nuz .art { animation: look 2s ease-in-out, nuz-in 2.6s ease-in-out 2s; }
+  @keyframes nuz-in { 0%, 100% { transform: none; } 40%, 60% { transform: translateX(calc(var(--dir) * 9px)) rotate(calc(var(--dir) * 8deg)); } }
 
   /* pair reactions */
   .re-startle .pic { animation: startle .8s ease-out !important; }
@@ -236,6 +239,7 @@
     .slot.invite .body { animation-duration: 4s; }
     .animal.ghost .pic { animation: none; }
     .animal.look .art { animation: none; }
+    .animal.look.nuz .art { animation: none; }
     .falling { animation-name: fall-calm; }
     .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
   }
@@ -668,14 +672,22 @@ function lookToward(k) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const me = slotsEl.children[k].getBoundingClientRect();
   const reach = me.width * 2.4;
+  const near = [];
   floor.forEach((l, j) => {
     if (j === k || !named.has(l)) return;
     const a = slotsEl.children[j].querySelector('.animal');
     const them = slotsEl.children[j].getBoundingClientRect();
-    if (Math.hypot(me.left + me.width / 2 - them.left - them.width / 2, me.top + me.height / 2 - them.top - them.height / 2) > reach) return;
+    const d = Math.hypot(me.left + me.width / 2 - them.left - them.width / 2, me.top + me.height / 2 - them.top - them.height / 2);
+    if (d > reach) return;
+    near.push({ a, d });
+  });
+  near.sort((x, y) => x.d - y.d);
+  near.forEach(({ a }, i) => {
+    const them = a.getBoundingClientRect();
     a.style.setProperty('--dir', me.left > them.left ? '1' : '-1');
-    setTimeout(() => { a.classList.remove('look'); void a.offsetWidth; a.classList.add('look'); }, 500);
-    setTimeout(() => a.classList.remove('look'), 2700);
+    const nuzzle = i < 2;
+    setTimeout(() => { a.classList.remove('look', 'nuz'); void a.offsetWidth; a.classList.add('look'); if (nuzzle) a.classList.add('nuz'); }, 500);
+    setTimeout(() => a.classList.remove('look', 'nuz'), nuzzle ? 5300 : 2700);
   });
 }
 function hiddenFriend(k) {
