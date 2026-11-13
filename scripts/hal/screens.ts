@@ -26,13 +26,15 @@ async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
 
 
 // Lanternkeep: the ?hal hook only reads the page (cellPoint, state) and seeds progress; taps and clicks are real.
+/** Lanternkeep's waits: its 3D first frames are slow under software GL. */
+const LK_T = 30_000;
 const lkState = (page: Page) => page.evaluate(() => (globalThis as any).__hal.state());
 /** Every reveal card already seen, so a shot shows the garden and not a card. */
 const LK_SEEN = ['glowcap', 'frost', 'ember', 'sunspire'].map((t) => `plant:${t}`)
   .concat(['moth', 'firefly', 'beetle', 'wisp', 'mossback', 'toad', 'mothmother'].map((t) => `creature:${t}`), ['tip:flare']);
 /** Waits out the intro swoop (headless GL can be slow), dismissing reveal cards with real taps. */
 async function lkSettled(page: Page) {
-  const end = Date.now() + 30_000;
+  const end = Date.now() + 60_000;
   for (;;) {
     const s = await lkState(page);
     if (s.mode === 'play' && s.intro && !s.modal) return;
@@ -113,13 +115,14 @@ const FLOWS: Record<string, FlowFn> = {
   async lanternkeep(page, origin, shoot, flow) {
     await step('load', async () => {
       await page.goto(`${origin}/lanternkeep/index.html?hal=1`);
-      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
-      await page.locator('#playBtn').waitFor({ state: 'visible', timeout: T });
+      // A 3D page: under software GL its first frame compiles every shader, so it gets longer than the 2D games.
+      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: LK_T, polling: 250 });
+      await page.locator('#playBtn').waitFor({ state: 'visible', timeout: LK_T });
     });
     await page.waitForTimeout(800); // a few frames of the title garden
     await shoot(); // title
     await step('play night 1', async () => {
-      await page.locator('#playBtn').click({ timeout: T });
+      await page.locator('#playBtn').click({ timeout: LK_T });
       await lkSettled(page);
     });
     flow.reached = true;
@@ -248,7 +251,7 @@ const FOCUS: Record<string, FocusFn> = {
   async lanternkeep(page, origin, i) {
     await step('load', async () => {
       await page.goto(`${origin}/lanternkeep/index.html?hal=1`);
-      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
+      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: LK_T, polling: 250 });
     });
     // Every night open and every card seen, then night i+1 from the garden map, as a player would reach it.
     await step(`open night ${i + 1}`, async () => {

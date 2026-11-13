@@ -2,6 +2,11 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.3.0 (2026-11-13)
+- A new 3D garden built on three.js (MIT, bundled in the game folder, no outside requests): smooth physically based plants, creatures and lantern; soft moonlight shadows; coloured plant lights; bloom on every glow; reflections; wind-blown grass; rolling hills; a starry sky with a moon and aurora.
+- Every model is rebuilt: lathed mushrooms with glowing spots, curling frost fronds with ice tips, spiked ember thistles, glass-like sun crystals, iridescent beetles, translucent moth wings, a wet-skinned Gloom Toad and a paper lantern that sways.
+- Quality steps down by itself if a phone can't keep up; "Light effects" in the pause menu picks the lightest look.
+
 ## 0.2.0 (2026-11-13)
 - Lanternkeep is 3D: a hand-built WebGL2 garden under moonlight, every plant a coloured light, the lantern's light following your lives. Devices without WebGL2 get the flat garden.
 - Lantern Flare: tap the lantern (or Flare) to blind and burn everything near it. It charges during waves.
