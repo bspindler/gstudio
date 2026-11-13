@@ -572,6 +572,7 @@ function deathScreen(d) {
       ${G.cont || passed.has('revive') ? '' : `<button class="btn buy" data-act="revive-buy">Revive · ${price(CATALOG.revive)}</button>`}
       ${G.cont ? '' : `<button class="btn" data-act="revive-cr" ${S.credits < REVIVE_CR ? 'disabled' : ''}>Revive · ${REVIVE_CR} credits</button>`}
       <button class="btn ghost" data-act="again">Run again</button>
+      <button class="btn ghost" data-act="menu">Main Menu</button>
     </div>
     ${G.cont ? '<p class="fine">One revive per run.</p>' : ''}`);
 }
@@ -805,6 +806,7 @@ document.addEventListener('click', async (e) => {
       break;
     case 'revive-cr': if (S.credits < REVIVE_CR) break; S.credits -= REVIVE_CR; save(); cred(); revive(); break;
     case 'again': closeModal(); reset(); studio.feedback.maybePrompt(); break;
+    case 'menu': closeModal(); reset(); break;
     case 'close': closeModal(); break;
     case 'mode': if (G.state !== 'ready') break; S.mode = b.dataset.mode === 'daily' ? 'daily' : 'endless'; save(); audio.click(); reset(); break;
     case 'start': if (G.state !== 'ready' || S.mode !== 'endless') break;
