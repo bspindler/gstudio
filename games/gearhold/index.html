@@ -60,6 +60,9 @@
   .mid #kills { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .ammo { display: flex; align-items: center; gap: 10px; }
   .ammo b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  #compass { width: 26px; height: 26px; border-radius: 50%; position: relative; flex: none; background: radial-gradient(circle, #2a1a06 55%, #7a5418 60%, #d9a441 72%, #4a3009 76%); box-shadow: 0 0 5px rgba(255,190,60,.35); }
+  #needle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -10px 0 0 -3px; border-left: 3px solid transparent; border-right: 3px solid transparent; border-bottom: 10px solid #ffd27a; transform-origin: 3px 10px; }
+  #compass::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #b8812a; }
   #key { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle, #3a2405 28%, #ffc53d 30%, #ffc53d 62%, transparent 64%); filter: drop-shadow(0 0 6px rgba(255,190,60,.8)); }
   .btns { display: flex; gap: 6px; pointer-events: auto; }
   .btns button {
@@ -130,7 +133,7 @@
     <div class="panel hp" id="hpbox"><span class="label">Integrity</span><b id="hp">100</b><div class="bar"><i id="hpbar"></i></div></div>
     <div class="panel mid"><div id="lvl"></div><div><span class="label wide">Scrapped </span><span id="kills"></span></div></div>
     <div style="display:flex;gap:8px;align-items:flex-start">
-      <div class="panel ammo"><div><div class="label" id="wname">Hand cannon</div><b id="ammo">&infin;</b></div><span id="key" hidden></span></div>
+      <div class="panel ammo"><div><div class="label" id="wname">Hand cannon</div><b id="ammo">&infin;</b></div><span id="key" hidden></span><span id="compass" aria-hidden="true"><i id="needle"></i></span></div>
       <div class="btns"><button id="mute" aria-label="Sound on or off">SND</button><button id="pause" aria-label="Pause">II</button></div>
     </div>
   </div>
@@ -163,7 +166,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.3.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.3.2', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -952,6 +955,29 @@ function updateHud() {
   $('kills').textContent = `${kills} / ${foes}`;
 }
 
+// Brass compass: the needle points at the gear key until you hold it, then at the nearest exit arch.
+let needleDeg = null;
+function updateCompass() {
+  let tx = null, ty = 0;
+  const key = P.key ? null : items.find((it) => it.kind === 'k');
+  if (key) { tx = key.x; ty = key.y; }
+  else {
+    let best = Infinity;
+    for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
+      if (grid[y * mw + x] !== 'X') continue;
+      const d = (x + 0.5 - P.x) ** 2 + (y + 0.5 - P.y) ** 2;
+      if (d < best) { best = d; tx = x + 0.5; ty = y + 0.5; }
+    }
+  }
+  const el = $('compass');
+  if (tx === null) { if (needleDeg !== -1) { el.hidden = true; needleDeg = -1; } return; }
+  const dx = tx - P.x, dy = ty - P.y;
+  const fwd = dx * Math.cos(P.a) + dy * Math.sin(P.a), side = -dx * Math.sin(P.a) + dy * Math.cos(P.a);
+  const deg = Math.round(Math.atan2(side, fwd) * 180 / Math.PI);
+  if (needleDeg === -1) el.hidden = false;
+  if (deg !== needleDeg) { needleDeg = deg; $('needle').style.transform = `rotate(${deg}deg)`; }
+}
+
 // ---------- flow ----------
 function update(dt) {
   levelTime += dt;
@@ -1011,6 +1037,7 @@ function update(dt) {
   $('hurt').style.opacity = String(hurtFx);
   $('glow').style.opacity = String(glowFx);
   updateHud();
+  updateCompass();
 }
 
 const worldEl = $('world');
