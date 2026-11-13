@@ -1,6 +1,8 @@
 // Hal tripwires: pure checks over a candidate diff. Any hit rejects the candidate before it can merge.
 // No fs, no clock, no randomness: scripts/hal/git.ts builds the Diff, this file only judges it.
 
+import { parse } from 'yaml';
+
 export type FileChange = {
   path: string;
   status: 'A' | 'M' | 'D' | 'R';
@@ -131,16 +133,16 @@ function halFragments(src: string | null): string[] {
 
 export const halHook: Rule = (diff) => {
   const out: Violation[] = [];
-  for (const HOOK_FILE of HOOK_FILES) {
-    const f = diff.files.find((x) => norm(x.path) === HOOK_FILE || (x.oldPath !== undefined && norm(x.oldPath) === HOOK_FILE));
+  for (const hookFile of HOOK_FILES) {
+    const f = diff.files.find((x) => norm(x.path) === hookFile || (x.oldPath !== undefined && norm(x.oldPath) === hookFile));
     if (!f) continue;
-    const moved = f.status === 'D' || (f.oldPath !== undefined && norm(f.oldPath) === HOOK_FILE && norm(f.path) !== HOOK_FILE);
+    const moved = f.status === 'D' || (f.oldPath !== undefined && norm(f.oldPath) === hookFile && norm(f.path) !== hookFile);
     const before = halHookBlock(f.before);
     const after = moved ? null : halHookBlock(f.after);
     // Fail closed: the file is there, so both sides must be readable text with exactly one intact block each, byte for byte equal.
-    if (moved) out.push(hit('hal-hook', HOOK_FILE, 'hal hook file deleted or moved'));
-    else if (!hookIntact(f.before) || !hookIntact(f.after)) out.push(hit('hal-hook', HOOK_FILE, 'hal hook block missing, unreadable, or not exactly one start and one end marker'));
-    else if (before !== after) out.push(hit('hal-hook', HOOK_FILE, 'hal hook block changed'));
+    if (moved) out.push(hit('hal-hook', hookFile, 'hal hook file deleted or moved'));
+    else if (!hookIntact(f.before) || !hookIntact(f.after)) out.push(hit('hal-hook', hookFile, 'hal hook block missing, unreadable, or not exactly one start and one end marker'));
+    else if (before !== after) out.push(hit('hal-hook', hookFile, 'hal hook block changed'));
   }
   // Outside the block, no statement touching the hook, its counters or the HAL flag may be added or removed. Statements are compared as a
   // multiset (split on ; { }, comments dropped, whitespace normalised), so re-indenting, wrapping in a block or editing the rest of a line is fine.
@@ -444,26 +446,47 @@ export const kidAsset: Rule = (diff) =>
 // ---- child-directed ------------------------------------------------------
 
 const GAME_YAML = /^games\/[^/]+\/game\.yaml$/;
-/** The value of the `childDirected:` line, or null when the file has none (or is gone). */
-function childDirectedValue(src: string | null): string | null {
-  if (src === null) return null;
-  const m = /^[ \t]*childDirected[ \t]*:[ \t]*(.*?)[ \t]*(?:#.*)?$/m.exec(src);
-  return m ? m[1]!.replace(/^["']|["']$/g, '').toLowerCase() : null;
+/** The top-level `childDirected` of a game.yaml, as the compliance test reads it (`yaml` parse). undefined when absent, null source, or unparseable. */
+function childDirectedValue(src: string | null): string | undefined {
+  if (src === null) return undefined;
+  try {
+    const doc: unknown = parse(src);
+    if (doc === null || typeof doc !== 'object' || Array.isArray(doc) || !('childDirected' in doc)) return undefined;
+    return JSON.stringify((doc as Record<string, unknown>).childDirected) ?? 'undefined';
+  } catch {
+    return undefined;
+  }
 }
 
 /** A game that declares itself child-directed keeps that flag: removing it or changing its value is refused. Adding it is fine. */
 export const childDirected: Rule = (diff) => {
   const out: Violation[] = [];
   for (const f of diff.files) {
-    const at = touched(f).find((p) => GAME_YAML.test(norm(p)));
-    if (at === undefined) continue;
-    const gone = f.status === 'D' || !GAME_YAML.test(norm(f.path));
+    // Identity is the OLD path: a game.yaml renamed away is gone, wherever it went.
+    const oldAt = f.oldPath ?? f.path;
+    if (!GAME_YAML.test(norm(oldAt))) continue;
     const before = childDirectedValue(f.before);
-    if (before === null) continue;
-    if (gone || childDirectedValue(f.after) !== before) out.push(hit('child-directed', at, gone ? 'game.yaml with childDirected deleted or moved' : 'childDirected removed or changed'));
+    if (before === undefined) continue;
+    const gone = f.status === 'D' || norm(f.path) !== norm(oldAt);
+    if (gone || childDirectedValue(f.after) !== before) out.push(hit('child-directed', oldAt, gone ? 'game.yaml with childDirected deleted or moved' : 'childDirected removed, changed or unreadable'));
   }
   return out;
 };
+
+// ---- studio-owned --------------------------------------------------------
+
+/** `studio-owned` is a license Hal may never claim: only the studio adds such a SOURCES.md line. */
+export const studioOwned: Rule = (diff) =>
+  diff.files.filter((f) => /(?:^|\/)sources\.md$/i.test(norm(f.path))).flatMap((f) =>
+    addedLines(f).filter((l) => /studio-owned/i.test(l)).map((l) => hit('studio-owned', f.path, `added studio-owned entry: ${l.trim().slice(0, 100)}`)));
+
+// ---- kid-recorder --------------------------------------------------------
+
+const RECORDER_API = /\b(?:getUserMedia|MediaRecorder|indexedDB)\b/;
+/** Microphone capture and recording storage live only in Block Barn's protected recorder.js. */
+export const kidRecorder: Rule = (diff) =>
+  diff.files.filter((f) => norm(f.path).startsWith('games/block-barn/') && norm(f.path) !== 'games/block-barn/recorder.js').flatMap((f) =>
+    addedLines(f).filter((l) => RECORDER_API.test(l)).map((l) => hit('kid-recorder', f.path, `recorder API outside recorder.js: ${l.trim().slice(0, 100)}`)));
 
 // ---- levels, tests, scope -----------------------------------------------
 
@@ -652,6 +675,8 @@ export const TRIPWIRE_RULES: Record<string, Rule> = {
   'asset-source': assetSource,
   'kid-asset': kidAsset,
   'child-directed': childDirected,
+  'studio-owned': studioOwned,
+  'kid-recorder': kidRecorder,
   'level-removed': levelRemoved,
   'tests-removed': testsRemoved,
   'outside-scope': outsideScope,

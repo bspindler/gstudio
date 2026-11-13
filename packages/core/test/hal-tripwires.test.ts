@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, kidAsset, childDirected, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
+  isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -629,8 +629,9 @@ describe('Block Barn guards', () => {
     expect(rules(diff([BIN('games/block-barn/art/x.png'), src]))).toContain('kid-asset');
   });
   it('asset-source: m4a with studio-owned is accepted, unlisted m4a is rejected', () => {
-    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), A('games/g/audio/SOURCES.md', '| a.m4a | studio-owned |\n')]))).toEqual([]);
-    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), A('games/g/audio/SOURCES.md', '| b.m4a | studio-owned |\n')]))).toHaveLength(1);
+    const S = 'games/g/audio/SOURCES.md';
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), M(S, '| a.m4a | studio-owned |\n', '| a.m4a | studio-owned |\n')]))).toEqual([]);
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), M(S, '| b.m4a | studio-owned |\n', '| b.m4a | studio-owned |\n')]))).toHaveLength(1);
     expect(assetSource(diff([BIN('games/g/audio/a.m4a')]))).toHaveLength(1);
   });
   describe('hal-hook', () => {
@@ -661,6 +662,48 @@ describe('Block Barn guards', () => {
       expect(childDirected(diff([M(Y, y('', ''), y(''))]))).toEqual([]);
       expect(childDirected(diff([M('games/other/game.yaml', 'id: o\n', 'id: o\nversion: 2\n')]))).toEqual([]);
       expect(childDirected(diff([D('games/other/game.yaml', 'id: o\n')]))).toEqual([]);
+    });
+  });
+  it('studio-owned: adding such a SOURCES.md line hits; an existing one does not', () => {
+    const S = 'games/g/audio/SOURCES.md';
+    expect(studioOwned(diff([A(S, '| a.m4a | Studio-Owned |\n')])).map((v) => v.rule)).toEqual(['studio-owned']);
+    expect(studioOwned(diff([M(S, '| a.m4a | studio-owned |\n', '| a.m4a | studio-owned |\n| b.png | CC0 |\n')]))).toEqual([]);
+    expect(studioOwned(diff([A('games/g/notes.md', 'studio-owned')]))).toEqual([]);
+    expect(rules(diff([A(S, '| a.m4a | studio-owned |\n')]))).toContain('studio-owned');
+  });
+  it('kid-recorder: recorder APIs outside recorder.js hit, in it or in other games do not', () => {
+    for (const api of ['navigator.mediaDevices.getUserMedia({audio:true})', 'new MediaRecorder(s)', 'indexedDB.open("x")']) {
+      expect(kidRecorder(diff([A('games/block-barn/index.html', `${api};\n`)])).map((v) => v.rule), api).toEqual(['kid-recorder']);
+    }
+    expect(kidRecorder(diff([A('games/block-barn/recorder.js', 'new MediaRecorder(s);\n')]))).toEqual([]);
+    expect(rules(diff([M('games/block-barn/recorder.js', 'a', 'new MediaRecorder(s);')]))).toEqual(['protected-path']);
+    expect(kidRecorder(diff([A('games/other/a.js', 'new MediaRecorder(s);\n')]))).toEqual([]);
+    expect(kidRecorder(diff([A('games/block-barn/a.js', 'const mediaRecorder = 1;\n')]))).toEqual([]);
+  });
+  it('a modified binary png under block-barn fails (its SOURCES.md is protected)', () => {
+    const png: FileChange = { path: 'games/block-barn/art/a.png', status: 'M', before: null, after: null, binary: true };
+    expect(rules(diff([png]))).toContain('asset-source');
+    expect(rules(diff([png, M('games/block-barn/art/SOURCES.md', '| a.png | CC0 |\n', '| a.png | CC0 |\n')]))).toContain('protected-path');
+  });
+  describe('child-directed bypasses', () => {
+    const Y = 'games/block-barn/game.yaml';
+    const before = 'id: block-barn\nchildDirected: true\n';
+    const hits = (after: string | null) => childDirected(diff([after === null ? D(Y, before) : M(Y, before, after)]));
+    it('hits nested, decoy, flow-style and unparseable rewrites', () => {
+      expect(hits('id: block-barn\nmeta:\n  childDirected: true\n')).toHaveLength(1);
+      expect(hits('id: x\nnote: |\n  childDirected: true\nchildDirected: false\n')).toHaveLength(1);
+      expect(hits('{ id: x, childDirected: false }\n')).toHaveLength(1);
+      expect(hits('id: [unclosed\nchildDirected: true\n')).toHaveLength(1);
+      expect(hits('id: x\nchildDirected: "true"\n')).toHaveLength(1);
+    });
+    it('allows re-formatting that keeps the top-level value', () => {
+      expect(hits('id: x\nchildDirected: true # kids\nversion: 3\n')).toEqual([]);
+      expect(hits('{ id: x, childDirected: true }\n')).toEqual([]);
+    });
+    it('hits a rename away from game.yaml, wherever it goes', () => {
+      const r = (to: string): FileChange => ({ path: to, oldPath: Y, status: 'R', before, after: before, binary: false });
+      expect(childDirected(diff([r('games/block-barn/game.yml')]))).toHaveLength(1);
+      expect(childDirected(diff([r('games/other/game.yaml')]))).toHaveLength(1);
     });
   });
 });
