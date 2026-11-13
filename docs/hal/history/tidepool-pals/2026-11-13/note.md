@@ -24,3 +24,15 @@ The strip pal now wiggles on a level win. It's small, on-tone and adds no assets
 
 Changes:
 - HAL-049 polish(tidepool-pals): Tidepool: pal in the pool strip does a happy wiggle on level win: **merged** (0.6.0)
+
+## Run run-2026-11-13T19-39-37-293Z
+
+### Tidepool Pals
+Gentle reef restoration with pals.
+
+- **HAL-054 merged (0.6.0).** The strip's pal bobs up on goal progress, alongside the win wiggle.
+- It's feel work only. The score stays at 88.85, because goal, move and litter tuning is exhausted (L-003, L-006, L-013).
+- The strip size is unchanged.
+
+Changes:
+- HAL-054 polish(tidepool-pals): Tidepool: pal in the pool strip peeks up on goal progress: **merged** (0.6.0)

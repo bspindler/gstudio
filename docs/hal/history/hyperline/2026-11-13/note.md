@@ -24,3 +24,17 @@ The camera is now higher and further back: still centred, with a smaller runner 
 Changes:
 - HAL-046 polish(hyperline): Hyperline: game-over button reads "Main Menu", not all caps: **discarded** (implementer blocked: Ticket is label-only, but the game-over 'Main Menu' button from N-006 is not present in the code; adding it would be a behavior change beyond the ticket.)
 - HAL-047 fix(hyperline): Hyperline: raise and pull back the camera to show more track: **merged** (0.5.0)
+
+## Run run-2026-11-13T19-39-37-293Z
+
+### Hyperline
+A neon synthwave runner through sectors.
+
+- **HAL-055 held:** the side-on camera, with the original angle one setting away.
+- **HAL-056 held:** the "Main Menu" button on game-over.
+- Both kept the score at 100. The sim, timing, sectors and look are unchanged.
+- Both wait on your yes.
+
+Changes:
+- HAL-055 feature(hyperline): Hyperline: side-on horizontal camera for the run: **held** (0.5.0)
+- HAL-056 feature(hyperline): Hyperline: "Main Menu" button on the game-over screen: **held** (0.5.0)

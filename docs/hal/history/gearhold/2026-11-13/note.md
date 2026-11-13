@@ -24,3 +24,16 @@ The gear-key pickup now has a brass glow and a ratchet chime, in the same family
 Changes:
 - HAL-048 tuning(gearhold): Gearhold: seal Terrace of Dials' mid-wall gap for a longer route: **discarded** (0.3.3) (gearhold-play: no real gain: 0.00 < 0.5)
 - HAL-050 polish(gearhold): Gearhold: brass gear-key pickup flash and a clockwork chime: **merged** (0.3.3)
+
+## Run run-2026-11-13T19-39-37-293Z
+
+### Gearhold
+Clockwork-citadel exploration, with gear keys and timed presses.
+
+- **HAL-051 discarded.** The longer Terrace of Dials loop made the route 50% longer but added only 1.3s to the median win, and pace held at 66.7.
+- No new enemies were added, and the exploration feel would have been kept. The lever is simply wrong.
+- **Next:** check which level and which pace band is failing before reshaping anything else.
+- Level 4 (Press Gallery) is blocked until the protected screenshot tool is fixed.
+
+Changes:
+- HAL-051 tuning(gearhold): Gearhold: longer Terrace of Dials loop via a side gallery: **discarded** (0.3.3) (gearhold-play: no real gain: 0.00 < 0.5)
