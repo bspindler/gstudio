@@ -1,4 +1,4 @@
-// Lanternkeep renderer: draws the garden, towers, creatures and effects on one canvas.
+// Lanternkeep 2D fallback renderer (used when WebGL2 is missing): draws the garden, towers, creatures and effects on one canvas.
 // The look rests on one idea: the garden is dark, and only light pushes the dark back.
 // Towers and the lantern cut holes in a darkness layer; the lantern's light shrinks as lives drop.
 import { COLS, ROWS, stats } from './lib/sim.js';
@@ -166,6 +166,8 @@ const TOWER_LIGHT = { glowcap: COLOR.glowcap, frost: COLOR.frost, ember: COLOR.e
 
 function drawEnemy(ctx, e, x, y, s, t, heading) {
   const k = e.id * 1.37;
+  if (e.type === 'mothmother') { drawEnemy(ctx, { ...e, type: 'moth', slow: 0, hitFlash: 0 }, x, y, s * 2, t * 0.5, heading); ctx.fillStyle = 'rgba(255,150,230,0.8)'; ctx.beginPath(); ctx.arc(x, y, s * 0.06, 0, TAU); ctx.fill(); }
+  else if (e.type === 'mossback') { drawEnemy(ctx, { ...e, type: 'beetle', slow: 0, hitFlash: 0 }, x, y, s * 1.1, t, heading); ctx.fillStyle = 'rgba(110,190,90,0.85)'; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(x + Math.cos(i * 1.3) * s * 0.1, y + Math.sin(i * 1.3) * s * 0.1, s * 0.06, 0, TAU); ctx.fill(); } }
   ctx.save();
   ctx.translate(x, y);
   if (e.type === 'moth') {
@@ -278,7 +280,7 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
   }
 }
 
-const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42 };
+const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42, mossback: 0.32, mothmother: 0.46 };
 
 // ---------- renderer ----------
 
@@ -403,6 +405,7 @@ export function createRenderer(canvas, opts = {}) {
           fx.push({ k: 'spark', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 0.5 + hash(n, i) * 0.3 });
         }
       } else if (ev.e === 'leak') leakT = 0.5;
+      else if (ev.e === 'flare') fx.push({ k: 'pulse', x: ev.x, y: ev.y, r: ev.r, t: 0, life: 0.8, flare: true });
     }
   }
 
@@ -417,7 +420,7 @@ export function createRenderer(canvas, opts = {}) {
 
   function clearFx() { fx = []; leakT = 0; prevHeading.clear(); }
 
-  // view: { alpha, prev: Map<id,{x,y}>, time, sel: {c,r}|null, selTower, hint: {c,r}|null, ghost: {type,c,r}|null }
+  // view: { alpha, prev: Map<id,{x,y}>, time, sel: {c,r}|null, selTower, hint: {c,r}|null, ghost: tower type | null }
   function draw(g, view) {
     const t = view.time;
     const s = tile;
@@ -478,9 +481,9 @@ export function createRenderer(canvas, opts = {}) {
 
     // towers
     for (const tw of g.towers) drawTower(ctx, tw.type, tw.x * s, tw.y * s, s, tw.tier, t, tw.aim);
-    if (view.ghost) {
+    if (view.ghost && view.sel) {
       ctx.globalAlpha = 0.5;
-      drawTower(ctx, view.ghost.type, (view.ghost.c + 0.5) * s, (view.ghost.r + 0.5) * s, s, 0, t);
+      drawTower(ctx, view.ghost, (view.sel.c + 0.5) * s, (view.sel.r + 0.5) * s, s, 0, t);
       ctx.globalAlpha = 1;
     }
 
@@ -496,6 +499,11 @@ export function createRenderer(canvas, opts = {}) {
       drawn.push([e, p]);
     }
     if (prevHeading.size > 400) prevHeading.clear();
+
+    for (const p of g.patches) {
+      ctx.fillStyle = `rgba(255,110,40,${0.25 * Math.min(1, p.left)})`;
+      ctx.beginPath(); ctx.arc(p.x * s, p.y * s, p.r * s, 0, TAU); ctx.fill();
+    }
 
     // darkness, with light cut out
     dctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -567,7 +575,7 @@ export function createRenderer(canvas, opts = {}) {
       } else if (f.k === 'burst' && f.t > 0) {
         glow(f.x * s, f.y * s, s * f.r * (0.6 + 0.6 * (1 - k)), COLOR.ember, 0.6 * k);
       } else if (f.k === 'pulse') {
-        ctx.strokeStyle = rgba(COLOR.frost, 0.6 * k);
+        ctx.strokeStyle = rgba(f.flare ? COLOR.lantern : COLOR.frost, 0.6 * k);
         ctx.lineWidth = s * 0.05;
         ctx.beginPath();
         ctx.arc(f.x * s, f.y * s, f.r * s * (1 - k * 0.7), 0, TAU);
@@ -608,7 +616,13 @@ export function createRenderer(canvas, opts = {}) {
     }
   }
 
-  return { resize, cellAt, draw, addEvents, tickFx, clearFx, get tile() { return tile; } };
+  function project(x, y, z) { return { x: x * tile, y: z * tile }; }
+  function snapshot(type, form, target) { paintIcon(target, type); }
+  return {
+    kind: '2d', resize, cellAt, draw, addEvents, tickFx, clearFx, project, snapshot,
+    intro() {}, skipIntro() {}, get introDone() { return true; }, setTitle() {}, setFocus() {}, setLowFx() {},
+    get tile() { return tile; },
+  };
 }
 
 // A tray icon: the tower drawn on a small canvas.

@@ -55,11 +55,17 @@ export function createAudio() {
         else if (ev.e === 'kill' && limited('kill', 45)) tone(PENTA[Math.floor(Math.random() * PENTA.length)], 0.12, { type: 'triangle', gain: ev.type === 'toad' ? 0.2 : 0.07 });
         else if (ev.e === 'leak') tone(110, 0.4, { type: 'sawtooth', gain: 0.08, slide: 0.6 });
         else if (ev.e === 'wave') { tone(392, 0.25, { gain: 0.1 }); tone(523, 0.35, { gain: 0.1, delay: 0.12 }); }
+        else if (ev.e === 'flare') { tone(196, 0.9, { type: 'sawtooth', gain: 0.06, slide: 3 }); [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.7, { type: 'triangle', gain: 0.09, delay: 0.05 + i * 0.04 })); }
       }
     },
     place() { tone(330, 0.1, { type: 'triangle', gain: 0.12, slide: 1.5 }); },
     upgrade() { tone(523, 0.1, { type: 'triangle', gain: 0.1 }); tone(784, 0.16, { type: 'triangle', gain: 0.1, delay: 0.08 }); },
     sell() { tone(440, 0.14, { type: 'triangle', gain: 0.09, slide: 0.6 }); },
+    reveal() { [659, 880, 1175].forEach((f, i) => tone(f, 0.5, { type: 'sine', gain: 0.08, delay: i * 0.1 })); },
+    charged() { tone(784, 0.2, { type: 'sine', gain: 0.07 }); tone(1175, 0.4, { type: 'sine', gain: 0.07, delay: 0.1 }); },
+    branch() { [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, 0.35, { type: 'triangle', gain: 0.09, delay: i * 0.06 })); },
+    callout() { tone(587, 0.15, { type: 'triangle', gain: 0.06 }); tone(880, 0.25, { type: 'triangle', gain: 0.06, delay: 0.08 }); },
+    perk() { [523, 784, 1047, 1568].forEach((f, i) => tone(f, 0.5, { type: 'sine', gain: 0.08, delay: i * 0.08 })); },
     nope() { tone(180, 0.12, { type: 'square', gain: 0.04 }); },
     won(stars) { [523, 659, 784, 1047].slice(0, 1 + stars).forEach((f, i) => tone(f, 0.4, { type: 'triangle', gain: 0.12, delay: i * 0.13 })); },
     lost() { [392, 330, 262].forEach((f, i) => tone(f, 0.5, { type: 'sine', gain: 0.12, delay: i * 0.2 })); },
