@@ -28,21 +28,26 @@ function fakeSpeech(): void {
   let hold = true;
   const pending: any[] = [];
   const w = window as any;
-  const calls: { text: string; volume: number; sync: boolean }[] = [];
+  const calls: { text: string; volume: number; sync: boolean; rate: number; pitch: number }[] = [];
+  const times: { text: string; start: number; end: number | null }[] = [];
   const plays: { src: string; sync: boolean }[] = [];
   const realPlay = HTMLMediaElement.prototype.play;
   HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { plays.push({ src: this.src, sync: w.__sync === true }); return realPlay.call(this); };
   const fake = {
     speak(u: any) {
-      calls.push({ text: u.text, volume: u.volume, sync: w.__sync === true });
+      calls.push({ text: u.text, volume: u.volume, sync: w.__sync === true, rate: u.rate, pitch: u.pitch });
       if (u.text.trim() === '') return; // the silent priming utterance
+      const t = { text: u.text, start: performance.now(), end: null as number | null };
+      times.push(t);
+      const end = u.onend;
+      u.onend = (e: unknown) => { t.end = performance.now(); end?.call(u, e); };
       log.push(u.text); pending.push(u); if (!hold) setTimeout(() => u.onend?.(), 10);
     },
     cancel() { log.push('<cancel>'); pending.length = 0; },
     getVoices: () => [], addEventListener() {}, removeEventListener() {}, pause() {}, resume() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => fake });
-  (window as any).__fakeSpeech = { log, calls, plays, release() { hold = false; for (const u of pending.splice(0)) u.onend?.(); } };
+  (window as any).__fakeSpeech = { log, calls, plays, times, release() { hold = false; for (const u of pending.splice(0)) u.onend?.(); } };
 }
 
 async function open(query = '?hal', contextOptions = PHONE): Promise<{ page: Page; hal: HalContext }> {
@@ -143,7 +148,7 @@ describe('block barn page', () => {
     });
   }
 
-  it('tapping block C names it and starts speaking within 100 ms: "C c", then "cow"', async () => {
+  it('tapping block C names it and starts speaking within 100 ms: "C.", then "c.", then "cow", 700 ms apart, slow and natural', async () => {
     const { page } = await open();
     await seedWith(page, 'c');
     await page.evaluate(() => {
@@ -163,11 +168,31 @@ describe('block barn page', () => {
     await page.waitForFunction(() => (window as any).__t.ok !== undefined, null, { timeout: 2000 });
     const t = await page.evaluate(() => (window as any).__t);
     expect(t.ok - t.up).toBeLessThan(100);
-    expect(await said(page)).toContain('C c');
+    expect((await said(page)).filter((x) => x !== '<cancel>')).toEqual(['C.']); // the capital on its own; the rest waits for it to end
     await page.evaluate(() => (window as any).__fakeSpeech.release());
-    await page.waitForFunction(() => (window as any).__fakeSpeech.log.includes('cow'));
+    await page.waitForFunction(() => (window as any).__fakeSpeech.log.includes('moo'), null, { timeout: 5000 });
+    expect((await said(page)).filter((x) => x !== '<cancel>')).toEqual(['C.', 'c.', 'cow', 'moo']);
+    const times: { text: string; start: number; end: number }[] = await page.evaluate(() => (window as any).__fakeSpeech.times);
+    for (let i = 1; i < times.length; i++) expect(times[i]!.start - times[i - 1]!.end, `gap before ${times[i]!.text}`).toBeGreaterThanOrEqual(700);
+    const calls: { text: string; rate: number; pitch: number }[] = await page.evaluate(() => (window as any).__fakeSpeech.calls);
+    for (const c of calls.filter((x) => x.text.trim() !== '')) { expect(c.rate).toBeCloseTo(0.7, 5); expect(c.pitch).toBeCloseTo(1, 5); } // the browser keeps them as float32
+  });
+
+  it('a new tap during a gap cancels the rest of the old line', async () => {
+    const { page } = await open();
+    await seedWith(page, 'c');
+    await page.evaluate(() => (window as any).__fakeSpeech.release()); // speech ends by itself from here on
+    await tapBlock(page, 'c');
+    await page.waitForFunction(() => (window as any).__fakeSpeech.times.some((t: any) => t.text === 'C.' && t.end !== null));
+    const other = (await state(page)).floor.find((l) => l !== 'c')!;
+    await tapBlock(page, other); // inside the 700 ms gap before "c."
+    await page.waitForFunction((l) => (window as any).__fakeSpeech.log.includes(`${l}.`), other, { timeout: 5000 });
+    await page.waitForTimeout(2500);
     const log = (await said(page)).filter((x) => x !== '<cancel>');
-    expect(log.indexOf('C c')).toBeLessThan(log.indexOf('cow'));
+    expect(log[0]).toBe('C.');
+    expect(log).not.toContain('c.');
+    expect(log).not.toContain('cow');
+    expect(log).toContain(`${other.toUpperCase()}.`);
   });
 
   it('a tap near a block (not on it) still answers', async () => {

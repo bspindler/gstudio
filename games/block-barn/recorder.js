@@ -14,6 +14,8 @@ export function createRecorder(env = globalThis) {
   let noStorage = false;
   let dbp = null;
   const urls = new Map(); // key -> object URL handed out by get()
+  let known = null; // the keys that have a recording, read once (null until read, or if the read failed)
+  let knownP = null;
   let rec = null; // the one recording in progress: { key, mr, stream, chunks, done, timer, stopped }
   const listeners = new Set();
   const notify = () => { for (const f of listeners) { try { f(); } catch (e) { /* a listener's problem */ } } };
@@ -126,14 +128,29 @@ export function createRecorder(env = globalThis) {
     return blob;
   }
 
+  // One read of the recorded keys, so a tap on a letter with no recording never touches the database.
+  function loadKnown() {
+    if (!knownP) {
+      knownP = run('readonly', (os) => os.getAllKeys()).then(
+        (ks) => { known = new Set(ks.map(String)); },
+        () => { known = null; knownP = null; }, // try again next time
+      );
+    }
+    return knownP;
+  }
+
   async function keep(key, blob) {
     await run('readwrite', (os) => os.put(blob, key));
     forget(key);
+    await loadKnown();
+    if (known) known.add(key);
   }
 
   async function get(key) {
     if (urls.has(key)) return urls.get(key);
     if (!available().ok && (noStorage || !env.isSecureContext)) return null;
+    await loadKnown();
+    if (known && !known.has(key)) return null;
     let blob;
     try { blob = await run('readonly', (os) => os.get(key)); } catch (e) { return null; }
     if (!(blob instanceof Blob) || !blob.size) return null;
@@ -146,10 +163,13 @@ export function createRecorder(env = globalThis) {
   async function reset(key) {
     await run('readwrite', (os) => os.delete(key));
     forget(key);
+    await loadKnown();
+    if (known) known.delete(key);
   }
 
   async function keys() {
-    try { return (await run('readonly', (os) => os.getAllKeys())).map(String); } catch (e) { return []; }
+    try { await loadKnown(); } catch (e) { /* openDb failed */ }
+    return known ? [...known] : [];
   }
 
   // Open the database straight away, so a browser that can't keep recordings is known before anyone taps record.
@@ -210,6 +230,7 @@ export function mountVoices(section, o) {
   const fresh = new Map(); // key -> Blob recorded but not yet kept
   let busy = null; // key being recorded
   let failed = null; // key whose last start failed for a passing reason
+  let unkept = null; // key whose last keep failed
 
   if (!doc.getElementById('voices-css')) {
     const st = doc.createElement('style');
@@ -245,6 +266,7 @@ export function mountVoices(section, o) {
     stop();
     fresh.delete(key);
     failed = null;
+    unkept = null;
     busy = key;
     render();
     try { await recorder.start(key); } catch (e) {
@@ -282,12 +304,13 @@ export function mountVoices(section, o) {
     const blob = fresh.get(key);
     if (!blob) return;
     stop();
+    unkept = null;
     try {
       await recorder.keep(key, blob);
       fresh.delete(key);
       mine.add(key);
       onChange(key);
-    } catch (e) { /* the browser refused: available() now says why */ }
+    } catch (e) { unkept = key; } // the browser refused; the new recording is still here to try again
     render();
   }
   async function toDefault(key) {
@@ -299,7 +322,7 @@ export function mountVoices(section, o) {
 
   function stateText(key) {
     if (busy === key) return recorder.recording() ? 'Recording… (up to 6 s)' : 'Starting the microphone…';
-    if (fresh.has(key)) return 'New recording: keep it?';
+    if (fresh.has(key)) return unkept === key ? "Couldn't keep this recording. Try again." : 'New recording: keep it?';
     if (failed === key) return "Couldn't start the microphone. Try again.";
     return mine.has(key) ? 'Your voice' : 'Default voice';
   }

@@ -380,18 +380,12 @@ const recorder = createRecorder();
 const voice = createVoice({ audio: clipPlayer, synth: window.speechSynthesis || null, recordings: (key) => recorder.get(key), base: './' });
 let speaking = null; // the key being spoken, or null
 let talkId = 0;
+// A line is said in parts (capital, small letter, name, noise) with a pause between; a new tap cancels the rest.
 function talk(lines) {
   const mine = ++talkId;
   if (!soundOn) { voice.stop(); speaking = null; return; }
   speaking = lines[0][0]; // set now, inside the tap, so the response is immediate
-  (async () => {
-    for (const [key, text] of lines) {
-      if (mine !== talkId) return;
-      speaking = key;
-      await voice.say(key, text);
-    }
-    if (mine === talkId) speaking = null;
-  })();
+  voice.sayAll(lines, (key) => { if (mine === talkId) speaking = key; }).then(() => { if (mine === talkId) speaking = null; });
 }
 function hush_voice() { talkId++; voice.stop(); speaking = null; stopHearing(); }
 // "Hear it" in the grown-up corner plays a recording through the same shared element as the barn's clips.
@@ -402,7 +396,9 @@ function hearBack(url) {
   const h = (hearing = clipPlayer(url));
   return h.play().finally(() => { if (hearing === h) hearing = null; });
 }
-const letterLine = (l) => [`letter-${l}`, `${l.toUpperCase()} ${l}`];
+// Capital and small letter as two utterances ("C." then "c."), so each is read as a letter name, never as one word.
+// A recording or clip of letter-<x> stands for both.
+const letterLine = (l) => [`letter-${l}`, [`${l.toUpperCase()}.`, `${l}.`]];
 const nameLines = (l) => {
   const a = BY[l];
   const out = [[`name-${l}`, a.name]];
@@ -872,10 +868,11 @@ setInterval(() => {
 }, 250);
 
 // ---------- leaving the tab stops the voice ----------
+// ...and stops a recording in progress, so the microphone is never left on in the background.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') { hush_voice(); if (ac) ac.suspend().catch(() => {}); }
+  if (document.visibilityState === 'hidden') { hush_voice(); voicesList.close(); if (ac) ac.suspend().catch(() => {}); }
 });
-addEventListener('pagehide', () => hush_voice());
+addEventListener('pagehide', () => { hush_voice(); voicesList.close(); });
 
 // ---------- start ----------
 for (let k = 0; k < 5; k++) slotsEl.append(makeSlot());

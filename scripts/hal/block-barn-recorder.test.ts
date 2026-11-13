@@ -46,6 +46,26 @@ const denyMic = () => {
 const breakIndexedDb = () => {
   Object.defineProperty(IDBFactory.prototype, 'open', { configurable: true, value() { throw new DOMException('no', 'InvalidStateError'); } });
 };
+// Keeps every microphone stream handed out, so a test can see its tracks end.
+const watchMic = () => {
+  const md = navigator.mediaDevices;
+  const real = md.getUserMedia.bind(md);
+  const w = window as any;
+  w.__streams = [];
+  md.getUserMedia = async (c?: MediaStreamConstraints) => { const st = await real(c); w.__streams.push(st); return st; };
+};
+// Every put aborts its transaction: the browser refuses to keep the recording.
+const failPut = () => {
+  const real = IDBObjectStore.prototype.put;
+  IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...a: [unknown, IDBValidKey?]) { const r = real.apply(this, a); this.transaction.abort(); return r; };
+};
+// Counts IndexedDB transactions.
+const countTx = () => {
+  const real = IDBDatabase.prototype.transaction;
+  const w = window as any;
+  w.__tx = 0;
+  IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...a: any[]) { w.__tx++; return (real as any).apply(this, a); } as any;
+};
 const insecure = () => { Object.defineProperty(window, 'isSecureContext', { configurable: true, get: () => false }); };
 
 async function open(...init: (() => void)[]): Promise<{ page: Page; hal: HalContext }> {
@@ -147,8 +167,8 @@ describe('block barn: grown-ups record their own voice', () => {
     await goto(page);
     await seedWith(page, 'c');
     await tap(page, await find(page, 'block', 'c'));
-    await expect.poll(() => said(page)).toEqual(['C c']);
-    await release(page); // the letter is spoken (no bundled clip yet); then the name is the recording
+    await expect.poll(() => said(page)).toEqual(['C.']);
+    await release(page); // the letter is spoken, capital then small (no bundled clip yet); then the name is the recording
     await expect.poll(() => playedRecordings(page), { timeout: 5000 }).toHaveLength(1);
     await expect.poll(() => said(page), { timeout: 8000 }).toContain('moo'); // the noise follows once the recording ends
     expect(await said(page)).not.toContain('cow');
@@ -181,7 +201,7 @@ describe('block barn: grown-ups record their own voice', () => {
     await goto(page);
     await seedWith(page, 'c');
     await tap(page, await find(page, 'block', 'c'));
-    await expect.poll(() => said(page)).toEqual(['C c']);
+    await expect.poll(() => said(page)).toEqual(['C.']);
     await release(page);
     await expect.poll(() => said(page), { timeout: 5000 }).toContain('cow');
     expect(await playedRecordings(page)).toEqual([]);
@@ -200,7 +220,7 @@ describe('block barn: grown-ups record their own voice', () => {
     await closeCorner(page);
     await seedWith(page, 'c');
     await tap(page, await find(page, 'block', 'c'));
-    await expect.poll(() => said(page)).toEqual(['C c']);
+    await expect.poll(() => said(page)).toEqual(['C.']);
     expect(hal.consoleErrors).toEqual([]);
   });
 
@@ -214,7 +234,53 @@ describe('block barn: grown-ups record their own voice', () => {
     await closeCorner(page);
     await seedWith(page, 'c');
     await tap(page, await find(page, 'block', 'c'));
-    await expect.poll(() => said(page)).toEqual(['C c']);
+    await expect.poll(() => said(page)).toEqual(['C.']);
+    expect(hal.consoleErrors).toEqual([]);
+  });
+
+  for (const how of ['visibilitychange', 'pagehide'] as const) {
+    it(`the tab hiding (${how}) stops a recording in progress and turns the microphone off`, async () => {
+      const { page, hal } = await open(watchMic);
+      await openCorner(page);
+      await voices(page).getByRole('button', { name: 'C c', exact: true }).tap();
+      const name = row(page, /name.*cow/i);
+      await name.getByRole('button', { name: /^record$/i }).tap();
+      await name.getByRole('button', { name: /^stop$/i }).waitFor({ timeout: 5000 });
+      const live = () => page.evaluate(() => (window as any).__streams.flatMap((st: MediaStream) => st.getTracks()).filter((t: MediaStreamTrack) => t.readyState === 'live').length);
+      expect(await live()).toBeGreaterThan(0);
+      await page.evaluate((h) => {
+        if (h === 'pagehide') { dispatchEvent(new Event('pagehide')); return; }
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }, how);
+      await expect.poll(live, { timeout: 3000 }).toBe(0);
+      await expect(name.getByRole('button', { name: /^stop$/i }).count()).resolves.toBe(0);
+      expect(hal.consoleErrors).toEqual([]);
+    });
+  }
+
+  it('keep failing (the transaction aborts) says so on that row, and the recording can be kept again', async () => {
+    const { page, hal } = await open(failPut);
+    await recordCow(page);
+    const name = row(page, /name.*cow/i);
+    await name.getByRole('button', { name: /^keep$/i }).tap();
+    await name.getByText("Couldn't keep this recording. Try again.").waitFor({ timeout: 5000 });
+    await expect(name.getByRole('button', { name: /^keep$/i }).isVisible()).resolves.toBe(true);
+    await expect(name.getByText(/your voice/i).count()).resolves.toBe(0);
+    expect(hal.consoleErrors).toEqual([]);
+  });
+
+  it('tapping a letter with no recording does no IndexedDB read', async () => {
+    const { page, hal } = await open(countTx);
+    await page.waitForFunction(() => (window as any).__tx >= 1, null, { timeout: 5000 }); // the one load of recorded keys
+    await page.waitForTimeout(300);
+    await seedWith(page, 'c');
+    const before = await page.evaluate(() => (window as any).__tx);
+    await tap(page, await find(page, 'block', 'c'));
+    await release(page);
+    await expect.poll(() => said(page), { timeout: 8000 }).toContain('moo');
+    expect(await page.evaluate(() => (window as any).__tx)).toBe(before);
     expect(hal.consoleErrors).toEqual([]);
   });
 
