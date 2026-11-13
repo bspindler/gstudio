@@ -2,11 +2,12 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
-## 0.3.3 (2026-11-13)
+## 0.4.0 (2026-11-13)
 - A brass tick now flashes at the screen edge to show which direction damage came from.
 - Picking up the gear key now gives a brass glow around the screen edge and a clockwork ratchet-and-bell chime.
 - Wrecked clockwork foes now burst into a puff of brass steam and tumbling cogs.
 - Exit arches now glow brass with a slowly turning ring of cogs once you pick up the gear key.
+- New level 4, Press Gallery: a long brass gallery where gear presses thump in a steady, learnable wave. Each one glows hot just before it slams.
 
 ## 0.3.2 (2026-11-12)
 - A small brass compass on the HUD now points to the gear key, then to the exit arch once you hold the key.

@@ -6,11 +6,12 @@
 //   Doors:  D door (opens when you walk up)   K locked door (needs the gear key)
 //   Things: S start   k gear key   h repair crystal   a shell pack   w scatter cannon
 //           o volatile energy cell (shoot it; chains)
+//           u gear press (floor plate that thumps on a fixed beat; see press.js)
 //           d wisp drone (shoots)   c tick crawler (bites up close)   b kilnwarden (tough, shoots spreads)
 // packages/core/test/gearhold-levels.test.ts checks that every level is sealed and finishable.
 
 export const WALLS = '#MPX';
-export const FLOOR_THINGS = 'khawdcbo';
+export const FLOOR_THINGS = 'khawdcbou';
 
 export const LEVELS = [
   {
@@ -93,6 +94,25 @@ export const LEVELS = [
       '#.......#..........#.....#',
       '#..a....#..........#....h#',
       '##########################',
+    ],
+  },
+  {
+    name: 'Press Gallery',
+    hint: 'Brass presses thump in a steady wave. Cross while one rests; a hot glow means it is about to slam.',
+    mood: {
+      skyTop: [0.12, 0.2, 0.42], skyHorizon: [0.92, 0.7, 0.42], cloud: [0.95, 0.82, 0.7],
+      sunDir: [-0.4, 0.3, 0.55], sunColor: [1.6, 1.15, 0.7],
+      ambient: [0.46, 0.5, 0.66], ground: [0.4, 0.3, 0.2], lamp: [1.0, 0.72, 0.38], crystal: [0.95, 0.75, 0.3],
+      fog: 0.017, stars: 0,
+    },
+    map: [
+      '################################################',
+      '#S...#MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM#.h....#',
+      '#....#...u...u...u.h.u...u...u...u..u...#......#',
+      '#.w..D...u.d.u...u.c.u...u.d.u.c.u..u...D..d...X',
+      '#....#...u...u...u...u...u...u...u..u...#......#',
+      '#.a..#MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM#....a.#',
+      '################################################',
     ],
   },
 ];

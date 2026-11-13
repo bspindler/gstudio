@@ -162,6 +162,7 @@
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { LEVELS, WALLS } from './levels.js';
+import { PRESS, pressState } from './press.js';
 import { createRenderer, M4 } from './render3d.js';
 import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildScenery, buildArmillary } from './models.js';
 import { buildGuns, gunTriangles } from './gun3d.js';
@@ -171,7 +172,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.3.3', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.4.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -252,6 +253,7 @@ const sfx = {
   },
   door() { noise(0.8, 0.09, 300); tone(90, 70, 0.7, 'sawtooth', 0.03); },
   bite() { noise(0.1, 0.18, 2400); tone(300, 120, 0.08, 'square', 0.05); },
+  thump() { noise(0.22, 0.2, 240); tone(75, 38, 0.22, 'sine', 0.12); },
   locked() { tone(150, 130, 0.14, 'square', 0.07); tone(120, 100, 0.18, 'square', 0.07, 0.15); },
   exit() { [523, 659, 784, 1046].forEach((f, i) => tone(f, f * 1.01, 0.35, 'triangle', 0.1, i * 0.09)); },
   die() { tone(400, 40, 1.2, 'sawtooth', 0.12); noise(1.0, 0.2, 400); },
@@ -285,7 +287,7 @@ try { sens = Math.max(0.3, Math.min(3, Number(localStorage.getItem('gearhold.sen
 const viewLook = () => P.look + P.kick;
 
 let level = 0, mw = 0, mh = 0, grid = [], doorOpen = new Float32Array(0), doorMoving = new Uint8Array(0);
-let enemies = [], items = [], shots = [], fx = [], foes = 0;
+let enemies = [], items = [], shots = [], fx = [], foes = 0, presses = [];
 let hitFx = 0, hitDeg = 0;
 let kills = 0, levelTime = 0, noiseRadius = 0, msgTime = 0, lockedNag = 0, hurtFx = 0, glowFx = 0, keyFx = 0, shake = 0;
 let mode = 'title';
@@ -309,12 +311,13 @@ function loadLevel(i) {
   grid = new Array(mw * mh);
   doorOpen = new Float32Array(mw * mh);
   doorMoving = new Uint8Array(mw * mh);
-  enemies = []; items = []; shots = []; fx = [];
+  enemies = []; items = []; shots = []; fx = []; presses = [];
   Object.assign(P, { hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, recoil: 0, flash: 0, vx: 0, vy: 0, av: 0, look: 0, kick: 0, hitMark: 0, tracer: 0 });
   for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
     const c = map[y][x];
-    grid[y * mw + x] = c === 'S' || STATS[c] || ITEM_KINDS.includes(c) ? '.' : c;
-    if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
+    grid[y * mw + x] = c === 'S' || c === 'u' || STATS[c] || ITEM_KINDS.includes(c) ? '.' : c;
+    if (c === 'u') presses.push({ x, y, was: 'open', hit: false });
+    else if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
       enemies.push({ kind: c, ...STATS[c], x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0 });
     } else if (ITEM_KINDS.includes(c)) items.push({ id: items.length, kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
@@ -549,6 +552,13 @@ function render(now) {
   const lampC = lin(mood.lamp, 0.55);
   for (const [x, y] of G.lamps) bb.push({ p: [x + 0.5, 1.75, y + 0.5], size: 0.7, c: lampC, a: 0.6, add: 1 });
   for (const e of G.emitters) bb.push({ p: e.p, size: e.kind === 'exit' ? 1.4 : 0.9, c: lin(e.c, 0.35), a: 0.5, add: 1 });
+  for (const p of presses) {
+    // Brass plate: dim while resting, hot orange while warning, a white-gold flash on the slam.
+    const st = pressState(levelTime, p.x), pos = [p.x + 0.5, 0.06, p.y + 0.5];
+    if (st === 'open') bb.push({ p: pos, size: 0.9, c: [0.9, 0.62, 0.2], a: 0.3, add: 1 });
+    else if (st === 'warn') bb.push({ p: pos, size: 1.15, c: [2.6, 0.7, 0.15], a: 0.85, add: 1 });
+    else bb.push({ p: [pos[0], 0.3, pos[2]], size: 1.5, c: [3, 2.4, 1.2], a: 1, add: 1 });
+  }
   if (P.key) {
     // Key in hand: each exit arch glows brass and a slow ring of small cogs turns around it.
     for (const e of G.emitters) {
@@ -917,6 +927,16 @@ function updateWorld(dt) {
     else if (it.kind === 'w') { P.scatter = true; P.weapon = 1; P.shells = Math.min(50, P.shells + 8); say(coarse ? 'Scatter cannon! Tap SWAP to switch.' : 'Scatter cannon! Press 1 / 2 to switch.'); }
     items.splice(i, 1); sfx.pickup(); glowFx = 1;
     if (it.kind === 'k') { keyFx = 1; sfx.keyChime(); saveCheckpoint(); }
+  }
+
+  // Gear presses: a steady beat. Standing on a plate as it slams costs a little integrity, once per slam.
+  for (const p of presses) {
+    const st = pressState(levelTime, p.x);
+    if (st === 'down') {
+      if (p.was !== 'down' && Math.hypot(P.x - p.x - 0.5, P.y - p.y - 0.5) < 9) sfx.thump();
+      if (!p.hit && px0 === p.x && py0 === p.y) { p.hit = true; shake = Math.max(shake, 0.35); hurt(PRESS.dmg, false, p.x + 0.5, p.y + 0.5); if (mode !== 'play') return; }
+    } else p.hit = false;
+    p.was = st;
   }
 
   for (let y = py0 - 1; y <= py0 + 1; y++) for (let x = px0 - 1; x <= px0 + 1; x++) {
