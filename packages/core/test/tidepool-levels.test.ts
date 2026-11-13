@@ -8,13 +8,14 @@ import {
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
-describe('tidepool levels: hand-authored 1-20', () => {
-  it('has exactly 20 levels, numbered in order', () => {
-    expect(AUTHORED).toHaveLength(20);
+// New hand-made levels are welcome (Brian declines them, not a test): check every one, never a count.
+describe('tidepool levels: hand-authored', () => {
+  it('has the original 20 levels or more, numbered in order', () => {
+    expect(AUTHORED.length).toBeGreaterThanOrEqual(20);
     AUTHORED.forEach((d, i) => expect(d.n).toBe(i + 1));
   });
 
-  it.each(range(1, 20))('level %i is solvable-shaped, with tides on and off', (n) => {
+  it.each(range(1, AUTHORED.length))('level %i is solvable-shaped, with tides on and off', (n) => {
     const def = levelDef(n);
     expect(validateLevel(def)).toEqual([]);
     expect(validateLevel(withoutTides(def))).toEqual([]);
