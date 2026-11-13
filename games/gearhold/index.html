@@ -549,6 +549,18 @@ function render(now) {
   const lampC = lin(mood.lamp, 0.55);
   for (const [x, y] of G.lamps) bb.push({ p: [x + 0.5, 1.75, y + 0.5], size: 0.7, c: lampC, a: 0.6, add: 1 });
   for (const e of G.emitters) bb.push({ p: e.p, size: e.kind === 'exit' ? 1.4 : 0.9, c: lin(e.c, 0.35), a: 0.5, add: 1 });
+  if (P.key) {
+    // Key in hand: each exit arch glows brass and a slow ring of small cogs turns around it.
+    for (const e of G.emitters) {
+      if (e.kind !== 'exit') continue;
+      const pulse = 0.85 + Math.sin(t * 2) * 0.15;
+      bb.push({ p: e.p, size: 2.6 * pulse, c: [1.5, 0.95, 0.3], a: 0.55, add: 1 });
+      for (let i = 0; i < 8; i++) {
+        const ang = t * 0.6 + i * Math.PI / 4;
+        bb.push({ p: [e.p[0] + Math.cos(ang) * 0.75, e.p[1], e.p[2] + Math.sin(ang) * 0.75], size: 0.16, c: [2.2, 1.4, 0.4], a: 0.9, add: 1 });
+      }
+    }
+  }
   if (hal.overhead) {
     // Hal's layout shots: a bright marker over each live machine (red), repair crystal (green) and key (gold), so a
     // placement change reads at a glance from above. Never drawn in play.
