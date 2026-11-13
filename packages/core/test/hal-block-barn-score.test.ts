@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, scoreBlockBarn, type BlockBarnPage, type BlockBarnRecord,
+  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, scoreBlockBarn, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize,
 } from '../src/hal/block-barn-score.js';
 import { blockBarnScorer, SCORERS } from '../src/hal/scorers.js';
 
@@ -11,8 +11,12 @@ const rec = (over: Partial<BlockBarnRecord> = {}): BlockBarnRecord => ({ kind: '
 const good = (): BlockBarnRecord[] => (['390x844', '1024x768'] as const).flatMap((viewport) =>
   (['block', 'block', 'block', 'animal', 'animal', 'tower', 'tower', 'floor', 'floor', 'corner'] as const).map((kind) =>
     rec({ kind, viewport, ...(kind === 'corner' ? { w: 46, h: 46 } : {}) })));
+/** Every target seen before each tap: 9 for her and the corner, per viewport. */
+const sizes = (): BlockBarnTargetSize[] => (['390x844', '1024x768'] as const).flatMap((viewport) =>
+  (['block', 'block', 'block', 'block', 'block', 'animal', 'animal', 'tower', 'floor', 'corner'] as const).map((kind) =>
+    ({ kind, viewport, w: kind === 'corner' ? 46 : 160, h: kind === 'corner' ? 46 : 160 })));
 const page = (over: Partial<BlockBarnPage> = {}): BlockBarnPage => ({
-  letters: [...AZ], voiced: [...AZ], pictured: [...AZ], flashes: 0, masterGain: 0.5, peakGain: 0.12, leftBarn: false, ...over,
+  letters: [...AZ], voiced: [...AZ], pictured: [...AZ], flashes: 0, masterGain: 0.5, peakGain: 0.12, leftBarn: false, targets: sizes(), ...over,
 });
 
 describe('scoreBlockBarn', () => {
@@ -53,17 +57,26 @@ describe('scoreBlockBarn', () => {
     expect(scoreBlockBarn(good(), page({ leftBarn: true })).measures.noDeadEnds).toBe(0);
   });
 
-  it('a 60 px target lowers bigTargets; the grown-up corner (small on purpose) is not counted', () => {
-    const rs = good();
-    rs[12] = { ...rs[12]!, w: 60 }; // a 1024x768 block
-    const r = scoreBlockBarn(rs, page());
+  it('bigTargets counts every target seen, not only the tapped ones; a 60 px one lowers it; the corner (small on purpose) is not counted', () => {
+    const ts = sizes();
+    ts[12] = { ...ts[12]!, w: 60 }; // a 1024x768 block that was never tapped
+    const r = scoreBlockBarn(good(), page({ targets: ts }));
     expect(r.measures.bigTargets).toBeLessThan(100);
-    expect(r.measures.bigTargets).toBeCloseTo((100 * 17) / 18, 2);
-    expect(r.levels[1]!.bigTargets).toBeCloseTo((100 * 8) / 9, 2);
-    expect(scoreBlockBarn(good().map((x) => (x.kind === 'corner' ? { ...x, w: 10, h: 10 } : x)), page()).measures.bigTargets).toBe(100);
+    expect(r.measures.bigTargets).toBeCloseTo((100 * 15) / 16, 2);
+    expect(r.levels[1]!.bigTargets).toBeCloseTo((100 * 7) / 8, 2);
+    expect(scoreBlockBarn(good(), page({ targets: sizes().map((x) => (x.kind === 'corner' ? { ...x, w: 10, h: 10 } : x)) })).measures.bigTargets).toBe(100);
+    // the floor is the bare hay between things: a full barn leaves only a sliver of it
+    expect(scoreBlockBarn(good(), page({ targets: sizes().map((x) => (x.kind === 'floor' ? { ...x, h: 58 } : x)) })).measures.bigTargets).toBe(100);
     // 88 is enough; 87.9 each way is not
-    expect(scoreBlockBarn(good().map((x) => ({ ...x, w: 88, h: 88 })), page()).measures.bigTargets).toBe(100);
-    expect(scoreBlockBarn(good().map((x) => ({ ...x, h: 87.9 })), page()).measures.bigTargets).toBe(0);
+    expect(scoreBlockBarn(good(), page({ targets: sizes().map((x) => ({ ...x, w: 88, h: 88 })) })).measures.bigTargets).toBe(100);
+    expect(scoreBlockBarn(good(), page({ targets: sizes().map((x) => ({ ...x, h: 87.9 })) })).measures.bigTargets).toBe(0);
+  });
+
+  it('a target of a kind the scorer has never heard of is measured like any other, and tapping it is no failure', () => {
+    const r = scoreBlockBarn([...good(), rec({ kind: 'bell', w: 40, h: 40 })], page({ targets: [...sizes(), { kind: 'bell', viewport: '390x844', w: 40, h: 40 }] }));
+    expect(r.hardFailures).toEqual([]);
+    expect(r.measures.bigTargets).toBeCloseTo((100 * 16) / 17, 2);
+    expect(r.levels[0]!.kinds).toContain('bell');
   });
 
   it('a letter with no voice, no picture, or never reached lowers alphabet', () => {
@@ -86,8 +99,10 @@ describe('scoreBlockBarn', () => {
 
   it('reports hard failures: no taps, a missing viewport, a non-finite number', () => {
     expect(() => scoreBlockBarn([], page())).toThrow(/no tap records/);
-    const phoneOnly = scoreBlockBarn(good().filter((x) => x.viewport === '390x844'), page());
-    expect(phoneOnly.hardFailures).toEqual(['no taps at 1024x768']);
+    const phoneOnly = scoreBlockBarn(good().filter((x) => x.viewport === '390x844'), page({ targets: sizes().filter((x) => x.viewport === '390x844') }));
+    expect(phoneOnly.hardFailures).toEqual(['no taps at 1024x768', 'no targets measured at 1024x768']);
+    expect(scoreBlockBarn(good(), page({ targets: [...sizes(), { kind: 'block', viewport: '390x844', w: Number.NaN, h: 1 }] })).hardFailures)
+      .toEqual([expect.stringMatching(/target 20 .*w is not finite/)]);
     const rs = good();
     rs[2] = { ...rs[2]!, ms: Number.NaN };
     const bad = scoreBlockBarn(rs, page());

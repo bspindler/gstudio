@@ -3,15 +3,19 @@
 // every letter turns up with its picture and a voice, and nothing flashes or jumps in volume. Fitness is their mean.
 import type { ScoreReport } from './types.js';
 
-export type BlockBarnKind = 'block' | 'animal' | 'tower' | 'floor' | 'corner';
+/** The hook's target kinds today. A kind the scorer has not heard of (new in the game) is measured like any other. */
+export type BlockBarnKind = 'block' | 'animal' | 'tower' | 'floor' | 'corner' | (string & {});
 export type BlockBarnViewport = '390x844' | '1024x768';
 export const BLOCK_BARN_VIEWPORTS: readonly BlockBarnViewport[] = ['390x844', '1024x768'];
 
 /**
- * One real tap. `ms`: from the pointerup to the first change the page made to its DOM (the runner gives up waiting at
- * 1 s); `changed`: the page changed something in answer; `w`/`h`: the tapped target's box in CSS px.
+ * One real tap. `changed`: the page changed its DOM synchronously while handling this tap's own pointerdown or
+ * pointerup (a change made later, by a timer, never counts); `ms`: from the pointerdown to that change (when nothing
+ * changed, the time the tap's two dispatches took); `w`/`h`: the tapped target's box in CSS px.
  */
 export type BlockBarnRecord = { kind: BlockBarnKind; letter?: string; ms: number; changed: boolean; w: number; h: number; viewport: BlockBarnViewport };
+/** One target as the hook listed it before a tap (every target, in every state visited), in CSS px. */
+export type BlockBarnTargetSize = { kind: BlockBarnKind; viewport: BlockBarnViewport; w: number; h: number };
 
 /** Page-level facts from the run. */
 export type BlockBarnPage = {
@@ -23,9 +27,15 @@ export type BlockBarnPage = {
   pictured: string[];
   /** Animations or transitions of brightness (opacity, colour, filter, shadow) faster than BLOCK_BARN_RULES.flashMs. */
   flashes: number;
-  /** Highest gain the sound effects' master stage reached, and the highest any single sound's own gain reached. */
+  /**
+   * Effective Web Audio gains, as products along every path from a sound source to the speakers: `masterGain` is the
+   * loudest product of the shared stage (gains that more than one source feeds through); `peakGain` is the loudest
+   * moment of everything playing together (each path's full product, summed over the sources sounding at once).
+   */
   masterGain: number;
   peakGain: number;
+  /** Every target seen before each tap. */
+  targets: BlockBarnTargetSize[];
   /** The page navigated away from the barn. */
   leftBarn: boolean;
 };
@@ -41,15 +51,17 @@ export const BLOCK_BARN_ALPHABET_STEPS = 52;
 
 export type BlockBarnViewStats = { viewport: BlockBarnViewport; taps: number; responsive: number; changed: number; bigTargets: number; kinds: BlockBarnKind[] };
 
-const KINDS: readonly string[] = ['block', 'animal', 'tower', 'floor', 'corner'];
 const AZ = 'abcdefghijklmnopqrstuvwxyz'.split('');
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 const pct = (num: number, den: number): number => (den === 0 ? 100 : round2((100 * num) / den));
 
 const quick = (r: BlockBarnRecord): boolean => r.changed && r.ms <= BLOCK_BARN_RULES.responsiveMs;
-/** The grown-up corner is small and tucked away on purpose; every target for her must be palm-sized. */
-const forHer = (r: BlockBarnRecord): boolean => r.kind !== 'corner';
-const big = (r: BlockBarnRecord): boolean => Math.min(r.w, r.h) >= BLOCK_BARN_RULES.minTarget;
+/**
+ * Every target for her must be palm-sized. Not counted: the grown-up corner (small and tucked away on purpose) and
+ * the floor, which is the bare hay left between things, not a thing; a full barn leaves little of it, as it should.
+ */
+const forHer = (r: { kind: string }): boolean => r.kind !== 'corner' && r.kind !== 'floor';
+const big = (r: { w: number; h: number }): boolean => Math.min(r.w, r.h) >= BLOCK_BARN_RULES.minTarget;
 
 export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage): ScoreReport<BlockBarnViewStats> {
   if (records.length === 0) throw new Error('scoreBlockBarn: no tap records');
@@ -59,21 +71,28 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
     let bad = false;
     for (const k of ['ms', 'w', 'h'] as const)
       if (!Number.isFinite(r[k])) { hardFailures.push(`record ${i} (${r.viewport} ${r.kind}): ${k} is not finite`); bad = true; }
-    if (!KINDS.includes(r.kind)) { hardFailures.push(`record ${i}: unknown target kind "${String(r.kind)}"`); bad = true; }
+    if (typeof r.kind !== 'string' || !r.kind) { hardFailures.push(`record ${i}: no target kind`); bad = true; }
     if (!BLOCK_BARN_VIEWPORTS.includes(r.viewport)) { hardFailures.push(`record ${i}: unknown viewport "${String(r.viewport)}"`); bad = true; }
     return !bad;
   });
+  const targets = (page.targets ?? []).filter((t, i) => {
+    let bad = false;
+    for (const k of ['w', 'h'] as const) if (!Number.isFinite(t[k])) { hardFailures.push(`target ${i} (${t.viewport} ${t.kind}): ${k} is not finite`); bad = true; }
+    if (!BLOCK_BARN_VIEWPORTS.includes(t.viewport)) { hardFailures.push(`target ${i}: unknown viewport "${String(t.viewport)}"`); bad = true; }
+    return !bad;
+  });
   for (const v of BLOCK_BARN_VIEWPORTS) if (!records.some((r) => r.viewport === v)) hardFailures.push(`no taps at ${v}`);
+  for (const v of BLOCK_BARN_VIEWPORTS) if (!targets.some((t) => t.viewport === v)) hardFailures.push(`no targets measured at ${v}`);
 
   const levels: BlockBarnViewStats[] = BLOCK_BARN_VIEWPORTS.map((viewport) => {
-    const rs = records.filter((r) => r.viewport === viewport), hers = rs.filter(forHer);
+    const rs = records.filter((r) => r.viewport === viewport), hers = targets.filter((t) => t.viewport === viewport && forHer(t));
     return {
       viewport, taps: rs.length, responsive: pct(rs.filter(quick).length, rs.length), changed: pct(rs.filter((r) => r.changed).length, rs.length),
-      bigTargets: pct(hers.filter(big).length, hers.length), kinds: KINDS.filter((k) => rs.some((r) => r.kind === k)) as BlockBarnKind[],
+      bigTargets: pct(hers.filter(big).length, hers.length), kinds: [...new Set([...rs, ...targets.filter((t) => t.viewport === viewport)].map((r) => r.kind))].sort(),
     };
   });
 
-  const hers = records.filter(forHer);
+  const hers = targets.filter(forHer);
   const has = (xs: string[]) => new Set(xs);
   const reached = has(page.letters), voiced = has(page.voiced), pictured = has(page.pictured);
   const measures = {
