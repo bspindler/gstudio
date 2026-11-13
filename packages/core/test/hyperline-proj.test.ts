@@ -38,6 +38,15 @@ describe('hyperline 3D projection', () => {
     expect(faceVisible([{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 10, y: 0 }])).toBe(false);
   });
 
+  it('the game camera sits straight behind the lane: lane centre projects to screen centre x', async () => {
+    const { cameraFor } = await import('../../../games/hyperline/render.js');
+    const st = { rx: 10, lift: 0, flipT: 0, shakeX: 0, shakeY: 0 };
+    const c = cameraFor(st, 400, 700);
+    expect(c.eye[2]).toBe(0);
+    expect(c.r[2]).toBeCloseTo(1, 5);
+    for (const x of [14, 40, 120]) expect(project(c, x, 0, 0)!.x).toBeCloseTo(200, 3);
+  });
+
   it('rotateXYZ preserves length', () => {
     const [x, y, z] = rotateXYZ([1, 2, 3], 0.3, 1.1, -0.7);
     expect(Math.hypot(x, y, z)).toBeCloseTo(Math.hypot(1, 2, 3));

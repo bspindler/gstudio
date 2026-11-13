@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.5.0 (2026-11-13)
 - New sector: SWEEP COLUMNS. After SLOT GATES you now meet rows of slot gates, a jump apart: thread one, land, and jump again in rhythm. HYPERCORE is now sector 9.
+- Hyperline: the camera now sits straight behind your lane, with the vanishing point at the centre, so obstacles are easier to read.
 
 ## 0.4.1 (2026-11-12)
 - Sound now plays on iPhone even when the ring/silent switch is set to silent. Use the in-game sound setting to turn it off.
