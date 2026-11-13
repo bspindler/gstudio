@@ -14,3 +14,13 @@ Changes:
 
 Changes:
 - HAL-045 feature(gearhold): Gearhold L4 Press Gallery: crystal before the last presses: **discarded** (0.4.0) (before shot failed: exit 1: flow: level 4 from above failed (page.evaluate: TypeError: Cannot read properties of undefined (reading 'map')))
+
+## Run run-2026-11-13T13-34-06-006Z
+
+**Identity:** clockwork citadel of rooms and corridors in brass, with ticks and chimes.
+
+The gear-key pickup now has a brass glow and a ratchet chime, in the same family as the compass and hit ticks you voted up. The Terrace of Dials route change made the level longer (19.5s median) but left pace at 66.7, so it was discarded. gearhold-play holds at 83.05. The screenshot-tool fix and the level 4 retry are still queued.
+
+Changes:
+- HAL-048 tuning(gearhold): Gearhold: seal Terrace of Dials' mid-wall gap for a longer route: **discarded** (0.3.3) (gearhold-play: no real gain: 0.00 < 0.5)
+- HAL-050 polish(gearhold): Gearhold: brass gear-key pickup flash and a clockwork chime: **merged** (0.3.3)

@@ -50,6 +50,31 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-13T13-34-06-006Z",
+      "at": "2026-11-13T13:52:50.777Z",
+      "scorers": {
+        "gearhold": {
+          "fitness": 100,
+          "measures": {
+            "safeStarts": 100,
+            "supplied": 100,
+            "rising": 100,
+            "challenge": 100
+          }
+        },
+        "gearhold-play": {
+          "fitness": 83.05,
+          "measures": {
+            "winnable": 66.67,
+            "fairDamage": 98.84,
+            "pace": 66.67,
+            "feel": 100,
+            "tension": 0
+          }
+        }
+      }
     }
   ]
 }

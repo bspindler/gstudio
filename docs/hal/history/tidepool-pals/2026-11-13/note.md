@@ -15,3 +15,12 @@ Changes:
 Changes:
 - HAL-042 polish(tidepool-pals): Tidepool: shrink the pool panel to a compact strip: **merged** (0.6.0)
 - HAL-043 fix(tidepool-pals): Tidepool: level label clear of the board's bottom edge: **merged** (0.6.0)
+
+## Run run-2026-11-13T13-34-06-006Z
+
+**Identity:** gentle, warm tidepool puzzler with pals to rescue.
+
+The strip pal now wiggles on a level win. It's small, on-tone and adds no assets. The score is unchanged at 88.85. The tension and noWalls gaps remain, and goal easing and move trims are already ruled out, so the next lever is the scorer bot's rescue and tide play (L-013).
+
+Changes:
+- HAL-049 polish(tidepool-pals): Tidepool: pal in the pool strip does a happy wiggle on level win: **merged** (0.6.0)
