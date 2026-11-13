@@ -6,6 +6,7 @@ import {
   callWave, canBuild, canCallWave, createGame, pathCells, place, pointAt, buildPath, sell, starsFor, step, upgrade,
   type Game, type Group, type Level,
 } from '../../../games/lanternkeep/lib/sim.js';
+import { endlessLevel } from '../../../games/lanternkeep/lib/endless.js';
 import { play } from './lanternkeep-bot.js';
 
 // A straight test lane down column 4, lantern at the bottom.
@@ -50,14 +51,14 @@ describe('lanternkeep: building', () => {
     expect(place(g, 'glowcap', 5, 3)).toBe('gold');
   });
 
-  it('upgrades up to the third tier', () => {
+  it('grows twice, then once more into a branch', () => {
     const g = createGame(lane([[['moth', 1, 1]]], { gold: 1000 }));
     place(g, 'glowcap', 3, 3);
     const id = g.towers[0]!.id;
     expect(upgrade(g, id)).toBe('');
-    expect(upgrade(g, id)).toBe('');
-    expect(upgrade(g, id)).toBe('max');
-    expect(g.towers[0]!.spent).toBe(50 + 60 + 110);
+    expect(upgrade(g, id, 'a')).toBe('');
+    expect(upgrade(g, id, 'a')).toBe('max');
+    expect(g.towers[0]!.spent).toBe(50 + 60 + 120);
   });
 
   it('refunds in full before the first wave, then 70%', () => {
@@ -207,7 +208,16 @@ describe('lanternkeep: levels', () => {
     expect(play(level, { maxTowers: 0 }).won).toBe(false);
   });
 
-  it.each(LEVELS.slice(1).map((l, i) => [i + 2, l] as const))('level %i: two towers and no upgrades is not enough', (_n, level) => {
+  // Levels 1-2 are deliberately forgiving: the first minutes should feel good.
+  it.each(LEVELS.slice(2).map((l, i) => [i + 3, l] as const))('level %i: two towers and no upgrades is not enough', (_n, level) => {
     expect(play(level, { maxTowers: 2, upgrades: false }).won).toBe(false);
+  });
+});
+
+describe('lanternkeep: night watch balance', () => {
+  it('a sensible player gets past wave 10, and the night eventually wins', () => {
+    const r = play(endlessLevel());
+    expect(r.wave).toBeGreaterThan(10);
+    expect(r.won).toBe(false);
   });
 });
