@@ -706,4 +706,11 @@ describe('Block Barn guards', () => {
       expect(childDirected(diff([r('games/other/game.yaml')]))).toHaveLength(1);
     });
   });
+  it('renames cannot smuggle content past studio-owned or kid-recorder', () => {
+    const R = (from: string, to: string, text: string): FileChange => ({ path: to, oldPath: from, status: 'R', before: text, after: text, binary: false });
+    expect(kidRecorder(diff([R('games/other/rec.js', 'games/block-barn/rec.js', 'new MediaRecorder(s);\n')])).map((v) => v.rule)).toEqual(['kid-recorder']);
+    expect(kidRecorder(diff([R('games/block-barn/a.js', 'games/block-barn/b.js', 'const a = 1;\n')]))).toEqual([]);
+    expect(studioOwned(diff([R('games/g/a/SOURCES.md', 'games/g/b/SOURCES.md', '| a.m4a | studio-owned |\n')])).map((v) => v.rule)).toEqual(['studio-owned']);
+    expect(studioOwned(diff([R('games/g/a/SOURCES.md', 'games/g/b/SOURCES.md', '| a.png | CC0 |\n')]))).toEqual([]);
+  });
 });

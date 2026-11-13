@@ -473,12 +473,16 @@ export const childDirected: Rule = (diff) => {
   return out;
 };
 
+/** Added lines, except that a file moved to a new path counts every line as added (a rename carries no diff, so it must not smuggle content in). */
+const addedOrMovedLines = (f: FileChange): string[] =>
+  f.oldPath !== undefined && norm(f.oldPath) !== norm(f.path) ? (f.after ?? '').split('\n') : addedLines(f);
+
 // ---- studio-owned --------------------------------------------------------
 
 /** `studio-owned` is a license Hal may never claim: only the studio adds such a SOURCES.md line. */
 export const studioOwned: Rule = (diff) =>
   diff.files.filter((f) => /(?:^|\/)sources\.md$/i.test(norm(f.path))).flatMap((f) =>
-    addedLines(f).filter((l) => /studio-owned/i.test(l)).map((l) => hit('studio-owned', f.path, `added studio-owned entry: ${l.trim().slice(0, 100)}`)));
+    addedOrMovedLines(f).filter((l) => /studio-owned/i.test(l)).map((l) => hit('studio-owned', f.path, `added studio-owned entry: ${l.trim().slice(0, 100)}`)));
 
 // ---- kid-recorder --------------------------------------------------------
 
@@ -486,7 +490,7 @@ const RECORDER_API = /\b(?:getUserMedia|MediaRecorder|indexedDB)\b/;
 /** Microphone capture and recording storage live only in Block Barn's protected recorder.js. */
 export const kidRecorder: Rule = (diff) =>
   diff.files.filter((f) => norm(f.path).startsWith('games/block-barn/') && norm(f.path) !== 'games/block-barn/recorder.js').flatMap((f) =>
-    addedLines(f).filter((l) => RECORDER_API.test(l)).map((l) => hit('kid-recorder', f.path, `recorder API outside recorder.js: ${l.trim().slice(0, 100)}`)));
+    addedOrMovedLines(f).filter((l) => RECORDER_API.test(l)).map((l) => hit('kid-recorder', f.path, `recorder API outside recorder.js: ${l.trim().slice(0, 100)}`)));
 
 // ---- levels, tests, scope -----------------------------------------------
 
