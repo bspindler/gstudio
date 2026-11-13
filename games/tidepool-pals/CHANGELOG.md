@@ -10,6 +10,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - The pal in the pool strip now bobs up with a little cheer whenever a move gets you closer to the level goal.
 - Tidepool Pals: the pal in the pool strip now glances toward the side of the board where you clear a group.
 - Tidepool Pals has a new hand-made level 21: clear the litter along the reef floor and collect Gems while the tide turns.
+- Tidepool Pals are now rounder, cuter sea animals: a crab, starfish, fish, octopus and turtle, each with big shiny eyes, rosy cheeks and a smile.
 
 ## 0.5.3 (2026-11-12)
 - The board now sits right under the goal bar instead of floating in the middle, so the spare water collects in one calm band above the tabs.

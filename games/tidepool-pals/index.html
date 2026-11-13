@@ -536,19 +536,32 @@ ${TC.map(([b, l, d], i) => `<radialGradient id="tg${i}" cx="36%" cy="28%" r="82%
 </defs></svg>`);
 
 function starPts(cx, cy, R, r) { const p = []; for (let i = 0; i < 10; i++) { const a = (-90 + 36 * i) * Math.PI / 180, rr = i % 2 ? r : R; p.push((cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1)); } return p.join(' '); }
+// Cartoon pals, drawn in code: 0 crab, 1 starfish, 2 fish, 3 octopus, 4 turtle. Each keeps its colour.
+// Each entry: parts drawn behind the body (fins, claws, flippers), the body, and parts in front (shell marks).
 const SHAPES = [
-  (a) => `<circle cx="20" cy="20" r="15.5" ${a}/>`,
-  (a) => `<polygon points="${starPts(20, 21.5, 17.5, 8.8)}" stroke-linejoin="round" ${a}/>`,
-  (a) => `<path d="M20 3.5C28 14 33.5 20 33.5 26.5A13.5 13.5 0 0 1 6.5 26.5C6.5 20 12 14 20 3.5Z" ${a}/>`,
-  (a) => `<path d="M20 3.5L36.5 20L20 36.5L3.5 20Z" stroke-linejoin="round" ${a}/>`,
-  (a) => `<rect x="5" y="5" width="30" height="30" rx="10" ${a}/>`];
-const EYE_Y = [21, 22.5, 26, 21, 21];
-const SPEC = [[14, 12], [14.5, 14], [14, 20], [14.5, 13], [14, 12]];
-const eyes = (y) => `<circle cx="16" cy="${y}" r="2.4" fill="#14202B"/><circle cx="24" cy="${y}" r="2.4" fill="#14202B"/><circle cx="16.8" cy="${y - .8}" r=".85" fill="#fff"/><circle cx="24.8" cy="${y - .8}" r=".85" fill="#fff"/>`;
+  { back: (a) => `<circle cx="6.5" cy="12" r="4.6" ${a}/><circle cx="33.5" cy="12" r="4.6" ${a}/><path d="M4 7l3 3.2M36 7l-3 3.2" stroke="#fff" stroke-opacity=".5" stroke-width="1.6" stroke-linecap="round"/>`,
+    body: (a) => `<ellipse cx="20" cy="22" rx="15.5" ry="13.5" ${a}/>` },
+  { back: () => '',
+    body: (a) => `<polygon points="${starPts(20, 21.5, 16, 9.5)}" stroke-linejoin="round" ${a}/>` },
+  { back: (a) => `<path d="M28 21L38 11Q39.5 21 38 31Z" stroke-linejoin="round" ${a}/><path d="M14 10Q20 2.5 25 9Z" stroke-linejoin="round" ${a}/>`,
+    body: (a) => `<ellipse cx="18" cy="21" rx="14.5" ry="12.5" ${a}/>` },
+  { back: (a) => [8.5, 15.5, 24.5, 31.5].map((x, k) => `<circle cx="${x}" cy="${31 + (k % 2) * 1.5}" r="3.8" ${a}/>`).join(''),
+    body: (a) => `<ellipse cx="20" cy="18.5" rx="14.5" ry="14" ${a}/>` },
+  { back: (a) => [[6, 9], [34, 9], [6, 30], [34, 30]].map(([x, y]) => `<ellipse cx="${x}" cy="${y}" rx="4.6" ry="3.6" ${a}/>`).join(''),
+    body: (a) => `<rect x="6" y="5" width="28" height="29" rx="12" ${a}/>`,
+    front: '<path d="M13 31q7-5 14 0M20 27.5v4.5" fill="none" stroke="#378824" stroke-opacity=".55" stroke-width="1.6" stroke-linecap="round"/>' }];
+const FACE = [[20, 21], [20, 23], [16.5, 21], [20, 19], [20, 17]]; // eye-centre x, y per pal
+const SPEC = [[13, 14], [14.5, 14], [11.5, 14.5], [13.5, 10], [13, 10]];
+const face = (cx, y) => {
+  const L = cx - 5.4, R = cx + 5.4;
+  const eye = (x) => `<circle cx="${x}" cy="${y}" r="3.9" fill="#fff" stroke="#14202B" stroke-width=".7"/><circle cx="${x + .3}" cy="${y + .4}" r="2.6" fill="#14202B"/><circle cx="${x + 1.2}" cy="${y - .7}" r="1.1" fill="#fff"/><circle cx="${x - .7}" cy="${y + 1.3}" r=".55" fill="#fff"/>`;
+  return `<ellipse cx="${L - 2.6}" cy="${y + 4.6}" rx="2.4" ry="1.5" fill="#FF8FA3" opacity=".6"/><ellipse cx="${R + 2.6}" cy="${y + 4.6}" rx="2.4" ry="1.5" fill="#FF8FA3" opacity=".6"/>${eye(L)}${eye(R)}<path d="M${cx - 2.6} ${y + 5}q2.6 2.8 5.2 0" fill="none" stroke="#14202B" stroke-width="1.4" stroke-linecap="round"/>`;
+};
 const SHADOW = '<ellipse cx="20" cy="37" rx="13" ry="3.2" fill="url(#tsh)"/>';
 function tileSVG(i) {
-  const [sx, sy] = SPEC[i];
-  return `<svg viewBox="0 0 40 40">${SHADOW}${SHAPES[i](`fill="url(#tg${i})" stroke="${TC[i][2]}" stroke-width="1.6"`)}<ellipse cx="${sx}" cy="${sy}" rx="6.2" ry="3.6" fill="url(#tspec)" transform="rotate(-28 ${sx} ${sy})"/>${eyes(EYE_Y[i])}</svg>`;
+  const [sx, sy] = SPEC[i], [fx, fy] = FACE[i], P = SHAPES[i], d = TC[i][2];
+  const edge = `stroke="${d}" stroke-width="1.6"`;
+  return `<svg viewBox="0 0 40 40">${SHADOW}${P.back(`fill="${TC[i][0]}" ${edge}`)}${P.body(`fill="url(#tg${i})" ${edge}`)}${P.front || ''}<ellipse cx="${sx}" cy="${sy}" rx="5.4" ry="2.9" fill="url(#tspec)" transform="rotate(-28 ${sx} ${sy})"/>${face(fx, fy)}</svg>`;
 }
 const TILES = TC.map((_, i) => tileSVG(i));
 let spikes = ''; for (let i = 0; i < 12; i++) { const a = i * 30 * Math.PI / 180; spikes += `<line x1="${(20 + 9 * Math.cos(a)).toFixed(1)}" y1="${(20 + 9 * Math.sin(a)).toFixed(1)}" x2="${(20 + 18.5 * Math.cos(a)).toFixed(1)}" y2="${(20 + 18.5 * Math.sin(a)).toFixed(1)}"/>`; }
