@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.1.1 (2026-11-13)
 - Block Barn: when you name a block, the animals nearby slowly turn to look at it (and stay still if reduced motion is on).
+- Block Barn: the grown-up corner is easier to find and press, with a bigger touch area and a clearer ring that fills during the 3-second hold and empties gently if you let go early.
 
 ## 0.1.0 (2026-11-13)
 - A toy barn full of big letter blocks: tap one and it flips into its animal while a voice says the letter and the name ("C... cow!"). Tap a named block to stack it, tap the tower to knock it down, and now and then the barn asks "Where's the duck?". All 26 letters, A ant to Z zebra, with no reading, no score and nothing to lose.

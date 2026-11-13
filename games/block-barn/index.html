@@ -235,10 +235,12 @@
   }
 
   /* ---- the grown-up corner ---- */
-  #corner { position: fixed; z-index: 20; top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 10px); width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%;
-    background: rgba(70, 40, 25, .28); color: rgba(255, 240, 220, .8); touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  #corner { position: fixed; z-index: 20; top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 10px); width: 56px; height: 56px; padding: 0; border: 0; border-radius: 50%;
+    background: rgba(70, 40, 25, .34); color: rgba(255, 240, 220, .85); touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  #corner::before { content: ""; position: absolute; inset: -12px; border-radius: 50%; } /* bigger hit area than the dots */
   #corner svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #corner .ring { fill: none; stroke: #fff4d8; stroke-width: 4; stroke-dasharray: 126; stroke-dashoffset: 126; transform: rotate(-90deg); transform-origin: 23px 23px; }
+  #corner .track { fill: none; stroke: rgba(255, 244, 216, .28); stroke-width: 4; }
+  #corner .ring { fill: none; stroke: #fff4d8; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 151; stroke-dashoffset: 151; transform: rotate(-90deg); transform-origin: 28px 28px; transition: stroke-dashoffset .7s ease-out; }
   #corner.holding .ring { transition: stroke-dashoffset 3s linear; stroke-dashoffset: 0; }
   #grownups { position: fixed; inset: 0; z-index: 30; background: #fbf4e6; color: #2f241c; overflow-y: auto; font-weight: 500;
     padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
@@ -267,9 +269,10 @@
   <div id="fx"></div>
 </main>
 <button id="corner" type="button" aria-label="For grown-ups: press and hold for 3 seconds">
-  <svg viewBox="0 0 46 46" aria-hidden="true" focusable="false">
-    <circle class="ring" cx="23" cy="23" r="20"/>
-    <circle cx="16" cy="23" r="2.6" fill="currentColor"/><circle cx="23" cy="23" r="2.6" fill="currentColor"/><circle cx="30" cy="23" r="2.6" fill="currentColor"/>
+  <svg viewBox="0 0 56 56" aria-hidden="true" focusable="false">
+    <circle class="track" cx="28" cy="28" r="24"/>
+    <circle class="ring" cx="28" cy="28" r="24"/>
+    <circle cx="21" cy="28" r="2.8" fill="currentColor"/><circle cx="28" cy="28" r="2.8" fill="currentColor"/><circle cx="35" cy="28" r="2.8" fill="currentColor"/>
   </svg>
 </button>
 <div id="grownups" role="dialog" aria-modal="true" aria-labelledby="gu-title" hidden>
