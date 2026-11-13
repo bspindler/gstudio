@@ -163,3 +163,13 @@
 - [ ] **Step 1: Failing test:** the planner prompt contains a Block Barn section naming the anti-goals (no score, timers, rewards, nudges, purchases, prompts, events, links out, reading, flashing) and the locked files.
 - [ ] **Step 2:** FAIL. **Step 3:** Write the section: Block Barn is child-directed (2+); new letters/animals are not a thing; good tickets are animations, reactions, surprises, softer sounds, bigger or clearer targets; the scorer measures are what matter. **Step 4:** PASS.
 - [ ] **Step 5:** Full `npm run ci:local -- <sha>` on the branch tip; PASS. Commit `docs(block-barn): planner guidance and Brian's recording guide`.
+
+### Task 9: The shelf card and the Pages build
+
+**Files:**
+- Modify: `scripts/site/index.html` (a `block-barn` entry in `COVERS`: an animated canvas cover in the game's look — warm barn red, hay floor, a couple of chunky letter blocks and an animal, gentle motion, no flashing)
+- Modify: `scripts/build-pages.ts` (pass `{ childDirected: g.childDirected === true }` to `complianceViolations`)
+- Test: the existing site/no-external-fonts and Pages tests; add a test that `npm run build:pages` (or its core function) accepts a child-directed game and still rejects an ordinary game without level events
+
+- [ ] **Step 1:** Failing test: building Pages with Block Barn present fails today (the plain compliance check demands level events). **Step 2:** FAIL. **Step 3:** Implement both changes. **Step 4:** PASS; screenshot the shelf at 390x844 and 1280x800 and look at the card.
+- [ ] **Step 5:** Commit `feat(site): Block Barn on the shelf; Pages build honours childDirected`.
