@@ -22,6 +22,10 @@ describe('tidepool-pals play layout', () => {
     const panel = html.match(/\.poolpanel\{([^}]*)\}/)![1];
     expect(panel).toContain('min-height:0');
     expect(panel).toContain('overflow:hidden');
+    // a compact strip: sized by its content, not stretched to fill the band
+    expect(panel).toContain('flex:0 0 auto');
+    expect(panel).not.toContain('container-type');
+    expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
     const fn = html.match(/function renderPoolPanel\(\)\s*\{([\s\S]*?)\n\}/)![1];
     expect(fn).toContain('poolProgress');
     expect(fn).toContain('levels cleaned up');
