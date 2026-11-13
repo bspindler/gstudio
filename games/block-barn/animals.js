@@ -26,5 +26,5 @@ export const ANIMALS = [
   { letter: 'w', name: 'whale', sound: 'move', move: 'spout' },
   { letter: 'x', name: 'fox', spell: 'fo[x]', sound: 'call', move: 'pounce' },
   { letter: 'y', name: 'yak', sound: 'move', move: 'shaggy-sway' },
-  { letter: 'z', name: 'zebra', sound: 'move', move: 'stripe-shimmer' },
+  { letter: 'z', name: 'zebra', sound: 'move', move: 'mane-toss' },
 ];

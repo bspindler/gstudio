@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#6b3a26">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Block Barn</title>
+<style>
+  :root {
+    --ink: #3d2a1e;
+    --wall: #b9573d;
+    --wall2: #a84c35;
+    --beam: #6b3a26;
+    --hay: #e9c55c;
+    --hay2: #ddb54a;
+    --S: 110px;
+    --T: 44px;
+    color-scheme: light;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--wall);
+    color: var(--ink);
+    font: 800 16px/1.2 ui-rounded, "Arial Rounded MT Bold", "Nunito", "Avenir Next", system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  #probe { position: fixed; visibility: hidden; pointer-events: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+
+  /* ---- the barn ---- */
+  #barn { position: fixed; inset: 0; overflow: hidden; touch-action: none; }
+  #wall { position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,0) 30%),
+      repeating-linear-gradient(90deg, var(--wall) 0 46px, var(--wall2) 46px 49px); }
+  #rafter { position: absolute; left: 0; right: 0; top: 0; height: 26px; background: var(--beam); box-shadow: 0 4px 0 rgba(0,0,0,.15); }
+  #rafter::before, #rafter::after { content: ""; position: absolute; top: 18px; width: 16px; height: 90px; background: var(--beam); }
+  #rafter::before { left: 12%; transform: skewX(24deg); }
+  #rafter::after { right: 12%; transform: skewX(-24deg); }
+  #window { position: absolute; width: 92px; height: 80px; border: 8px solid #f4e6c8; border-radius: 46px 46px 6px 6px;
+    background: linear-gradient(180deg, #a9dcff, #d9f1ff 70%, #9fd38a 70%); box-shadow: inset 0 0 0 3px rgba(0,0,0,.08); }
+  #window::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: #f4e6c8; }
+  #window::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 6px; margin-top: -3px; background: #f4e6c8; }
+  #floor { position: absolute; left: 0; right: 0; bottom: 0;
+    background:
+      linear-gradient(180deg, rgba(120,70,20,.25), rgba(0,0,0,0) 22px),
+      repeating-linear-gradient(115deg, transparent 0 22px, rgba(190,140,40,.35) 22px 25px, transparent 25px 40px),
+      repeating-linear-gradient(65deg, transparent 0 31px, rgba(255,240,180,.35) 31px 33px, transparent 33px 50px),
+      var(--hay); }
+
+  /* ---- floor blocks and their animals ---- */
+  .slot { position: absolute; }
+  .block { position: absolute; inset: 0; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit;
+    pointer-events: none; }
+  .body { position: absolute; inset: 0; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--c, #ffd43b); box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18);
+    transform-origin: 50% 100%; }
+  .glyph { font-size: calc(var(--S) * .4); letter-spacing: .02em; line-height: 1; white-space: nowrap; }
+  .word { font-size: calc(var(--S) * .16); margin-top: calc(var(--S) * .04); opacity: .85; }
+  .word mark { background: none; color: #c2410c; }
+  .animal { position: absolute; left: 0; right: 0; bottom: 100%; height: max(88px, calc(var(--S) * .95)); pointer-events: none; }
+  .animal .pic, .tanimal .pic { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: 50% 92%; overflow: visible; }
+  .friend { position: absolute; width: 46px; height: 30px; bottom: -4px; right: -40px; animation: peek 2.4s ease-in-out forwards; pointer-events: none; }
+
+  .slot.invite .body { animation: glow 2.4s ease-in-out infinite; }
+  @keyframes glow { 0%, 100% { box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18), 0 0 0 0 rgba(255,246,200,.0); }
+    50% { box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18), 0 0 18px 10px rgba(255,246,200,.75); } }
+
+  .body.flip { animation: flip .62s cubic-bezier(.3,.7,.4,1); }
+  @keyframes flip { 0% { transform: none; } 35% { transform: translateY(-34px) rotate(170deg) scale(.95); } 70% { transform: translateY(0) rotate(360deg); }
+    84% { transform: scale(1.08, .9); } 100% { transform: none; } }
+  .body.arrive { animation: arrive .55s cubic-bezier(.3,.7,.4,1); }
+  @keyframes arrive { 0% { transform: translateY(-120px) scale(.6); opacity: 0; } 60% { transform: translateY(0) scale(1.05, .92); opacity: 1; } 100% { transform: none; } }
+  .body.nudge { animation: nudge .4s ease-out; }
+  @keyframes nudge { 30% { transform: scale(1.06, .94); } 60% { transform: scale(.97, 1.03); } }
+  .animal.pop .pic { animation: pop .55s cubic-bezier(.3,1.6,.5,1); }
+  @keyframes pop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+
+  /* moves: each animal's signature, then a different little one on each repeat tap */
+  .mv .pic { animation: var(--anim) var(--dur, .9s) ease-in-out; }
+  .mv[data-move="march"] .pic { --anim: march; }
+  @keyframes march { 25% { transform: translateX(-6px) rotate(-4deg); } 50% { transform: translateX(6px) rotate(4deg); } 75% { transform: translateX(-4px) rotate(-3deg); } }
+  .mv[data-move="hop"] .pic, .mv[data-move="baa-bounce"] .pic { --anim: hop; }
+  @keyframes hop { 30% { transform: translateY(-26px) scale(.95, 1.06); } 55% { transform: translateY(0) scale(1.08, .9); } 75% { transform: translateY(-10px); } }
+  .mv[data-move="bounce"] .pic { --anim: bounce; --dur: 1.1s; }
+  @keyframes bounce { 20%, 60% { transform: translateY(-34px); } 40%, 80% { transform: translateY(0) scale(1.06, .92); } }
+  .mv[data-move="waddle"] .pic { --anim: waddle; }
+  @keyframes waddle { 20% { transform: rotate(-9deg); } 40% { transform: rotate(9deg); } 60% { transform: rotate(-7deg); } 80% { transform: rotate(6deg); } }
+  .mv[data-move="pulse"] .pic { --anim: pulse; --dur: 1.2s; }
+  @keyframes pulse { 25% { transform: scale(1.12, .86); } 50% { transform: translateY(-14px) scale(.92, 1.1); } 75% { transform: scale(1.06, .94); } }
+  .mv[data-move="wiggle-tail"] .pic, .mv[data-move="wiggle-spines"] .pic, .mv[data-move="snort-wiggle"] .pic { --anim: wiggle; }
+  @keyframes wiggle { 15%, 45%, 75% { transform: rotate(-6deg); } 30%, 60%, 90% { transform: rotate(6deg); } }
+  .mv[data-move="head-turn"] .pic { --anim: turn; --dur: 1.1s; }
+  @keyframes turn { 30% { transform: scaleX(-1); } 60% { transform: scaleX(-1) rotate(-6deg); } }
+  .mv[data-move="growl-stomp"] .pic, .mv[data-move="gallop"] .pic { --anim: stomp; }
+  @keyframes stomp { 20%, 60% { transform: translateY(-10px) rotate(-3deg); } 40%, 80% { transform: translateY(0) scale(1.06, .94); } }
+  .mv[data-move="moo-chew"] .pic, .mv[data-move="head-bob"] .pic { --anim: nod; }
+  @keyframes nod { 25%, 75% { transform: rotate(6deg) translateY(4px); } 50% { transform: rotate(-4deg); } }
+  .mv[data-move="head-butt"] .pic, .mv[data-move="pounce"] .pic { --anim: butt; }
+  @keyframes butt { 30% { transform: translateX(-10px) rotate(-6deg); } 55% { transform: translateX(14px) rotate(4deg) translateY(-8px); } 75% { transform: none; } }
+  .mv[data-move="roar"] .pic, .mv[data-move="trunk-swing"] .pic { --anim: roar; }
+  @keyframes roar { 30% { transform: scale(1.14); } 50% { transform: scale(1.1) rotate(3deg); } 70% { transform: scale(1.12) rotate(-3deg); } }
+  .mv[data-move="swing"] .pic, .mv[data-move="shaggy-sway"] .pic, .mv[data-move="mane-toss"] .pic { --anim: sway; --dur: 1.2s; }
+  @keyframes sway { 25% { transform: rotate(-10deg); } 50% { transform: rotate(9deg); } 75% { transform: rotate(-5deg); } }
+  .mv[data-move="tongue-flick"] .pic, .mv[data-move="hide-in-shell"] .pic, .mv[data-move="wing-flap"] .pic, .mv[data-move="spout"] .pic { --anim: nod; }
+  .mv[data-move="tongue-flick"] .p-tongue { animation: flick .9s ease-in-out; transform-origin: 8px 72px; }
+  @keyframes flick { 20%, 60% { transform: scaleX(1.8); } 40%, 80% { transform: scaleX(.2); } }
+  .mv[data-move="hide-in-shell"] .p-head { animation: tuck 1.2s ease-in-out; }
+  @keyframes tuck { 30%, 70% { transform: translateX(22px) scale(.6); } }
+  .mv[data-move="wing-flap"] .p-wing, .mv[data-move="wing-flap"] .p-wing2 { animation: flap .3s ease-in-out 3; }
+  .p-wing { transform-origin: 34px 60px; } .p-wing2 { transform-origin: 86px 60px; }
+  @keyframes flap { 50% { transform: rotate(-24deg); } }
+  .mv[data-move="wing-flap"] .p-wing2 { animation-name: flap2; }
+  @keyframes flap2 { 50% { transform: rotate(24deg); } }
+  .mv[data-move="spout"] .p-spout { animation: spout 1s ease-out; transform-origin: 46px 34px; }
+  @keyframes spout { 0% { transform: scaleY(.2); } 40% { transform: scaleY(1.6); } }
+  .mv.alt1 .pic { --anim: jump; --dur: .7s; }
+  @keyframes jump { 40% { transform: translateY(-30px) rotate(-8deg); } 70% { transform: translateY(0) scale(1.08, .9); } }
+  .mv.alt2 .pic { --anim: spin; --dur: .8s; }
+  @keyframes spin { 50% { transform: translateY(-16px) rotate(180deg) scale(.9); } 100% { transform: rotate(360deg); } }
+  .mv.alt3 .pic { --anim: squish; --dur: .7s; }
+  @keyframes squish { 30% { transform: scale(1.2, .75); } 60% { transform: scale(.88, 1.14); } }
+  .dance .pic { animation: dance 1.8s ease-in-out !important; }
+  @keyframes dance { 10% { transform: translateY(-20px) rotate(-12deg); } 25% { transform: translateY(0) rotate(10deg); } 40% { transform: translateY(-26px) rotate(-10deg) scale(1.08); }
+    55% { transform: translateY(0) rotate(12deg); } 70% { transform: translateY(-18px) rotate(340deg); } 85% { transform: translateY(0) rotate(360deg) scale(1.08, .92); } 100% { transform: rotate(360deg); } }
+
+  /* pair reactions */
+  .re-startle .pic { animation: startle .8s ease-out !important; }
+  @keyframes startle { 15% { transform: translate(calc(var(--dir) * -12px), -18px) rotate(calc(var(--dir) * -8deg)); } 40% { transform: translate(calc(var(--dir) * -14px), 0); }
+    55%, 75% { transform: translate(calc(var(--dir) * -14px), 0) rotate(3deg); } 65% { transform: translate(calc(var(--dir) * -14px), 0) rotate(-3deg); } }
+  .re-follow .pic { animation: follow 1.4s ease-in-out !important; }
+  @keyframes follow { 15%, 45% { transform: translateX(calc(var(--dir) * 10px)) rotate(-8deg); } 30%, 60% { transform: translateX(calc(var(--dir) * 22px)) rotate(8deg); } 80% { transform: translateX(calc(var(--dir) * 8px)); } }
+  .re-nuzzle .pic { animation: nuzzle 1s ease-in-out !important; }
+  @keyframes nuzzle { 40%, 60% { transform: translateX(calc(var(--dir) * 12px)) rotate(calc(var(--dir) * 10deg)); } }
+  .re-hop .pic { animation: hop .8s ease-in-out !important; }
+  @keyframes peek { 0% { transform: translateX(-30px); opacity: 0; } 20%, 80% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-30px); opacity: 0; } }
+
+  /* ---- the tower ---- */
+  #tower { position: absolute; pointer-events: none; }
+  #tower .bale { position: absolute; left: 6px; right: 6px; bottom: 0; height: 38px; border-radius: 10px;
+    background: repeating-linear-gradient(90deg, #e9c55c 0 7px, #d9ad3e 7px 9px); box-shadow: inset 0 0 0 4px #c99a32, 0 5px 0 rgba(0,0,0,.15); }
+  #tower .stack { position: absolute; left: 0; right: 0; bottom: 36px; display: flex; flex-direction: column-reverse; align-items: center; transform-origin: 50% 100%; }
+  #tower .stack.wobble { animation: wobble 1s ease-out; }
+  @keyframes wobble { 15% { transform: rotate(-3deg); } 35% { transform: rotate(2.5deg); } 55% { transform: rotate(-1.5deg); } 75% { transform: rotate(.8deg); } }
+  .tblock { width: var(--T); height: var(--T); border-radius: 10px; background: var(--c); display: grid; place-items: center;
+    font-size: calc(var(--T) * .4); box-shadow: inset 0 -5px 0 rgba(0,0,0,.16), inset 0 0 0 3px rgba(255,255,255,.35); }
+  .tanimal { position: relative; width: calc(var(--T) * 1.3); height: calc(var(--T) * 1.25); }
+  .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
+  #bale-bump.bump { animation: nudge .4s ease-out; }
+
+  /* ---- effects ---- */
+  #fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .puff { position: absolute; width: 96px; height: 68px; margin: -50px 0 0 -48px; animation: puff .75s ease-out forwards; }
+  @keyframes puff { 0% { transform: scale(.3) translateY(10px); opacity: .9; } 60% { opacity: .85; } 100% { transform: scale(1.25) translateY(-14px); opacity: 0; } }
+  .falling { position: absolute; animation: fall 1.3s cubic-bezier(.4,0,.6,1) forwards; }
+  @keyframes fall { 0% { transform: none; } 45% { transform: translate(calc(var(--dx) * .7), var(--dy)) rotate(var(--rot)); }
+    65% { transform: translate(calc(var(--dx) * .85), calc(var(--dy) - 30px)) rotate(calc(var(--rot) * 1.2)); }
+    85% { transform: translate(var(--dx), var(--dy)) rotate(calc(var(--rot) * 1.3)); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(calc(var(--rot) * 1.3)); opacity: 0; } }
+  .flyer { position: absolute; transition: transform .38s cubic-bezier(.4,.1,.4,1), width .38s, height .38s; z-index: 5; }
+  .flyer .body { transition: inherit; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .body.flip, .body.arrive { animation-duration: .3s; }
+    .mv .pic, .dance .pic { animation-duration: .5s !important; }
+    .slot.invite .body { animation-duration: 4s; }
+  }
+
+  /* ---- the grown-up corner ---- */
+  #corner { position: fixed; z-index: 20; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%;
+    background: rgba(70, 40, 25, .28); color: rgba(255, 240, 220, .8); touch-action: none; -webkit-touch-callout: none; }
+  #corner svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #corner .ring { fill: none; stroke: #fff4d8; stroke-width: 4; stroke-dasharray: 126; stroke-dashoffset: 126; transform: rotate(-90deg); transform-origin: 23px 23px; }
+  #corner.holding .ring { transition: stroke-dashoffset 3s linear; stroke-dashoffset: 0; }
+  #grownups { position: fixed; inset: 0; z-index: 30; background: #fbf4e6; color: #2f241c; overflow-y: auto; font-weight: 500;
+    padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  #grownups .inner { max-width: 560px; margin: 0 auto; }
+  #grownups h2 { font-size: 22px; margin: 8px 0 12px; }
+  #grownups h3 { font-size: 16px; margin: 20px 0 6px; }
+  #grownups p { margin: 6px 0; line-height: 1.4; font-size: 15px; }
+  #grownups button { font: 700 16px/1 system-ui, -apple-system, sans-serif; border-radius: 12px; border: 2px solid #c9b394; background: #fff; color: inherit; min-height: 44px; padding: 0 16px; }
+  #grownups button[aria-pressed="true"] { background: #ffe08a; border-color: #d9a520; }
+  #pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 8px; }
+  #pins button { padding: 0; }
+  #close { width: 100%; margin-top: 24px; min-height: 56px !important; background: #6b3a26 !important; color: #fff !important; border-color: #6b3a26 !important; }
+</style>
+</head>
+<body>
+<div id="probe"></div>
+<main id="barn" aria-label="Block Barn">
+  <div id="wall"><div id="rafter"></div><div id="window"></div></div>
+  <div id="floor"></div>
+  <div id="tower" aria-hidden="true"><div class="bale" id="bale-bump"></div><div class="stack"></div></div>
+  <div id="slots"></div>
+  <div id="fx"></div>
+</main>
+<button id="corner" type="button" aria-label="For grown-ups: press and hold for 3 seconds">
+  <svg viewBox="0 0 46 46" aria-hidden="true" focusable="false">
+    <circle class="ring" cx="23" cy="23" r="20"/>
+    <circle cx="16" cy="23" r="2.6" fill="currentColor"/><circle cx="23" cy="23" r="2.6" fill="currentColor"/><circle cx="30" cy="23" r="2.6" fill="currentColor"/>
+  </svg>
+</button>
+<div id="grownups" role="dialog" aria-modal="true" aria-labelledby="gu-title" hidden>
+  <div class="inner">
+    <h2 id="gu-title">For grown-ups</h2>
+    <p>Block Barn is made for a little one to play alone: tap a block to hear its letter and meet its animal, tap again to stack it, tap the tower to knock it down. Nothing here can be lost, and nothing leaves this device.</p>
+
+    <h3>Sound</h3>
+    <button id="sound" type="button" aria-pressed="true">Sound on</button>
+
+    <h3>Favourite letters</h3>
+    <p>Pinned letters come around more often (her name's letters, say).</p>
+    <div id="pins"></div>
+
+    <!-- Task 6: the recorder (recorder.js) puts its list of voices here: record, hear it back, keep or redo, back to default. -->
+    <section id="voices" aria-label="Voices"></section>
+
+    <h3>Keep her in the game</h3>
+    <p>On iPhone or iPad, turn on Guided Access (Settings, Accessibility, Guided Access). Then triple-click the side or Home button while Block Barn is open to lock the device to it. Triple-click again and enter your passcode to leave.</p>
+
+    <h3>Keep your recordings</h3>
+    <p>Add Block Barn to your Home Screen (Share, then Add to Home Screen) to keep your recordings. Safari may clear a website's saved data after a few weeks without a visit unless it is on the Home Screen.</p>
+
+    <button id="close" type="button">Back to the barn</button>
+  </div>
+</div>
+<script type="module">
+import { createStudio } from '../sdk/studio-sdk.js';
+import { ANIMALS } from './animals.js';
+import { createRotation } from './rotation.js';
+import { createTower } from './tower.js';
+import { createVoice } from './voice.js';
+import { animalSVG, mouseSVG, puffSVG } from './draw.js';
+
+// Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
+const studio = createStudio({ game: 'block-barn', version: '0.1.0', endpoint: '' });
+void studio;
+
+const $ = (id) => document.getElementById(id);
+const BY = Object.fromEntries(ANIMALS.map((a) => [a.letter, a]));
+const LETTERS = ANIMALS.map((a) => a.letter);
+const COLORS = ['#ff7b7b', '#ffaa5c', '#ffd84d', '#7fdc8a', '#6cbcf7', '#bfa6ff'];
+const colorOf = (l) => COLORS[LETTERS.indexOf(l) % COLORS.length];
+const NOISE = { a: 'tip tap tip tap', b: 'grrr', c: 'moo', d: 'quack quack', e: 'toot toot', f: 'ribbit', g: 'maa', h: 'neigh',
+  l: 'roar', m: 'ooh ooh ah ah', o: 'hoo hoo', p: 'oink oink', s: 'baa', x: 'yip yip' };
+// Who reacts to whom: when the first arrives (or is tapped), the second, if out, reacts.
+const PAIRS = [['g', 'd', 'follow'], ['x', 'r', 'startle'], ['l', 'z', 'startle'], ['a', 'e', 'startle'], ['o', 'n', 'startle'],
+  ['c', 'p', 'nuzzle'], ['p', 'c', 'nuzzle'], ['h', 's', 'nuzzle'], ['f', 'd', 'hop'], ['w', 'j', 'hop'], ['b', 'm', 'hop'], ['k', 'r', 'hop']];
+const INVITE_AFTER = 8000; // ms of no taps before "Where's the ...?" (once per quiet spell)
+const NEAR = 44; // a tap this close to a target (CSS px) counts as on it
+const HOLD = 3000; // grown-up corner press-and-hold
+
+// ---------- settings (per-device conveniences only) ----------
+const load = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode: memory only */ } };
+let soundOn = load('block-barn.sound', true) !== false;
+let pins = new Set((load('block-barn.pins', []) || []).filter((l) => LETTERS.includes(l)));
+
+// ---------- sound effects (synthesised, soft, created on the first tap) ----------
+let ac = null, master = null, noiseBuf = null;
+function wakeAudio() {
+  if (!soundOn) return null;
+  if (!ac) {
+    try {
+      // iPhone: Web Audio follows the ring/silent switch unless the page's audio session is 'playback'.
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      const comp = ac.createDynamicsCompressor();
+      master = ac.createGain();
+      master.gain.value = 0.5;
+      master.connect(comp);
+      comp.connect(ac.destination);
+      noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.6), ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    } catch { ac = null; return null; }
+  }
+  if (ac.state === 'suspended') ac.resume().catch(() => {});
+  return ac;
+}
+function env(g, t0, peak, attack, dur) {
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(peak, t0 + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+}
+function tone(f0, f1, dur, vol, at = 0, type = 'triangle') {
+  const c = wakeAudio(); if (!c) return;
+  const t0 = c.currentTime + 0.005 + at;
+  const o = c.createOscillator(), g = c.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t0);
+  o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+  env(g, t0, vol, 0.01, dur);
+  o.connect(g); g.connect(master);
+  o.start(t0); o.stop(t0 + dur + 0.05);
+}
+function hush(dur, vol, freq, at = 0, attack = 0.02) {
+  const c = wakeAudio(); if (!c) return;
+  const t0 = c.currentTime + 0.005 + at;
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+  s.buffer = noiseBuf;
+  f.type = 'lowpass'; f.frequency.value = freq;
+  env(g, t0, vol, attack, dur);
+  s.connect(f); f.connect(g); g.connect(master);
+  s.start(t0); s.stop(t0 + dur + 0.05);
+}
+const sfx = {
+  clack(at = 0, pitch = 1) { tone(560 * pitch, 320 * pitch, 0.09, 0.12, at); hush(0.06, 0.05, 2200, at, 0.004); },
+  pop() { tone(380, 720, 0.22, 0.08, 0, 'sine'); },
+  tumble(n) { for (let i = 0; i < n; i++) sfx.clack(0.08 + i * 0.11, 1.15 - i * 0.07); hush(0.5, 0.06, 500, 0.1, 0.05); },
+  puff() { hush(0.35, 0.07, 900, 0, 0.03); },
+  happy() { [523, 659, 784].forEach((f, i) => tone(f, f * 1.01, 0.22, 0.06, i * 0.12, 'sine')); },
+};
+
+// ---------- voice ----------
+// A clip resolves when it has finished (or was paused), so the letter, name and noise play one after another.
+const clipPlayer = (url) => {
+  const a = new Audio(url);
+  return {
+    play: () => a.play().then(() => new Promise((done) => { a.onended = done; a.onpause = done; a.onerror = done; })),
+    pause: () => a.pause(),
+  };
+};
+const voice = createVoice({ audio: clipPlayer, synth: window.speechSynthesis || null, recordings: async () => null, base: './' });
+let speaking = null; // the key being spoken, or null
+let talkId = 0;
+function talk(lines) {
+  const mine = ++talkId;
+  if (!soundOn) { voice.stop(); speaking = null; return; }
+  speaking = lines[0][0]; // set now, inside the tap, so the response is immediate
+  (async () => {
+    for (const [key, text] of lines) {
+      if (mine !== talkId) return;
+      speaking = key;
+      await voice.say(key, text);
+    }
+    if (mine === talkId) speaking = null;
+  })();
+}
+function hush_voice() { talkId++; voice.stop(); speaking = null; }
+const letterLine = (l) => [`letter-${l}`, `${l.toUpperCase()} ${l}`];
+const nameLines = (l) => {
+  const a = BY[l];
+  const out = [[`name-${l}`, a.name]];
+  if (a.sound === 'call' && NOISE[l]) out.push([`noise-${l}`, NOISE[l]]);
+  return out;
+};
+
+// ---------- the barn's state ----------
+let seedNow = Math.floor(Math.random() * 2 ** 31);
+let gen; // createRotation(seed, 1) used as a fixed seeded cycle through a..z
+let rng; // small seeded generator for invitations and surprises
+let floor = []; // the 5 letters on the floor, by slot
+const named = new Set(); // floor letters showing their animal
+const tower = createTower();
+let towerTop = null; // the animal sitting on top of the tower
+let picks = 0; // replacement count, for pinned letters
+let invited = null;
+let invitedThisQuiet = false;
+let quietMs = 0;
+let cornerOpen = false;
+let manualClock = false;
+const tapCount = {}; // per letter, to vary the animal's repeat animation
+
+function seeded(a) {
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function pickLetter() {
+  picks++;
+  const busy = new Set([...floor, ...tower.blocks()]);
+  const pinned = LETTERS.filter((l) => pins.has(l) && !busy.has(l));
+  if (pinned.length && picks % 3 === 0) return pinned[Math.floor(rng() * pinned.length)];
+  for (let i = 0; i < 26; i++) {
+    const l = gen.floor()[0];
+    gen.next(l);
+    if (!busy.has(l)) return l;
+  }
+  return LETTERS.find((l) => !busy.has(l));
+}
+function reseed(n) {
+  seedNow = n >>> 0;
+  gen = createRotation(seedNow, 1);
+  rng = seeded(seedNow ^ 0x9e3779b9);
+  floor = [];
+  picks = 0;
+  named.clear();
+  tower.tumble();
+  towerTop = null;
+  invited = null; invitedThisQuiet = false; quietMs = 0;
+  for (let i = 0; i < 5; i++) floor.push(pickLetter());
+  hush_voice();
+  renderAll(false);
+}
+
+// ---------- layout ----------
+const slotsEl = $('slots'), towerEl = $('tower'), stackEl = towerEl.querySelector('.stack'), fx = $('fx');
+let layout = null;
+function insets() {
+  const s = getComputedStyle($('probe'));
+  return { t: parseFloat(s.paddingTop) || 0, r: parseFloat(s.paddingRight) || 0, b: parseFloat(s.paddingBottom) || 0, l: parseFloat(s.paddingLeft) || 0 };
+}
+function computeLayout() {
+  const W = innerWidth, H = innerHeight, i = insets();
+  const L = i.l + 16, R = W - i.r - 16, B = H - i.b - 24;
+  const corner = { x: R - 46 + 6, y: i.t + 10, w: 46, h: 46 };
+  const g = 16;
+  const wideS = Math.min(140, (H - i.t - i.b) / 4.8, (R - L - 200 - 4 * 22) / 5);
+  const wide = wideS >= 96;
+  let S, slots = [], tz, fb, floorTop;
+  if (wide) {
+    // One row of five along the bottom right, the tower on the left.
+    S = wideS;
+    const gap = 22;
+    const row = 5 * S + 4 * gap;
+    const x0 = Math.max(L + 200, (L + 200 + R - row) / 2);
+    const y = B - S;
+    for (let k = 0; k < 5; k++) slots.push({ x: x0 + k * (S + gap), y });
+    const aTop = y - Math.max(88, S * 0.95);
+    tz = { x: L, y: corner.y + corner.h + 24, w: 170, h: B - (corner.y + corner.h + 24) };
+    floorTop = Math.max(i.t + 120, aTop - 180);
+    fb = { x: x0, y: floorTop + 12, w: row, h: Math.max(88, aTop - NEAR - 8 - (floorTop + 12)) };
+  } else {
+    // Two rows (three, then two) at the bottom, the tower above on the left.
+    S = Math.max(88, Math.min(132, (R - L - 2 * 14) / 3, (H - i.t - i.b) / 7.2));
+    const gap = Math.min(18, (R - L - 3 * S) / 2);
+    const aH = Math.max(88, S * 0.95);
+    const y2 = B - S, y1 = y2 - aH - g - S;
+    const x0 = (W - (3 * S + 2 * gap)) / 2;
+    for (let k = 0; k < 3; k++) slots.push({ x: x0 + k * (S + gap), y: y1 });
+    for (let k = 0; k < 2; k++) slots.push({ x: W / 2 - S - gap / 2 + k * (S + gap), y: y2 });
+    const aTop = y1 - aH;
+    const top = corner.y + corner.h + 14;
+    tz = { x: L, y: top, w: Math.min(150, (R - L) * 0.4), h: aTop - 12 - top };
+    floorTop = Math.max(top + 60, aTop - 170);
+    const fx0 = tz.x + tz.w + NEAR + 4;
+    fb = { x: fx0, y: floorTop + 10, w: R - fx0, h: aTop - NEAR - 4 - (floorTop + 10) };
+  }
+  const T = Math.max(20, Math.min(64, tz.w * 0.42, (tz.h - 40 - 8) / 6.3));
+  return { W, H, S, T, slots, tower: tz, floorBox: fb, floorTop, corner, wide };
+}
+function applyLayout() {
+  layout = computeLayout();
+  const root = document.documentElement.style;
+  root.setProperty('--S', `${layout.S}px`);
+  root.setProperty('--T', `${layout.T}px`);
+  $('floor').style.top = `${layout.floorTop}px`;
+  const win = $('window');
+  win.style.left = `${Math.max(layout.tower.x + layout.tower.w + 20, layout.W * 0.55)}px`;
+  win.style.top = `${Math.max(40, layout.floorTop - 120)}px`;
+  win.hidden = layout.floorTop - 120 < 36;
+  Object.assign(towerEl.style, { left: `${layout.tower.x}px`, top: `${layout.tower.y}px`, width: `${layout.tower.w}px`, height: `${layout.tower.h}px` });
+  Object.assign($('corner').style, { left: `${layout.corner.x}px`, top: `${layout.corner.y}px` });
+  [...slotsEl.children].forEach((el, k) => {
+    const p = layout.slots[k];
+    Object.assign(el.style, { left: `${p.x}px`, top: `${p.y}px`, width: `${layout.S}px`, height: `${layout.S}px` });
+  });
+}
+
+// ---------- drawing ----------
+function wordHTML(l) {
+  const a = BY[l];
+  if (a.spell) return a.spell.replace(/\[(.)\]/, '<mark>$1</mark>');
+  const at = a.name.indexOf(l);
+  return at < 0 ? a.name : `${a.name.slice(0, at)}<mark>${l}</mark>${a.name.slice(at + 1)}`;
+}
+function makeSlot() {
+  const el = document.createElement('div');
+  el.className = 'slot';
+  el.innerHTML = '<div class="animal" hidden></div><button class="block" type="button" tabindex="-1"><div class="body"><div class="glyph"></div><div class="word" hidden></div></div></button>';
+  return el;
+}
+function renderSlot(k, anim) {
+  const el = slotsEl.children[k];
+  const l = floor[k];
+  const isNamed = named.has(l);
+  el.dataset.letter = l;
+  const block = el.querySelector('.block'), body = el.querySelector('.body'), animal = el.querySelector('.animal');
+  block.dataset.letter = l;
+  block.setAttribute('aria-label', `${l.toUpperCase()} ${l}${isNamed ? `, ${BY[l].name}` : ''}`);
+  body.style.setProperty('--c', colorOf(l));
+  el.querySelector('.glyph').textContent = `${l.toUpperCase()} ${l}`;
+  const word = el.querySelector('.word');
+  word.hidden = !isNamed;
+  if (isNamed) word.innerHTML = wordHTML(l);
+  el.classList.toggle('invite', invited === l);
+  if (isNamed) {
+    if (animal.dataset.letter !== l) { animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
+    animal.hidden = false;
+  } else {
+    animal.hidden = true;
+    animal.dataset.letter = '';
+    animal.innerHTML = '';
+  }
+  if (anim) restart(body, anim);
+}
+function renderTower(popTop) {
+  const blocks = tower.blocks();
+  stackEl.replaceChildren(...blocks.map((l) => {
+    const b = document.createElement('div');
+    b.className = 'tblock';
+    b.style.setProperty('--c', colorOf(l));
+    b.textContent = `${l.toUpperCase()} ${l}`;
+    return b;
+  }));
+  if (towerTop && blocks.length) {
+    const a = document.createElement('div');
+    a.className = 'tanimal';
+    a.dataset.move = BY[towerTop].move;
+    a.innerHTML = animalSVG(towerTop);
+    stackEl.append(a);
+    if (popTop) restart(a, 'pop');
+  }
+}
+function renderAll(anim) {
+  for (let k = 0; k < 5; k++) renderSlot(k, anim ? 'arrive' : null);
+  renderTower(false);
+}
+function restart(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth; // restart the CSS animation
+  el.classList.add(cls);
+}
+const animalEl = (l) => { const k = floor.indexOf(l); return k < 0 ? null : slotsEl.children[k].querySelector('.animal'); };
+function moveAnimal(l, variant) {
+  const a = animalEl(l);
+  if (!a) return;
+  a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop');
+  void a.offsetWidth;
+  a.classList.add('mv');
+  if (variant) a.classList.add(`alt${variant}`);
+}
+function react(l) {
+  for (const [who, other, how] of PAIRS) {
+    if (who !== l) continue;
+    const a = animalEl(other);
+    if (!a) continue;
+    const me = slotsEl.children[floor.indexOf(l)].getBoundingClientRect(), them = a.getBoundingClientRect();
+    a.style.setProperty('--dir', me.left > them.left ? '1' : '-1');
+    setTimeout(() => { a.classList.remove('re-startle', 're-follow', 're-nuzzle', 're-hop'); void a.offsetWidth; a.classList.add(`re-${how}`); }, 450);
+    setTimeout(() => a.classList.remove(`re-${how}`), 2200);
+  }
+}
+function hiddenFriend(k) {
+  const el = slotsEl.children[k];
+  const m = document.createElement('div');
+  m.className = 'friend';
+  m.innerHTML = mouseSVG();
+  el.append(m);
+  setTimeout(() => m.remove(), 2600);
+}
+function puffAt(x, y) {
+  const p = document.createElement('div');
+  p.className = 'puff';
+  p.style.left = `${x}px`;
+  p.style.top = `${y}px`;
+  p.innerHTML = puffSVG();
+  fx.append(p);
+  setTimeout(() => p.remove(), 800);
+  sfx.puff();
+}
+
+// ---------- what a tap does ----------
+function clearInvite() {
+  if (invited === null) return;
+  const was = invited;
+  invited = null;
+  const k = floor.indexOf(was);
+  if (k >= 0) slotsEl.children[k].classList.remove('invite');
+}
+function nameBlock(k) {
+  const l = floor[k];
+  named.add(l);
+  renderSlot(k, 'flip');
+  const animal = slotsEl.children[k].querySelector('.animal');
+  restart(animal, 'pop');
+  setTimeout(() => moveAnimal(l, 0), 650);
+  talk([letterLine(l), ...nameLines(l)]);
+  sfx.clack(); sfx.pop();
+  react(l);
+  if (rng() < 0.14) hiddenFriend(k);
+}
+function tapAnimal(l) {
+  const n = (tapCount[l] = (tapCount[l] || 0) + 1);
+  moveAnimal(l, n % 4);
+  talk(nameLines(l));
+  react(l);
+}
+function stackBlock(k) {
+  const l = floor[k];
+  const before = tower.blocks();
+  const from = slotsEl.children[k].getBoundingClientRect();
+  named.delete(l);
+  const result = tower.add(l);
+  towerTop = l;
+  floor[k] = pickLetter();
+  delete tapCount[l];
+  talk([letterLine(l)]);
+  sfx.clack(0, 1.1);
+  fly(l, from, before.length);
+  if (result === 'tumble') {
+    towerTop = null;
+    renderTower(false);
+    tumbleDown([...before, l]);
+  } else {
+    renderTower(true);
+    restart(stackEl, 'wobble');
+  }
+  renderSlot(k, 'arrive');
+}
+function fly(l, from, height) {
+  const t = layout.T;
+  const tx = layout.tower.x + layout.tower.w / 2 - t / 2, ty = layout.tower.y + layout.tower.h - 36 - (height + 1) * t;
+  const f = document.createElement('div');
+  f.className = 'flyer';
+  Object.assign(f.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+  f.innerHTML = `<div class="body" style="--c:${colorOf(l)}"><div class="glyph">${l.toUpperCase()} ${l}</div></div>`;
+  fx.append(f);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    f.style.transform = `translate(${tx - from.left}px, ${ty - from.top}px)`;
+    f.style.width = `${t}px`; f.style.height = `${t}px`;
+  }));
+  setTimeout(() => f.remove(), 420);
+}
+function tumbleDown(letters) {
+  const t = layout.T;
+  const baseY = layout.tower.y + layout.tower.h - 36;
+  const cx = layout.tower.x + layout.tower.w / 2 - t / 2;
+  const groundY = layout.H - 30 - t;
+  letters.forEach((l, k) => {
+    const b = document.createElement('div');
+    b.className = 'tblock falling';
+    b.style.setProperty('--c', colorOf(l));
+    b.textContent = `${l.toUpperCase()} ${l}`;
+    const y = baseY - (k + 1) * t;
+    Object.assign(b.style, { left: `${cx}px`, top: `${y}px`, width: `${t}px`, height: `${t}px` });
+    const dx = (20 + rng() * (layout.W * 0.45)) * (k % 2 ? 1 : 0.6);
+    b.style.setProperty('--dx', `${dx}px`);
+    b.style.setProperty('--dy', `${Math.max(0, groundY - y - rng() * 40)}px`);
+    b.style.setProperty('--rot', `${(rng() * 2 - 1) * 160}deg`);
+    b.style.animationDelay = `${k * 40}ms`;
+    fx.append(b);
+    setTimeout(() => b.remove(), 1500 + k * 40);
+  });
+  sfx.tumble(letters.length);
+  setTimeout(() => puffAt(layout.tower.x + layout.tower.w / 2, layout.tower.y + layout.tower.h - 20), 500);
+}
+function tapTower() {
+  const was = tower.tumble();
+  if (was.length) {
+    towerTop = null;
+    renderTower(false);
+    tumbleDown(was);
+  } else {
+    restart($('bale-bump'), 'bump');
+    puffAt(layout.tower.x + layout.tower.w / 2, layout.tower.y + layout.tower.h - 30);
+  }
+}
+
+/** The tappable things (CSS px boxes), for routing and for the hook. */
+function hitBoxes() {
+  const out = [];
+  [...slotsEl.children].forEach((el, k) => {
+    const l = floor[k];
+    const r = el.querySelector('.block').getBoundingClientRect();
+    out.push({ kind: 'block', letter: l, k, x: r.left, y: r.top, w: r.width, h: r.height });
+    const a = el.querySelector('.animal');
+    if (!a.hidden) { const q = a.getBoundingClientRect(); out.push({ kind: 'animal', letter: l, k, x: q.left, y: q.top, w: q.width, h: q.height }); }
+  });
+  const t = towerEl.getBoundingClientRect();
+  out.push({ kind: 'tower', x: t.left, y: t.top, w: t.width, h: t.height });
+  return out;
+}
+function distTo(b, x, y) {
+  const dx = Math.max(b.x - x, 0, x - (b.x + b.w)), dy = Math.max(b.y - y, 0, y - (b.y + b.h));
+  return Math.hypot(dx, dy);
+}
+function tapAt(x, y) {
+  quietMs = 0;
+  invitedThisQuiet = false;
+  const wasInvited = invited;
+  clearInvite();
+  let best = null, bestD = Infinity, bestC = Infinity;
+  for (const b of hitBoxes()) {
+    const d = distTo(b, x, y), c = Math.hypot(b.x + b.w / 2 - x, b.y + b.h / 2 - y);
+    if (d < bestD - 0.5 || (Math.abs(d - bestD) <= 0.5 && c < bestC)) { best = b; bestD = d; bestC = c; }
+  }
+  if (!best || bestD > NEAR) { puffAt(x, y); return; }
+  if (best.kind === 'tower') { tapTower(); return; }
+  const l = best.letter;
+  if (best.kind === 'animal') tapAnimal(l);
+  else if (!named.has(l)) nameBlock(best.k);
+  else stackBlock(best.k);
+  if (wasInvited && wasInvited === l && floor.includes(l)) {
+    setTimeout(() => { const a = animalEl(l); if (a) { a.classList.remove('mv', 'alt1', 'alt2', 'alt3'); restart(a, 'dance'); sfx.happy(); } }, 700);
+  }
+}
+
+// ---------- input: one tap per gesture, extra fingers ignored ----------
+const barnEl = $('barn');
+let gesture = null; // { id, x, y, fired, fingers }
+barnEl.addEventListener('pointerdown', (e) => {
+  if (cornerOpen) return;
+  e.preventDefault();
+  if (gesture) { gesture.fingers.add(e.pointerId); return; }
+  gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, fired: false, fingers: new Set([e.pointerId]) };
+  wakeAudio();
+});
+function endPointer(e, cancelled) {
+  if (!gesture || !gesture.fingers.has(e.pointerId)) return;
+  if (e.pointerId === gesture.id && !gesture.fired) {
+    gesture.fired = true;
+    if (!cancelled && !cornerOpen) tapAt(gesture.x, gesture.y);
+  }
+  gesture.fingers.delete(e.pointerId);
+  if (!gesture.fingers.size) gesture = null;
+}
+barnEl.addEventListener('pointerup', (e) => endPointer(e, false));
+barnEl.addEventListener('pointercancel', (e) => endPointer(e, true));
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+
+// ---------- the grown-up corner: press and hold 3 s ----------
+const cornerBtn = $('corner'), dialog = $('grownups');
+let holdTimer = 0;
+cornerBtn.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  if (holdTimer) return;
+  cornerBtn.classList.add('holding');
+  holdTimer = setTimeout(() => { holdTimer = 0; cornerBtn.classList.remove('holding'); openCorner(); }, HOLD);
+});
+const letGo = (e) => {
+  if (!holdTimer) return;
+  clearTimeout(holdTimer); holdTimer = 0;
+  cornerBtn.classList.remove('holding');
+  if (e.type === 'pointerup') { const r = cornerBtn.getBoundingClientRect(); puffAt(r.left + r.width / 2, r.bottom + 18); }
+};
+for (const t of ['pointerup', 'pointercancel', 'pointerleave']) cornerBtn.addEventListener(t, letGo);
+function openCorner() {
+  cornerOpen = true;
+  gesture = null;
+  hush_voice();
+  clearInvite();
+  renderPins();
+  dialog.hidden = false;
+  $('close').focus({ preventScroll: true });
+}
+function closeCorner() {
+  cornerOpen = false;
+  dialog.hidden = true;
+  quietMs = 0; invitedThisQuiet = false;
+}
+$('close').addEventListener('click', closeCorner);
+const soundBtn = $('sound');
+function renderSound() { soundBtn.setAttribute('aria-pressed', String(soundOn)); soundBtn.textContent = soundOn ? 'Sound on' : 'Sound off'; }
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  save('block-barn.sound', soundOn);
+  if (!soundOn) { hush_voice(); if (ac) ac.suspend().catch(() => {}); }
+  renderSound();
+});
+function renderPins() {
+  const box = $('pins');
+  box.replaceChildren(...LETTERS.map((l) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = `${l.toUpperCase()} ${l}`;
+    b.setAttribute('aria-pressed', String(pins.has(l)));
+    b.setAttribute('aria-label', `Pin ${l.toUpperCase()} (${BY[l].name})`);
+    b.addEventListener('click', () => {
+      if (pins.has(l)) pins.delete(l); else pins.add(l);
+      save('block-barn.pins', [...pins]);
+      b.setAttribute('aria-pressed', String(pins.has(l)));
+    });
+    return b;
+  }));
+}
+
+// ---------- the quiet clock: "Where's the duck?" once per quiet spell ----------
+function advanceQuiet(ms) {
+  if (cornerOpen || document.visibilityState === 'hidden') return;
+  quietMs += ms;
+  if (quietMs >= INVITE_AFTER && !invitedThisQuiet && invited === null) invite();
+}
+function invite() {
+  invitedThisQuiet = true;
+  const fresh = floor.filter((l) => !named.has(l));
+  const from = fresh.length ? fresh : floor;
+  invited = from[Math.floor(rng() * from.length)];
+  slotsEl.children[floor.indexOf(invited)].classList.add('invite');
+  talk([[`where-${invited}`, `Where's the ${BY[invited].name}?`]]);
+}
+let lastTick = performance.now();
+setInterval(() => {
+  const now = performance.now(), dt = now - lastTick;
+  lastTick = now;
+  if (!manualClock) advanceQuiet(Math.min(dt, 1000));
+}, 250);
+
+// ---------- leaving the tab stops the voice ----------
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { hush_voice(); if (ac) ac.suspend().catch(() => {}); }
+});
+addEventListener('pagehide', () => hush_voice());
+
+// ---------- start ----------
+for (let k = 0; k < 5; k++) slotsEl.append(makeSlot());
+applyLayout();
+addEventListener('resize', applyLayout);
+renderSound();
+reseed(seedNow);
+
+// ---- hal hook (test robot only; inert without ?hal) ----
+// A headless robot drives the barn through window.__hal with real taps; this block only reads the barn's own
+// state and boxes, advances its quiet clock, and reseeds it. The real-time quiet clock is switched off so the
+// robot decides when 8 s have passed. Nothing here touches the network: the SDK is in no-ingest mode above.
+if (new URLSearchParams(location.search).has('hal')) {
+  manualClock = true;
+  const box = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
+  window.__hal = {
+    state: () => ({ floor: [...floor], named: floor.filter((l) => named.has(l)), tower: tower.blocks(), corner: cornerOpen, speaking, invited }),
+    targets: () => {
+      const c = cornerBtn.getBoundingClientRect();
+      return [
+        ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
+        { kind: 'floor', ...box(layout.floorBox) },
+        { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
+      ];
+    },
+    idle: (ms) => advanceQuiet(Number(ms) || 0),
+    seed: (n) => reseed(Number(n) || 0),
+  };
+}
+// ---- end hal hook ----
+</script>
+</body>
+</html>
