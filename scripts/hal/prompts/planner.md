@@ -26,7 +26,8 @@ Games in scope: {{games}}
    - create accounts, use keys, or add anything that can bill or has usage fees;
    - touch purchase code, prices, IAP or anything money-shaped;
    - add art, sound, music or fonts that aren't generated in code by Hal or verifiably free with no attribution required (CC0 / public domain), with the source recorded next to the asset. **Fonts may also be SIL Open Font License 1.1**, provided they are bundled locally in the game folder with the full license text and a `fonts/SOURCES.md` entry, and a font with a Reserved Font Name is bundled unmodified (no subsetting or conversion).
-   Games today have no build step and no dependencies; that stays the default.
+   Games today have no build step and no dependencies beyond the core libraries below; that stays the default.
+   **Core libraries (already approved, not a new dependency):** three.js, bundled at `packages/sdk/vendor/three.module.js` (MIT) and imported from a game as `../sdk/vendor/three.module.js`, like the SDK. Any game may use it, with no call needed; it exports the parts listed in `scripts/vendor/three-entry.js` (loaders are left out, so no network code). A game must not bundle its own copy of three.js or any other library. If a ticket needs a three.js part the bundle doesn't export, that is a call for Brian.
 2. **Dark patterns.** An engagement-optimizing loop drifts toward fake timers, fake scarcity, nagging after "no", and paid luck. These are hard rule 4 and are rejected automatically, never weighed against a score.
 3. **Generic drift.** Fifty "improvements" that each look fine but sand off each game's personality. The director's note must keep each game's identity in view, and Brian's 👎 is the brake.
 4. **Copying.** Candy Crush and Fortnite are the bar for feel, not a source. No borrowed names, characters, art, music, levels or look (hard rule 6).

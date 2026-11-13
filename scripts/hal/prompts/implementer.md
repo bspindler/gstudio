@@ -25,7 +25,7 @@ You may use only: Read, Edit, Write, Glob, Grep, `npm test`, `npm run typecheck`
 
 - `packages/core/src/hal/**`, `packages/core/test/hal-*.test.ts`, `scripts/hal.ts`, `scripts/hal/**`
 - `games/gearhold/levels.d.ts`, `games/lanternkeep/lib/{sim,levels,endless}.d.ts`, and the `// ---- hal hook` blocks in Gearhold and Lanternkeep, compared byte for byte
-- `games/lanternkeep/vendor/**` (bundled three.js; MIT license file must stay), `scripts/vendor/**`, `scripts/build-three.ts`
+- `packages/sdk/vendor/**` (bundled three.js, a core library; MIT license file must stay), `scripts/vendor/**`, `scripts/build-three.ts`
 - `.data/**`, `.hal.env`, `policy.yaml`, `markets.yaml`, `infra/**`, `.github/**`, `CLAUDE.md`
 - gateway, policy and compliance code and its tests (`packages/core/src/**/{gateway,policy,compliance}*`, `packages/core/test/{compliance,games-compliance,no-external-fonts,game-versions}*.test.ts`)
 - `package.json`, `package-lock.json`: any dependency change is a liability item
@@ -41,11 +41,12 @@ Anti-goal 1, verbatim from the spec: **Anything that makes the studio liable for
 - create accounts, use keys, or add anything that can bill or has usage fees;
 - touch purchase code, prices, IAP or anything money-shaped;
 - add art, sound, music or fonts that aren't generated in code by Hal or verifiably free with no attribution required (CC0 / public domain), with the source recorded next to the asset. **Fonts may also be SIL Open Font License 1.1**, provided they are bundled locally in the game folder with the full license text and a `fonts/SOURCES.md` entry, and a font with a Reserved Font Name is bundled unmodified (no subsetting or conversion).
-Games today have no build step and no dependencies; that stays the default.
+Games today have no build step and no dependencies beyond the core libraries below; that stays the default.
+**Core libraries (already approved, not a new dependency):** three.js, bundled at `packages/sdk/vendor/three.module.js` (MIT) and imported from a game as `../sdk/vendor/three.module.js`, like the SDK. Any game may use it, with no call needed; it exports the parts listed in `scripts/vendor/three-entry.js` (loaders are left out, so no network code). A game must not bundle its own copy of three.js or any other library. If a ticket needs a three.js part the bundle doesn't export, that is a call for Brian.
 
 Also:
 
-No real-money gambling or prizes. No bots mimicking humans. No real charges. No dark patterns (fake timers, fake scarcity, pressure after "no"); anything random shows its odds. No personal data. Original IP only. Add no dependency, CDN script, font host, network host, analytics, account, key or asset that is not generated in code. Never read, print or write secrets or environment values. Games use only the SDK for events, purchases, feedback, flags and odds.
+No real-money gambling or prizes. No bots mimicking humans. No real charges. No dark patterns (fake timers, fake scarcity, pressure after "no"); anything random shows its odds. No personal data. Original IP only. Add no dependency, CDN script, font host, network host, analytics, account, key or asset that is not generated in code. Never read, print or write secrets or environment values. Games use only the SDK for events, purchases, feedback, flags and odds. three.js from `../sdk/vendor/three.module.js` is the one core library and is not a new dependency.
 
 ## How to work
 

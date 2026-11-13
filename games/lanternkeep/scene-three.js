@@ -2,7 +2,7 @@
 // shadows, a pool of coloured plant lights, wind-blown grass, bloom on every glow, and image-based
 // reflections. Same interface as render.js (the flat fallback), so the page doesn't care which one runs.
 // World: x = grid column, z = grid row, y = up; the camera sits past the last row looking back.
-import * as THREE from './vendor/three.module.js';
+import * as THREE from '../sdk/vendor/three.module.js';
 import { COLS, ROWS, FLARE_RADIUS, TOWERS, flareCharge, stats } from './lib/sim.js';
 import { creatureModel, glow, hash, lanternModel, mat, plantModel, rockGeometry, treeModel } from './models-three.js';
 

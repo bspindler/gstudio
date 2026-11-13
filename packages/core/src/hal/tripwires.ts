@@ -41,8 +41,8 @@ export type Rule = (diff: Diff) => Violation[];
 const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^(\.\/)+/, '').toLowerCase();
 const touched = (f: FileChange): string[] => (f.oldPath ? [f.path, f.oldPath] : [f.path]);
 
-// games/lanternkeep/vendor/ is a bundled third-party library (three.js, MIT): changing it is a dependency change, which is Brian's call.
-const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/', 'games/lanternkeep/vendor/', 'scripts/vendor/', 'games/block-barn/audio/'];
+// packages/sdk/vendor/ is the bundled third-party library every game may use (three.js, MIT): changing it is a dependency change, which is Brian's call.
+const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/', 'packages/sdk/vendor/', 'scripts/vendor/', 'games/block-barn/audio/'];
 const PROTECTED_EXACT = new Set(['scripts/hal.ts', 'scripts/build-three.ts', 'games/gearhold/levels.d.ts', 'games/lanternkeep/lib/sim.d.ts', 'games/lanternkeep/lib/levels.d.ts', 'games/lanternkeep/lib/endless.d.ts', 'games/block-barn/recorder.js', '.hal.env', 'policy.yaml', 'markets.yaml', 'claude.md', 'package.json', 'package-lock.json']);
 const PROTECTED_REGEX = [
   /^games\/block-barn\/(?:.*\/)?sources\.md$/,

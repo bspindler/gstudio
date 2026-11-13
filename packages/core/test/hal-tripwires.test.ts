@@ -32,7 +32,7 @@ describe('addedLines', () => {
 describe('protected-path', () => {
   it.each([
     'packages/core/src/hal/gate.ts', 'packages/core/src/hal/new.ts', 'packages/core/test/hal-gate.test.ts', 'scripts/hal.ts', 'scripts/hal/git.ts',
-    'games/lanternkeep/vendor/three.module.js', 'games/lanternkeep/vendor/three.LICENSE.txt', 'scripts/build-three.ts',
+    'packages/sdk/vendor/three.module.js', 'packages/sdk/vendor/three.LICENSE.txt', 'scripts/build-three.ts',
     'games/gearhold/levels.d.ts', 'games/lanternkeep/lib/sim.d.ts', 'games/lanternkeep/lib/levels.d.ts', '.data/hal/ledger.jsonl', '.hal.env', 'policy.yaml', 'markets.yaml', 'infra/main.bicep', '.github/workflows/ci.yml', 'CLAUDE.md',
     'packages/core/src/gateway/index.ts', 'packages/core/src/policy/rules.ts', 'packages/core/src/library/compliance-checks.ts', 'packages/core/src/x/gateway.ts', 'packages/core/src/policy.ts',
     'packages/core/test/compliance.test.ts', 'packages/core/test/games-compliance.test.ts', 'packages/core/test/no-external-fonts.test.ts', 'packages/core/test/game-versions.test.ts',

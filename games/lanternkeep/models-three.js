@@ -1,7 +1,7 @@
 // Lanternkeep models for the three.js renderer: smooth, physically shaded plants, creatures, the lantern and
 // scenery, built from code at load time (no model files). One world unit is one grid cell; y is up; models
 // face +z. Emissive parts are pushed above 1 so the bloom pass turns them into glows.
-import * as THREE from './vendor/three.module.js';
+import * as THREE from '../sdk/vendor/three.module.js';
 
 const TAU = Math.PI * 2;
 const V2 = (x, y) => new THREE.Vector2(x, y);

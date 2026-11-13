@@ -23,6 +23,7 @@ for (const g of games) {
 
 mkdirSync(join(out, 'sdk'), { recursive: true });
 cpSync(join(repo, 'packages', 'sdk', 'studio-sdk.js'), join(out, 'sdk', 'studio-sdk.js'));
+cpSync(join(repo, 'packages', 'sdk', 'vendor'), join(out, 'sdk', 'vendor'), { recursive: true }); // three.js, a core library
 writeFileSync(join(out, 'index.html'), pagesIndexHtml(games));
 writeFileSync(join(out, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
 writeFileSync(join(out, '.nojekyll'), '');

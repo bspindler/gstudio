@@ -1,4 +1,4 @@
-// The parts of three.js (MIT) that Lanternkeep uses, re-exported by name so esbuild can leave the rest out
+// The parts of three.js (MIT) any game may use (a core library, served at ../sdk/vendor/three.module.js), re-exported by name so esbuild can leave the rest out
 // (notably every loader, which would bring network code into the game). Build: npm run build:three.
 export {
   WebGLRenderer, WebGLRenderTarget, Scene, PerspectiveCamera, OrthographicCamera, Color, Vector2, Vector3, Vector4, Matrix4,
@@ -11,6 +11,12 @@ export {
   PMREMGenerator, SRGBColorSpace, ACESFilmicToneMapping, AgXToneMapping, NeutralToneMapping, NoToneMapping, PCFShadowMap,
   AdditiveBlending, NormalBlending, DoubleSide, FrontSide, BackSide, RepeatWrapping, ClampToEdgeWrapping, LinearFilter,
   HalfFloatType, MathUtils, Box3, Sphere,
+  // Beyond Lanternkeep's set, for other 3D games: lines, more materials and lights, fog, a clock and curves.
+  Line, LineSegments, LineLoop, LineBasicMaterial, LineDashedMaterial, EdgesGeometry, WireframeGeometry, Fog, Clock,
+  SpotLight, MeshPhongMaterial, MeshToonMaterial, MeshNormalMaterial, MeshMatcapMaterial, InstancedBufferGeometry,
+  DataTexture, Matrix3, Spherical, Ray, Triangle, TetrahedronGeometry, TorusKnotGeometry, Path, Curve, LineCurve3,
+  CubicBezierCurve3, ReinhardToneMapping, PCFSoftShadowMap, VSMShadowMap, MultiplyBlending, SubtractiveBlending,
+  NearestFilter, LinearSRGBColorSpace,
 } from 'three';
 export { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 export { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -22,3 +28,9 @@ export { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 export { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 export { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 export { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+export { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
+export { Line2 } from 'three/examples/jsm/lines/Line2.js';
+export { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+export { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+export { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+export { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';

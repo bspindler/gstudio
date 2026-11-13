@@ -35,6 +35,7 @@ Phase 1a and 1b are merged to `main`. Plan 1c (console, portal, Azure adapters, 
 - Infrastructure is Bicep only (`infra/`). Secrets live in Key Vault and are reached via managed identity; never put them in the repo.
 - Money is USD numbers. Rates are fractions from 0 to 1. Days are UTC.
 - Games use only the SDK (`packages/sdk/studio-sdk.js`) for events, purchases, feedback, flags and odds. `packages/core/test/games-compliance.test.ts` checks every game statically.
+- Core libraries: three.js (MIT) is bundled at `packages/sdk/vendor/three.module.js`, served to every game as `../sdk/vendor/three.module.js`. Any game may use it without a new dependency call; games never bundle their own copy. Add parts to `scripts/vendor/three-entry.js` and run `npm run build:three` (loaders stay out, so the bundle has no network code).
 
 ## Local dev
 
