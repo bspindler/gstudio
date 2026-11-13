@@ -49,3 +49,10 @@ Changes:
 
 Changes:
 - HAL-057 fix(hyperline): Hyperline: restore the original angled chase camera: **discarded** (implementer blocked: Need the pre-HAL-041 cameraFor values (eye, target, fov) from git history; they are not in the working tree or docs.)
+
+## Run run-2026-11-13T21-58-15-764Z
+
+**Hyperline:** nothing changed tonight. What makes it itself is the neon chase down the track, seen from the original angled camera. Restoring that camera was blocked because the builder can't read git history. Main Menu (👍) is untouched. three.js waits for the camera restore and for your approval of the dependency.
+
+Changes:
+- HAL-066 fix(hyperline): Hyperline: restore the exact 0.4.1 angled chase camera: **discarded** (implementer blocked: Need the exact 0.4.1 cameraFor values (eye, target, fov, any CAMERA_VIEW default) from git history; they are not in the working tree, docs or changelog, and this build has no git access. Paste them into the ticket and re-run.)

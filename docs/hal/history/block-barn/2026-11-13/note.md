@@ -23,3 +23,10 @@ Changes:
 Changes:
 - HAL-058 fix(block-barn): Block Barn: hold-to-open dots fill a ring while held: **merged** (0.1.1)
 - HAL-062 polish(block-barn): Block Barn: tumbled blocks bounce once softly on landing: **merged** (0.1.1)
+
+## Run run-2026-11-13T21-58-15-764Z
+
+**Block Barn 0.1.1 (merged):** the tower animal now gives a soft hop after each stack, built on the pop that was already there, as L-023 advised. It keeps the calm toy-barn warmth: no score, no new sound, and reduced motion skips it. It stays at 100, which means healthy, not finished.
+
+Changes:
+- HAL-068 polish(block-barn): Block Barn: stacked animal gives a soft happy hop on the tower: **merged** (0.1.1)

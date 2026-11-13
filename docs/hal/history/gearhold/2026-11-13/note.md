@@ -59,3 +59,10 @@ Changes:
 - HAL-063 fix(gearhold): Overhead shot tool: skip levels the build lacks: **discarded** (implementer blocked: The fix belongs in scripts/hal/screens.ts and focus.ts (guard h.start(n) when n is at or above the build's level count and record 'level not present'). Both are protected paths, and the Gearhold hook block is also protected.)
 - HAL-064 polish(gearhold): Gearhold: exit arch glows brass once you hold the gear key: **merged** (0.3.3)
 - HAL-065 feature(gearhold): Gearhold L4 Press Gallery: longer gallery, wider press windows: **discarded** (implementer blocked: T1 (timed presses) is not merged: games/gearhold has no press mechanic, so level 4 Press Gallery cannot be implemented.)
+
+## Run run-2026-11-13T21-58-15-764Z
+
+**Gearhold 0.4.0 (held):** Press Gallery adds brass presses that glow, then thump, in a steady, learnable wave. That fits its clockwork-citadel identity, with no random timing. gearhold-play went from 83.1 to 87.3, with real tension at last (35) and winnable at 75. A kilnwarden in the exit room dropped wins to 14%, so a drone guards it instead. The layout scorer still needs a rerun on the longer map.
+
+Changes:
+- HAL-069 feature(gearhold): Gearhold L4 Press Gallery with its timed gear presses: **held** (0.4.0)

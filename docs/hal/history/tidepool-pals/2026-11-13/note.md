@@ -46,3 +46,10 @@ Changes:
 
 Changes:
 - HAL-061 polish(tidepool-pals): Tidepool: pal in strip glances at the tile group you clear: **merged** (0.6.0)
+
+## Run run-2026-11-13T21-58-15-764Z
+
+**Tidepool Pals 0.6.0 (held):** hand-made level 21 is a litter-and-gem clear on an open board while the tide turns. It sits in the close-finish band and keeps the gentle reef-restoration identity. Your player-feedback note on the art style is answered in the reply to N-011.
+
+Changes:
+- HAL-070 feature(tidepool-pals): Tidepool: new hand-made level after the last one: **held** (0.6.0)

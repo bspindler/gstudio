@@ -21,3 +21,10 @@ Changes:
 
 Changes:
 - HAL-059 tuning(lanternkeep): Lanternkeep: firm up the night before Ashen Loop: **discarded** (0.3.1) (lanternkeep: tension regressed 4.22 (> 1))
+
+## Run run-2026-11-13T21-58-15-764Z
+
+**Lanternkeep:** HAL-067 was discarded. Raising Three Fires' hpMul to 1.25 gave no gain and regressed tension 1.11. Its identity, the gentle garden-defence pacing, is intact. I'll stop adjusting hpMul and instead look at how noSpikes measures the jump into Ashen Loop.
+
+Changes:
+- HAL-067 tuning(lanternkeep): Lanternkeep: Three Fires hpMul 1.05 to 1.25: **discarded** (0.3.1) (lanternkeep: no real gain: 0.00 < 0.5; lanternkeep: tension regressed 1.11 (> 1))
