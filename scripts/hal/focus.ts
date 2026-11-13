@@ -38,6 +38,10 @@ export async function fingerprintGame(root: string, game: string): Promise<Finge
       for (const o of c.objs) per[Math.min(world.SECTORS.length - 1, world.sectorAt(o.x))]!.push(o);
       return world.SECTORS.map((s, i) => ({ key: hash([s, per[i]]), label: `sector ${i + 1}${s.name ? `, ${s.name}` : ''}` }));
     }
+    case 'lanternkeep': {
+      const { LEVELS } = await load<{ LEVELS: Array<{ name?: string }> }>(root, 'games/lanternkeep/lib/levels.js');
+      return LEVELS.map((l, i) => ({ key: hash(l), label: `night ${i + 1}${l.name ? `, ${l.name}` : ''}` }));
+    }
     default: throw new Error(`fingerprint: no level data for ${game}`);
   }
 }

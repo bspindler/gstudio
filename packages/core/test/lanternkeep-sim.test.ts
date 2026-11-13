@@ -7,7 +7,7 @@ import {
   type Game, type Group, type Level,
 } from '../../../games/lanternkeep/lib/sim.js';
 import { endlessLevel } from '../../../games/lanternkeep/lib/endless.js';
-import { play } from './lanternkeep-bot.js';
+import { playLanternkeep as play } from '../src/hal/lanternkeep-bot.js';
 
 // A straight test lane down column 4, lantern at the bottom.
 function lane(waves: Group[][], extra: Partial<Level> = {}): Level {

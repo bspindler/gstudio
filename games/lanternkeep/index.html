@@ -375,11 +375,9 @@ import { createRenderer3d } from './scene3d.js';
 import { createRenderer } from './render.js';
 import { createAudio } from './audio.js';
 
-// Keep version the same as in game.yaml and CHANGELOG.md.
-const studio = createStudio({
-  game: 'lanternkeep', version: '0.2.0',
-  endpoint: resolveEndpoint(location, window.STUDIO_CONFIG),
-});
+const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
+// Keep version the same as in game.yaml and CHANGELOG.md. Under the test robot the SDK sends nothing.
+const studio = createStudio({ game: 'lanternkeep', version: '0.2.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
@@ -387,10 +385,12 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const audio = createAudio();
 
 // ---------- progress ----------
+// Under the test robot, progress starts empty and is never written, so runs repeat and real saves are untouched.
 let save = (() => {
+  if (HAL) return parseSave(null);
   try { return parseSave(localStorage.getItem(SAVE_KEY), localStorage.getItem(OLD_KEY)); } catch { return parseSave(null); }
 })();
-function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* private mode: progress lasts this visit */ } }
+function persist() { if (HAL) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* private mode: progress lasts this visit */ } }
 audio.setOn(save.sound);
 const ENDLESS = endlessLevel();
 const ENDLESS_INDEX = -1;
@@ -1045,18 +1045,29 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// Test hook for automated play-throughs (screenshots, Hal). Only present with ?lkdebug in the URL.
-if (new URLSearchParams(location.search).has('lkdebug')) {
-  window.__lk = {
+// ---- hal hook (test only; inert without ?hal) ----
+// Hal's screenshot and controls checks drive the real page (real taps and clicks) and read it through
+// window.__hal. Nothing here changes how the game plays: cellPoint() says where on screen a grid cell is,
+// state() reads the game, progress() replaces this visit's progress (never written to storage under ?hal),
+// and gold() tops up gold so a check can reach a plant's branch choice. The SDK sends nothing in this mode.
+if (HAL) {
+  window.__hal = {
     cellPoint(c, r) {
       const p = renderer.project(c + 0.5, 0, r + 0.5);
       const rect = $(renderer.kind === '3d' ? 'gl' : 'board2d').getBoundingClientRect();
       return p && { x: rect.left + p.x, y: rect.top + p.y };
     },
-    state() { return g && { phase: g.phase, gold: g.gold, lives: g.lives, wave: g.waveIndex + 1, towers: g.towers.length, enemies: g.enemies.length, flare: flareCharge(g), mode, modal, intro: renderer.introDone }; },
-    give(gold) { if (g) g.gold += gold; },
+    state() {
+      return {
+        mode, modal, paused, renderer: renderer.kind, intro: renderer.introDone, level: levelIndex + 1,
+        ...(g ? { phase: g.phase, gold: g.gold, lives: g.lives, wave: g.waveIndex + 1, towers: g.towers.length, enemies: g.enemies.length, flare: flareCharge(g) } : {}),
+      };
+    },
+    progress(p) { save = parseSave(JSON.stringify({ ...parseSave(null), ...p, v: 2 })); renderTitle(); },
+    gold(n) { if (g) g.gold += n; },
   };
 }
+// ---- end hal hook ----
 if (renderer.kind === '2d') for (const t of TOWER_ORDER) renderer.snapshot(t, 0, cards[t].querySelector('canvas'));
 renderTitle();
 setMode('title');
