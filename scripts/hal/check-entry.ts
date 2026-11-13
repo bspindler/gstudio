@@ -23,8 +23,12 @@ async function main(op: string | undefined, a: string | undefined, b: string | u
   if (!a) throw new Error('usage: check-entry.ts <score|screens|controls|shoot|fingerprint> <name> [out] [focus]');
   switch (op) {
     case 'score': {
-      const { gearholdPlayScorer, SCORERS, scorerFor } = await import('@studio/core/hal');
-      const scorers = { ...SCORERS, 'gearhold-play': gearholdPlayScorer(async (o) => (await import('./gearhold-play.js')).runGearholdPlay(o)) };
+      const { blockBarnScorer, gearholdPlayScorer, SCORERS, scorerFor } = await import('@studio/core/hal');
+      const scorers = {
+        ...SCORERS,
+        'gearhold-play': gearholdPlayScorer(async (o) => (await import('./gearhold-play.js')).runGearholdPlay(o)),
+        'block-barn': blockBarnScorer(async () => (await import('./block-barn-play.js')).runBlockBarnPlay()),
+      };
       const s = scorerFor(a, scorers);
       return out(await s.score(s.defaults));
     }

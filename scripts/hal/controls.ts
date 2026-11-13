@@ -5,6 +5,7 @@
 // Touch drags go through CDP Input.dispatchTouchEvent, which Chromium turns into pointer events with
 // pointerType 'touch' (page.mouse would send pointerType 'mouse' even in a touch context).
 // Tidepool and Hyperline have no hook: one real primary action each, with a screenshot diff and a DOM check.
+// Block Barn: a real touch tap on a block (found through its ?hal hook, which is read-only here) must name it.
 import type { Browser, BrowserContextOptions, CDPSession, Locator, Page } from 'playwright';
 import { closeAll, launchBrowser, newHalContext, serveGames, type StaticServer } from './browser.js';
 
@@ -337,6 +338,28 @@ async function hyperline(run: Run) {
   }
 }
 
+async function blockBarn(run: Run) {
+  const G = 'block-barn', { context, page, errors } = await run.open(PHONE, '/block-barn/index.html?hal');
+  try {
+    await page.waitForFunction(() => !!(window as any).__hal, undefined, { timeout: 15_000 });
+    await page.evaluate(() => (window as any).__hal.seed(1));
+    const types: string[] = [];
+    await page.exposeFunction('__bbPointer', (t: string) => { types.push(t); });
+    await page.evaluate(() => document.getElementById('barn')!.addEventListener('pointerup', (e) => (window as any).__bbPointer(e.pointerType), true));
+    const l = (await page.evaluate(() => (window as any).__hal.state().floor[0])) as string;
+    const t = (await page.evaluate((x) => ((window as any).__hal.targets() as { kind: string; letter?: string; x: number; y: number; w: number; h: number }[])
+      .find((b) => b.kind === 'block' && b.letter === x), l))!;
+    await page.touchscreen.tap(t.x + t.w / 2, t.y + t.h / 2);
+    const named = (await page.evaluate(() => (window as any).__hal.state().named)) as string[];
+    run.add(G, 'touch tap on a block names it', named.includes(l), `tapped block ${l} at ${Math.round(t.x + t.w / 2)},${Math.round(t.y + t.h / 2)}; named: ${named.join(',') || 'none'}`);
+    await wait(100);
+    run.add(G, 'touch events reach the game as pointerType touch', types.length > 0 && types.every((x) => x === 'touch'), `barn pointerup types: ${[...new Set(types)].join(',') || 'none'}`);
+  } finally {
+    run.noErrors(G, errors);
+    await context.close();
+  }
+}
+
 /**
  * Runs every controls check against the local games/ folder. Never throws for a game failure (that is a failed
  * check); throws "browser unavailable: ..." from launchBrowser when no WebGL 2 Chromium can start.
@@ -352,6 +375,7 @@ export async function runControlsCheck(opts: ControlsOptions = {}): Promise<Cont
     if (want('gearhold')) await run.guard('gearhold', 'touch (390x844)', () => gearholdTouch(run));
     if (want('tidepool-pals')) await run.guard('tidepool-pals', 'touch tile tap', () => tidepool(run));
     if (want('hyperline')) await run.guard('hyperline', 'tap and key', () => hyperline(run));
+    if (want('block-barn')) await run.guard('block-barn', 'touch block tap', () => blockBarn(run));
     return run.checks;
   } finally {
     await closeAll(browser, server);

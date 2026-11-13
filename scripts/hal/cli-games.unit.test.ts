@@ -4,7 +4,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gearholdPlayScorer, SCORERS } from '@studio/core/hal';
+import { blockBarnScorer, gearholdPlayScorer, SCORERS } from '@studio/core/hal';
 
 const seen = vi.hoisted(() => ({ ops: [] as string[][], run: [] as string[][] }));
 vi.mock('./cli-ops.js', async (orig) => ({
@@ -27,7 +27,15 @@ beforeEach(async () => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-const deps = () => ({ scorers: { ...SCORERS, 'gearhold-play': gearholdPlayScorer(async () => ({ records: [], errors: [] })) }, halDir, now: () => new Date('2026-11-12T03:00:00Z') });
+// As scripts/hal.ts wires them: the core registry plus the two browser-backed scorers.
+const deps = () => ({
+  scorers: {
+    ...SCORERS,
+    'gearhold-play': gearholdPlayScorer(async () => ({ records: [], errors: [] })),
+    'block-barn': blockBarnScorer(async () => { throw new Error('not run in this test'); }),
+  },
+  halDir, now: () => new Date('2026-11-12T03:00:00Z'),
+});
 
 describe('game slugs for subcommands', () => {
   it('tell --game accepts a real game and rejects gearhold-play', async () => {
@@ -36,12 +44,16 @@ describe('game slugs for subcommands', () => {
     expect(err.join('\n')).toMatch(/unknown game gearhold-play/);
     expect(err.join('\n')).not.toMatch(/known: .*gearhold-play/);
   });
+  it('tell --game accepts block-barn: its browser scorer is what makes it a game', async () => {
+    expect(await main(['tell', 'a hiding duck', '--game', 'block-barn'], deps())).toBe(0);
+  });
   it('serve (the Run-now page) and run get the game slugs only', async () => {
     expect(await main(['serve'], deps())).toBe(0);
     expect(await main(['run', '--report-only'], deps())).toBe(0);
     for (const games of [...seen.ops, ...seen.run]) {
       expect(games).toContain('gearhold');
       expect(games).not.toContain('gearhold-play');
+      expect([...games].sort()).toEqual(['block-barn', 'gearhold', 'hyperline', 'tidepool-pals']);
     }
     expect(seen.ops).toHaveLength(1);
     expect(seen.run).toHaveLength(1);
