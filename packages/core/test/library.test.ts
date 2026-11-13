@@ -32,6 +32,15 @@ describe('loadGameLibrary', () => {
     await expect(loadGameLibrary(lib({ alpha: yaml('alpha', 'odds: hidden\n') }))).rejects.toThrow(/odds/);
   });
 
+  it('accepts childDirected: true', async () => {
+    const games = await loadGameLibrary(lib({ alpha: yaml('alpha', 'childDirected: true\n') }));
+    expect(games[0]?.childDirected).toBe(true);
+  });
+
+  it('rejects a non-boolean childDirected', async () => {
+    await expect(loadGameLibrary(lib({ alpha: yaml('alpha', 'childDirected: "yes"\n') }))).rejects.toThrow(/childDirected/);
+  });
+
   it('loads the real library', async () => {
     // Contributors add their own games here, so check the known ones are present rather than an exact list.
     const dir = fileURLToPath(new URL('../../../games', import.meta.url));

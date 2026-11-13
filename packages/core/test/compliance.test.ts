@@ -117,3 +117,47 @@ const u = 'https://example.com/x'; // checkout later
     expect(complianceViolations(html)).toEqual([]);
   });
 });
+
+describe('complianceViolations for child-directed games', () => {
+  const kid = `<!doctype html><html><body>
+<script type="module">
+import { createStudio } from '../../packages/sdk/studio-sdk.js';
+const { purchase } = createStudio({ gameSlug: 'kid', endpoint: '' });
+</script></body></html>`;
+  const kidWith = (extra: string) => kid.replace('</body>', `${extra}</body>`);
+  const opt = { childDirected: true };
+
+  it('returns [] for a clean child-directed page with no events or prompts', () => {
+    expect(complianceViolations(kid, opt)).toEqual([]);
+  });
+
+  it.each([
+    ['resolveEndpoint(', 'const e = resolveEndpoint(location, window.STUDIO_CONFIG);'],
+    ['track(', "track('level_start', {});"],
+    ['purchase.offer(', 'purchase.offer({});'],
+    ['feedback.maybePrompt(', 'feedback.maybePrompt();'],
+  ])('flags %s', (_n, code) => {
+    const v = complianceViolations(kidWith(`<script>${code}</script>`), opt);
+    expect(v).toHaveLength(1);
+    expect(v[0]).toMatch(/child-directed/i);
+  });
+
+  it('still flags fetch( (the existing network rule applies)', () => {
+    expect(complianceViolations(kidWith("<script>fetch('/x');</script>"), opt)).toHaveLength(1);
+  });
+
+  it("requires endpoint: '' (no-ingest)", () => {
+    const v = complianceViolations(kid.replace("endpoint: ''", 'endpoint: "https://x.example"'), opt);
+    expect(v).toHaveLength(1);
+    expect(v[0]).toMatch(/child-directed/i);
+  });
+
+  it('accepts a double-quoted empty endpoint', () => {
+    expect(complianceViolations(kid.replace("endpoint: ''", 'endpoint: ""'), opt)).toEqual([]);
+  });
+
+  it('leaves ordinary games unchanged without the option', () => {
+    expect(complianceViolations(kid).length).toBeGreaterThan(0);
+    expect(complianceViolations(clean, { childDirected: false })).toEqual([]);
+  });
+});

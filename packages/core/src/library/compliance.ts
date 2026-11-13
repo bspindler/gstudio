@@ -16,13 +16,25 @@ function stripComments(html: string): string {
     .replace(jsComments, (m: string, str?: string) => str ?? ' ');
 }
 
-export function complianceViolations(html: string): string[] {
+export function complianceViolations(html: string, o: { childDirected?: boolean } = {}): string[] {
+  const kid = o.childDirected === true;
   const v: string[] = [];
   const code = stripComments(html);
 
   if (!/import\s*\{[^}]*createStudio[^}]*\}\s*from\s*['"][^'"]*studio-sdk\.js['"]/.test(html))
     v.push("The game must import createStudio from the studio SDK (studio-sdk.js); it is how events, purchases and feedback work.");
-  if (!code.includes('resolveEndpoint('))
+  if (kid) {
+    if (!/endpoint\s*:\s*(['"])\1/.test(code))
+      v.push("This game is child-directed, so it must call createStudio with endpoint: '' (the SDK then sends nothing).");
+    if (code.includes('resolveEndpoint('))
+      v.push('This game is child-directed, so it must not use resolveEndpoint( ; events are never sent.');
+    if (/\btrack\s*\(/.test(code))
+      v.push('This game is child-directed, so it must not call track( ; no events are sent.');
+    if (code.includes('purchase.offer('))
+      v.push('This game is child-directed, so it must not call purchase.offer( ; there are no purchases.');
+    if (code.includes('feedback.maybePrompt('))
+      v.push('This game is child-directed, so it must not call feedback.maybePrompt( ; there are no prompts.');
+  } else if (!code.includes('resolveEndpoint('))
     v.push('Pass endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) to createStudio. It picks where events go, and it makes sure test builds send nothing.');
 
   if (NETWORK.test(code))
@@ -51,6 +63,8 @@ export function complianceViolations(html: string): string[] {
 
   if (/\shidden[\s>=]/.test(html) && !/\[hidden\][^{]*\{\s*display:\s*none\s*!important/.test(html))
     v.push('The game uses the hidden attribute, so add this CSS rule: [hidden]{display:none !important}');
+
+  if (kid) return v;
 
   if (!/track\(\s*['"]level_start['"]/.test(html))
     v.push("The game must call track('level_start' ...) when a level starts.");
