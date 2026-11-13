@@ -231,7 +231,7 @@
 
   /* ---- the grown-up corner ---- */
   #corner { position: fixed; z-index: 20; top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 10px); width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%;
-    background: rgba(70, 40, 25, .28); color: rgba(255, 240, 220, .8); touch-action: none; -webkit-touch-callout: none; }
+    background: rgba(70, 40, 25, .28); color: rgba(255, 240, 220, .8); touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
   #corner svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   #corner .ring { fill: none; stroke: #fff4d8; stroke-width: 4; stroke-dasharray: 126; stroke-dashoffset: 126; transform: rotate(-90deg); transform-origin: 23px 23px; }
   #corner.holding .ring { transition: stroke-dashoffset 3s linear; stroke-dashoffset: 0; }
@@ -286,7 +286,7 @@
     <p>On iPhone or iPad, turn on Guided Access (Settings, Accessibility, Guided Access). Then triple-click the side or Home button while Block Barn is open to lock the device to it. Triple-click again and enter your passcode to leave.</p>
 
     <h3>Keep your recordings</h3>
-    <p>Add Block Barn to your Home Screen (Share, then Add to Home Screen) to keep your recordings. Safari may clear a website's saved data after a few weeks without a visit unless it is on the Home Screen.</p>
+    <p>On iPhone or iPad, add Block Barn to your Home Screen first (Share, then Add to Home Screen), then open it and record from the Home Screen icon. Safari and the Home Screen app keep separate recordings, and Safari may clear a website's saved data after a few weeks without a visit.</p>
 
     <button id="close" type="button">Back to the barn</button>
   </div>
@@ -343,7 +343,7 @@ function wakeAudio() {
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     } catch { ac = null; return null; }
   }
-  if (ac.state === 'suspended') ac.resume().catch(() => {});
+  if (ac.state !== 'running') ac.resume().catch(() => {}); // 'suspended', or iOS's 'interrupted' after a call or Siri
   return ac;
 }
 function env(g, t0, peak, attack, dur) {
@@ -870,7 +870,8 @@ function closeCorner() {
   quietMs = 0; invitedThisQuiet = false;
 }
 $('close').addEventListener('click', closeCorner);
-const voicesList = mountVoices($('voices'), { recorder, animals: ANIMALS, noises: NOISE, play: hearBack, stop: hush_voice });
+// Recording starts only while the grown-up corner is open and showing (recorder.js checks this before the microphone).
+const voicesList = mountVoices($('voices'), { recorder, animals: ANIMALS, noises: NOISE, play: hearBack, stop: hush_voice, canRecord: () => cornerOpen && !dialog.hidden && document.visibilityState !== 'hidden' });
 const soundBtn = $('sound');
 function renderSound() { soundBtn.setAttribute('aria-pressed', String(soundOn)); soundBtn.textContent = soundOn ? 'Sound on' : 'Sound off'; }
 soundBtn.addEventListener('click', () => {

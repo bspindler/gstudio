@@ -9,6 +9,10 @@ const LIMIT_MS = 6000; // a recording stops by itself after 6 s
 // Mic errors that mean "not allowed / no microphone", as opposed to a passing hiccup.
 const MIC_REFUSED = new Set(['NotAllowedError', 'SecurityError', 'NotFoundError', 'OverconstrainedError']);
 
+// recorder -> canRecord(): the grown-up corner's "is it open?" check, set once by mountVoices. start() refuses without
+// it, or while it says no, so nothing outside the open corner can turn the microphone on.
+const gates = new WeakMap();
+
 export function createRecorder(env = globalThis) {
   let micRefused = false;
   let noStorage = false;
@@ -17,6 +21,8 @@ export function createRecorder(env = globalThis) {
   let known = null; // the keys that have a recording, read once (null until read, or if the read failed)
   let knownP = null;
   let rec = null; // the one recording in progress: { key, mr, stream, chunks, done, timer, stopped }
+  let api = null;
+  let persisted = false;
   const listeners = new Set();
   const notify = () => { for (const f of listeners) { try { f(); } catch (e) { /* a listener's problem */ } } };
 
@@ -75,6 +81,10 @@ export function createRecorder(env = globalThis) {
   }
 
   async function start(key) {
+    const gate = gates.get(api);
+    let open = false;
+    try { open = !!gate && gate() === true; } catch (e) { open = false; }
+    if (!open) throw new Error('closed');
     if (rec) throw new Error('already recording');
     const a = available();
     if (!a.ok) throw new Error(a.why);
@@ -144,6 +154,11 @@ export function createRecorder(env = globalThis) {
     forget(key);
     await loadKnown();
     if (known) known.add(key);
+    // After the first kept recording, ask the browser not to clear this site's storage (a refusal changes nothing).
+    if (!persisted) {
+      persisted = true;
+      try { const p = env.navigator && env.navigator.storage && env.navigator.storage.persist && env.navigator.storage.persist(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignore */ }
+    }
   }
 
   async function get(key) {
@@ -178,7 +193,7 @@ export function createRecorder(env = globalThis) {
     return openDb().then(() => {}, () => {});
   })();
 
-  return {
+  api = {
     available, start, finish, keep, get, reset, keys,
     /** Resolves once the database has been opened (or found unusable). */
     ready: () => ready,
@@ -187,6 +202,7 @@ export function createRecorder(env = globalThis) {
     /** Calls fn whenever available(), recording() or a stop changes; returns an unsubscribe function. */
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   };
+  return api;
 }
 
 // ---------- the list in the grown-up corner ----------
@@ -217,9 +233,11 @@ const CSS = `
  * a call) noise: record, stop, hear it, keep, redo, back to default. `play(url)` plays a recording through the page's
  * shared audio element and resolves when it ends; `stop()` silences the barn's voice and any hear-back;
  * `onChange(key)` is called after a recording is kept or removed. `noises` maps a letter to its noise word.
+ * `canRecord()` is true only while the grown-up corner is open: recording starts only then (the first mount's check stays).
  */
 export function mountVoices(section, o) {
   const { recorder, animals } = o;
+  if (!gates.has(recorder)) gates.set(recorder, typeof o.canRecord === 'function' ? o.canRecord : () => false);
   const play = o.play || (() => Promise.resolve());
   const stop = o.stop || (() => {});
   const onChange = o.onChange || (() => {});

@@ -22,6 +22,9 @@ afterAll(async () => {
 });
 
 function fakeSpeech(): void {
+  // One on-device English voice (the barn speaks only with a local voice), and a plain utterance that accepts it.
+  const local = { name: 'Samantha', lang: 'en-US', localService: true, voiceURI: 'Samantha', default: false };
+  (window as any).SpeechSynthesisUtterance = class { text: string; volume = 1; rate = 1; pitch = 1; voice: unknown = null; lang = ''; onend: any = null; onerror: any = null; constructor(t: string) { this.text = t; } };
   const log: string[] = [];
   let hold = true;
   const pending: any[] = [];
@@ -34,7 +37,7 @@ function fakeSpeech(): void {
       log.push(u.text); pending.push(u); if (!hold) setTimeout(() => u.onend?.(), 10);
     },
     cancel() { pending.length = 0; },
-    getVoices: () => [], addEventListener() {}, removeEventListener() {}, pause() {}, resume() {},
+    getVoices: () => [local], addEventListener() {}, removeEventListener() {}, pause() {}, resume() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => fake });
   (window as any).__fakeSpeech = { log, plays, release() { hold = false; for (const u of pending.splice(0)) u.onend?.(); } };
@@ -65,6 +68,13 @@ const countTx = () => {
   const w = window as any;
   w.__tx = 0;
   IDBDatabase.prototype.transaction = function (this: IDBDatabase, ...a: any[]) { w.__tx++; return (real as any).apply(this, a); } as any;
+};
+// Counts navigator.storage.persist() calls (and makes them fail, which the recorder must ignore).
+const countPersist = () => {
+  const w = window as any;
+  w.__persist = 0;
+  if (!navigator.storage) Object.defineProperty(navigator, 'storage', { configurable: true, value: {} });
+  Object.defineProperty(navigator.storage, 'persist', { configurable: true, value: () => { w.__persist++; return Promise.reject(new Error('no')); } });
 };
 const insecure = () => { Object.defineProperty(window, 'isSecureContext', { configurable: true, get: () => false }); };
 
@@ -154,8 +164,9 @@ async function recordCow(page: Page): Promise<void> {
 
 describe('block barn: grown-ups record their own voice', () => {
   it('records name-c, hears it back, keeps it; after a reload tapping C plays the recording, not a clip or speech', async () => {
-    const { page, hal } = await open();
+    const { page, hal } = await open(countPersist);
     await recordCow(page);
+    expect(await page.evaluate(() => (window as any).__persist)).toBe(0);
     const name = row(page, /name.*cow/i);
     await expect(name.getByRole('button', { name: /^redo$/i }).isVisible()).resolves.toBe(true);
     await name.getByRole('button', { name: /^hear it$/i }).tap();
@@ -163,6 +174,8 @@ describe('block barn: grown-ups record their own voice', () => {
     await name.getByRole('button', { name: /^keep$/i }).tap();
     await name.getByText(/your voice/i).waitFor({ timeout: 5000 });
     await expect(name.getByRole('button', { name: /back to default/i }).isVisible()).resolves.toBe(true);
+    // The first kept recording asks the browser to keep this site's storage (a refusal is ignored).
+    await expect.poll(() => page.evaluate(() => (window as any).__persist)).toBe(1);
 
     await goto(page);
     await seedWith(page, 'c');
@@ -174,6 +187,36 @@ describe('block barn: grown-ups record their own voice', () => {
     expect(await said(page)).not.toContain('cow');
     expect((await plays(page)).filter((s) => /audio\/name-c/.test(s))).toEqual([]);
     expect(hal.blockedRequests).toEqual([]);
+    expect(hal.consoleErrors).toEqual([]);
+  });
+
+  it('start() refuses while the grown-up corner is closed, and never opens the microphone', async () => {
+    const { page, hal } = await open(watchMic);
+    // A string, so the test runner does not rewrite the page's own import().
+    const r = await page.evaluate(`(async () => {
+      const m = await import('./recorder.js');
+      const { ANIMALS } = await import('./animals.js');
+      const tryStart = async (rec) => { try { await rec.start('name-c'); return 'started'; } catch (e) { return String(e.message); } };
+      const bare = m.createRecorder();
+      await bare.ready();
+      const out = { ungated: await tryStart(bare) };
+      let open = false;
+      const gated = m.createRecorder();
+      await gated.ready();
+      m.mountVoices(document.createElement('section'), { recorder: gated, animals: ANIMALS, canRecord: () => open });
+      out.closed = await tryStart(gated);
+      // A second mount cannot replace the first gate with a more permissive one.
+      m.mountVoices(document.createElement('section'), { recorder: gated, animals: ANIMALS, canRecord: () => true });
+      out.remounted = await tryStart(gated);
+      out.streams = String(window.__streams.length);
+      open = true;
+      out.open = await tryStart(gated);
+      if (out.open === 'started') await gated.finish();
+      return out;
+    })()`) as Record<string, string>;
+    expect(r).toEqual({ ungated: 'closed', closed: 'closed', remounted: 'closed', streams: '0', open: 'started' });
+    // The page's own corner, closed: no Record button is reachable, and nothing has asked for the microphone.
+    expect(await page.getByRole('dialog').isVisible()).toBe(false);
     expect(hal.consoleErrors).toEqual([]);
   });
 

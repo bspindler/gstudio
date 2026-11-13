@@ -28,14 +28,17 @@ function fakeSpeech(): void {
   let hold = true;
   const pending: any[] = [];
   const w = window as any;
-  const calls: { text: string; volume: number; sync: boolean; rate: number; pitch: number }[] = [];
+  // One on-device English voice (the barn speaks only with a local voice), and a plain utterance that accepts it.
+  const local = { name: 'Samantha', lang: 'en-US', localService: true, voiceURI: 'Samantha', default: false };
+  w.SpeechSynthesisUtterance = class { text: string; volume = 1; rate = 1; pitch = 1; voice: unknown = null; lang = ''; onend: any = null; onerror: any = null; constructor(t: string) { this.text = t; } };
+  const calls: { text: string; volume: number; sync: boolean; rate: number; pitch: number; voice: string | null }[] = [];
   const times: { text: string; start: number; end: number | null }[] = [];
   const plays: { src: string; sync: boolean }[] = [];
   const realPlay = HTMLMediaElement.prototype.play;
   HTMLMediaElement.prototype.play = function (this: HTMLMediaElement) { plays.push({ src: this.src, sync: w.__sync === true }); return realPlay.call(this); };
   const fake = {
     speak(u: any) {
-      calls.push({ text: u.text, volume: u.volume, sync: w.__sync === true, rate: u.rate, pitch: u.pitch });
+      calls.push({ text: u.text, volume: u.volume, sync: w.__sync === true, rate: u.rate, pitch: u.pitch, voice: u.voice?.name ?? null });
       if (u.text.trim() === '') return; // the silent priming utterance
       const t = { text: u.text, start: performance.now(), end: null as number | null };
       times.push(t);
@@ -44,7 +47,7 @@ function fakeSpeech(): void {
       log.push(u.text); pending.push(u); if (!hold) setTimeout(() => u.onend?.(), 10);
     },
     cancel() { log.push('<cancel>'); pending.length = 0; },
-    getVoices: () => [], addEventListener() {}, removeEventListener() {}, pause() {}, resume() {},
+    getVoices: () => [local], addEventListener() {}, removeEventListener() {}, pause() {}, resume() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => fake });
   (window as any).__fakeSpeech = { log, calls, plays, times, release() { hold = false; for (const u of pending.splice(0)) u.onend?.(); } };
@@ -492,6 +495,47 @@ describe('block barn page', () => {
     const b = (await state(page)).floor[1]!;
     await tapBlock(page, b);
     expect((await state(page)).named).toContain(b);
+  });
+
+  it('every spoken line uses the on-device voice', async () => {
+    const { page } = await open();
+    await seedWith(page, 'c');
+    await tapBlock(page, 'c');
+    await page.evaluate(() => (window as any).__fakeSpeech.release());
+    await expect.poll(() => said(page), { timeout: 8000 }).toContain('moo');
+    const voices = await page.evaluate(() => (window as any).__fakeSpeech.calls.filter((c: any) => c.text.trim()).map((c: any) => c.voice));
+    expect(voices.length).toBeGreaterThan(0);
+    for (const v of voices) expect(v).toBe('Samantha');
+  });
+
+  it("sound wakes an AudioContext that is not running, including iOS's 'interrupted'", async () => {
+    const hal = await newHalContext(browser, { contextOptions: PHONE });
+    opened.push(hal);
+    await hal.context.addInitScript(fakeSpeech);
+    await hal.context.addInitScript(() => {
+      const w = window as any;
+      w.__resumes = 0;
+      const P = (w.BaseAudioContext ?? w.AudioContext).prototype;
+      Object.defineProperty(P, 'state', { configurable: true, get: () => 'interrupted' });
+      const A = w.AudioContext.prototype; // resume() lives on AudioContext, not BaseAudioContext
+      const real = A.resume;
+      A.resume = function (this: any) { w.__resumes++; return real.call(this); };
+    });
+    const page = await hal.context.newPage();
+    await page.goto(`${server.origin}/block-barn/index.html?hal`);
+    await page.waitForFunction(() => !!(window as any).__hal, null, { timeout: 5000 });
+    await tapBlock(page, (await state(page)).floor[0]!);
+    await expect.poll(() => page.evaluate(() => (window as any).__resumes)).toBeGreaterThan(0);
+  });
+
+  it('the corner keeps a drifting finger (no scrolling, callout or selection), and tells grown-ups to record from the Home Screen icon', async () => {
+    const { page } = await open();
+    const css = await page.evaluate(() => { const s = getComputedStyle(document.getElementById('corner')!); return { touch: s.touchAction, select: s.userSelect || (s as any).webkitUserSelect }; });
+    expect(css).toEqual({ touch: 'none', select: 'none' });
+    const text = (await page.locator('#grownups').textContent()) ?? '';
+    expect(text).toMatch(/Home Screen first/i);
+    expect(text).toMatch(/record from the Home Screen icon/i);
+    expect(text).toMatch(/Safari and the Home Screen app keep separate recordings/i);
   });
 
   it('a hidden tab stops speaking', async () => {
