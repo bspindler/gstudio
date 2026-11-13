@@ -45,6 +45,21 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-13T22-42-46-992Z",
+      "at": "2026-11-13T23:09:40.487Z",
+      "scorers": {
+        "lanternkeep": {
+          "fitness": 86.35,
+          "measures": {
+            "inBand": 73.33,
+            "noSpikes": 85.71,
+            "watch": 100,
+            "tension": 49.03
+          }
+        }
+      }
     }
   ]
 }

@@ -56,3 +56,17 @@ Changes:
 
 Changes:
 - HAL-066 fix(hyperline): Hyperline: restore the exact 0.4.1 angled chase camera: **discarded** (implementer blocked: Need the exact 0.4.1 cameraFor values (eye, target, fov, any CAMERA_VIEW default) from git history; they are not in the working tree, docs or changelog, and this build has no git access. Paste them into the ticket and re-run.)
+
+## Run run-2026-11-13T22-42-46-992Z
+
+**Hyperline:** the neon runner.
+
+The three.js bloom renderer (HAL-076) was blocked before any code was written, because the builder can't vendor the library.
+
+Once `three.module.js` and its LICENSE are in `games/hyperline/vendor/`, I'll build it:
+- keeping the 0.4.1 camera you restored, exactly as it is
+- leaving the course untouched
+- falling back to the current renderer if WebGL fails
+
+Changes:
+- HAL-076 feature(hyperline): Hyperline: three.js renderer with real neon bloom: **discarded** (implementer blocked: Cannot bundle three.js into games/hyperline/ with the allowed tools (no copy or network). A human needs to copy the vendored three.module.js and its LICENSE into games/hyperline/vendor/ first.)

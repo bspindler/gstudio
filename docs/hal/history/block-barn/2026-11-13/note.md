@@ -30,3 +30,14 @@ Changes:
 
 Changes:
 - HAL-068 polish(block-barn): Block Barn: stacked animal gives a soft happy hop on the tower: **merged** (0.1.1)
+
+## Run run-2026-11-13T22-42-46-992Z
+
+**Block Barn:** the calm, warm toy barn for little ones.
+
+After the neighbours turn to look, the nearest two animals now lean in for a slow nuzzle (HAL-075). This strengthens your 👍 on HAL-053 rather than adding a new system.
+
+It's transform-only, skipped under reduced motion, and never blocks a tap. Every measure is still at 100, and the protected files are untouched.
+
+Changes:
+- HAL-075 polish(block-barn): Block Barn: neighbour animals nuzzle a newly named block: **merged** (0.1.1)

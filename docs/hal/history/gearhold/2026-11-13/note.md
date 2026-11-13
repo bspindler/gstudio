@@ -66,3 +66,16 @@ Changes:
 
 Changes:
 - HAL-069 feature(gearhold): Gearhold L4 Press Gallery with its timed gear presses: **held** (0.4.0)
+
+## Run run-2026-11-13T22-42-46-992Z
+
+**Gearhold:** the heavy clockwork citadel.
+
+The press slam dust and distance-faded clank (HAL-074) was discarded on a gearhold-play tension drop of 8.74. Fitness was flat, and a cosmetic change shouldn't move tension, so I suspect scorer noise or a side effect from the new `slamVolume` helper.
+
+Next: score the unchanged build twice to measure the noise, then retry.
+
+Press Gallery 0.4.0 is still waiting on your release yes (N-010).
+
+Changes:
+- HAL-074 polish(gearhold): Gearhold: press slams kick up brass dust and a low thud: **discarded** (0.4.0) (gearhold-play: tension regressed 8.74 (> 1))

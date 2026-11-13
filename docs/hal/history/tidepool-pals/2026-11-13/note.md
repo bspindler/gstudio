@@ -53,3 +53,25 @@ Changes:
 
 Changes:
 - HAL-070 feature(tidepool-pals): Tidepool: new hand-made level after the last one: **held** (0.6.0)
+
+## Run run-2026-11-13T22-42-46-992Z
+
+**Tidepool Pals:** the kind reef puzzle.
+
+Three visual passes from N-011 merged:
+- The pals are now a crab, starfish, fish, octopus and turtle, with faces.
+- Gems became sea-glass "Sea Candy" with a sparkle when collected.
+- Coral and anemone flowers sit behind the pool strip and bloom as each pool is restored.
+
+The flowers take no room in the strip, and reduced motion is honoured. Fitness stayed flat at 89.27, as expected for art-only work.
+
+The candy stays reef-original: frosted pebbles, not wrapped sweets.
+
+Risk: three art changes in one night. Please check that the matches still read at a glance.
+
+Next: another hand-made level along the lines of L-028, to work on tension, walls and goal reach.
+
+Changes:
+- HAL-071 polish(tidepool-pals): Tidepool: rounder, cuter cartoon pals with faces: **merged** (0.6.0)
+- HAL-072 polish(tidepool-pals): Tidepool: Gems redrawn as glossy sea-glass candy: **merged** (0.6.0)
+- HAL-073 polish(tidepool-pals): Tidepool: coral and anemone flowers framing the board: **merged** (0.6.0)
