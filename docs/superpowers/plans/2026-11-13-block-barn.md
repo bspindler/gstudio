@@ -173,3 +173,16 @@
 
 - [ ] **Step 1:** Failing test: building Pages with Block Barn present fails today (the plain compliance check demands level events). **Step 2:** FAIL. **Step 3:** Implement both changes. **Step 4:** PASS; screenshot the shelf at 390x844 and 1280x800 and look at the card.
 - [ ] **Step 5:** Commit `feat(site): Block Barn on the shelf; Pages build honours childDirected`.
+
+### Task 10: Slower, warmer device speech (Brian's playtest, 2026-11-13)
+
+**Files:**
+- Modify: `games/block-barn/voice.js` (+ `voice.d.ts`), `games/block-barn/index.html` (the tap's talk sequence)
+- Test: `packages/core/test/block-barn-voice.test.ts`, `scripts/hal/block-barn-page.test.ts`
+
+**Interfaces:**
+- Produces: `pickVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null` (English only; prefers names containing "Premium", then "Enhanced", then a local en-US/en-GB voice, then null = browser default); `SPEECH = { rate: 0.7, pitch: 1.0, gapMs: 700 }`.
+
+- [ ] **Step 1: Failing tests:** speech utterances use rate 0.7 and pitch 1.0; the chosen voice is the Premium one when the list has Premium, Enhanced and plain English voices, Enhanced when no Premium, never a non-English voice; the choice is re-made after `voiceschanged`; a tap on C speaks "C", then "c", then "cow" as three utterances with gaps of at least 700 ms between the end of one and the start of the next; a new tap during a gap cancels the rest of the sequence (nothing from the old tap speaks later). Recordings and clips are unaffected (they play as recorded, in the same order with the same gaps).
+- [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS (voice + page tests).
+- [ ] **Step 5:** Commit `feat(block-barn): slower, warmer device speech; best installed voice`.
