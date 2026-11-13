@@ -12,6 +12,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Tidepool Pals has a new hand-made level 21: clear the litter along the reef floor and collect Gems while the tide turns.
 - Tidepool Pals are now rounder, cuter sea animals: a crab, starfish, fish, octopus and turtle, each with big shiny eyes, rosy cheeks and a smile.
 - Gems are now glossy sea-glass 'Sea Candy' pebbles with a twist of light and a little sparkle when collected.
+- Coral fans and swaying anemone flowers now decorate the pool strip, blooming brighter as you restore each pool.
 
 ## 0.5.3 (2026-11-12)
 - The board now sits right under the goal bar instead of floating in the middle, so the spare water collects in one calm band above the tabs.

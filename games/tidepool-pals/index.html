@@ -135,6 +135,13 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 /* ---------- pool panel: the pal and pool this level is restoring (decoration only) ---------- */
 .poolpanel{flex:0 0 auto;min-height:0;width:100%;max-width:420px;overflow:hidden;margin-top:6px}
 .pp{display:flex;align-items:center;gap:10px;background:var(--panel);box-shadow:var(--rim);border-radius:16px;padding:6px 12px}
+.pp{position:relative;overflow:hidden}
+.pp>*{position:relative;z-index:1}
+.pp>.flora{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:calc(.3 + .7*var(--bloom,0));filter:saturate(calc(.5 + .8*var(--bloom,0)));transition:opacity .8s,filter .8s}
+.flora svg{position:absolute;bottom:0;height:60%;width:auto;overflow:visible;transform-origin:50% 100%}
+.flora .fl{animation:florasway 5s ease-in-out infinite alternate}
+.flora .fr{animation-delay:-2.5s}
+@keyframes florasway{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
 .pp .ppal{flex:none;width:40px;aspect-ratio:1;display:grid;place-items:center;animation:bob 3.2s ease-in-out infinite}
 .pp .ppal svg{width:100%;height:100%;display:block;transform-origin:50% 85%}
 .pp .ppal svg.peek{animation:palpeek .7s ease-out 1}
@@ -956,6 +963,16 @@ function startLevel(n, picks = [], helperId = null) {
   return true;
 }
 
+/** Soft coral fans and anemone blooms tucked into the pool strip's corners. Brightness follows --bloom (restoration). */
+function reefFlora(pal) {
+  const c1 = (pal && pal.accent) || '#FF8FA3', c2 = '#FFB86B';
+  const fan = `<svg class="fl" viewBox="0 0 40 40" aria-hidden="true" style="left:-2px"><path d="M20 40V26M20 30L9 18M20 30l11-12M20 26V10" stroke="${c1}" stroke-width="3.2" stroke-linecap="round" fill="none"/><circle cx="9" cy="17" r="3.2" fill="${c1}"/><circle cx="31" cy="17" r="3.2" fill="${c1}"/><circle cx="20" cy="9" r="3.4" fill="${c1}"/></svg>`;
+  const ane = `<svg class="fr" viewBox="0 0 40 40" aria-hidden="true" style="right:-2px"><path d="M20 40V24" stroke="${c2}" stroke-width="3" stroke-linecap="round"/><g stroke="#FFD9A8" stroke-width="2.6" stroke-linecap="round"><path d="M20 24L10 12M20 24L15 9M20 24V7M20 24l5-15M20 24l10-12"/></g><g fill="${c2}"><circle cx="10" cy="11" r="2.4"/><circle cx="15" cy="8" r="2.4"/><circle cx="20" cy="6" r="2.4"/><circle cx="25" cy="8" r="2.4"/><circle cx="30" cy="11" r="2.4"/></g></svg>`;
+  const small = `<svg class="fl" viewBox="0 0 40 40" aria-hidden="true" style="left:34px;height:36%"><path d="M20 40V22M20 28L12 18M20 28l8-10" stroke="${c2}" stroke-width="3.4" stroke-linecap="round" fill="none"/></svg>`;
+  const small2 = `<svg class="fr" viewBox="0 0 40 40" aria-hidden="true" style="right:34px;height:36%"><path d="M20 40V22" stroke="${c1}" stroke-width="3" stroke-linecap="round"/><circle cx="20" cy="18" r="7" fill="${c1}" opacity=".8"/><circle cx="20" cy="18" r="3" fill="#FFE9EE"/></svg>`;
+  return `<div class="flora" aria-hidden="true">${fan}${small}${small2}${ane}</div>`;
+}
+
 /** Calm panel under the board: the pool being restored, its favourite pal (a silhouette until it is in the album) and
     how much of the pool is cleaned up. Decoration only: no timers, no prompts. */
 function renderPoolPanel() {
@@ -964,7 +981,7 @@ function renderPoolPanel() {
   const cr = CREATURES.find((c) => PAL_HOME[c.id] === p);
   const owned = !!(cr && S.album[cr.id]);
   const palLine = !cr ? '' : owned ? `${cr.name} is cheering you on` : `${cr.name}'s favourite spot`;
-  el.innerHTML = `<div class="pp">${cr ? `<span class="ppal" aria-hidden="true">${creatureSVG(cr, !owned)}</span>` : ''}
+  el.innerHTML = `<div class="pp" style="--bloom:${x.fraction.toFixed(2)}">${reefFlora(info.palette)}${cr ? `<span class="ppal" aria-hidden="true">${creatureSVG(cr, !owned)}</span>` : ''}
     <div class="ptxt"><h3>${info.name}</h3>
       <div class="rmeter" role="progressbar" aria-label="${info.name} restoration" aria-valuemin="0" aria-valuemax="${x.total}" aria-valuenow="${x.cleared}"><i style="width:${(x.fraction * 100).toFixed(0)}%"></i></div>
       <p class="psub">${x.cleared} of ${x.total} levels cleaned up · ${st.name}${palLine ? ` · ${palLine}` : ''}</p></div></div>`;
