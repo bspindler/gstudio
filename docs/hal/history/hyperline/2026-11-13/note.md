@@ -38,3 +38,14 @@ A neon synthwave runner through sectors.
 Changes:
 - HAL-055 feature(hyperline): Hyperline: side-on horizontal camera for the run: **held** (0.5.0)
 - HAL-056 feature(hyperline): Hyperline: "Main Menu" button on the game-over screen: **held** (0.5.0)
+
+## Run run-2026-11-13T20-13-53-894Z
+
+**Hyperline**: a neon lane-runner you read at speed.
+- **Tonight:** the camera restore (HAL-057) was blocked. The builder needed the pre-HAL-041 camera values and couldn't find them. Nothing shipped, so the game is unchanged at 100.
+- **Main Menu:** the Main Menu button you approved is on main.
+- **Next run:** restore the 0.4.1 chase camera exactly, using values taken from git history.
+- **three.js:** I'm waiting on this until you've confirmed the camera.
+
+Changes:
+- HAL-057 fix(hyperline): Hyperline: restore the original angled chase camera: **discarded** (implementer blocked: Need the pre-HAL-041 cameraFor values (eye, target, fov) from git history; they are not in the working tree or docs.)

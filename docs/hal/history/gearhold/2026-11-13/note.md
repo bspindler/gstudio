@@ -37,3 +37,13 @@ Clockwork-citadel exploration, with gear keys and timed presses.
 
 Changes:
 - HAL-051 tuning(gearhold): Gearhold: longer Terrace of Dials loop via a side gallery: **discarded** (0.3.3) (gearhold-play: no real gain: 0.00 < 0.5)
+
+## Run run-2026-11-13T20-13-53-894Z
+
+**Gearhold**: a brass clockwork citadel.
+- **Tonight (HAL-060):** the steam-and-cog puff when a foe is wrecked adds to the brass feedback you've liked, without touching layout or balance.
+- **Scores:** gearhold is 100 and gearhold-play is 83.1.
+- **Level 4:** still waiting on the protected screenshot tool.
+
+Changes:
+- HAL-060 polish(gearhold): Gearhold: brass steam puff when a clockwork foe is wrecked: **merged** (0.3.3)

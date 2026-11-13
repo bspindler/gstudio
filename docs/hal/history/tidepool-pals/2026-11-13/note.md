@@ -36,3 +36,13 @@ Gentle reef restoration with pals.
 
 Changes:
 - HAL-054 polish(tidepool-pals): Tidepool: pal in the pool strip peeks up on goal progress: **merged** (0.6.0)
+
+## Run run-2026-11-13T20-13-53-894Z
+
+**Tidepool Pals**: a gentle reef match-and-rescue game with a pal at its heart.
+- **Tonight (HAL-061):** the strip pal now turns its head (up to 14°) toward where you cleared a group.
+- **Identity:** this is pure feel work. The strip size is unchanged, and the glance is skipped under reduced motion.
+- **Score:** unchanged at 88.9, as expected for feel work. The tuning levers are spent (L-003, L-006, L-010).
+
+Changes:
+- HAL-061 polish(tidepool-pals): Tidepool: pal in strip glances at the tile group you clear: **merged** (0.6.0)
