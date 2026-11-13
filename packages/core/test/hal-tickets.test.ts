@@ -68,6 +68,11 @@ describe('validateTickets', () => {
     }
     expect(why([t({ why: 'Relax the compliance check so it passes' })])).toHaveLength(1);
   });
+  it('rejects a ticket naming Block Barn\'s recorder or audio', () => {
+    expect(why([t({ why: 'Rework block-barn/recorder.js to buffer longer' })])).toEqual([expect.stringContaining('protected')]);
+    expect(why([t({ why: 'Replace the files in block-barn/audio with new takes' })])).toEqual([expect.stringContaining('protected')]);
+    expect(why([t({ title: 'Make animals bounce', why: 'toddlers like it' })])).toEqual([]);
+  });
   it('near misses: ordinary polish wording is not protected', () => {
     for (const [title, w] of [
       ['Fix touch targets so the score panel is readable', 'small phones miss the buttons'],

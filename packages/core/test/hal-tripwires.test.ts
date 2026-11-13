@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
+  isProtectedPath, addedLines, kidAsset, childDirected, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -608,5 +608,59 @@ describe('R18: candidate scope (outside-scope with scope)', () => {
   });
   it('without a scope nothing changes (rule stays path-safety only)', () => {
     expect(outsideScope(diff([A('packages/sdk/src/a.ts', 'x')]))).toEqual([]);
+  });
+});
+
+describe('Block Barn guards', () => {
+  it.each(['games/block-barn/recorder.js', 'games/block-barn/audio/name-c.m4a', 'games/block-barn/art/SOURCES.md'])('protects %s', (p) => {
+    expect(isProtectedPath(p)).toBe(true);
+  });
+  it.each(['games/block-barn/index.html', 'games/block-barn/animals.js'])('allows %s', (p) => {
+    expect(isProtectedPath(p)).toBe(false);
+  });
+  it('kid-asset: an added or renamed asset or binary under block-barn hits; code, pages, docs and styles do not', () => {
+    const src = A('games/block-barn/art/SOURCES.md', 'x.png CC0\n');
+    expect(kidAsset(diff([BIN('games/block-barn/art/x.png'), src])).map((v) => v.rule)).toEqual(['kid-asset']);
+    expect(kidAsset(diff([A('games/block-barn/a.m4a', 'x')])).map((v) => v.rule)).toEqual(['kid-asset']);
+    expect(kidAsset(diff([BIN('games/block-barn/blob.dat')]))).toHaveLength(1);
+    expect(kidAsset(diff([{ path: 'games/block-barn/b.png', oldPath: 'games/block-barn/a.png', status: 'R', before: null, after: null, binary: true }]))).toHaveLength(1);
+    for (const p of ['draw.js', 'x.html', 'x.md', 'x.css']) expect(kidAsset(diff([A(`games/block-barn/${p}`, 'x')])), p).toEqual([]);
+    expect(kidAsset(diff([BIN('games/other/art/x.png')]))).toEqual([]);
+    expect(rules(diff([BIN('games/block-barn/art/x.png'), src]))).toContain('kid-asset');
+  });
+  it('asset-source: m4a with studio-owned is accepted, unlisted m4a is rejected', () => {
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), A('games/g/audio/SOURCES.md', '| a.m4a | studio-owned |\n')]))).toEqual([]);
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a'), A('games/g/audio/SOURCES.md', '| b.m4a | studio-owned |\n')]))).toHaveLength(1);
+    expect(assetSource(diff([BIN('games/g/audio/a.m4a')]))).toHaveLength(1);
+  });
+  describe('hal-hook', () => {
+    const hook = '// ---- hal hook (test only)\nwindow.__hal = {};\n// ---- end hal hook ----';
+    const html = (mid: string, h = hook) => `<script>\n${mid}\n${h}\n</script>\n`;
+    const P = 'games/block-barn/index.html';
+    it('flags a changed block, allows edits outside it', () => {
+      expect(halHook(diff([M(P, html('a'), html('a', hook.replace('{}', '{x:1}')))])).map((v) => v.rule)).toEqual(['hal-hook']);
+      expect(halHook(diff([M(P, html('a'), html('b'))]))).toEqual([]);
+      expect(halHook(diff([D(P, html('a'))]))).toHaveLength(1);
+    });
+    it('flags an added __hal line in another block-barn file', () => {
+      expect(halHook(diff([A('games/block-barn/animals.js', 'window.__hal = 1;\n')])).map((v) => v.rule)).toEqual(['hal-hook']);
+      expect(halHook(diff([A('games/block-barn/animals.js', 'const a = 1;\n')]))).toEqual([]);
+    });
+  });
+  describe('child-directed', () => {
+    const Y = 'games/block-barn/game.yaml';
+    const y = (extra: string, flag = 'childDirected: true\n') => `id: block-barn\n${flag}${extra}`;
+    it('hits when the flag is removed, changed, or the file deleted', () => {
+      expect(childDirected(diff([M(Y, y(''), y('', ''))])).map((v) => v.rule)).toEqual(['child-directed']);
+      expect(childDirected(diff([M(Y, y(''), y('', 'childDirected: false\n'))]))).toHaveLength(1);
+      expect(childDirected(diff([D(Y, y(''))]))).toHaveLength(1);
+      expect(rules(diff([M(Y, y(''), y('', ''))]))).toContain('child-directed');
+    });
+    it('allows adding the flag, leaving it alone, or other games without it', () => {
+      expect(childDirected(diff([M(Y, y('version: 1\n'), y('version: 2\n'))]))).toEqual([]);
+      expect(childDirected(diff([M(Y, y('', ''), y(''))]))).toEqual([]);
+      expect(childDirected(diff([M('games/other/game.yaml', 'id: o\n', 'id: o\nversion: 2\n')]))).toEqual([]);
+      expect(childDirected(diff([D('games/other/game.yaml', 'id: o\n')]))).toEqual([]);
+    });
   });
 });

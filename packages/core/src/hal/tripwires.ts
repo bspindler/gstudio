@@ -39,9 +39,10 @@ export type Rule = (diff: Diff) => Violation[];
 const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^(\.\/)+/, '').toLowerCase();
 const touched = (f: FileChange): string[] => (f.oldPath ? [f.path, f.oldPath] : [f.path]);
 
-const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/'];
-const PROTECTED_EXACT = new Set(['scripts/hal.ts', 'games/gearhold/levels.d.ts', '.hal.env', 'policy.yaml', 'markets.yaml', 'claude.md', 'package.json', 'package-lock.json']);
+const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/', 'games/block-barn/audio/'];
+const PROTECTED_EXACT = new Set(['scripts/hal.ts', 'games/gearhold/levels.d.ts', 'games/block-barn/recorder.js', '.hal.env', 'policy.yaml', 'markets.yaml', 'claude.md', 'package.json', 'package-lock.json']);
 const PROTECTED_REGEX = [
+  /^games\/block-barn\/(?:.*\/)?sources\.md$/,
   /^packages\/core\/test\/(?:.*\/)?hal-[^/]*\.test\.ts$/,
   /^packages\/core\/test\/(?:compliance|games-compliance|no-external-fonts|game-versions)[^/]*\.test\.ts$/,
   // packages/core/src/**/{gateway,policy,compliance}*: a file or a directory whose name starts so, at any depth.
@@ -90,7 +91,8 @@ export const protectedPath: Rule = (diff) =>
 
 // ---- hal-hook ------------------------------------------------------------
 
-const HOOK_FILE = 'games/gearhold/index.html';
+const HOOK_FILES = ['games/gearhold/index.html', 'games/block-barn/index.html'];
+const gamePrefix = (hookFile: string): string => hookFile.slice(0, hookFile.lastIndexOf('/') + 1);
 const HOOK_START = '// ---- hal hook';
 const HOOK_END = '// ---- end hal hook ----';
 
@@ -129,8 +131,9 @@ function halFragments(src: string | null): string[] {
 
 export const halHook: Rule = (diff) => {
   const out: Violation[] = [];
-  const f = diff.files.find((x) => norm(x.path) === HOOK_FILE || (x.oldPath !== undefined && norm(x.oldPath) === HOOK_FILE));
-  if (f) {
+  for (const HOOK_FILE of HOOK_FILES) {
+    const f = diff.files.find((x) => norm(x.path) === HOOK_FILE || (x.oldPath !== undefined && norm(x.oldPath) === HOOK_FILE));
+    if (!f) continue;
     const moved = f.status === 'D' || (f.oldPath !== undefined && norm(f.oldPath) === HOOK_FILE && norm(f.path) !== HOOK_FILE);
     const before = halHookBlock(f.before);
     const after = moved ? null : halHookBlock(f.after);
@@ -142,8 +145,9 @@ export const halHook: Rule = (diff) => {
   // Outside the block, no statement touching the hook, its counters or the HAL flag may be added or removed. Statements are compared as a
   // multiset (split on ; { }, comments dropped, whitespace normalised), so re-indenting, wrapping in a block or editing the rest of a line is fine.
   for (const g of diff.files) {
-    if (!norm(g.path).startsWith('games/gearhold/') || isProse(g) || g.symlink) continue;
-    const isHookFile = norm(g.path) === HOOK_FILE;
+    const hookFile = HOOK_FILES.find((h) => norm(g.path).startsWith(gamePrefix(h)));
+    if (hookFile === undefined || isProse(g) || g.symlink) continue;
+    const isHookFile = norm(g.path) === hookFile;
     const b = halFragments(isHookFile ? withoutHook(g.before) : g.before);
     const a = halFragments(isHookFile ? withoutHook(g.after) : g.after);
     for (const [label, from, minus] of [['added', a, b], ['removed', b, a]] as const) {
@@ -388,9 +392,9 @@ export const darkPattern: Rule = (diff) => {
 
 // ---- asset-source --------------------------------------------------------
 
-const ASSET_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp3', 'ogg', 'wav', 'woff2', 'woff', 'ttf', 'otf', 'svg']);
+const ASSET_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp3', 'ogg', 'wav', 'm4a', 'woff2', 'woff', 'ttf', 'otf', 'svg']);
 const FONT_EXT = new Set(['woff2', 'woff', 'ttf', 'otf']);
-const LICENSE_RE = /\b(hal-generated|CC0|public domain|OFL[- ]1\.1)\b/i;
+const LICENSE_RE = /\b(hal-generated|studio-owned|CC0|public domain|OFL[- ]1\.1)\b/i;
 const OFL_RE = /\bOFL[- ]1\.1\b/i;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
@@ -416,8 +420,8 @@ export const assetSource: Rule = (diff) => {
     const lines = src.after.split('\n').filter((l) => name.test(l));
     if (lines.length === 0) { out.push(hit('asset-source', f.path, 'not named in SOURCES.md')); continue; }
     const licensed = lines.filter((l) => LICENSE_RE.test(l));
-    if (licensed.length === 0) { out.push(hit('asset-source', f.path, 'SOURCES.md entry has no allowed license (hal-generated, CC0, public domain, OFL-1.1)')); continue; }
-    const nonOfl = licensed.some((l) => /\b(hal-generated|CC0|public domain)\b/i.test(l));
+    if (licensed.length === 0) { out.push(hit('asset-source', f.path, 'SOURCES.md entry has no allowed license (hal-generated, studio-owned, CC0, public domain, OFL-1.1)')); continue; }
+    const nonOfl = licensed.some((l) => /\b(hal-generated|studio-owned|CC0|public domain)\b/i.test(l));
     if (FONT_EXT.has(ext) && !nonOfl) {
       const d = norm(dir ? dir + '/' : '');
       const has = [...tree].some((p) => p.startsWith(d) && /^ofl[^/]*\.txt$/.test(p.slice(d.length)));
@@ -426,6 +430,38 @@ export const assetSource: Rule = (diff) => {
   }
   // Fonts and images smuggled in as data: URIs skip the file checks above.
   for (const f of codeIn(diff, inGames)) for (const l of addedLines(f)) if (DATA_URI_RE.test(l)) out.push(hit('asset-source', f.path, 'embedded data: URI for a font or image'));
+  return out;
+};
+
+// ---- kid-asset -----------------------------------------------------------
+
+/** Block Barn is for toddlers: its images and sounds are vetted by hand, so Hal may not add or rename any (new code, pages and docs are fine). */
+export const kidAsset: Rule = (diff) =>
+  diff.files
+    .filter((f) => (f.status === 'A' || f.status === 'R') && norm(f.path).startsWith('games/block-barn/') && (f.binary || ASSET_EXT.has(extOf(f.path))))
+    .map((f) => hit('kid-asset', f.path, `asset ${f.status === 'A' ? 'added' : 'renamed'} under games/block-barn/`));
+
+// ---- child-directed ------------------------------------------------------
+
+const GAME_YAML = /^games\/[^/]+\/game\.yaml$/;
+/** The value of the `childDirected:` line, or null when the file has none (or is gone). */
+function childDirectedValue(src: string | null): string | null {
+  if (src === null) return null;
+  const m = /^[ \t]*childDirected[ \t]*:[ \t]*(.*?)[ \t]*(?:#.*)?$/m.exec(src);
+  return m ? m[1]!.replace(/^["']|["']$/g, '').toLowerCase() : null;
+}
+
+/** A game that declares itself child-directed keeps that flag: removing it or changing its value is refused. Adding it is fine. */
+export const childDirected: Rule = (diff) => {
+  const out: Violation[] = [];
+  for (const f of diff.files) {
+    const at = touched(f).find((p) => GAME_YAML.test(norm(p)));
+    if (at === undefined) continue;
+    const gone = f.status === 'D' || !GAME_YAML.test(norm(f.path));
+    const before = childDirectedValue(f.before);
+    if (before === null) continue;
+    if (gone || childDirectedValue(f.after) !== before) out.push(hit('child-directed', at, gone ? 'game.yaml with childDirected deleted or moved' : 'childDirected removed or changed'));
+  }
   return out;
 };
 
@@ -614,6 +650,8 @@ export const TRIPWIRE_RULES: Record<string, Rule> = {
   'random-reward': randomReward,
   'dark-pattern': darkPattern,
   'asset-source': assetSource,
+  'kid-asset': kidAsset,
+  'child-directed': childDirected,
   'level-removed': levelRemoved,
   'tests-removed': testsRemoved,
   'outside-scope': outsideScope,
