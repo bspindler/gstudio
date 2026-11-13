@@ -174,6 +174,57 @@ describe('block barn instrumentation', () => {
     expect(a.peakGain).toBeCloseTo(0.08, 6);
   });
 
+  it('a gain set to 0.4, played for 0.5 s, then set to 0 peaks at 0.4 (a later .value = is a timed set, not a new start)', async () => {
+    const a = await inPage<{ peakGain: number }>(`(() => { const c = new AudioContext(); const t = c.currentTime;
+      const g = c.createGain(); g.gain.value = 0.4; g.connect(c.destination);
+      const o = c.createOscillator(); o.connect(g); o.start(t); o.stop(t + 1);
+      setTimeout(() => { g.gain.value = 0; }, 500); })()`, 'window.__bbPlay.audio()', 700);
+    expect(a.peakGain).toBeCloseTo(0.4, 6);
+  });
+
+  // Real taps on the page, answered by `code` (the barn itself never hears them). Taps land on a virtual clock
+  // (TAP_GAP_MS apart), whatever the real gaps; `hog(ms)` busy-waits in the page.
+  type Audio = { masterGain: number; peakGain: number; sounds: { start: number; stop: number }[] };
+  const tapAudio = async (code: string, gapsMs: number[], settle = 800): Promise<Audio> => {
+    const { context } = await newHalContext(browser, { contextOptions: { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } });
+    try {
+      await context.addInitScript({ content: instrumentScript() });
+      const page = await context.newPage();
+      await page.goto(`${server.origin}/block-barn/index.html`);
+      await page.evaluate(`(() => { const c = new AudioContext();
+        const gain = (v) => { const g = c.createGain(); g.gain.value = v; g.connect(c.destination); return g; };
+        const osc = (to, at, dur) => { const o = c.createOscillator(), t = c.currentTime + at; o.connect(to); o.start(t); o.stop(t + dur); };
+        const hog = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
+        for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'])
+          addEventListener(type, (e) => { e.stopImmediatePropagation(); if (type === 'pointerdown') { ${code} } }, true);
+      })()`);
+      for (const g of gapsMs) { await page.touchscreen.tap(195, 420); if (g) await page.waitForTimeout(g); }
+      await page.waitForTimeout(settle);
+      return await page.evaluate('window.__bbPlay.audio()') as Audio;
+    } finally { await context.close(); }
+  };
+  const rel = (a: Audio) => a.sounds.map((s) => Math.round((s.start - a.sounds[0]!.start) * 1e6) / 1e6);
+
+  it("a 600 ms sound per tap overlaps the next taps' sounds on the virtual clock, the same whatever the real gaps", async () => {
+    const sound = 'osc(gain(0.06), 0, 0.6);';
+    const fast = await tapAudio(sound, [0, 0, 0]), slow = await tapAudio(sound, [700, 700, 700]);
+    expect(rel(slow)).toEqual([0, 0.25, 0.5]);
+    expect(slow.peakGain).toBeCloseTo(0.18, 6); // three sounding at once: over the cap
+    expect(slow.peakGain).toBeGreaterThan(BLOCK_BARN_RULES.peakCap);
+    expect(fast).toEqual(slow);
+    const two = await tapAudio(sound, [700, 700]);
+    expect(two.peakGain).toBeCloseTo(0.12, 6); // two at once: under it
+    expect(two.peakGain).toBeLessThanOrEqual(BLOCK_BARN_RULES.peakCap);
+  }, 60_000);
+
+  it('a second layer a timer starts 300 ms after the tap sounds at +0.3 s, however late the timer really runs', async () => {
+    const layered = (hogMs: number) => `osc(gain(0.1), 0, 0.35); setTimeout(() => osc(gain(0.1), 0, 0.2), 300); setTimeout(() => hog(${hogMs}), 250);`;
+    const late = await tapAudio(layered(250), [0]), onTime = await tapAudio(layered(0), [0]);
+    expect(rel(late)).toEqual([0, 0.3]);
+    expect(late.peakGain).toBeCloseTo(0.2, 6); // the layers overlap from +0.3 to +0.35
+    expect(late).toEqual(onTime);
+  }, 60_000);
+
   const flashes = (css: string, html = '<div class="x" style="width:50px;height:50px;background:#fc0"></div>') =>
     inPage<string[]>(`(() => { const s = document.createElement('style'); s.textContent = ${JSON.stringify(css)}; document.head.append(s);
       document.body.insertAdjacentHTML('beforeend', ${JSON.stringify(html)}); })()`, 'window.__bbPlay.flashes', 900);

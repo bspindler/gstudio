@@ -52,8 +52,30 @@ type Target = { kind: BlockBarnKind; letter?: string; x: number; y: number; w: n
 type State = { floor: string[]; named: string[]; tower: string[]; corner: boolean; speaking: string | null; invited: string | null };
 
 /** Runs in the page before the game: fake speech, tap probe, animation and audio recorders, on window.__bbPlay. */
-function instrument(flashMs: number): void {
+function instrument(flashMs: number, gapMs: number): void {
   const w = window as any;
+  // ---- The virtual clock (seconds): audio is placed on it, never on the wall clock ----
+  // The n-th real tap is at n x gapMs (plus any hold the runner declares), whatever the driver's real gaps. Work a tap
+  // starts runs at its virtual time: the tap's own input events, then any setTimeout or requestAnimationFrame callback
+  // scheduled from it (transitively), at the scheduler's virtual time plus the requested delay (one frame for a frame
+  // callback). So how long the driver or a busy timer really took never moves a sound. A callback sets the time and
+  // leaves it in place, so its promise continuations share it; any other task (an interval, the runner's own calls)
+  // runs at the latest tap's time.
+  let taps = 0, held = 0, tapAt = 0, vnow = 0;
+  for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click', 'keydown', 'keyup']) {
+    addEventListener(type, (e) => {
+      if (!e.isTrusted) return;
+      if (type === 'pointerdown') tapAt = (++taps * gapMs + held) / 1000;
+      vnow = tapAt;
+    }, true);
+  }
+  const later = (fn: unknown, at: number) => (typeof fn !== 'function' ? fn : function (this: unknown) { vnow = at; return (fn as Function).apply(this, arguments as any); });
+  const realTimeout = w.setTimeout, realRaf = w.requestAnimationFrame, realInterval = w.setInterval;
+  w.setTimeout = function (fn: unknown, ms?: number, ...rest: unknown[]) { return realTimeout.call(this, later(fn, vnow + Math.max(0, Number(ms) || 0) / 1000), ms, ...rest); };
+  if (realRaf) w.requestAnimationFrame = function (fn: FrameRequestCallback) { return realRaf.call(this, later(fn, vnow + 1 / 60)); };
+  w.setInterval = function (fn: unknown, ...rest: unknown[]) {
+    return realInterval.call(this, typeof fn !== 'function' ? fn : function (this: unknown) { vnow = tapAt; return (fn as Function).apply(this, arguments as any); }, ...rest);
+  };
   // Speech: record each spoken line and end it at once.
   const spoken: string[] = [];
   const fake = {
@@ -72,16 +94,25 @@ function instrument(flashMs: number): void {
   };
 
   // ---- Web Audio: the graph, every gain's values over time, and when each source sounds ----
-  // Times are kept on the wall clock: each call's context time is placed at performance.now() plus its offset from the
-  // context's currentTime. A headless context's clock barely moves between taps, so context time alone would pile
-  // separate taps' sounds onto one moment; what matters is what really sounds together.
+  // Times are kept on the virtual clock: each call's context time is placed at the virtual now plus its offset from the
+  // context's currentTime. (A headless context's clock barely moves between taps, and the wall clock moves with the
+  // driver's latency; neither is what a toddler tapping 4 times a second would hear together.)
   // One anchor per context per task, so the calls of one handler (an envelope, then its source's start) keep their
   // exact offsets even if the audio clock ticks between them.
+  // The page sees the same: a context's currentTime holds still within a task (the real one moves on mid-task, by render
+  // quanta, which would shift one handler's sounds against each other by a few ms from run to run).
   const anchors = new Map<BaseAudioContext, { now: number; ct: number }>();
-  const wall = (ctx: BaseAudioContext, t: number) => {
+  const BAC0 = (w.BaseAudioContext ?? w.AudioContext) as typeof BaseAudioContext | undefined;
+  const clock = BAC0 && Object.getOwnPropertyDescriptor(BAC0.prototype, 'currentTime');
+  const anchor = (ctx: BaseAudioContext) => {
     let a = anchors.get(ctx);
-    if (!a) { a = { now: performance.now() / 1000, ct: ctx.currentTime }; anchors.set(ctx, a); queueMicrotask(() => anchors.delete(ctx)); }
-    return a.now + (Number(t) - a.ct);
+    if (!a) { a = { now: vnow, ct: clock?.get ? Number(clock.get.call(ctx)) : ctx.currentTime }; anchors.set(ctx, a); queueMicrotask(() => anchors.delete(ctx)); }
+    return a;
+  };
+  if (BAC0 && clock?.get) Object.defineProperty(BAC0.prototype, 'currentTime', { ...clock, get(this: BaseAudioContext) { return anchor(this).ct; } });
+  const wall = (ctx: BaseAudioContext, t: number) => {
+    const a = anchor(ctx);
+    return Math.round((a.now + (Number(t) - a.ct)) * 1e6) / 1e6; // to the microsecond: the context's own clock value never shows
   };
   type Ev = { k: 'set' | 'lin' | 'exp' | 'target'; v: number; t: number; tc?: number };
   type Rec = { init: number | null; events: Ev[]; ctx: BaseAudioContext };
@@ -126,7 +157,9 @@ function instrument(flashMs: number): void {
       ...value,
       set(this: AudioParam, v: number) {
         const r = gainRec.get(this);
-        if (r) { if (r.events.length) r.events.push({ k: 'set', v: Number(v), t: wall(r.ctx, r.ctx.currentTime) }); else r.init = Number(v); }
+        // The start value is the constructor's (or the default 1); every assignment is a set at the (virtual) now, so
+        // turning a gain down after its sound played never rewrites what it played at.
+        if (r && Number.isFinite(Number(v))) r.events.push({ k: 'set', v: Number(v), t: wall(r.ctx, r.ctx.currentTime) });
         value.set!.call(this, v);
       },
     });
@@ -219,7 +252,9 @@ function instrument(flashMs: number): void {
         if (total > peakGain) { peakGain = total; loudest = parts.join(', '); }
       }
     }
-    return { masterGain, peakGain, loudest };
+    // Every sound's virtual start and stop, in the order the page started them.
+    const sounds = live.map((s) => ({ start: s.start, stop: s.stop }));
+    return { masterGain, peakGain, loudest, sounds };
   };
 
   // ---- Animations and transitions: brightness that repeats, or goes back and forth, faster than flashMs ----
@@ -285,13 +320,14 @@ function instrument(flashMs: number): void {
   addEventListener('pointerup', (e) => { if (e.isTrusted && probe) begin(e); }, true);
   addEventListener('pointerup', (e) => { if (!e.isTrusted || !probe || current !== e) return; finish(); probe.up = true; probe.end = performance.now() - probe.t0; });
 
-  w.__bbPlay = { spoken, played, flashes, audio, reset() { probe = null; }, probe: () => probe };
+  // `hold(ms)`: the runner is holding a finger down for ms; the virtual clock moves on by that much.
+  w.__bbPlay = { spoken, played, flashes, audio, reset() { probe = null; }, probe: () => probe, hold(ms: number) { held += Number(ms) || 0; tapAt += (Number(ms) || 0) / 1000; vnow = tapAt; } };
 }
 
 /** The runner's in-page instrumentation as an init script (exported for tests). */
 export function instrumentScript(): string {
   // tsx compiles with keepNames, so functions sent to the page may call esbuild's __name helper: give the page one.
-  return `globalThis.__name = globalThis.__name || ((f) => f); (${instrument.toString()})(${BLOCK_BARN_RULES.flashMs});`;
+  return `globalThis.__name = globalThis.__name || ((f) => f); (${instrument.toString()})(${BLOCK_BARN_RULES.flashMs}, ${TAP_GAP_MS});`;
 }
 
 const center = (t: Target) => ({ x: t.x + t.w / 2, y: t.y + t.h / 2 });
@@ -399,6 +435,7 @@ async function script(b: Barn): Promise<void> {
   const cdp = await page.context().newCDPSession(page);
   await touch(cdp, 'touchStart', [corner]);
   await page.waitForTimeout(HOLD_MS);
+  await page.evaluate((ms) => (window as any).__bbPlay.hold(ms), HOLD_MS);
   await touch(cdp, 'touchEnd', []);
   if (!(await b.state()).corner) throw new Error(`${b.viewport}: the grown-up corner did not open after a 3 s hold`);
   await page.getByRole('button', { name: /back to the barn/i }).tap();
