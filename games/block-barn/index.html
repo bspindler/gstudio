@@ -32,12 +32,14 @@
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
   }
-  #probe { position: fixed; visibility: hidden; pointer-events: none;
-    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
 
-  /* ---- the barn ---- */
-  #barn { position: fixed; inset: 0; overflow: hidden; touch-action: none; }
-  #wall { position: absolute; inset: 0;
+  /* ---- the barn: a thin wall along the top (at most 15% of the height), then the floor, filled edge to edge.
+     Everything is sized from the screen with CSS grid and container units: two big columns with the tower beside
+     them on a tall phone, three columns with the tower in the corner on other portrait screens, one big row with
+     the tower at the side on landscape tablets and desktop windows. ---- */
+  #barn { position: fixed; inset: 0; overflow: hidden; touch-action: none; display: grid;
+    grid-template-rows: clamp(calc(64px + env(safe-area-inset-top, 0px)), 10%, 15%) minmax(0, 1fr); }
+  #wall { position: relative; overflow: hidden; container-type: size;
     background:
       linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,0) 30%),
       repeating-linear-gradient(90deg, var(--wall) 0 46px, var(--wall2) 46px 49px); }
@@ -45,29 +47,67 @@
   #rafter::before, #rafter::after { content: ""; position: absolute; top: 18px; width: 16px; height: 90px; background: var(--beam); }
   #rafter::before { left: 12%; transform: skewX(24deg); }
   #rafter::after { right: 12%; transform: skewX(-24deg); }
-  #window { position: absolute; width: 92px; height: 80px; border: 8px solid #f4e6c8; border-radius: 46px 46px 6px 6px;
+  #window { position: absolute; left: 58%; bottom: 0; height: calc(100% - 34px); aspect-ratio: 92 / 80; border: 6px solid #f4e6c8; border-bottom: 0; border-radius: 999px 999px 0 0;
     background: linear-gradient(180deg, #a9dcff, #d9f1ff 70%, #9fd38a 70%); box-shadow: inset 0 0 0 3px rgba(0,0,0,.08); }
   #window::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 6px; margin-left: -3px; background: #f4e6c8; }
   #window::after { content: ""; position: absolute; top: 50%; left: 0; right: 0; height: 6px; margin-top: -3px; background: #f4e6c8; }
-  #floor { position: absolute; left: 0; right: 0; bottom: 0;
+  @container (max-height: 76px) { #window { display: none; } }
+  #play { position: relative; container-type: size; min-height: 0; }
+  #floor { position: absolute; inset: 0;
     background:
       linear-gradient(180deg, rgba(120,70,20,.25), rgba(0,0,0,0) 22px),
       repeating-linear-gradient(115deg, transparent 0 22px, rgba(190,140,40,.35) 22px 25px, transparent 25px 40px),
       repeating-linear-gradient(65deg, transparent 0 31px, rgba(255,240,180,.35) 31px 33px, transparent 33px 50px),
       var(--hay); }
+  #stage { position: absolute; inset: 0; box-sizing: border-box; display: grid; --g: 8px;
+    --pl: max(8px, env(safe-area-inset-left, 0px)); --pr: max(8px, env(safe-area-inset-right, 0px)); --pt: 8px; --pb: max(16px, env(safe-area-inset-bottom, 0px));
+    --iw: calc(100cqw - var(--pl) - var(--pr)); --ih: calc(100cqh - var(--pt) - var(--pb));
+    gap: var(--g); padding: var(--pt) var(--pr) var(--pb) var(--pl);
+    /* portrait (iPhone SE, tablets upright): three columns, two rows; the tower stands top right */
+    --S0: min((var(--iw) - 2 * var(--g)) / 3, (var(--ih) - 2 * var(--g) - 88px) / 3.8);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr) calc(var(--S0) * 1.9) calc(var(--S0) * 1.9);
+    grid-template-areas: "free free tower" "s0 s1 tower" "s2 s3 s4"; }
+  @media (max-aspect-ratio: 13 / 25) {
+    /* tall phones: two big columns, three rows; the tower has its own band down the left */
+    #stage { grid-template-columns: calc(var(--iw) * .31) repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr));
+      grid-template-areas: "tower s0 s1" "tower s2 s3" "tower s4 free"; }
+  }
+  @media (min-aspect-ratio: 5 / 4) and (max-aspect-ratio: 3 / 2) {
+    /* 4:3 landscape (iPads): one row would leave the top half empty, so two rows of three and two, the tower at the side */
+    #stage { --g: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr));
+      grid-template-areas: "tower s0 s1 s2" "tower s3 s4 free"; }
+  }
+  @media (min-aspect-ratio: 3 / 2) {
+    /* wide landscape (desktop windows, phones on their side): one big row, animals above, the tower at the side */
+    #stage { --g: 12px; --tw: clamp(120px, calc(var(--iw) * .11), 260px);
+      --S0: min((var(--iw) - var(--tw) - 5 * var(--g)) / 5, (var(--ih) - var(--g)) / 1.85);
+      grid-template-columns: var(--tw) repeat(5, minmax(0, 1fr));
+      grid-template-rows: minmax(0, 1fr) min(calc(var(--ih) - var(--g)), calc(var(--S0) * 3.2));
+      grid-template-areas: "tower free free free free free" "tower s0 s1 s2 s3 s4"; }
+  }
+  #free { grid-area: free; pointer-events: none; }
+  #slots { display: contents; }
 
   /* ---- floor blocks and their animals ---- */
-  .slot { position: absolute; }
-  .block { position: absolute; inset: 0; padding: 0; margin: 0; border: 0; background: none; color: inherit; font: inherit;
-    pointer-events: none; }
+  /* each slot is one grid cell: the block (S, square) at the bottom, its animal standing on it */
+  .slot { position: relative; container-type: size; min-width: 0; min-height: 0; }
+  .slot:nth-child(1) { grid-area: s0; } .slot:nth-child(2) { grid-area: s1; } .slot:nth-child(3) { grid-area: s2; }
+  .slot:nth-child(4) { grid-area: s3; } .slot:nth-child(5) { grid-area: s4; }
+  .slot > * { --S: min(100cqw, 100cqh / 1.85); }
+  .block { position: absolute; left: calc(50% - var(--S) / 2); bottom: 0; width: var(--S); height: var(--S); padding: 0; margin: 0; border: 0;
+    background: none; color: inherit; font: inherit; pointer-events: none; }
   .body { position: absolute; inset: 0; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center;
     background: var(--c, #ffd43b); box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18);
     transform-origin: 50% 100%; }
   .glyph { font-size: calc(var(--S) * .4); letter-spacing: .02em; line-height: 1; white-space: nowrap; }
   .word { font-size: calc(var(--S) * .16); margin-top: calc(var(--S) * .04); opacity: .85; }
   .word mark { background: none; color: #c2410c; }
-  .animal { position: absolute; left: 0; right: 0; bottom: 100%; height: max(88px, calc(var(--S) * .95)); pointer-events: none; }
-  .animal .pic, .tanimal .pic { position: absolute; inset: 0; width: 100%; height: 100%; transform-origin: 50% 92%; overflow: visible; }
+  .animal { position: absolute; left: 0; right: 0; bottom: calc(var(--S) + 2px);
+    height: min(100cqh - var(--S) - 2px, var(--S) * 2.2); pointer-events: none; }
+  .animal .pic { position: absolute; left: 0; bottom: 0; width: 100%; height: auto; aspect-ratio: 140 / 124; max-height: 100%; }
+  .tanimal .pic { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .animal .pic, .tanimal .pic { transform-origin: 50% 92%; overflow: visible; }
   .friend { position: absolute; width: 46px; height: 30px; bottom: -4px; right: -40px; animation: peek 2.4s ease-in-out forwards; pointer-events: none; }
 
   .slot.invite .body { animation: glow 2.4s ease-in-out infinite; }
@@ -144,7 +184,9 @@
   @keyframes peek { 0% { transform: translateX(-30px); opacity: 0; } 20%, 80% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(-30px); opacity: 0; } }
 
   /* ---- the tower ---- */
-  #tower { position: absolute; pointer-events: none; }
+  #tower { grid-area: tower; position: relative; container-type: size; min-width: 0; min-height: 0; pointer-events: none; }
+  #tower > * { --T: min(100cqw - 54px, (100cqw - 24px) * .66, (100cqh - 44px) / 5.2); }
+  #tprobe { position: absolute; visibility: hidden; left: 0; top: 0; }
   #tower .bale { position: absolute; left: 6px; right: 6px; bottom: 0; height: 38px; border-radius: 10px;
     background: repeating-linear-gradient(90deg, #e9c55c 0 7px, #d9ad3e 7px 9px); box-shadow: inset 0 0 0 4px #c99a32, 0 5px 0 rgba(0,0,0,.15); }
   #tower .stack { position: absolute; left: 12px; width: var(--T); bottom: 36px; display: flex; flex-direction: column-reverse; align-items: center; transform-origin: 50% 100%; }
@@ -153,6 +195,12 @@
   .tblock { width: var(--T); height: var(--T); border-radius: 10px; background: var(--c); display: grid; place-items: center;
     font-size: calc(var(--T) * .4); box-shadow: inset 0 -5px 0 rgba(0,0,0,.16), inset 0 0 0 3px rgba(255,255,255,.35); }
   .tanimal { position: absolute; left: calc(var(--T) + 16px); bottom: 34px; width: min(calc(var(--T) * 1.3), calc(100% - var(--T) - 18px)); aspect-ratio: 1 / 1; }
+  /* a tall, narrow tower zone: the stack in the middle and its animal sitting on top (--n = blocks stacked) */
+  @container (max-aspect-ratio: 3 / 10) {
+    #tower > * { --T: min((100cqw - 24px) * .66, (100cqh - 44px) / 6.6); }
+    #tower .stack { left: calc(50% - var(--T) / 2); }
+    .tanimal { left: calc(50% - var(--A) / 2); --A: min(var(--T) * 1.6, 100cqw - 12px); width: var(--A); bottom: calc(34px + var(--n, 0) * var(--T)); }
+  }
   .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
   #bale-bump.bump { animation: nudge .4s ease-out; }
 
@@ -174,7 +222,7 @@
   }
 
   /* ---- the grown-up corner ---- */
-  #corner { position: fixed; z-index: 20; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%;
+  #corner { position: fixed; z-index: 20; top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 10px); width: 46px; height: 46px; padding: 0; border: 0; border-radius: 50%;
     background: rgba(70, 40, 25, .28); color: rgba(255, 240, 220, .8); touch-action: none; -webkit-touch-callout: none; }
   #corner svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   #corner .ring { fill: none; stroke: #fff4d8; stroke-width: 4; stroke-dasharray: 126; stroke-dashoffset: 126; transform: rotate(-90deg); transform-origin: 23px 23px; }
@@ -193,12 +241,16 @@
 </style>
 </head>
 <body>
-<div id="probe"></div>
 <main id="barn" aria-label="Block Barn">
   <div id="wall"><div id="rafter"></div><div id="window"></div></div>
-  <div id="floor"></div>
-  <div id="tower" aria-hidden="true"><div class="bale" id="bale-bump"></div><div class="stack"></div></div>
-  <div id="slots"></div>
+  <div id="play">
+    <div id="floor"></div>
+    <div id="stage">
+      <div id="tower" aria-hidden="true"><div class="bale" id="bale-bump"></div><div class="stack"></div><div class="tblock" id="tprobe"></div></div>
+      <div id="free"></div>
+      <div id="slots"></div>
+    </div>
+  </div>
   <div id="fx"></div>
 </main>
 <button id="corner" type="button" aria-label="For grown-ups: press and hold for 3 seconds">
@@ -453,68 +505,19 @@ function reseed(n) {
 }
 
 // ---------- layout ----------
+// The CSS grid places and sizes everything from the screen; the script only reads the boxes back (for the flying and
+// tumbling blocks, the puffs and the hook) and hands the block and tower sizes to the effects layer.
 const slotsEl = $('slots'), towerEl = $('tower'), stackEl = towerEl.querySelector('.stack'), fx = $('fx');
 let layout = null;
-function insets() {
-  const s = getComputedStyle($('probe'));
-  return { t: parseFloat(s.paddingTop) || 0, r: parseFloat(s.paddingRight) || 0, b: parseFloat(s.paddingBottom) || 0, l: parseFloat(s.paddingLeft) || 0 };
-}
-function computeLayout() {
-  const W = innerWidth, H = innerHeight, i = insets();
-  const L = i.l + 16, R = W - i.r - 16, B = H - i.b - 24;
-  const corner = { x: R - 46 + 6, y: i.t + 10, w: 46, h: 46 };
-  const g = 16;
-  const wideS = Math.min(140, (H - i.t - i.b) / 4.8, (R - L - 200 - 4 * 22) / 5);
-  const wide = wideS >= 96;
-  let S, slots = [], tz, fb, floorTop;
-  if (wide) {
-    // One row of five along the bottom right, the tower on the left.
-    S = wideS;
-    const gap = 22;
-    const row = 5 * S + 4 * gap;
-    const x0 = Math.max(L + 200, (L + 200 + R - row) / 2);
-    const y = B - S;
-    for (let k = 0; k < 5; k++) slots.push({ x: x0 + k * (S + gap), y });
-    const aTop = y - Math.max(88, S * 0.95);
-    tz = { x: L, y: corner.y + corner.h + 24, w: 170, h: B - (corner.y + corner.h + 24) };
-    floorTop = Math.max(i.t + 120, aTop - 180);
-    fb = { x: x0, y: floorTop + 12, w: row, h: Math.max(88, aTop - NEAR - 8 - (floorTop + 12)) };
-  } else {
-    // Two rows (three, then two) at the bottom, the tower above on the left.
-    S = Math.max(88, Math.min(132, (R - L - 2 * 14) / 3, (H - i.t - i.b) / 7.2));
-    const gap = Math.min(18, (R - L - 3 * S) / 2);
-    const aH = Math.max(88, S * 0.95);
-    const y2 = B - S, y1 = y2 - aH - g - S;
-    const x0 = (W - (3 * S + 2 * gap)) / 2;
-    for (let k = 0; k < 3; k++) slots.push({ x: x0 + k * (S + gap), y: y1 });
-    for (let k = 0; k < 2; k++) slots.push({ x: W / 2 - S - gap / 2 + k * (S + gap), y: y2 });
-    const aTop = y1 - aH;
-    // The tower stands left of the corner, so it may use the full height above the animals.
-    const top = i.t + 10;
-    tz = { x: L, y: top, w: Math.min(150, (R - L) * 0.4), h: aTop - 12 - top };
-    floorTop = Math.max(top + 60, aTop - 170);
-    const fx0 = tz.x + tz.w + NEAR + 4;
-    fb = { x: fx0, y: floorTop + 10, w: R - fx0, h: aTop - NEAR - 4 - (floorTop + 10) };
-  }
-  const T = Math.max(20, Math.min(64, tz.w * 0.42, (tz.h - 40 - 4) / 5)); // five stacked (the 6th tumbles); its animal sits beside
-  return { W, H, S, T, slots, tower: tz, floorBox: fb, floorTop, corner, wide };
-}
+const rectOf = (el) => { const q = el.getBoundingClientRect(); return { x: q.left, y: q.top, w: q.width, h: q.height }; };
 function applyLayout() {
-  layout = computeLayout();
+  const block = slotsEl.querySelector('.block');
+  layout = { W: innerWidth, H: innerHeight, T: $('tprobe').getBoundingClientRect().width || 44, S: block ? block.getBoundingClientRect().width : 110,
+    tower: rectOf(towerEl), floorBox: rectOf($('free')) };
   const root = document.documentElement.style;
-  root.setProperty('--S', `${layout.S}px`);
+  root.setProperty('--S', `${layout.S}px`); // for blocks in flight (#fx sits outside the grid cells)
   root.setProperty('--T', `${layout.T}px`);
-  $('floor').style.top = `${layout.floorTop}px`;
-  const win = $('window');
-  win.style.left = `${Math.max(layout.tower.x + layout.tower.w + 20, layout.W * 0.55)}px`;
-  win.style.top = `${Math.max(40, layout.floorTop - 120)}px`;
-  win.hidden = layout.floorTop - 120 < 36;
-  Object.assign(towerEl.style, { left: `${layout.tower.x}px`, top: `${layout.tower.y}px`, width: `${layout.tower.w}px`, height: `${layout.tower.h}px` });
-  Object.assign($('corner').style, { left: `${layout.corner.x}px`, top: `${layout.corner.y}px` });
-  [...slotsEl.children].forEach((el, k) => {
-    const p = layout.slots[k];
-    Object.assign(el.style, { left: `${p.x}px`, top: `${p.y}px`, width: `${layout.S}px`, height: `${layout.S}px` });
-  });
+  return layout;
 }
 
 // ---------- drawing ----------
@@ -557,6 +560,7 @@ function renderSlot(k, anim) {
 function renderTower(popTop) {
   const blocks = tower.blocks();
   towerEl.querySelector('.tanimal')?.remove();
+  towerEl.style.setProperty('--n', String(blocks.length));
   stackEl.replaceChildren(...blocks.map((l) => {
     const b = document.createElement('div');
     b.className = 'tblock';
@@ -670,11 +674,14 @@ function stackBlock(k) {
   renderSlot(k, 'arrive');
 }
 function fly(l, from, height) {
+  applyLayout();
   const t = layout.T;
-  const tx = layout.tower.x + 12, ty = layout.tower.y + layout.tower.h - 36 - (height + 1) * t;
+  const st = stackEl.getBoundingClientRect();
+  const tx = st.left, ty = st.bottom - (height + 1) * t;
   const f = document.createElement('div');
   f.className = 'flyer';
   Object.assign(f.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+  f.style.setProperty('--S', `${from.width}px`);
   f.innerHTML = `<div class="body" style="--c:${colorOf(l)}"><div class="glyph">${l.toUpperCase()} ${l}</div></div>`;
   fx.append(f);
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -684,9 +691,10 @@ function fly(l, from, height) {
   setTimeout(() => f.remove(), 420);
 }
 function tumbleDown(letters) {
+  applyLayout();
   const t = layout.T;
-  const baseY = layout.tower.y + layout.tower.h - 36;
-  const cx = layout.tower.x + 12;
+  const st = stackEl.getBoundingClientRect();
+  const baseY = st.bottom, cx = st.left;
   const groundY = layout.H - 30 - t;
   letters.forEach((l, k) => {
     const b = document.createElement('div');
@@ -707,6 +715,7 @@ function tumbleDown(letters) {
   setTimeout(() => puffAt(layout.tower.x + layout.tower.w / 2, layout.tower.y + layout.tower.h - 20), 500);
 }
 function tapTower() {
+  applyLayout();
   const was = tower.tumble();
   if (was.length) {
     towerTop = null;
@@ -894,7 +903,7 @@ if (new URLSearchParams(location.search).has('hal')) {
       const c = cornerBtn.getBoundingClientRect();
       return [
         ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
-        { kind: 'floor', ...box(layout.floorBox) },
+        { kind: 'floor', ...box(applyLayout().floorBox) },
         { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
       ];
     },
