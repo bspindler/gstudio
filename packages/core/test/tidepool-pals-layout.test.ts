@@ -8,7 +8,8 @@ describe('tidepool-pals play layout', () => {
     const zone = html.match(/\.playzone\{([^}]*)\}/)![1];
     expect(zone).toMatch(/flex:1 1 0/);
     expect(zone).toContain('container-type:size');
-    expect(zone).toContain('justify-content:center');
+    expect(zone).toContain('justify-content:flex-start');
+    expect(zone).not.toContain('justify-content:center');
     const wrap = html.match(/\.boardwrap\{([^}]*)\}/)![1];
     expect(wrap).toContain('aspect-ratio:7/8');
     expect(wrap).toMatch(/width:min\(100cqw,calc\(\(100cqh/);

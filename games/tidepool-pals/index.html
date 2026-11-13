@@ -77,7 +77,7 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes bump{40%{transform:scale(1.25)}}
 
 /* ---------- board (pseudo-3D: a tilted slab, pieces are glossy SVG with shared gradients) ---------- */
-.playzone{flex:1 1 0;min-height:0;container-type:size;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.playzone{flex:1 1 0;min-height:0;container-type:size;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px}
 .boardwrap{flex:none;width:min(100cqw,calc((100cqh - 44px) * 7 / 8));aspect-ratio:7/8;display:grid;place-items:center;perspective:900px}
 .board{position:relative;width:100%;aspect-ratio:7/8;max-width:100%;transform:rotateX(var(--rx,7deg)) rotateY(var(--ry,0deg));transform-origin:50% 70%;transition:transform .5s cubic-bezier(.2,.8,.3,1)}
 .slots{position:absolute;inset:0;filter:drop-shadow(0 7px 0 #04121F) drop-shadow(0 18px 18px rgba(0,0,0,.45))}
@@ -490,7 +490,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSa
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.5.2', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.5.3', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
