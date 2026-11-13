@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.5.1 (2026-11-13)
+- Hyperline: the camera is back to the original angled chase view from 0.4.1.
+
 ## 0.5.0 (2026-11-13)
 - New sector: SWEEP COLUMNS. After SLOT GATES you now meet rows of slot gates, a jump apart: thread one, land, and jump again in rhythm. HYPERCORE is now sector 9.
 - Hyperline: the camera now sits straight behind your lane, with the vanishing point at the centre, so obstacles are easier to read.
