@@ -185,7 +185,7 @@ describe('block barn instrumentation', () => {
   // Real taps on the page, answered by `code` (the barn itself never hears them). Taps land on a virtual clock
   // (TAP_GAP_MS apart), whatever the real gaps; `hog(ms)` busy-waits in the page.
   type Audio = { masterGain: number; peakGain: number; sounds: { start: number; stop: number }[] };
-  const tapAudio = async (code: string, gapsMs: number[], settle = 800): Promise<Audio> => {
+  const tapAudio = async (code: string, gapsMs: number[], settle = 800, { setup = '', beforeMs = 0 } = {}): Promise<Audio> => {
     const { context } = await newHalContext(browser, { contextOptions: { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } });
     try {
       await context.addInitScript({ content: instrumentScript() });
@@ -195,9 +195,11 @@ describe('block barn instrumentation', () => {
         const gain = (v) => { const g = c.createGain(); g.gain.value = v; g.connect(c.destination); return g; };
         const osc = (to, at, dur) => { const o = c.createOscillator(), t = c.currentTime + at; o.connect(to); o.start(t); o.stop(t + dur); };
         const hog = (ms) => { const end = performance.now() + ms; while (performance.now() < end) {} };
+        ${setup}
         for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click'])
           addEventListener(type, (e) => { e.stopImmediatePropagation(); if (type === 'pointerdown') { ${code} } }, true);
       })()`);
+      if (beforeMs) await page.waitForTimeout(beforeMs);
       for (const g of gapsMs) { await page.touchscreen.tap(195, 420); if (g) await page.waitForTimeout(g); }
       await page.waitForTimeout(settle);
       return await page.evaluate('window.__bbPlay.audio()') as Audio;
@@ -224,6 +226,42 @@ describe('block barn instrumentation', () => {
     expect(late.peakGain).toBeCloseTo(0.2, 6); // the layers overlap from +0.3 to +0.35
     expect(late).toEqual(onTime);
   }, 60_000);
+
+  it('a standing frame loop begun before the first tap plays its sound at the tap, however the real frames ran', async () => {
+    // The loop starts at page load; on the 3rd frame after a tap it plays a 600 ms sound. One run waits 1.5 s before
+    // tapping and busy-waits 40 ms in every frame (fewer, later frames); the other taps at once.
+    const loop = (hogMs: number) => `let k = -1; const f = () => { if (k >= 0 && ++k === 3) { k = -1; osc(gain(0.1), 0, 0.6); } hog(${hogMs}); requestAnimationFrame(f); };
+      requestAnimationFrame(f); window.__armed = () => { k = 0; };`;
+    const tap = 'osc(gain(0.1), 0, 0.6); window.__armed();';
+    const slow = await tapAudio(tap, [0], 800, { setup: loop(40), beforeMs: 1500 }), quick = await tapAudio(tap, [0], 800, { setup: loop(0) });
+    expect(rel(slow)).toEqual([0, 0]);
+    expect(slow.peakGain).toBeCloseTo(0.2, 6);
+    expect(quick).toEqual(slow);
+  }, 60_000);
+
+  it("a sound started from an onended handler lands at the latest tap's time, not at a timer's", async () => {
+    // A 50 ms timer runs first (its time is tap + 0.05); the onended handler is an untraced task.
+    const a = await tapAudio(`c.resume(); setTimeout(() => {}, 50);
+      const o = c.createOscillator(), t = c.currentTime; o.connect(gain(0.1)); o.onended = () => osc(gain(0.1), 0, 0.3); o.start(t); o.stop(t + 0.1);`, [0], 1000);
+    expect(a.sounds).toHaveLength(2);
+    expect(rel(a)).toEqual([0, 0]);
+  }, 60_000);
+
+  it('cancelScheduledValues(now) after .value = 0.2 keeps the 0.2; it drops only the automation scheduled from then on', async () => {
+    const a = await inPage<{ peakGain: number }>(`(() => { const c = new AudioContext(); const t = c.currentTime;
+      const g = c.createGain(); g.gain.value = 0.2; g.connect(c.destination);
+      g.gain.linearRampToValueAtTime(0.9, t + 0.5); g.gain.cancelScheduledValues(t);
+      g.gain.linearRampToValueAtTime(0.1, t + 0.5);
+      const o = c.createOscillator(); o.connect(g); o.start(t); o.stop(t + 1); })()`, 'window.__bbPlay.audio()');
+    expect(a.peakGain).toBeCloseTo(0.2, 6); // not the default 1, not the cancelled 0.9
+  });
+  it('cancelAndHoldAtTime holds the value a ramp had reached', async () => {
+    const a = await inPage<{ peakGain: number }>(`(() => { const c = new AudioContext(); const t = c.currentTime;
+      const g = new GainNode(c, { gain: 0 }); g.connect(c.destination);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.8, t + 1); g.gain.cancelAndHoldAtTime(t + 0.5);
+      const o = c.createOscillator(); o.connect(g); o.start(t); o.stop(t + 2); })()`, 'window.__bbPlay.audio()');
+    expect(a.peakGain).toBeCloseTo(0.4, 6);
+  });
 
   const flashes = (css: string, html = '<div class="x" style="width:50px;height:50px;background:#fc0"></div>') =>
     inPage<string[]>(`(() => { const s = document.createElement('style'); s.textContent = ${JSON.stringify(css)}; document.head.append(s);

@@ -55,12 +55,14 @@ type State = { floor: string[]; named: string[]; tower: string[]; corner: boolea
 function instrument(flashMs: number, gapMs: number): void {
   const w = window as any;
   // ---- The virtual clock (seconds): audio is placed on it, never on the wall clock ----
-  // The n-th real tap is at n x gapMs (plus any hold the runner declares), whatever the driver's real gaps. Work a tap
-  // starts runs at its virtual time: the tap's own input events, then any setTimeout or requestAnimationFrame callback
-  // scheduled from it (transitively), at the scheduler's virtual time plus the requested delay (one frame for a frame
-  // callback). So how long the driver or a busy timer really took never moves a sound. A callback sets the time and
-  // leaves it in place, so its promise continuations share it; any other task (an interval, the runner's own calls)
-  // runs at the latest tap's time.
+  // The n-th real tap is at n x gapMs (plus any hold the runner declares), whatever the driver's real gaps; `tapAt` is
+  // the latest tap's time. Everything runs at tapAt (the tap's own input events, intervals, media and onended events,
+  // promise continuations, the runner's own calls) except two kinds of wrapped callback:
+  // - a setTimeout callback runs at its scheduler's virtual time plus the requested delay (so a chain a tap starts
+  //   stays on that tap's time line, however late the real timer ran);
+  // - a requestAnimationFrame callback runs at max(its scheduler's virtual time, tapAt): a frame never moves the clock
+  //   on, so a standing frame loop always sounds with the latest tap, however many real frames ran.
+  // After a wrapped callback the clock goes back to tapAt, so nothing it leaves behind runs at its time.
   let taps = 0, held = 0, tapAt = 0, vnow = 0;
   for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click', 'keydown', 'keyup']) {
     addEventListener(type, (e) => {
@@ -69,13 +71,13 @@ function instrument(flashMs: number, gapMs: number): void {
       vnow = tapAt;
     }, true);
   }
-  const later = (fn: unknown, at: number) => (typeof fn !== 'function' ? fn : function (this: unknown) { vnow = at; return (fn as Function).apply(this, arguments as any); });
-  const realTimeout = w.setTimeout, realRaf = w.requestAnimationFrame, realInterval = w.setInterval;
-  w.setTimeout = function (fn: unknown, ms?: number, ...rest: unknown[]) { return realTimeout.call(this, later(fn, vnow + Math.max(0, Number(ms) || 0) / 1000), ms, ...rest); };
-  if (realRaf) w.requestAnimationFrame = function (fn: FrameRequestCallback) { return realRaf.call(this, later(fn, vnow + 1 / 60)); };
-  w.setInterval = function (fn: unknown, ...rest: unknown[]) {
-    return realInterval.call(this, typeof fn !== 'function' ? fn : function (this: unknown) { vnow = tapAt; return (fn as Function).apply(this, arguments as any); }, ...rest);
-  };
+  const at = (fn: unknown, when: () => number) => (typeof fn !== 'function' ? fn : function (this: unknown) {
+    vnow = when();
+    try { return (fn as Function).apply(this, arguments as any); } finally { vnow = tapAt; }
+  });
+  const realTimeout = w.setTimeout, realRaf = w.requestAnimationFrame;
+  w.setTimeout = function (fn: unknown, ms?: number, ...rest: unknown[]) { const t = vnow + Math.max(0, Number(ms) || 0) / 1000; return realTimeout.call(this, at(fn, () => t), ms, ...rest); };
+  if (realRaf) w.requestAnimationFrame = function (fn: FrameRequestCallback) { const t = vnow; return realRaf.call(this, at(fn, () => Math.max(t, tapAt))); };
   // Speech: record each spoken line and end it at once.
   const spoken: string[] = [];
   const fake = {
@@ -114,7 +116,7 @@ function instrument(flashMs: number, gapMs: number): void {
     const a = anchor(ctx);
     return Math.round((a.now + (Number(t) - a.ct)) * 1e6) / 1e6; // to the microsecond: the context's own clock value never shows
   };
-  type Ev = { k: 'set' | 'lin' | 'exp' | 'target'; v: number; t: number; tc?: number };
+  type Ev = { k: 'set' | 'lin' | 'exp' | 'target'; v: number; t: number; tc?: number; now?: true }; // now: a `.value =`
   type Rec = { init: number | null; events: Ev[]; ctx: BaseAudioContext };
   const gainRec = new Map<AudioParam, Rec>(); // the gain parameter of every GainNode the page made
   const gainOf = new WeakMap<AudioNode, AudioParam>();
@@ -150,7 +152,17 @@ function instrument(flashMs: number, gapMs: number): void {
     for (const m of ['cancelScheduledValues', 'cancelAndHoldAtTime']) {
       const orig = AP[m];
       if (!orig) continue;
-      AP[m] = function (this: AudioParam, t: number) { const r = gainRec.get(this); if (r) { const at = wall(r.ctx, t); r.events = r.events.filter((e) => e.t < at); } return orig.apply(this, arguments as any); };
+      // Drops the automation scheduled at or after the cancel time; a `.value =` already took effect and stays.
+      // cancelAndHoldAtTime then holds the value reached at that time.
+      AP[m] = function (this: AudioParam, t: number) {
+        const r = gainRec.get(this);
+        if (r) {
+          const from = wall(r.ctx, t), kept = m === 'cancelAndHoldAtTime' ? valueAt(this, from) : null;
+          r.events = r.events.filter((e) => e.t < from || e.now);
+          if (kept !== null) r.events.push({ k: 'set', v: kept, t: from });
+        }
+        return orig.apply(this, arguments as any);
+      };
     }
     const value = Object.getOwnPropertyDescriptor(AP, 'value')!;
     Object.defineProperty(AP, 'value', {
@@ -159,7 +171,7 @@ function instrument(flashMs: number, gapMs: number): void {
         const r = gainRec.get(this);
         // The start value is the constructor's (or the default 1); every assignment is a set at the (virtual) now, so
         // turning a gain down after its sound played never rewrites what it played at.
-        if (r && Number.isFinite(Number(v))) r.events.push({ k: 'set', v: Number(v), t: wall(r.ctx, r.ctx.currentTime) });
+        if (r && Number.isFinite(Number(v))) r.events.push({ k: 'set', v: Number(v), t: wall(r.ctx, r.ctx.currentTime), now: true });
         value.set!.call(this, v);
       },
     });
