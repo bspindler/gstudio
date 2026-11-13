@@ -77,6 +77,9 @@ const RAW = [
   L(20, 32, 5, [LITTER, ICE(4), C(4, 16)],
     ['x.....x', '.......', '.i...i.', '.......', '.i...i.', 'o.....o', 'll...ll', 'lll.lll'],
     { tide: T(4, 3, 'right'), intro: 'A big one to finish the first stretch: litter, nets, a colour goal and a sideways tide.' }),
+  L(21, 30, 5, [LITTER, C(3, 16)],
+    ['.......', '.......', '.......', '.......', '.......', '.......', 'l.....l', 'll.l.ll'],
+    { tide: T(5, 3, 'up') }),
 ];
 export const AUTHORED = RAW.map((d) => ({ ...d, pool: poolOf(d.n) }));
 
