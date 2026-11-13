@@ -97,6 +97,11 @@ describe('renderReport', () => {
     expect(html).not.toContain('no-referrer');
     expect(html).not.toMatch(/<meta name="referrer"(?![^>]*content="same-origin")/);
   });
+  it('the header row keeps its own height: a tall side panel spans head+main, and auto rows would share its extra height', () => {
+    // Without explicit rows the grid splits the panel's overflow across the head and main rows, opening a screen-tall gap
+    // above the Director's note whenever the threads outgrow the report.
+    expect(renderReport(view())).toMatch(/\.app\{[^}]*grid-template-rows:auto auto 1fr/);
+  });
   it('sections appear in order', () => {
     const r = fullReport();
     r.planned = [ticket('T7', 'gearhold', 'feature', 'A boss rush mode')];
