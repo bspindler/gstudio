@@ -47,3 +47,15 @@ Changes:
 
 Changes:
 - HAL-060 polish(gearhold): Gearhold: brass steam puff when a clockwork foe is wrecked: **merged** (0.3.3)
+
+## Run run-2026-11-13T20-47-47-798Z
+
+### Gearhold
+Gearhold is a clockwork citadel where the threat comes from machinery and timing, not from crowds of enemies. Tonight's brass arch glow keeps that identity. It echoes the key flash and the brass-and-cog look, and it makes the exit easier to spot in the busy rooms on levels 2 and 3. Gearhold is at 100 and gearhold-play is at 83.07, both unchanged.
+
+Level 4 is stuck behind the screenshot-tool fix, which sits on protected paths. When it's unblocked, the ticket has to build the timed presses from scratch, because no press code was ever merged.
+
+Changes:
+- HAL-063 fix(gearhold): Overhead shot tool: skip levels the build lacks: **discarded** (implementer blocked: The fix belongs in scripts/hal/screens.ts and focus.ts (guard h.start(n) when n is at or above the build's level count and record 'level not present'). Both are protected paths, and the Gearhold hook block is also protected.)
+- HAL-064 polish(gearhold): Gearhold: exit arch glows brass once you hold the gear key: **merged** (0.3.3)
+- HAL-065 feature(gearhold): Gearhold L4 Press Gallery: longer gallery, wider press windows: **discarded** (implementer blocked: T1 (timed presses) is not merged: games/gearhold has no press mechanic, so level 4 Press Gallery cannot be implemented.)
