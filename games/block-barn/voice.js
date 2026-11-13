@@ -15,6 +15,7 @@ export function createVoice(o) {
     const c = current;
     current = null;
     if (c) {
+      if (c.cancelWait) c.cancelWait();
       try { c.audio && c.audio.pause(); } catch (e) { /* ignore */ }
       c.finish();
     }
@@ -41,9 +42,22 @@ export function createVoice(o) {
             if (retried || current !== mine) return resolve();
             retried = true;
             if (voicesChanged || !synth.addEventListener) return attempt();
-            const go = () => { if (current === mine) attempt(); };
+            let done = false;
+            let timer = null;
+            const cleanup = () => {
+              done = true;
+              clearTimeout(timer);
+              if (synth.removeEventListener) synth.removeEventListener('voiceschanged', go);
+            };
+            const go = () => {
+              if (done) return;
+              cleanup();
+              mine.cancelWait = null;
+              if (current === mine) attempt();
+            };
+            mine.cancelWait = cleanup;
             synth.addEventListener('voiceschanged', go, { once: true });
-            setTimeout(go, 1500);
+            timer = setTimeout(go, 1500);
           };
           synth.speak(u);
         } catch (e) { resolve(); }

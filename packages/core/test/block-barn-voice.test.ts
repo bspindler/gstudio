@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createVoice } from '../../../games/block-barn/voice.js';
 import { CLIPS } from '../../../games/block-barn/audio/clips.js';
+
+afterEach(() => { (CLIPS as Set<string>).clear(); vi.useRealTimers(); });
 
 function setup(o: { clips?: string[]; rec?: (k: string) => Promise<string | null>; synth?: any; playFails?: boolean } = {}) {
   const log: string[] = [];
@@ -26,8 +28,14 @@ function fakeSynth(opts: { voices?: any[]; script?: Array<'end' | 'error' | 'hol
     getVoices: () => opts.voices ?? [],
     speak(u: any) { spoken.push(u); const m = script.shift() ?? 'end'; if (m === 'end') u.onend?.(); else if (m === 'error') u.onerror?.({}); },
     cancel() { s.cancels++; },
-    addEventListener(n: string, f: () => void) { (listeners[n] ||= []).push(f); },
-    fire(n: string) { (listeners[n] || []).forEach((f) => f()); },
+    addEventListener(n: string, f: () => void, opt?: { once?: boolean }) {
+      const g = opt?.once ? () => { s.removeEventListener(n, g); f(); } : f;
+      (g as any).orig = f;
+      (listeners[n] ||= []).push(g);
+    },
+    removeEventListener(n: string, f: () => void) { listeners[n] = (listeners[n] || []).filter((x: any) => x !== f && x.orig !== f); },
+    listenerCount: (n: string) => (listeners[n] || []).length,
+    fire(n: string) { [...(listeners[n] || [])].forEach((f) => f()); },
   };
   return s;
 }
@@ -35,6 +43,7 @@ function fakeSynth(opts: { voices?: any[]; script?: Array<'end' | 'error' | 'hol
 describe('block-barn voice', () => {
   it('exports an empty CLIPS set', () => {
     expect(CLIPS instanceof Set).toBe(true);
+    expect(CLIPS.size).toBe(0);
   });
   it('recording beats clip and synth', async () => {
     const synth = fakeSynth();
@@ -137,5 +146,62 @@ describe('block-barn voice', () => {
     synth.fire('voiceschanged');
     await v.say('name-k', 'kangaroo');
     expect(synth.spoken).toHaveLength(2);
+  });
+  it('voiceschanged then 1.5s timer: exactly one retry', async () => {
+    vi.useFakeTimers();
+    const synth = fakeSynth({ script: ['error', 'hold', 'end'] });
+    const { v } = setup({ synth });
+    const p = v.say('name-j', 'jellyfish');
+    await vi.advanceTimersByTimeAsync(0);
+    synth.fire('voiceschanged');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(synth.spoken).toHaveLength(2);
+    v.stop();
+    await p;
+  });
+  it('timer first then late voiceschanged: exactly one retry', async () => {
+    vi.useFakeTimers();
+    const synth = fakeSynth({ script: ['error', 'hold', 'end'] });
+    const { v } = setup({ synth });
+    const p = v.say('name-j', 'jellyfish');
+    await vi.advanceTimersByTimeAsync(2000);
+    synth.fire('voiceschanged');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(synth.spoken).toHaveLength(2);
+    v.stop();
+    await p;
+  });
+  it('stop() during the retry wait: no retry, no lingering timer', async () => {
+    vi.useFakeTimers();
+    const synth = fakeSynth({ script: ['error', 'end'] });
+    const { v } = setup({ synth });
+    const p = v.say('name-j', 'jellyfish');
+    await vi.advanceTimersByTimeAsync(0);
+    v.stop();
+    await p;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(synth.listenerCount('voiceschanged')).toBe(1);
+    synth.fire('voiceschanged');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(synth.spoken).toHaveLength(1);
+  });
+  it('stop() during a pending recordings lookup never plays', async () => {
+    let release!: (s: string) => void;
+    const { v, log } = setup({ rec: () => new Promise<string>((r) => (release = r)) });
+    const p = v.say('name-a', 'ant');
+    v.stop();
+    release('blob:late');
+    await expect(p).resolves.toBeUndefined();
+    expect(log).toEqual([]);
+  });
+  it('a new say while speech is in flight cancels it and resolves the old promise', async () => {
+    const synth = fakeSynth({ script: ['hold', 'end'] });
+    const { v } = setup({ synth });
+    const first = v.say('name-a', 'ant');
+    await new Promise((r) => setTimeout(r, 0));
+    const before = synth.cancels;
+    await v.say('name-b', 'bear');
+    expect(synth.cancels).toBeGreaterThan(before);
+    await expect(first).resolves.toBeUndefined();
   });
 });
