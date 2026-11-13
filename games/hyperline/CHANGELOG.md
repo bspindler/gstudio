@@ -2,6 +2,11 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.5.0 (2026-11-13)
+- New sector: SWEEP COLUMNS. After SLOT GATES you now meet rows of slot gates, a jump apart: thread one, land, and jump again in rhythm. HYPERCORE is now sector 9.
+- Hyperline: the camera now sits straight behind your lane, with the vanishing point at the centre, so obstacles are easier to read.
+- Hyperline: the camera is now higher and further back with a gentler tilt, so the runner looks smaller and you can see more track ahead.
+
 ## 0.4.1 (2026-11-12)
 - Sound now plays on iPhone even when the ring/silent switch is set to silent. Use the in-game sound setting to turn it off.
 

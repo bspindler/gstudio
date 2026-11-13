@@ -9,7 +9,7 @@ describe('runControlsCheck', () => {
     const checks = await runControlsCheck();
     const failed = checks.filter((c) => !c.skipped && !c.ok);
     expect(failed).toEqual([]);
-    expect(new Set(checks.map((c) => c.game.split(' ')[0]))).toEqual(new Set(['gearhold', 'tidepool-pals', 'hyperline', 'block-barn']));
+    expect(new Set(checks.map((c) => c.game.split(' ')[0]))).toEqual(new Set(['gearhold', 'tidepool-pals', 'hyperline', 'lanternkeep', 'block-barn']));
     expect(find(checks, 'block-barn', 'touch tap on a block names it')).toMatchObject({ ok: true });
     // the core real-input paths must actually run, not be skipped
     for (const c of ['key KeyW moves fwd', 'key Space fires', 'touch stick (left half drag) moves forward',

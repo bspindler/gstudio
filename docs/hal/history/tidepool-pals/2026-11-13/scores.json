@@ -1,0 +1,50 @@
+{
+  "night": "2026-11-13",
+  "runs": [
+    {
+      "run": "run-2026-11-13T12-19-59-373Z",
+      "at": "2026-11-13T12:46:36.913Z",
+      "scorers": {
+        "tidepool-pals": {
+          "fitness": 88.85,
+          "measures": {
+            "inBand": 90,
+            "noWalls": 89.66,
+            "goalReach": 86.9,
+            "tension": 39.19
+          }
+        }
+      }
+    },
+    {
+      "run": "run-2026-11-13T13-03-20-409Z",
+      "at": "2026-11-13T13:23:18.228Z",
+      "scorers": {
+        "tidepool-pals": {
+          "fitness": 88.85,
+          "measures": {
+            "inBand": 90,
+            "noWalls": 89.66,
+            "goalReach": 86.9,
+            "tension": 39.19
+          }
+        }
+      }
+    },
+    {
+      "run": "run-2026-11-13T13-34-06-006Z",
+      "at": "2026-11-13T13:52:50.777Z",
+      "scorers": {
+        "tidepool-pals": {
+          "fitness": 88.85,
+          "measures": {
+            "inBand": 90,
+            "noWalls": 89.66,
+            "goalReach": 86.9,
+            "tension": 39.19
+          }
+        }
+      }
+    }
+  ]
+}

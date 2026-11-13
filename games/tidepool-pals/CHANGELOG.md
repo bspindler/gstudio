@@ -2,6 +2,12 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.6.0 (2026-11-13)
+- A calm pool panel under the board shows the pool you're restoring, its favourite pal and how much of the pool is cleaned up.
+- The pool panel under the board is now a slim strip with a smaller pal icon and a tighter meter, so it no longer crowds the screen.
+- The level label under the board now has a little breathing room and no longer tucks under the board's shadow.
+- The pal in the pool strip now does a happy wiggle when you win a level.
+
 ## 0.5.3 (2026-11-12)
 - The board now sits right under the goal bar instead of floating in the middle, so the spare water collects in one calm band above the tabs.
 

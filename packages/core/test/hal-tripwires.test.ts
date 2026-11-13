@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, kidVoice, kidAudio, kidFlash, kidExit, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, type Diff, type FileChange,
+  isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, kidVoice, kidAudio, kidFlash, kidExit, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, halHookBlock, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -32,7 +32,7 @@ describe('addedLines', () => {
 describe('protected-path', () => {
   it.each([
     'packages/core/src/hal/gate.ts', 'packages/core/src/hal/new.ts', 'packages/core/test/hal-gate.test.ts', 'scripts/hal.ts', 'scripts/hal/git.ts',
-    'games/gearhold/levels.d.ts', '.data/hal/ledger.jsonl', '.hal.env', 'policy.yaml', 'markets.yaml', 'infra/main.bicep', '.github/workflows/ci.yml', 'CLAUDE.md',
+    'games/gearhold/levels.d.ts', 'games/lanternkeep/lib/sim.d.ts', 'games/lanternkeep/lib/levels.d.ts', '.data/hal/ledger.jsonl', '.hal.env', 'policy.yaml', 'markets.yaml', 'infra/main.bicep', '.github/workflows/ci.yml', 'CLAUDE.md',
     'packages/core/src/gateway/index.ts', 'packages/core/src/policy/rules.ts', 'packages/core/src/library/compliance-checks.ts', 'packages/core/src/x/gateway.ts', 'packages/core/src/policy.ts',
     'packages/core/test/compliance.test.ts', 'packages/core/test/games-compliance.test.ts', 'packages/core/test/no-external-fonts.test.ts', 'packages/core/test/game-versions.test.ts',
     'package.json', 'package-lock.json', 'docs/superpowers/plans/x.md',
@@ -70,6 +70,18 @@ describe('hal-hook', () => {
   it('near-miss: edits outside the block, or another file, are fine', () => {
     expect(halHook(diff([M(P, html('a'), html('b'))]))).toEqual([]);
     expect(halHook(diff([M('games/hyperline/index.html', hook, 'x')]))).toEqual([]);
+  });
+  it('guards Lanternkeep\'s hook the same way', () => {
+    const L = 'games/lanternkeep/index.html';
+    expect(halHook(diff([M(L, html('a'), html('a', hook.replace('{}', '{gold(n){}}')))])).map((v) => v.rule)).toEqual(['hal-hook']);
+    expect(halHook(diff([M(L, html('a'), '<script>a</script>')]))).toHaveLength(1);
+    expect(halHook(diff([M(L, html('a'), html('b'))]))).toEqual([]);
+    expect(halHook(diff([M('games/lanternkeep/lib/sim.js', 'let a;\n', 'let a;\nif (HAL) cheat();\n')]))).toHaveLength(1);
+  });
+  it('the shipped Lanternkeep page has exactly one intact hook block', () => {
+    const src = readFileSync(new URL('../../../games/lanternkeep/index.html', import.meta.url), 'utf8');
+    expect(halHookBlock(src)).toContain('window.__hal');
+    expect(src.split('// ---- hal hook').length).toBe(2);
   });
 });
 

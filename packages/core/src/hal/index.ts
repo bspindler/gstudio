@@ -10,6 +10,8 @@ export * from './gearhold-score.js';
 export * from './gearhold-bot.js';
 export * from './gearhold-play-score.js';
 export * from './block-barn-score.js';
+export * from './lanternkeep-bot.js';
+export * from './lanternkeep-score.js';
 export * from './gate.js';
 export * from './ledger.js';
 export * from './baseline.js';

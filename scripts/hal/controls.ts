@@ -6,6 +6,7 @@
 // pointerType 'touch' (page.mouse would send pointerType 'mouse' even in a touch context).
 // Tidepool and Hyperline have no hook: one real primary action each, with a screenshot diff and a DOM check.
 // Block Barn: a real touch tap on a block (found through its ?hal hook, which is read-only here) must name it.
+// Lanternkeep's hook is read-only here: it says where a grid cell is on screen and what state the game is in.
 import type { Browser, BrowserContextOptions, CDPSession, Locator, Page } from 'playwright';
 import { closeAll, launchBrowser, newHalContext, serveGames, type StaticServer } from './browser.js';
 
@@ -284,6 +285,57 @@ async function tidepool(run: Run) {
   }
 }
 
+/**
+ * Lanternkeep: real taps all the way. Play starts night 1, a tap on a tile then on the Glowcap card plants it,
+ * Start begins the wave, and p / Escape pause and resume. The ?hal hook is only read (state, cellPoint).
+ */
+async function lanternkeep(run: Run) {
+  const G = 'lanternkeep', { context, page, errors } = await run.open(PHONE, '/lanternkeep/index.html?hal=1');
+  type LkSt = { mode: string; modal: boolean; paused: boolean; intro: boolean; towers?: number; gold?: number; phase?: string; wave?: number };
+  const st = (): Promise<LkSt> => page.evaluate(() => (window as any).__hal.state());
+  const settled = async () => {
+    const end = Date.now() + 30_000;
+    for (;;) {
+      const s = await st();
+      if (s.mode === 'play' && s.intro && !s.modal) return true;
+      if (s.modal) { const ok = page.locator('#revealOk'); if (await ok.isVisible()) { const b = await ok.boundingBox(); if (b) await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); } }
+      if (Date.now() > end) return false;
+      await wait(150);
+    }
+  };
+  const tapEl = async (sel: string) => { const b = await page.locator(sel).first().boundingBox(); if (!b) throw new Error(`${sel} not on screen`); await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2); };
+  try {
+    await page.waitForFunction(() => !!(window as any).__hal, undefined, { timeout: 15_000 });
+    await page.locator('#playBtn').waitFor({ state: 'visible', timeout: 15_000 });
+    await tapEl('#playBtn');
+    const inPlay = await settled();
+    run.add(G, 'tap Play starts night 1', inPlay, JSON.stringify(await st()));
+    if (!inPlay) return;
+    const before = await st();
+    const pt = await page.evaluate(() => (window as any).__hal.cellPoint(3, 2));
+    await page.touchscreen.tap(pt.x, pt.y);
+    await wait(150);
+    await tapEl('.card');
+    await wait(200);
+    const after = await st();
+    run.add(G, 'touch tap on a tile, then the Glowcap card, plants it', after.towers === 1 && (after.gold ?? 0) < (before.gold ?? 0), `plants ${before.towers} -> ${after.towers}, gold ${before.gold} -> ${after.gold}`);
+    if (after.phase === 'ready') { await tapEl('#waveBtn'); await wait(300); }
+    const waved = await st();
+    run.add(G, 'the first wave starts', waved.phase === 'wave' && (waved.wave ?? 0) >= 1, `phase ${waved.phase}, wave ${waved.wave}`);
+    await settled();
+    await page.keyboard.press('p');
+    await wait(150);
+    const paused = (await st()).paused;
+    await page.keyboard.press('Escape');
+    await wait(150);
+    const resumed = !(await st()).paused;
+    run.add(G, 'p pauses and Escape resumes', paused && resumed, `paused ${paused}, resumed ${resumed}`);
+  } finally {
+    run.noErrors(G, errors);
+    await context.close();
+  }
+}
+
 /** Polls until Hyperline's run has started (ready overlay hidden, pause button shown), up to ms. */
 async function runStarted(page: Page, ms = 5_000): Promise<boolean> {
   return page.waitForFunction(() => document.getElementById('ready')!.hidden && !document.getElementById('pauseBtn')!.hidden, undefined, { timeout: ms })
@@ -376,6 +428,7 @@ export async function runControlsCheck(opts: ControlsOptions = {}): Promise<Cont
     if (want('tidepool-pals')) await run.guard('tidepool-pals', 'touch tile tap', () => tidepool(run));
     if (want('hyperline')) await run.guard('hyperline', 'tap and key', () => hyperline(run));
     if (want('block-barn')) await run.guard('block-barn', 'touch block tap', () => blockBarn(run));
+    if (want('lanternkeep')) await run.guard('lanternkeep', 'tap, plant and keys', () => lanternkeep(run));
     return run.checks;
   } finally {
     await closeAll(browser, server);

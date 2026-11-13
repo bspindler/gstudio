@@ -65,6 +65,25 @@ per build, always with the gate's defaults, and only for the ticket's own game. 
 Hal's scorer code (`scripts/hal/**`, `packages/core/src/hal/**`, `package.json`). None of this replaces the gate: Hal
 scores the final tree again on its own.
 
+### Lanternkeep (added 2026-11-13)
+
+`lanternkeep` is scored by bot plays, not a browser: every night is played by a greedy bot in four styles (spread
+wide, or 4, 6 or 8 plants grown tall) times `--seeds` placement seeds (default 4, so 16 plays a night), plus Night
+Watch. It takes about 20 seconds. The game has no randomness of its own, so seeds only vary which of the bot's best
+few tiles it picks. Measures, with Brian's bands from 2026-11-13 (`LANTERNKEEP_BANDS` in
+`packages/core/src/hal/lanternkeep-score.ts`):
+
+- `inBand`: nights 1-5 win at least 90% of the time (no upper limit, the opening should feel good); nights 6-15
+  win between 40% and 90%.
+- `noSpikes`: no night's win rate falls more than 30 points below the night before.
+- `watch`: Night Watch's median wave reached is 30-60% of its 60 waves.
+- `tension` (reported, not in fitness): 15-50% of a night's wins miss three stars.
+
+A night that no style can win, that planting nothing wins, or whose paths or waves are malformed is a hard failure.
+These checks live in the scorer because Hal may edit `packages/core/test/lanternkeep-*`. The bot lives in
+`packages/core/src/hal/lanternkeep-bot.ts` for the same reason. Screens and controls drive the real page with
+`?hal=1`, whose hook (protected like Gearhold's) only reads the page, seeds progress, and tops up gold.
+
 `npm run hal` is `node --import tsx`, not the `tsx` command, because the tsx command opens a socket in the temp
 folder, and the sandbox allows none.
 

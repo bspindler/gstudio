@@ -22,8 +22,8 @@ describe('hal scorers', () => {
   it('scores via scoreTidepool', async () => {
     expect((await scorerFor('tidepool-pals').score({ from: 1, to: 1, seeds: 1 })).game).toBe('tidepool-pals');
   });
-  it('registers all three games', () => {
-    expect(Object.keys(SCORERS).sort()).toEqual(['gearhold', 'hyperline', 'tidepool-pals']);
+  it('registers all four games', () => {
+    expect(Object.keys(SCORERS).sort()).toEqual(['gearhold', 'hyperline', 'lanternkeep', 'tidepool-pals']);
     expect(scorerFor('hyperline').defaults).toEqual({ seeds: 100, until: HYPERLINE_UNTIL });
     expect(scorerFor('gearhold').defaults).toEqual({});
   });

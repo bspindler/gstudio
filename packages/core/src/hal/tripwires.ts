@@ -42,7 +42,7 @@ const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^(\.\/)+/, ''
 const touched = (f: FileChange): string[] => (f.oldPath ? [f.path, f.oldPath] : [f.path]);
 
 const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/', 'games/block-barn/audio/'];
-const PROTECTED_EXACT = new Set(['scripts/hal.ts', 'games/gearhold/levels.d.ts', 'games/block-barn/recorder.js', '.hal.env', 'policy.yaml', 'markets.yaml', 'claude.md', 'package.json', 'package-lock.json']);
+const PROTECTED_EXACT = new Set(['scripts/hal.ts', 'games/gearhold/levels.d.ts', 'games/lanternkeep/lib/sim.d.ts', 'games/lanternkeep/lib/levels.d.ts', 'games/lanternkeep/lib/endless.d.ts', 'games/block-barn/recorder.js', '.hal.env', 'policy.yaml', 'markets.yaml', 'claude.md', 'package.json', 'package-lock.json']);
 const PROTECTED_REGEX = [
   /^games\/block-barn\/(?:.*\/)?sources\.md$/,
   /^packages\/core\/test\/(?:.*\/)?hal-[^/]*\.test\.ts$/,
@@ -93,8 +93,12 @@ export const protectedPath: Rule = (diff) =>
 
 // ---- hal-hook ------------------------------------------------------------
 
-const HOOK_FILES = ['games/gearhold/index.html', 'games/block-barn/index.html'];
-const gamePrefix = (hookFile: string): string => hookFile.slice(0, hookFile.lastIndexOf('/') + 1);
+// Games driven through a `// ---- hal hook` block: the file that holds it, and the game folder whose code may not touch it.
+const HOOKS = [
+  { file: 'games/gearhold/index.html', dir: 'games/gearhold/' },
+  { file: 'games/lanternkeep/index.html', dir: 'games/lanternkeep/' },
+  { file: 'games/block-barn/index.html', dir: 'games/block-barn/' },
+];
 const HOOK_START = '// ---- hal hook';
 const HOOK_END = '// ---- end hal hook ----';
 
@@ -136,33 +140,34 @@ function halFragments(src: string | null, tamper: RegExp[] = HAL_TAMPER): string
 
 export const halHook: Rule = (diff) => {
   const out: Violation[] = [];
-  for (const hookFile of HOOK_FILES) {
-    const f = diff.files.find((x) => norm(x.path) === hookFile || (x.oldPath !== undefined && norm(x.oldPath) === hookFile));
-    if (!f) continue;
-    const moved = f.status === 'D' || (f.oldPath !== undefined && norm(f.oldPath) === hookFile && norm(f.path) !== hookFile);
-    const before = halHookBlock(f.before);
-    const after = moved ? null : halHookBlock(f.after);
-    // Fail closed: the file is there, so both sides must be readable text with exactly one intact block each, byte for byte equal.
-    if (moved) out.push(hit('hal-hook', hookFile, 'hal hook file deleted or moved'));
-    else if (!hookIntact(f.before) || !hookIntact(f.after)) out.push(hit('hal-hook', hookFile, 'hal hook block missing, unreadable, or not exactly one start and one end marker'));
-    else if (before !== after) out.push(hit('hal-hook', hookFile, 'hal hook block changed'));
-  }
-  // Outside the block, no statement touching the hook, its counters or the HAL flag may be added or removed. Statements are compared as a
-  // multiset (split on ; { }, comments dropped, whitespace normalised), so re-indenting, wrapping in a block or editing the rest of a line is fine.
-  for (const g of diff.files) {
-    const hookFile = HOOK_FILES.find((h) => norm(g.path).startsWith(gamePrefix(h)));
-    if (hookFile === undefined || isProse(g) || g.symlink) continue;
-    const isHookFile = norm(g.path) === hookFile;
-    const tamper = hookFile === 'games/block-barn/index.html' ? BB_TAMPER : HAL_TAMPER;
-    const b = halFragments(isHookFile ? withoutHook(g.before) : g.before, tamper);
-    const a = halFragments(isHookFile ? withoutHook(g.after) : g.after, tamper);
-    for (const [label, from, minus] of [['added', a, b], ['removed', b, a]] as const) {
-      const budget = new Map<string, number>();
-      for (const x of minus) budget.set(x, (budget.get(x) ?? 0) + 1);
-      for (const x of from) {
-        const n = budget.get(x) ?? 0;
-        if (n > 0) budget.set(x, n - 1);
-        else out.push(hit('hal-hook', g.path, `${label} statement touches the hal hook, counters or HAL flag: ${x.slice(0, 100)}`));
+  for (const { file: HOOK_FILE, dir } of HOOKS) {
+    const f = diff.files.find((x) => norm(x.path) === HOOK_FILE || (x.oldPath !== undefined && norm(x.oldPath) === HOOK_FILE));
+    if (f) {
+      const moved = f.status === 'D' || (f.oldPath !== undefined && norm(f.oldPath) === HOOK_FILE && norm(f.path) !== HOOK_FILE);
+      const before = halHookBlock(f.before);
+      const after = moved ? null : halHookBlock(f.after);
+      // Fail closed: the file is there, so both sides must be readable text with exactly one intact block each, byte for byte equal.
+      if (moved) out.push(hit('hal-hook', HOOK_FILE, 'hal hook file deleted or moved'));
+      else if (!hookIntact(f.before) || !hookIntact(f.after)) out.push(hit('hal-hook', HOOK_FILE, 'hal hook block missing, unreadable, or not exactly one start and one end marker'));
+      else if (before !== after) out.push(hit('hal-hook', HOOK_FILE, 'hal hook block changed'));
+    }
+    // Outside the block, no statement touching the hook, its counters or the HAL flag may be added or removed. Statements are compared as a
+    // multiset (split on ; { }, comments dropped, whitespace normalised), so re-indenting, wrapping in a block or editing the rest of a line is fine.
+    for (const g of diff.files) {
+      if (!norm(g.path).startsWith(dir) || isProse(g) || g.symlink) continue;
+      const isHookFile = norm(g.path) === HOOK_FILE;
+      // Block Barn's code may not detect that it is being scored either (manualClock, webdriver).
+      const tamper = HOOK_FILE === 'games/block-barn/index.html' ? BB_TAMPER : HAL_TAMPER;
+      const b = halFragments(isHookFile ? withoutHook(g.before) : g.before, tamper);
+      const a = halFragments(isHookFile ? withoutHook(g.after) : g.after, tamper);
+      for (const [label, from, minus] of [['added', a, b], ['removed', b, a]] as const) {
+        const budget = new Map<string, number>();
+        for (const x of minus) budget.set(x, (budget.get(x) ?? 0) + 1);
+        for (const x of from) {
+          const n = budget.get(x) ?? 0;
+          if (n > 0) budget.set(x, n - 1);
+          else out.push(hit('hal-hook', g.path, `${label} statement touches the hal hook, counters or HAL flag: ${x.slice(0, 100)}`));
+        }
       }
     }
   }

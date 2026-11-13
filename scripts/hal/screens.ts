@@ -1,6 +1,7 @@
 // Phone-size screenshots and console errors for every game (390x844 @2x, touch).
-// Gearhold uses the ?hal hook; Tidepool Pals and Hyperline are pressed through their own start buttons; Block Barn
-// is tapped for real, finding its targets through its ?hal hook.
+// Gearhold uses the ?hal hook; Lanternkeep reads its ?hal hook but is played with real taps; Tidepool Pals and
+// Hyperline are pressed through their own start buttons; Block Barn is tapped for real, finding its targets through
+// its ?hal hook.
 // Output: <outDir>/<game>/<n>.png (1-based; a labeled shot is <n>-<label>.png) and <outDir>/<game>/errors.json.
 // Gearhold adds an overhead layout shot of every level. Local builds only (127.0.0.1).
 //   A browser that can't launch throws "browser unavailable: ...".
@@ -22,6 +23,29 @@ const settle = (page: Page) => page.waitForTimeout(SETTLE);
 /** Runs a must-succeed step; on failure throws "flow: <name> failed" so the game is reported as not reached. */
 async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
   try { await fn(); } catch (e) { throw new Error(`flow: ${name} failed (${String((e as Error)?.message ?? e).split('\n')[0]})`); }
+}
+
+
+// Lanternkeep: the ?hal hook only reads the page (cellPoint, state) and seeds progress; taps and clicks are real.
+const lkState = (page: Page) => page.evaluate(() => (globalThis as any).__hal.state());
+/** Every reveal card already seen, so a shot shows the garden and not a card. */
+const LK_SEEN = ['glowcap', 'frost', 'ember', 'sunspire'].map((t) => `plant:${t}`)
+  .concat(['moth', 'firefly', 'beetle', 'wisp', 'mossback', 'toad', 'mothmother'].map((t) => `creature:${t}`), ['tip:flare']);
+/** Waits out the intro swoop (headless GL can be slow), dismissing reveal cards with real taps. */
+async function lkSettled(page: Page) {
+  const end = Date.now() + 30_000;
+  for (;;) {
+    const s = await lkState(page);
+    if (s.mode === 'play' && s.intro && !s.modal) return;
+    if (s.modal && await page.locator('#revealOk').isVisible()) await page.locator('#revealOk').click({ force: true, timeout: T });
+    if (Date.now() > end) throw new Error('night did not settle');
+    await page.waitForTimeout(150);
+  }
+}
+async function lkTapCell(page: Page, c: number, r: number) {
+  const pt = await page.evaluate(([c, r]) => (globalThis as any).__hal.cellPoint(c, r), [c, r]);
+  if (!pt) throw new Error(`cell ${c},${r} is off screen`);
+  await page.touchscreen.tap(pt.x, pt.y);
 }
 
 const FLOWS: Record<string, FlowFn> = {
@@ -85,6 +109,31 @@ const FLOWS: Record<string, FlowFn> = {
     }
     if (await page.locator('#movesCount').textContent() === moves) flow.notes.push('tile taps did not change moves');
     await settle(page);
+    await shoot();
+  },
+  async lanternkeep(page, origin, shoot, flow) {
+    await step('load', async () => {
+      await page.goto(`${origin}/lanternkeep/index.html?hal=1`);
+      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
+      await page.locator('#playBtn').waitFor({ state: 'visible', timeout: T });
+    });
+    await page.waitForTimeout(800); // a few frames of the title garden
+    await shoot(); // title
+    await step('play night 1', async () => {
+      await page.locator('#playBtn').click({ timeout: T });
+      await lkSettled(page);
+    });
+    flow.reached = true;
+    await settle(page);
+    await shoot(); // night 1, ready to plant
+    await step('plant a glowcap', async () => {
+      await lkTapCell(page, 3, 2);
+      await page.locator('.card').first().click({ force: true, timeout: T });
+    });
+    if ((await lkState(page)).towers !== 1) flow.notes.push('planting a glowcap did not add a plant');
+    await page.waitForTimeout(3500); // the first wave starts on its own on night 1
+    await lkSettled(page).catch(() => flow.notes.push('a reveal card did not close'));
+    await page.waitForTimeout(1200);
     await shoot();
   },
   async hyperline(page, origin, shoot, flow) {
@@ -243,6 +292,20 @@ const FOCUS: Record<string, FocusFn> = {
       await page.evaluate((k) => (document.querySelector(`#view-map [data-act="open-level"][data-n="${k}"]`) as HTMLElement | null)?.click(), n);
       await page.locator('#modal [data-act="start"]').waitFor({ state: 'visible', timeout: T });
       await page.locator('#modal [data-act="start"]').click({ timeout: T });
+    });
+    await settle(page);
+  },
+  async lanternkeep(page, origin, i) {
+    await step('load', async () => {
+      await page.goto(`${origin}/lanternkeep/index.html?hal=1`);
+      await page.waitForFunction(() => !!(globalThis as any).__hal, null, { timeout: T });
+    });
+    // Every night open and every card seen, then night i+1 from the garden map, as a player would reach it.
+    await step(`open night ${i + 1}`, async () => {
+      await page.evaluate((seen) => (globalThis as any).__hal.progress({ stars: Array(20).fill(1), seen }), LK_SEEN);
+      await page.locator('#playBtn').click({ timeout: T });
+      await page.locator('.node').nth(i).click({ force: true, timeout: T });
+      await lkSettled(page);
     });
     await settle(page);
   },
