@@ -146,6 +146,26 @@ describe('batching', () => {
 describe('fake-door purchases', () => {
   const offer = { sku: 'skin-neon', title: 'Neon Trail', priceUsd: 0.99 };
 
+  it("draws its own colours (a game's dark-mode button styles can't make it unreadable) and gives No thanks the same weight as Buy", async () => {
+    const s = make();
+    const p = s.purchase.offer(offer);
+    const root = document.querySelector<HTMLElement>('.studio-modal')!;
+    const card = root.firstElementChild as HTMLElement;
+    expect(root.style.colorScheme).toBe('dark');
+    expect(card.style.background).not.toBe('');
+    expect(card.style.color).not.toBe('');
+    const buy = document.querySelector<HTMLElement>('[data-studio="buy"]')!;
+    const no = document.querySelector<HTMLElement>('[data-studio="decline"]')!;
+    for (const b of [buy, no]) {
+      expect(b.style.color).not.toBe('');
+      expect(b.style.background).not.toBe('');
+      expect(b.style.minHeight).toBe('44px');
+    }
+    expect(no.style.cssText).toBe(buy.style.cssText);
+    click('decline');
+    await p;
+  });
+
   it('logs intent, tells the player it is free during the beta, and grants', async () => {
     const s = make();
     const p = s.purchase.offer(offer);

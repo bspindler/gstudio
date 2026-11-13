@@ -204,18 +204,23 @@ export function createStudio(opts) {
     const root = doc.createElement('div');
     root.className = 'studio-modal';
     root.setAttribute('role', 'dialog');
-    root.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;'
-      + 'background:rgba(0,0,0,.55);z-index:2147483647;font:16px system-ui,sans-serif';
+    // Every colour is set here, never inherited: games are dark-themed and style `button { color: inherit }`, which
+    // left dark text on dark buttons inside the old white card. Every button looks the same (No thanks = Buy).
+    root.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;'
+      + 'background:rgba(0,0,0,.6);z-index:2147483647;font:16px/1.4 system-ui,-apple-system,sans-serif;color-scheme:dark';
     const card = doc.createElement('div');
-    card.style.cssText = 'background:#fff;color:#111;border-radius:14px;padding:20px;max-width:320px;text-align:center';
+    card.style.cssText = 'background:#1d2030;color:#f4f5fa;border:1px solid #3a3f58;border-radius:16px;padding:20px;'
+      + 'max-width:320px;width:100%;box-sizing:border-box;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.5)';
     const p = doc.createElement('p');
+    p.style.cssText = 'margin:0 0 14px;color:#f4f5fa;font-size:17px;font-weight:600';
     p.textContent = text;
     card.append(p);
     for (const b of buttons) {
       const btn = doc.createElement('button');
       btn.dataset.studio = b.id;
       btn.textContent = b.label;
-      btn.style.cssText = 'margin:4px;padding:10px 14px;border-radius:10px;border:1px solid #999;font:inherit';
+      btn.style.cssText = 'margin:4px;padding:10px 16px;min-height:44px;border-radius:12px;border:1px solid #5a6080;'
+        + 'background:#2c3047;color:#f4f5fa;font:inherit;font-weight:600;text-transform:none;letter-spacing:normal;cursor:pointer';
       btn.addEventListener('click', () => { root.remove(); onPick(b.id); });
       card.append(btn);
     }
