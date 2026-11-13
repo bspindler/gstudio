@@ -55,4 +55,14 @@ describe('tidepool-pals play layout', () => {
     expect(html.match(/function onTileTap\(el\)\s*\{([\s\S]*?)\n\}/)![1]).toMatch(/else glancePal\(c\)/);
     expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
   });
+
+  it('reserves the measured height of the label and pool strip under the board, so the strip never runs onto the tabs', () => {
+    const wrap = html.match(/\.boardwrap\{([^}]*)\}/)![1];
+    expect(wrap).toMatch(/width:min\(100cqw,calc\(\(100cqh - var\(--below,\s*\d+px\)\) \* 7 \/ 8\)\)/);
+    const fn = html.match(/function fitBelow\(\)\s*\{([\s\S]*?)\n\}/)![1];
+    expect(fn).toContain("$('hint')");
+    expect(fn).toContain("$('poolPanel')");
+    expect(fn).toContain("'--below'");
+    expect(html).toMatch(/new ResizeObserver\(fitBelow\)/);
+  });
 });

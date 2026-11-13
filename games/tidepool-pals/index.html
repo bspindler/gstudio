@@ -78,7 +78,7 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 
 /* ---------- board (pseudo-3D: a tilted slab, pieces are glossy SVG with shared gradients) ---------- */
 .playzone{flex:1 1 0;min-height:0;container-type:size;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:6px}
-.boardwrap{flex:none;width:min(100cqw,calc((100cqh - 44px) * 7 / 8));aspect-ratio:7/8;display:grid;place-items:center;perspective:900px}
+.boardwrap{flex:none;width:min(100cqw,calc((100cqh - var(--below, 44px)) * 7 / 8));aspect-ratio:7/8;display:grid;place-items:center;perspective:900px}
 .board{position:relative;width:100%;aspect-ratio:7/8;max-width:100%;transform:rotateX(var(--rx,7deg)) rotateY(var(--ry,0deg));transform-origin:50% 70%;transition:transform .5s cubic-bezier(.2,.8,.3,1)}
 .slots{position:absolute;inset:0;filter:drop-shadow(0 7px 0 #04121F) drop-shadow(0 18px 18px rgba(0,0,0,.45))}
 .slot{position:absolute;width:calc(100% / 7 + .5px);height:calc(100% / 8 + .5px);background:radial-gradient(circle at 50% 42%,#1E6584 0 40%,#16516D 72%)}
@@ -514,7 +514,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSa
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.6.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.6.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -986,6 +986,16 @@ function renderPoolPanel() {
       <div class="rmeter" role="progressbar" aria-label="${info.name} restoration" aria-valuemin="0" aria-valuemax="${x.total}" aria-valuenow="${x.cleared}"><i style="width:${(x.fraction * 100).toFixed(0)}%"></i></div>
       <p class="psub">${x.cleared} of ${x.total} levels cleaned up · ${st.name}${palLine ? ` · ${palLine}` : ''}</p></div></div>`;
 }
+
+/** The board leaves room under it for the level label and the pool strip, measured rather than guessed, so on a short
+    screen the board shrinks a little instead of the strip running onto the tabs. */
+function fitBelow() {
+  const zone = document.querySelector('.playzone'), hint = $('hint'), panel = $('poolPanel'); if (!zone || !hint || !panel) return;
+  const outer = (el) => { const cs = getComputedStyle(el); return el.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0); };
+  const gap = parseFloat(getComputedStyle(zone).rowGap) || 0;
+  zone.style.setProperty('--below', `${Math.ceil(outer(hint) + outer(panel) + 2 * gap)}px`);
+}
+if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(fitBelow); ro.observe($('hint')); ro.observe($('poolPanel')); }
 
 /** A short happy wiggle for the pool strip's pal when a level is won (CSS only; skipped for reduced motion). */
 function wigglePal() {
