@@ -7,6 +7,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - The pool panel under the board is now a slim strip with a smaller pal icon and a tighter meter, so it no longer crowds the screen.
 - The level label under the board now has a little breathing room and no longer tucks under the board's shadow.
 - The pal in the pool strip now does a happy wiggle when you win a level.
+- The pal in the pool strip now bobs up with a little cheer whenever a move gets you closer to the level goal.
 
 ## 0.5.3 (2026-11-12)
 - The board now sits right under the goal bar instead of floating in the middle, so the spare water collects in one calm band above the tabs.

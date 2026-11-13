@@ -39,4 +39,12 @@ describe('tidepool-pals play layout', () => {
     expect(html.match(/function win\(\)\s*\{([\s\S]*?)\n\}/)![1]).toContain('wigglePal()');
     expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
   });
+
+  it('bobs the strip pal up when a move advances the goal, without resizing the strip', () => {
+    expect(html.match(/\.pp \.ppal svg\.peek\{([^}]*)\}/)![1]).toContain('palpeek');
+    expect(html).toContain('@keyframes palpeek');
+    expect(html).toContain('function peekPal()');
+    expect(html.match(/function onTileTap\(el\)\s*\{([\s\S]*?)\n\}/)![1]).toMatch(/if \(gained\) peekPal\(\)/);
+    expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
+  });
 });
