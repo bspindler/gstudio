@@ -136,7 +136,9 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .poolpanel{flex:0 0 auto;min-height:0;width:100%;max-width:420px;overflow:hidden;margin-top:6px}
 .pp{display:flex;align-items:center;gap:10px;background:var(--panel);box-shadow:var(--rim);border-radius:16px;padding:6px 12px}
 .pp .ppal{flex:none;width:40px;aspect-ratio:1;display:grid;place-items:center;animation:bob 3.2s ease-in-out infinite}
-.pp .ppal svg{width:100%;height:100%;display:block}
+.pp .ppal svg{width:100%;height:100%;display:block;transform-origin:50% 85%}
+.pp .ppal svg.happy{animation:palhappy 1.8s ease-in-out 1}
+@keyframes palhappy{0%,100%{transform:rotate(0) scale(1)}12%{transform:rotate(-14deg) translateY(-8%) scale(1.12)}27%{transform:rotate(14deg) translateY(-8%) scale(1.12)}42%{transform:rotate(-10deg) scale(1.06)}57%{transform:rotate(10deg) scale(1.06)}72%{transform:rotate(-4deg)}86%{transform:rotate(3deg)}}
 .pp .ptxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .pp h3{font-size:14px;color:var(--foam);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pp .rmeter{height:8px}
@@ -951,6 +953,12 @@ function renderPoolPanel() {
       <p class="psub">${x.cleared} of ${x.total} levels cleaned up · ${st.name}${palLine ? ` · ${palLine}` : ''}</p></div></div>`;
 }
 
+/** A short happy wiggle for the pool strip's pal when a level is won (CSS only; skipped for reduced motion). */
+function wigglePal() {
+  const svg = document.querySelector('#poolPanel .ppal svg'); if (!svg) return;
+  svg.classList.remove('happy'); void svg.getBoundingClientRect(); svg.classList.add('happy');
+}
+
 /* ---------- a move ---------- */
 let aiming = false; // a targeted helper ability is waiting for the player to tap a cell
 const active = () => activeMask(mask, lvl.rock, lvl.phase);
@@ -1267,7 +1275,7 @@ function win() {
   const stars = starsFor(lvl.moves, lvl.def.moves);
   const rec = recordWin(S, lvl.n, stars);
   lvl.shellDrop = shellDrop(lvl, rec.prevBest, stars);
-  persist(); pearlsChanged(); sfx.win(); buzz([20, 40, 20]);
+  persist(); pearlsChanged(); sfx.win(); buzz([20, 40, 20]); wigglePal();
   studio.track('level_end', { level: lvl.n, result: 'win', score: stars, moves_left: lvl.moves, specials: lvl.specials, assisted: lvl.assisted, ...endProps() });
   const pearlLine = rec.pearls ? `+${rec.pearls} pearls` : 'No new stars this time';
   showModal(`${confetti()}<div class="label">Level ${lvl.n} cleared</div><div class="stars">${[1, 2, 3].map((i) => STAR(i <= stars)).join('')}</div>
