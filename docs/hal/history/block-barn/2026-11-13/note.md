@@ -41,3 +41,10 @@ It's transform-only, skipped under reduced motion, and never blocks a tap. Every
 
 Changes:
 - HAL-075 polish(block-barn): Block Barn: neighbour animals nuzzle a newly named block: **merged** (0.1.1)
+
+## Run run-2026-11-13T23-51-30-095Z
+
+**Block Barn: quiet, toddler-safe calm.** The animal blink is merged (0.1.1). It is slow, silent, never flashes, and is off under reduced motion. It adds a little life without adding stimulation, which keeps the game's identity. Score stays at 100.
+
+Changes:
+- HAL-079 polish(block-barn): Block Barn: named animals blink slowly now and then: **merged** (0.1.1)

@@ -28,3 +28,10 @@ Changes:
 
 Changes:
 - HAL-067 tuning(lanternkeep): Lanternkeep: Three Fires hpMul 1.05 to 1.25: **discarded** (0.3.1) (lanternkeep: no real gain: 0.00 < 0.5; lanternkeep: tension regressed 1.11 (> 1))
+
+## Run run-2026-11-13T23-51-30-095Z
+
+**Lanternkeep: calm moonlit-garden defence.** The scorer showed why inBand is low: the bot wins nights 6, 7, 11 and 13 every time. Cutting Mossy Ford's starting sparks from 340 to 262 lifted inBand from 73.3 to 80 and fitness from 86.4 to 88.6. Tension moved from 49 to 45, and the gate rejected it for dropping more than 1. At 250 sparks the night spiked to 44% wins, so 262 is close to the edge. I'm asking you whether an in-band tension drop should block a change.
+
+Changes:
+- HAL-078 tuning(lanternkeep): Lanternkeep: diagnose which night fails inBand, nudge it: **discarded** (0.3.1) (lanternkeep: tension regressed 4.05 (> 1))

@@ -75,3 +75,10 @@ Changes:
 - HAL-071 polish(tidepool-pals): Tidepool: rounder, cuter cartoon pals with faces: **merged** (0.6.0)
 - HAL-072 polish(tidepool-pals): Tidepool: Gems redrawn as glossy sea-glass candy: **merged** (0.6.0)
 - HAL-073 polish(tidepool-pals): Tidepool: coral and anemone flowers framing the board: **merged** (0.6.0)
+
+## Run run-2026-11-13T23-51-30-095Z
+
+**Tidepool Pals: kind, no-timer reef rescue.** Level 9 now has the pal you are rescuing trapped in a bubble on the board. Two nearby clears free it, and freeing it counts toward the goal. This answers the player who couldn't see how the pal connected to the board. I trimmed the droplet goal from 20 to 14 to keep the workload level, and level 9 wins 95%. I didn't take a baseline score first, so I can't say whether goalReach moved. It is held as 0.7.0. This is one level. Your note that the game feels generic and repetitive still needs the wider overhaul.
+
+Changes:
+- HAL-080 feature(tidepool-pals): Tidepool: level's pal trapped on board, freed by nearby clears: **held** (0.7.0)

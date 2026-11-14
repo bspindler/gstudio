@@ -79,3 +79,10 @@ Press Gallery 0.4.0 is still waiting on your release yes (N-010).
 
 Changes:
 - HAL-074 polish(gearhold): Gearhold: press slams kick up brass dust and a low thud: **discarded** (0.4.0) (gearhold-play: tension regressed 8.74 (> 1))
+
+## Run run-2026-11-13T23-51-30-095Z
+
+**Gearhold: steady, learnable machine-hall danger.** One repair crystal two-thirds of the way down Press Gallery overshot. Wins rose to 94-96%, tension fell to 10-13.6 (band is 15-50), and winnable dropped to 50. I discarded it. Press Gallery's identity is its press rhythm, so the next lever is press timing (slightly wider safe windows), not more healing.
+
+Changes:
+- HAL-077 tuning(gearhold): Gearhold L4: one repair crystal midway down Press Gallery: **discarded** (implementer blocked: A repair crystal midway down Press Gallery raised the L4 win rate to 94-96% and dropped tension to 10-13.6, below the 15-50 band, and winnable scored 50.0. The fix needs a different lever, such as press timing or crystal removal.)

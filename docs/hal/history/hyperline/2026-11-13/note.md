@@ -70,3 +70,10 @@ Once `three.module.js` and its LICENSE are in `games/hyperline/vendor/`, I'll bu
 
 Changes:
 - HAL-076 feature(hyperline): Hyperline: three.js renderer with real neon bloom: **discarded** (implementer blocked: Cannot bundle three.js into games/hyperline/ with the allowed tools (no copy or network). A human needs to copy the vendored three.module.js and its LICENSE into games/hyperline/vendor/ first.)
+
+## Run run-2026-11-13T23-51-30-095Z
+
+**Hyperline: neon speed on your restored chase camera.** Bloom now makes the rails, edges and sun really glow. It uses only the shared three.js copy, nothing is bundled into the game folder, and the game falls back to the plain renderer if WebGL fails or is lost. Gameplay and camera are unchanged, and the score is 100. It is held as 0.6.0 for your yes.
+
+Changes:
+- HAL-081 feature(hyperline): Hyperline: three.js neon bloom renderer, shared copy: **held** (0.6.0)
