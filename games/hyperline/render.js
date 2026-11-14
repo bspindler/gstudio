@@ -4,7 +4,7 @@
 // hot path) so it holds 60fps on a mid phone.
 
 import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
-import { moverH } from './lib/sim.js';
+import { moverH, railLit } from './lib/sim.js';
 import { BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo } from './lib/world.js';
 
 /* ---------- bloom presenter (three.js, shared core copy) ---------- */
@@ -449,6 +449,16 @@ export function drawScene(c, W, H, st) {
         for (const zz of [-1.2, 1.2]) seg(c, cam, [o.x, o.y, zz], [o.x, o.h, zz]);
         seg(c, cam, [o.x, o.y, -1.2], [o.x, o.y, 1.2]); seg(c, cam, [o.x, o.h, -1.2], [o.x, o.h, 1.2]);
         c.globalAlpha = fade * (0.6 + 0.3 * Math.sin(t * 7)); neon(c, pal.neon, 3);
+      } }); break;
+      case 'rail': dr.push({ z: depth(o.x + o.w, 0, 0) + 1, f: () => {
+        // lit (hot, wide glow) or dark (dim outline) exactly as the sim sees it at the runner's centre
+        const lit = railLit(o, st.runner.x + PS / 2), col = lit ? '#FF2B5E' : '#7CFFEA';
+        c.globalAlpha = fade * (lit ? 1 : 0.35);
+        box(c, cam, o.x, o.x + o.w, 0, lit ? 0.22 : 0.06, -1.1, 1.1, col, lit ? 1 : 0.4, lit ? 2.4 : 1.2);
+        c.beginPath();
+        for (const zz of [-1.2, 1.2]) seg(c, cam, [o.x, 0, zz], [o.x + o.w, 0, zz]);
+        for (let k = 0; k <= 3; k++) { const xx = o.x + (o.w * k) / 3; seg(c, cam, [xx, 0, -1.2], [xx, lit ? 1.1 : 0.3, -1.2]); seg(c, cam, [xx, 0, 1.2], [xx, lit ? 1.1 : 0.3, 1.2]); }
+        c.globalAlpha = fade * (lit ? 1 : 0.5); neon(c, col, lit ? 3.2 : 1.6);
       } }); break;
       case 'chip': if (!o.got) dr.push({ z: depth(o.x, o.y, 0), f: () => {
         c.globalAlpha = fade;

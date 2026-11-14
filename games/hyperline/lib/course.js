@@ -12,6 +12,7 @@
 //   mover {x, w, base, amp, k, ph}  platform bobbing at base + amp*sin(runnerX*k + ph)
 //   flip  {x, w}          gravity points up; the runner rides the ceiling track at CEIL_Y
 //   gate  {x, w, y, h}    slot gate: solid below y and above h; pass through the gap between
+//   rail  {x, w, per, ph} blinking floor rail: lit for half of every `per` units; lethal to the grounded runner while lit
 
 import { mulberry32 } from './rng.js';
 import { AIR, BAR_Y, CEIL_Y, GATE_HI, GATE_LO, GATE_W, GRAV, JV, PAD_AIR, PAD_V, PS, sectorAt, speedAt, STEP } from './world.js';
@@ -171,12 +172,25 @@ export const PATTERNS = [
       }
       return { o, len: 1 + (n - 1) * gap + GATE_W + 0.32 * v + 1 };
     } },
+
+  // Sector 8: pulse rails. A rail across the track glows lit, dark, lit to a beat. Touch it lit and you
+  // crash: be in the air when it glows, land in the dark half, and hop again for the second glow.
+  { id: 'pulse', sector: 8, weight: (s) => (s === 8 ? 2.6 : 1.2),
+    build(x, d, r) {
+      const v = speedAt(x + 4), per = v * 0.8, w = per * 1.5, rx = x + 1;
+      const o = [
+        { t: 'rail', x: rx, w, per },
+        { t: 'chip', x: rx + per * 0.2, y: 1.7 },
+        { t: 'chip', x: rx + per * 1.2, y: 1.7 },
+      ];
+      return { o, len: 1 + w + 1 };
+    } },
 ];
 
 const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

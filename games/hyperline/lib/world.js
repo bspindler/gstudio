@@ -56,6 +56,8 @@ export const SECTORS = [
     pal: { sky: ['#01060F', '#061A33', '#0A3A5C'], sun: ['#FFE45C', '#22F0FF'], grid: '#22A8FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#22F0FF' } },
   { name: 'SWEEP COLUMNS', hint: 'Columns in a row: thread each slot, then jump again in rhythm.',
     pal: { sky: ['#0A0210', '#2A0845', '#5A1070'], sun: ['#22F0FF', '#FF2BD6'], grid: '#22F0FF', rail: '#FFE45C', neon: '#22F0FF', block: '#FF2BD6' } },
+  { name: 'PULSE RAILS', hint: 'Rails that blink to a beat: stay in the air while they glow, land when they go dark.',
+    pal: { sky: ['#050212', '#14083A', '#2A0F5E'], sun: ['#FF2BD6', '#22F0FF'], grid: '#FF2BD6', rail: '#7CFFEA', neon: '#FF2B5E', block: '#B98CFF' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];

@@ -1,6 +1,6 @@
 export type Obj = {
-  t: 'spike' | 'block' | 'pit' | 'chip' | 'bar' | 'pad' | 'mover' | 'flip' | 'gate';
-  x: number; y?: number; w?: number; h?: number; inv?: boolean;
+  t: 'spike' | 'block' | 'pit' | 'chip' | 'bar' | 'pad' | 'mover' | 'flip' | 'gate' | 'rail';
+  x: number; y?: number; w?: number; h?: number; inv?: boolean; per?: number;
   base?: number; amp?: number; k?: number; ph?: number;
   p?: string; g?: number; got?: boolean; miss?: boolean; done?: boolean; mc?: number;
 };

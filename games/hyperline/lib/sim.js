@@ -14,6 +14,12 @@ export function moverH(o, x) {
   return o.base + o.amp * Math.sin(x * o.k + o.ph);
 }
 
+/** Whether a pulse rail is lit when the runner's centre is at x: lit for half of every beat (o.per units). */
+export function railLit(o, x) {
+  const u = (x - o.x) / o.per + (o.ph || 0);
+  return u - Math.floor(u) < 0.5;
+}
+
 /**
  * Advances the runner one STEP. `jump` is true when the player is holding or has a buffered tap.
  * Mutates the runner (and per-object flags like chip.got); returns the events that happened.
@@ -109,6 +115,9 @@ export function step(r, c, jump) {
     } else if (o.t === 'bar') {
       if (x1 - 0.08 > o.x && x0 + 0.08 < o.x + o.w && r.y + PS > o.y && r.y < o.y + BAR_H) die = die || 'bar';
       if (!o.done && x0 > o.x + o.w) { o.done = true; if (!die) ev.push({ t: 'bar' }); }
+    } else if (o.t === 'rail') {
+      if (!r.flip && cx >= o.x && cx < o.x + o.w && r.y < 0.25 && railLit(o, cx)) die = die || 'rail';
+      if (!o.done && x0 > o.x + o.w) { o.done = true; if (!die) ev.push({ t: 'rail' }); }
     } else if (o.t === 'gate') {
       if (x1 - 0.08 > o.x && x0 + 0.08 < o.x + o.w && (r.y < o.y - 0.04 || r.y + PS > o.h + 0.04)) die = die || 'gate';
       if (!o.done && x0 > o.x + o.w) { o.done = true; if (!die) ev.push({ t: 'gate' }); }
