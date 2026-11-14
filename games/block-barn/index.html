@@ -126,7 +126,9 @@
   @keyframes glow { 0%, 100% { box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18), 0 0 0 0 rgba(255,246,200,.0); }
     50% { box-shadow: inset 0 -9px 0 rgba(0,0,0,.16), inset 0 0 0 5px rgba(255,255,255,.35), 0 6px 0 rgba(0,0,0,.18), 0 0 18px 10px rgba(255,246,200,.75); } }
 
-  .body.flip { animation: flip .62s cubic-bezier(.3,.7,.4,1); }
+  .body.flip { animation: flip .62s cubic-bezier(.3,.7,.4,1), squish .32s ease-out; }
+  /* soft press under the finger; uses the separate `scale` property so it layers on the flip's transform */
+  @keyframes squish { 0% { scale: 1; } 35% { scale: 1.07 .88; } 70% { scale: .98 1.03; } 100% { scale: 1; } }
   @keyframes flip { 0% { transform: none; } 35% { transform: translateY(-34px) rotate(170deg) scale(.95); } 70% { transform: translateY(0) rotate(360deg); }
     84% { transform: scale(1.08, .9); } 100% { transform: none; } }
   .body.arrive { animation: arrive .55s cubic-bezier(.3,.7,.4,1); }
@@ -239,6 +241,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .body.flip, .body.arrive { animation-duration: .3s; }
+    .body.flip { animation-name: flip; }
     .mv .pic, .dance .pic { animation-duration: .5s !important; }
     .slot.invite .body { animation-duration: 4s; }
     .animal.ghost .pic { animation: none; }
