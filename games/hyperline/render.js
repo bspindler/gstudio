@@ -5,7 +5,7 @@
 
 import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
 import { moverH, railLit } from './lib/sim.js';
-import { BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo } from './lib/world.js';
+import { BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 
 /* ---------- bloom presenter (three.js, shared core copy) ---------- */
 /** Shows the finished Canvas2D frame through three.js with a neon bloom pass. The scene and camera are
@@ -371,7 +371,9 @@ export function drawScene(c, W, H, st) {
   // track segments between pits, far to near
   const objs = st.course.objs, near = rx - 7, far = rx + 75;
   const pits = [];
-  for (const o of objs) { if (o.x > far) break; if (o.t === 'pit' && o.x + o.w > near) pits.push(o); }
+  const rcx = st.runner.x + PS / 2;
+  // a crumble panel still holds the floor up until it drops, `drop` units before the runner reaches it
+  for (const o of objs) { if (o.x > far) break; if (o.t === 'pit' && o.x + o.w > near && !(o.c && rcx < o.x - o.drop)) pits.push(o); }
   const segs = [];
   let a = near;
   for (const p of pits) { if (p.x > a) segs.push([a, p.x]); a = Math.max(a, p.x + p.w); }
@@ -450,6 +452,28 @@ export function drawScene(c, W, H, st) {
         seg(c, cam, [o.x, o.y, -1.2], [o.x, o.y, 1.2]); seg(c, cam, [o.x, o.h, -1.2], [o.x, o.h, 1.2]);
         c.globalAlpha = fade * (0.6 + 0.3 * Math.sin(t * 7)); neon(c, pal.neon, 3);
       } }); break;
+      case 'pit': if (o.c) dr.push({ z: depth(o.x + o.w, 0, 0) + 1, f: () => {
+        const ahead = o.x - o.drop - rcx; // > 0: still standing; <= 0: dropped
+        if (ahead > 0) {
+          // glowing warning: starts `glow` units out and flickers faster as the drop nears
+          const k = Math.max(0, Math.min(1, 1 - ahead / (o.glow - o.drop)));
+          if (k <= 0) return;
+          const blink = st.reduced ? 1 : 0.6 + 0.4 * Math.sin(t * (8 + 14 * k));
+          c.globalAlpha = fade * (0.4 + 0.6 * k) * blink;
+          box(c, cam, o.x, o.x + o.w, 0, 0.1, -1.1, 1.1, '#FF8A3D', 0.9, 2.2);
+          c.beginPath();
+          for (let xx = o.x; xx <= o.x + o.w + 0.01; xx += o.w / 4) seg(c, cam, [xx, 0.12, -1.1], [xx, 0.12, 1.1]);
+          neon(c, '#FFE45C', 2.4);
+        } else {
+          // the panel falls away behind the drop
+          const tf = -ahead / speedAt(o.x);
+          if (tf > 0.55) return;
+          c.globalAlpha = fade * (1 - tf / 0.55) * 0.8;
+          const yy = -30 * tf * tf;
+          box(c, cam, o.x, o.x + o.w, yy - 0.1, yy, -1.1, 1.1, '#FF8A3D', 0.7, 1.6);
+        }
+      } });
+        break;
       case 'rail': dr.push({ z: depth(o.x + o.w, 0, 0) + 1, f: () => {
         // lit (hot, wide glow) or dark (dim outline) exactly as the sim sees it at the runner's centre
         const lit = railLit(o, st.runner.x + PS / 2), col = lit ? '#FF2B5E' : '#7CFFEA';

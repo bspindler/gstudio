@@ -8,6 +8,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.6.0 (2026-11-13)
 - Hyperline's neon now really glows: a soft bloom lights up the rails, edges and sun on phones that support it, and the game looks as before on those that don't.
 - New sector: PULSE RAILS. A rail across the track blinks lit and dark to a steady beat. Stay in the air while it glows, land in the dark half, then hop again. It comes before HYPERCORE, which is now sector 10.
+- New sector: CRUMBLE TRACK. Floor panels glow, then fall away, leaving holes to leap: jump, land, and jump again. It comes before HYPERCORE, which is now sector 11.
 
 ## 0.5.1 (2026-11-13)
 - Hyperline: the camera is back to the original angled chase view from 0.4.1.

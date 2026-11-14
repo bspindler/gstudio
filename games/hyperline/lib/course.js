@@ -12,6 +12,7 @@
 //   mover {x, w, base, amp, k, ph}  platform bobbing at base + amp*sin(runnerX*k + ph)
 //   flip  {x, w}          gravity points up; the runner rides the ceiling track at CEIL_Y
 //   gate  {x, w, y, h}    slot gate: solid below y and above h; pass through the gap between
+//   pit with c: 1         a crumbling panel: glows `glow` units ahead, drops `drop` units ahead; a plain pit to the sim
 //   rail  {x, w, per, ph} blinking floor rail: lit for half of every `per` units; lethal to the grounded runner while lit
 
 import { mulberry32 } from './rng.js';
@@ -101,7 +102,7 @@ export const PATTERNS = [
     } },
   { id: 'padWall', sector: 2, weight: (s) => (s === 2 ? 1.6 : 0.9),
     build(x, d, r) {
-      const v = speedAt(x), px = x + 0.5, wx = px + 3, ww = 3 + r() * 2;
+      const v = speedAt(x), px = x + 0.5, wx = px + Math.max(3, 0.9 + v * 0.16), ww = 3 + r() * 2;
       const o = [{ t: 'pad', x: px, w: 1.4 }, { t: 'block', x: wx, w: ww, h: 3 }, { t: 'chip', x: wx + ww / 2, y: 3.5 }];
       return { o, len: Math.max(wx + ww + 0.32 * v + 1, px + PAD_AIR * v + 1.5) - x };
     } },
@@ -185,12 +186,27 @@ export const PATTERNS = [
       ];
       return { o, len: 1 + w + 1 };
     } },
+
+  // Sector 9: crumble track. Floor panels glow, then drop out ahead of the runner, leaving holes to leap.
+  // To the sim each is a plain pit (c: 1); `glow` and `drop` are how far ahead the panel starts to glow
+  // and when it falls away, so the renderer can warn the player. Solid track between holes fits any landing.
+  { id: 'crumble', sector: 9, weight: (s) => (s === 9 ? 2.6 : 1.2),
+    build(x, d, r) {
+      const v = speedAt(x + 4), rg = range(x + 4), hw = rg * (0.36 + r() * 0.06), gp = rg * 0.7;
+      const n = 2 + (d > 0.5 && r() < 0.4 ? 1 : 0), o = [];
+      let hx = x + 1;
+      for (let i = 0; i < n; i++) {
+        o.push({ t: 'pit', x: hx, w: hw, c: 1, glow: v * 1.3, drop: v * 0.7 }, { t: 'chip', x: hx + hw / 2, y: 2.3 });
+        hx += hw + gp;
+      }
+      return { o, len: hx - gp - x + 0.5 };
+    } },
 ];
 
 const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

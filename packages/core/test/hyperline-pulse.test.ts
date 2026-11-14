@@ -8,10 +8,10 @@ import { clearable } from '../src/hal/hyperline-bot.js';
 const bare = (objs: Obj[]): Course => { const c = createCourse(5); c.objs.length = 0; c.nextX = 1e9; c.objs.push(...objs); return c; };
 
 describe('hyperline PULSE RAILS', () => {
-  it('is sector 9 for players, right before HYPERCORE, and introduces the pulse rail', () => {
+  it('is sector 9 for players, right before CRUMBLE TRACK, and introduces the pulse rail', () => {
     expect(sectorInfo(7).name).toBe('SWEEP COLUMNS');
     expect(sectorInfo(8).name).toBe('PULSE RAILS');
-    expect(sectorInfo(9).name).toBe('HYPERCORE');
+    expect(sectorInfo(9).name).toBe('CRUMBLE TRACK');
     expect(INTRO[8]).toBe('pulse');
   });
 
