@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.1.2 (2026-11-14)
+- Block Barn: neighbouring animals now and then turn to each other with a slow, gentle peek.
+
 ## 0.1.1 (2026-11-13)
 - Block Barn: when you name a block, the animals nearby slowly turn to look at it (and stay still if reduced motion is on).
 - Block Barn: the grown-up corner is easier to find and press, with a bigger touch area and a clearer ring that fills during the 3-second hold and empties gently if you let go early.

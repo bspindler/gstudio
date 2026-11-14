@@ -340,7 +340,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.1.1', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.1.2', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -550,7 +550,7 @@ function reseed(n) {
   for (let i = 0; i < 5; i++) floor.push(pickLetter());
   hush_voice();
   renderAll(false);
-  if (!blinking) { blinking = true; for (let k = 0; k < 5; k++) blinkLater(k); }
+  if (!blinking) { blinking = true; for (let k = 0; k < 5; k++) blinkLater(k); peekLater(); }
 }
 
 // ---------- layout ----------
@@ -756,6 +756,35 @@ function blinkLater(k) {
     }
     blinkLater(k);
   }, 4000 + Math.random() * 5000);
+}
+// Now and then two adjacent named animals turn to each other with a slow look and settle (reuses the look animation;
+// CSS only; never under reduced motion). Plain Math.random. No sound, no text, no score, no flashing.
+function peekLater() {
+  setTimeout(() => {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduced && !document.hidden) {
+      const ks = [0, 1, 2, 3, 4].filter((k) => named.has(floor[k]) && slotsEl.children[k]?.querySelector('.animal'));
+      const pairs = [];
+      for (const i of ks) for (const j of ks) {
+        if (j <= i) continue;
+        const ri = slotsEl.children[i].getBoundingClientRect(), rj = slotsEl.children[j].getBoundingClientRect();
+        const d = Math.hypot(ri.left + ri.width / 2 - rj.left - rj.width / 2, ri.top + ri.height / 2 - rj.top - rj.height / 2);
+        if (d <= ri.width * 1.5) pairs.push({ ai: slotsEl.children[i].querySelector('.animal'), aj: slotsEl.children[j].querySelector('.animal'), ri, rj });
+      }
+      const busy = (a) => ['look', 'oh', 'sway'].some((c) => a.classList.contains(c));
+      const free = pairs.filter((p) => !busy(p.ai) && !busy(p.aj));
+      if (free.length) {
+        const p = free[Math.floor(Math.random() * free.length)];
+        p.ai.style.setProperty('--dir', p.rj.left > p.ri.left ? '1' : '-1');
+        p.aj.style.setProperty('--dir', p.ri.left > p.rj.left ? '1' : '-1');
+        for (const a of [p.ai, p.aj]) {
+          restart(a, 'look');
+          setTimeout(() => a.classList.remove('look'), 2200);
+        }
+      }
+    }
+    peekLater();
+  }, 9000 + Math.random() * 8000);
 }
 function hiddenFriend(k) {
   const el = slotsEl.children[k];
