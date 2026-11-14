@@ -33,6 +33,12 @@ describe('tidepool-pals play layout', () => {
     expect(html).toMatch(/startLevel[\s\S]*renderPoolPanel\(\);[\s\S]*armIdle\(\);\s*return true;/);
   });
 
+  it('shows the favourite-pal line on its own second line so it is not cut off', () => {
+    const fn = html.match(/function renderPoolPanel\(\)\s*\{([\s\S]*?)\n\}/)![1];
+    expect(fn).toContain('class="psub ppline"');
+    expect(fn).not.toMatch(/\$\{st\.name\}\$\{palLine/);
+  });
+
   it('wiggles the strip pal once on a level win, in code, without growing the strip', () => {
     expect(html.match(/\.pp \.ppal svg\.happy\{([^}]*)\}/)![1]).toContain('palhappy');
     expect(html).toContain('@keyframes palhappy');

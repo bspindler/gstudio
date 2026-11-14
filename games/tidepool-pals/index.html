@@ -1024,11 +1024,12 @@ function renderPoolPanel() {
   const p = poolOf(lvl.n), info = poolInfo(p), x = poolProgress(S, p), st = STAGES[x.stage];
   const cr = CREATURES.find((c) => PAL_HOME[c.id] === p);
   const owned = !!(cr && S.album[cr.id]);
-  const palLine = !cr ? '' : owned ? `${cr.name} is cheering you on` : `${cr.name}'s favourite spot`;
+  const palLine = !cr ? '' : owned ? `${cr.name} is cheering you on` : `${cr.name}'s favourite pool`;
   el.innerHTML = `<div class="pp" style="--bloom:${x.fraction.toFixed(2)}">${reefFlora(info.palette)}${cr ? `<span class="ppal" aria-hidden="true">${creatureSVG(cr, !owned)}</span>` : ''}
     <div class="ptxt"><h3>${info.name}</h3>
       <div class="rmeter" role="progressbar" aria-label="${info.name} restoration" aria-valuemin="0" aria-valuemax="${x.total}" aria-valuenow="${x.cleared}"><i style="width:${(x.fraction * 100).toFixed(0)}%"></i></div>
-      <p class="psub">${x.cleared} of ${x.total} levels cleaned up · ${st.name}${palLine ? ` · ${palLine}` : ''}</p></div></div>`;
+      <p class="psub">${x.cleared} of ${x.total} levels cleaned up · ${st.name}</p>${palLine ? `
+      <p class="psub ppline">${palLine}</p>` : ''}</div></div>`;
 }
 
 /** The board leaves room under it for the level label and the pool strip, measured rather than guessed, so on a short
