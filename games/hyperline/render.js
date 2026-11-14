@@ -7,6 +7,45 @@ import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView 
 import { moverH } from './lib/sim.js';
 import { BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo } from './lib/world.js';
 
+/* ---------- bloom presenter (three.js, shared core copy) ---------- */
+/** Shows the finished Canvas2D frame through three.js with a neon bloom pass. The scene and camera are
+ *  untouched; only the final present changes. Resolves null when WebGL or the module is unavailable,
+ *  and the caller keeps the plain 2D present. */
+export const BLOOM = { strength: 0.55, radius: 0.55, threshold: 0.72 };
+export async function createBloom(glCanvas, src) {
+  let T, renderer;
+  try {
+    T = await import('../sdk/vendor/three.module.js');
+    renderer = new T.WebGLRenderer({ canvas: glCanvas, antialias: false, alpha: false, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(1);
+    const scene = new T.Scene(), cam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const mat = new T.MeshBasicMaterial({ toneMapped: false });
+    scene.add(new T.Mesh(new T.PlaneGeometry(2, 2), mat));
+    const composer = new T.EffectComposer(renderer);
+    composer.addPass(new T.RenderPass(scene, cam));
+    const bloom = new T.UnrealBloomPass(new T.Vector2(2, 2), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
+    composer.addPass(bloom);
+    composer.addPass(new T.OutputPass());
+    let tex = null, lost = () => {};
+    glCanvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost(); });
+    return {
+      onLost(fn) { lost = fn; },
+      resize(w, h) {
+        renderer.setSize(w, h, false); composer.setSize(w, h);
+        if (tex) tex.dispose();
+        tex = new T.CanvasTexture(src); tex.colorSpace = T.SRGBColorSpace;
+        tex.minFilter = T.LinearFilter; tex.generateMipmaps = false;
+        mat.map = tex; mat.needsUpdate = true;
+      },
+      present() { if (!tex) return; tex.needsUpdate = true; composer.render(); },
+      dispose() { try { composer.dispose(); renderer.dispose(); } catch { /* already gone */ } },
+    };
+  } catch {
+    try { renderer && renderer.dispose(); } catch { /* ignore */ }
+    return null;
+  }
+}
+
 /* ---------- colour ---------- */
 const rgbCache = new Map();
 export function rgb(hex) {

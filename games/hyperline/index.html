@@ -240,10 +240,10 @@ import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
 import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, migrateSave, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
-import { drawScene, drawSkinThumb, skinColors } from './render.js';
+import { createBloom, drawScene, drawSkinThumb, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.5.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.6.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -375,13 +375,24 @@ async function buy(key) {
 }
 
 /* ---------- game ---------- */
-const cv = $('game'), cx = cv.getContext('2d'), stage = $('stage');
+// The scene is drawn on an off-screen 2D canvas, then shown on #game: through three.js with a neon bloom
+// when WebGL works, or by a plain copy (the original look) when it doesn't.
+let cv = $('game'), out2d = null, bloom = null;
+const src = document.createElement('canvas'), cx = src.getContext('2d'), stage = $('stage');
 let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1), dprCap = DPR;
 function resize() {
   const r = stage.getBoundingClientRect(); DPR = Math.min(dprCap, window.devicePixelRatio || 1);
   W = r.width; H = r.height; if (!W || !H) return;
-  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  src.width = Math.round(W * DPR); src.height = Math.round(H * DPR);
+  if (bloom) bloom.resize(src.width, src.height); else if (out2d) { cv.width = src.width; cv.height = src.height; }
 }
+function useFlat() {
+  if (bloom) bloom.dispose();
+  bloom = null;
+  const n = document.createElement('canvas'); n.id = 'game'; n.setAttribute('aria-label', cv.getAttribute('aria-label') || '');
+  cv.replaceWith(n); cv = n; out2d = cv.getContext('2d'); resize();
+}
+createBloom(cv, src).then((b) => { if (!b) { useFlat(); return; } bloom = b; b.onLost(useFlat); resize(); }).catch(useFlat);
 new ResizeObserver(resize).observe(stage);
 
 let G, pressed = false;
@@ -659,6 +670,7 @@ function draw() {
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
     reduced, speed: speedAt(r.x), showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   });
+  if (bloom) bloom.present(); else if (out2d) out2d.drawImage(src, 0, 0);
 }
 
 /* input */
