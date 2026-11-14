@@ -520,7 +520,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSa
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.7.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.7.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1118,7 +1118,7 @@ function animateResult(res) {
     const t = els.get(cell.id); if (!t) continue;
     retire(t, cell.id, 'pop', 230);
     if (budget > 0) { burst(y, x, cell.k === 'pal' ? TC[cell.c][0] : '#E9DCFF', per); budget -= per; }
-    if (motion() && cell.c === 3 && (cell.k === 'pal' || cell.k === 'sp')) { fxNode('pt', `left:${cx(x)};top:${cy(y)};background:#fff;box-shadow:0 0 8px 3px #E9DCFF;--dx:0px;--dy:-10px;width:9px;height:9px;border-radius:2px;rotate:45deg`, 600); }
+    if (motion() && cell.c === 3 && (cell.k === 'pal' || cell.k === 'sp')) sugarSparkle(y, x);
   }
   for (const { r: y, c: x, cell } of res.broke) {
     const t = els.get(cell.id); if (!t) continue;
@@ -1305,6 +1305,16 @@ function burst(r, c, color, n) {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, d = w * (.5 + Math.random() * .9);
     fxNode('pt', `left:${cx(c)};top:${cy(r)};background:${color};--dx:${(Math.cos(a) * d).toFixed(0)}px;--dy:${(Math.sin(a) * d).toFixed(0)}px;width:${(5 + Math.random() * 6).toFixed(0)}px;height:${(5 + Math.random() * 6).toFixed(0)}px`, 600);
+  }
+}
+/** Sea Candy pop: a soft pastel sugar-sparkle burst (little glowing diamonds and dots), all CSS, no assets. */
+const SUGAR = ['#FFD9EC', '#D9F3FF', '#E9DCFF', '#FFF3C9', '#D5FFE9'];
+function sugarSparkle(r, c) {
+  const w = boardEl.clientWidth / COLS;
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + Math.random() * .5, d = w * (.45 + Math.random() * .5);
+    const col = SUGAR[i % SUGAR.length], star = i % 2 === 0, s = star ? 8 + Math.random() * 3 : 5 + Math.random() * 2;
+    fxNode('pt', `left:${cx(c)};top:${cy(r)};background:#fff;box-shadow:0 0 7px 2px ${col};--dx:${(Math.cos(a) * d).toFixed(0)}px;--dy:${(Math.sin(a) * d).toFixed(0)}px;width:${s.toFixed(0)}px;height:${s.toFixed(0)}px;border-radius:${star ? '2px' : '50%'};rotate:${star ? '45deg' : '0deg'}`, 600);
   }
 }
 function fxFor(e) {
