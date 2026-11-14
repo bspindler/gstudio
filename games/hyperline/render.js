@@ -495,6 +495,18 @@ export function drawScene(c, W, H, st) {
   for (const d of dr) d.f();
   c.globalAlpha = 1;
 
+  // landing ripples: a cyan ring spreading over the track from where the runner touched down
+  for (const rp of st.ripples || []) {
+    const k = Math.min(1, rp.age / 0.45), rad = st.reduced ? 0.9 : 0.4 + k * 1.3, sy = rp.flip ? CEIL_Y : 0.004;
+    c.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a0 = (i / 16) * Math.PI * 2, a1 = ((i + 1) / 16) * Math.PI * 2;
+      seg(c, cam, [rp.x + Math.cos(a0) * rad * 1.5, sy, Math.sin(a0) * rad * 0.8], [rp.x + Math.cos(a1) * rad * 1.5, sy, Math.sin(a1) * rad * 0.8]);
+    }
+    c.globalAlpha = 0.9 * (1 - k); neon(c, '#22F0FF', 2.2);
+  }
+  c.globalAlpha = 1;
+
   // particles
   c.globalCompositeOperation = 'lighter';
   for (const p of st.parts) {
