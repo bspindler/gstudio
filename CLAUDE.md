@@ -44,6 +44,7 @@ Phase 1a and 1b are merged to `main`. Plan 1c (console, portal, Azure adapters, 
 - `npm run dev:lan`: the same, also listening on the LAN so a phone can play; prints the addresses. Home networks only (the ingest has no auth). `STUDIO_LAN=1` still works.
 - `npm run new-game <slug>`: scaffold a compliant starter game in `games/<slug>/` (no purchases, no random rewards).
 - `npm run build:pages`: build the GitHub Pages test-build site into `_site/` (noindex, "test build" badge, SDK in no-ingest mode). The Pages workflow runs it on every push to `main`.
+- `./hal.sh`: drive Hal on the Mac (status, `run` standalone, `now` to kick the launchd nightly job, `logs`). See `docs/hal/OPERATIONS.md`.
 - `npm run seed`, `npm run rollup`, `npm run gates`: register games, compute metrics, run a gate cycle.
 - `npm run demo:1b`: synthetic players through the real ingest, written to `.data/demo`. Synthetic players are for local use only; never point them at a real channel (hard rule 2).
 

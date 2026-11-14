@@ -3,6 +3,11 @@
 Hal is the nightly polish loop. Each night it plays the games, plans a few small changes, builds and checks each one
 in its own worktree, writes a note, and pushes what passed. This page is how to drive it.
 
+**Shortcut:** `./hal.sh` at the repo root wraps the commands below and sets `TSX_DISABLE_CACHE=1` for you.
+`./hal.sh` shows status, `./hal.sh run` is a standalone run in your terminal, `./hal.sh now` starts the launchd
+nightly job immediately, and `./hal.sh logs` follows it. `./hal.sh help` lists the rest; anything else passes
+straight through to `npm run hal --`.
+
 ## What Hal touches
 
 - Hal works only on its own ref, `refs/hal/main`, in its own worktree under `.data/hal/wt/`. It never checks out,
