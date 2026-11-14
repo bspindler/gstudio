@@ -99,3 +99,13 @@ Changes:
 
 Changes:
 - HAL-099 feature(hyperline): Hyperline: new sector CRUMBLE TRACK, panels fall away: **held** (0.6.0)
+
+## Run run-2026-11-14T10-59-15-303Z
+
+**Hyperline 0.6.1**, a neon single-lane jump runner.
+- **Merged:** a cyan landing ripple. It flips onto the ceiling when you're inverted, picks up the bloom, and has a fixed-size fade under reduced motion.
+- Brian's camera is untouched. Hyperline is in band at 100, which is healthy, not finished.
+- **Unconfirmed:** CRUMBLE TRACK isn't in tonight's results, so I can't confirm it shipped.
+
+Changes:
+- HAL-103 polish(hyperline): Hyperline: neon ripple on the track when you land: **merged** (0.6.1)

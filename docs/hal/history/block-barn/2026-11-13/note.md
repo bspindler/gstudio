@@ -79,3 +79,12 @@ Changes:
 
 Changes:
 - HAL-097 polish(block-barn): Block Barn: found animal gives a slow happy sway: **merged** (0.1.1)
+
+## Run run-2026-11-14T10-59-15-303Z
+
+**Block Barn 0.1.2**, a gentle toddler barn.
+- **Merged:** neighbouring animals occasionally peek at each other. It reuses the existing look animation, has no sound, text or score, is skipped under reduced motion or a hidden tab, and comes with a new test.
+- Fitness is 100. The calm, child-safe tone is kept.
+
+Changes:
+- HAL-105 polish(block-barn): Block Barn: neighbouring animals slowly peek at each other: **merged** (0.1.2)

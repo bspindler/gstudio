@@ -56,3 +56,14 @@ Changes:
 
 Changes:
 - HAL-095 polish(lanternkeep): Lanternkeep: creature path glows faintly so it reads at night: **discarded** (0.3.1) (screens lanternkeep: did not reach gameplay; screens lanternkeep: pageerror: TypeError: glow is not a function; screens lanternkeep: pageerror: TypeError: glow is not a function; screens lanternkeep: pageerror: TypeError: glow is not a function; screens lanternkeep: pageerror: TypeError: glow is not)
+
+## Run run-2026-11-14T10-59-15-303Z
+
+**Lanternkeep 0.3.1**, a moonlit garden.
+- **Merged:** the faint breathing path glow, which no longer crashes on load.
+- **Gap:** the glow is in the 2D renderer only. Players on the WebGL scene won't see it, and it hasn't been viewed in a browser.
+- **Next:** bring the glow to scene-three.js.
+- Fitness is 86.35, unchanged.
+
+Changes:
+- HAL-102 polish(lanternkeep): Lanternkeep: creature path glows faintly at night: **merged** (0.3.1)

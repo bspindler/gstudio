@@ -123,3 +123,13 @@ Changes:
 
 Changes:
 - HAL-096 polish(gearhold): Gearhold: brass hit-tick on the crosshair when a shot lands: **merged** (0.4.0)
+
+## Run run-2026-11-14T10-59-15-303Z
+
+**Gearhold**, clockwork brass.
+- **Dropped:** the press steam vent and hiss (HAL-101), for a gearhold-play tension -4.17 with fitness flat. This is the second time a visual- or audio-only change has tripped tension, which points to scorer noise.
+- **Next:** measure variance on an unchanged build before more polish. Gearhold stays off winnable and pace tuning, per N-015.
+- Press Gallery 0.4.0 still needs Brian to confirm it is live.
+
+Changes:
+- HAL-101 polish(gearhold): Gearhold: presses vent a brass steam puff after slamming: **discarded** (0.4.1) (gearhold-play: tension regressed 4.17 (> 1))

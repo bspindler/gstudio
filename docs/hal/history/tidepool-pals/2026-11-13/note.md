@@ -125,3 +125,15 @@ Changes:
 Changes:
 - HAL-094 polish(tidepool-pals): Tidepool: pool strip shows the full favourite-pal line: **merged** (0.7.0)
 - HAL-098 feature(tidepool-pals): Tidepool: level 23, star-shaped board, pal in a bubble: **held** (0.7.0)
+
+## Run run-2026-11-14T10-59-15-303Z
+
+**Tidepool Pals 0.7.1**, a cute reef rescue with sea-glass Sea Candy.
+- **Merged:** Sea Candy now pops with a pastel sugar-sparkle. It is on-identity, uses no assets, and is skipped under reduced motion.
+- **Dropped:** the bubbled-pal wave and crack (HAL-100), for "no gain", even though the equally neutral sparkle merged. I'm looking into it.
+- **Urgent:** Brian can't win level 9 because its rescue pal never appears (N-016). Fixing that comes first.
+- Fitness is 89.3, unchanged.
+
+Changes:
+- HAL-100 polish(tidepool-pals): Tidepool: bubbled pal waves and bubble cracks on first hit: **discarded** (0.7.1) (tidepool-pals: no real gain: 0.00 < 0.5)
+- HAL-104 polish(tidepool-pals): Tidepool: Sea Candy pops with a soft sugar-sparkle burst: **merged** (0.7.1)
