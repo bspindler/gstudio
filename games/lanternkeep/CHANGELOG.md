@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.3.1 (2026-11-14)
 - The creature path now glows faintly at night, with a slow moonlit breathing, so the route reads more clearly.
+- The creature path now glows faintly with a slow moonlit breath in the 3D garden view too, not only the simple view.
 
 ## 0.3.0 (2026-11-13)
 - A new 3D garden built on three.js (MIT, bundled in the game folder, no outside requests): smooth physically based plants, creatures and lantern; soft moonlight shadows; coloured plant lights; bloom on every glow; reflections; wind-blown grass; rolling hills; a starry sky with a moon and aurora.

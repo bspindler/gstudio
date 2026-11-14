@@ -245,6 +245,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
 
   // ---------- world per level ----------
   let region = 'moon', R = REGIONS.moon, worldKey = '', grassMat = null, motes = [], mist = [];
+  let pathStoneMat = null; // the flagstone material, so the path can breathe a faint moonlit glow
   const disposeTree = (o) => o.traverse((x) => { if (x.isMesh || x.isPoints || x.isInstancedMesh) { x.geometry.dispose(); } });
 
   function buildWorld(g) {
@@ -279,7 +280,8 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         for (const [x0, x1] of cuts) stones.push([c + (x0 + x1) / 2, r + (z0 + z1) / 2, x1 - x0 - 0.03, z1 - z0 - 0.03, hash(c * 3 + x0, r + z0)]);
       }
     }
-    const stoneMesh = new THREE.InstancedMesh(new THREE.RoundedBoxGeometry(1, 1, 1, 2, 0.18), new THREE.MeshStandardMaterial({ roughness: 0.65, emissive: col(R.pathGlow), emissiveIntensity: 0.1, map: TEX.stone, bumpMap: TEX.stoneBump, bumpScale: 1.5 }), stones.length);
+    pathStoneMat = new THREE.MeshStandardMaterial({ roughness: 0.65, emissive: col(R.pathGlow), emissiveIntensity: 0.1, map: TEX.stone, bumpMap: TEX.stoneBump, bumpScale: 1.5 });
+    const stoneMesh = new THREE.InstancedMesh(new THREE.RoundedBoxGeometry(1, 1, 1, 2, 0.18), pathStoneMat, stones.length);
     stones.forEach(([x, z, w, d, v], i) => {
       T.position.set(x, -0.12 + v * 0.02, z); T.rotation.set(0, (v - 0.5) * 0.12, 0); T.scale.set(w, 0.08, d); T.updateMatrix();
       stoneMesh.setMatrixAt(i, T.matrix);
@@ -620,6 +622,8 @@ export function createRendererThree(canvas, overlay, opts = {}) {
     const life = g.lives / g.maxLives;
     const flick = reduced ? 1 : 0.92 + 0.08 * Math.sin(t * 9) * Math.sin(t * 5.3) + (life < 0.35 ? 0.14 * Math.sin(t * 31) : 0);
     glowP.begin(); smokeP.begin();
+    // the creature path glows faintly like moonlit stone, with a slow breath (steady if reduced motion)
+    if (pathStoneMat) pathStoneMat.emissiveIntensity = reduced ? 0.14 : 0.14 + 0.05 * Math.sin(t * 1.2);
 
     // lantern
     const lx = g.lantern.x, lz = g.lantern.y;
