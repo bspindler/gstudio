@@ -82,3 +82,19 @@ Changes:
 
 Changes:
 - HAL-080 feature(tidepool-pals): Tidepool: level's pal trapped on board, freed by nearby clears: **held** (0.7.0)
+
+## Run run-2026-11-14T00-28-38-604Z
+
+**Identity:** a cartoon reef with pals to rescue, Sea Candy, tides and pools that bloom back to life.
+
+**Tonight:**
+- **Merged:** each pool now has its own board look (0.7.0), which makes moving to a new pool feel like going somewhere new.
+- **Held:** the level-start goal card that ties the pal to what you clear.
+- **Dropped:** swipe-to-swap. Hal's controls check still expects taps, the scorer robot can't play swaps, and a blocked request to the local ingest needs tracing.
+
+**Next:** once you decide who updates the controls check and scorer, retry swipe with a baseline score first, keeping the pals and the trapped pal central.
+
+Changes:
+- HAL-082 polish(tidepool-pals): Tidepool: each pool gets its own board look and reef frame: **merged** (0.7.0)
+- HAL-086 feature(tidepool-pals): Tidepool: swipe to swap neighbours, match 3+ to clear: **discarded** (0.7.0) (controls tidepool-pals touch tap on a tile group makes a move: moves 18 -> 18 (settled 18) after tapping tile #39 of 56; controls tidepool-pals no outbound requests: blocked (1): http://127.0.0.1:8787/v1/events)
+- HAL-087 feature(tidepool-pals): Tidepool: level-start card shows the pal and what to clear: **held** (0.7.0)

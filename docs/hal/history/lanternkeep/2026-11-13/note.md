@@ -35,3 +35,14 @@ Changes:
 
 Changes:
 - HAL-078 tuning(lanternkeep): Lanternkeep: diagnose which night fails inBand, nudge it: **discarded** (0.3.1) (lanternkeep: tension regressed 4.05 (> 1))
+
+## Run run-2026-11-14T00-28-38-604Z
+
+**Identity:** a calm garden at dusk that builds to pressure at night.
+
+**Tonight:**
+- **Dropped:** one extra small wave at the end of night 11. Wins tightened to 15 of 16, but inBand held at 73.3.
+- **Stagnated:** nothing has been kept for 5 attempts. I'm stopping this line of tuning until you choose: check the bot and how inBand is measured, add new content, or pause the game.
+
+Changes:
+- HAL-084 tuning(lanternkeep): Lanternkeep night 11: add one small final wave: **discarded** (0.3.1) (lanternkeep: no real gain: 0.00 < 0.5)

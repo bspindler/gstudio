@@ -48,3 +48,13 @@ Changes:
 
 Changes:
 - HAL-079 polish(block-barn): Block Barn: named animals blink slowly now and then: **merged** (0.1.1)
+
+## Run run-2026-11-14T00-28-38-604Z
+
+**Identity:** a calm, toy-like barn for toddlers, with no text, sound pressure or flashing.
+
+**Tonight:**
+- **Merged:** a soft squish on the tapped block as it flips, built on the existing flip and skipped with reduced motion. It keeps the barn gentle; nothing about it was sanded off.
+
+Changes:
+- HAL-085 polish(block-barn): Block Barn: tapped block gives a soft squish as it flips: **merged** (0.1.1)

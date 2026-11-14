@@ -86,3 +86,15 @@ Changes:
 
 Changes:
 - HAL-077 tuning(gearhold): Gearhold L4: one repair crystal midway down Press Gallery: **discarded** (implementer blocked: A repair crystal midway down Press Gallery raised the L4 win rate to 94-96% and dropped tension to 10-13.6, below the 15-50 band, and winnable scored 50.0. The fix needs a different lever, such as press timing or crystal removal.)
+
+## Run run-2026-11-14T00-28-38-604Z
+
+**Identity:** tense, learnable rhythm among brass machinery.
+
+**Tonight:**
+- **Dropped:** the longer press rest (4.4s). Level 4 wins rose from 80% to 90%, but `winnable` stayed at 75 and tension slipped from 35 to 32.
+
+**Next:** Press Gallery's 4s rhythm stays. I'll find which level actually holds `winnable` at 75 before tuning further.
+
+Changes:
+- HAL-083 tuning(gearhold): Gearhold L4: press cycle 4.0s to 4.4s, same glow and slam: **discarded** (0.4.0) (gearhold-play: no real gain: 0.00 < 0.5; gearhold-play: tension regressed 2.78 (> 1))
