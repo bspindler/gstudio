@@ -8,6 +8,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Wrecked clockwork foes now burst into a puff of brass steam and tumbling cogs.
 - Exit arches now glow brass with a slowly turning ring of cogs once you pick up the gear key.
 - New level 4, Press Gallery: a long brass gallery where gear presses thump in a steady, learnable wave. Each one glows hot just before it slams.
+- Gearhold: landing a shot now gives the crosshair a brass ring-and-tick flash and a soft click.
 
 ## 0.3.2 (2026-11-12)
 - A small brass compass on the HUD now points to the gear key, then to the exit arch once you hold the key.

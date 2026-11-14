@@ -243,7 +243,8 @@ const sfx = {
   scatter() { noise(0.4, 0.42, 1100); noise(0.12, 0.3, 5000, 'highpass'); tone(160, 40, 0.3, 'sawtooth', 0.12); tone(900, 700, 0.06, 'square', 0.05, 0.38); },
   orb() { tone(240, 760, 0.28, 'sine', 0.06); tone(480, 1500, 0.2, 'triangle', 0.02); },
   hurt() { tone(180, 50, 0.25, 'square', 0.1); noise(0.12, 0.12, 900); },
-  hit() { tone(1800, 1000, 0.05, 'square', 0.035); },
+  // Brass tick plus a soft click.
+  hit() { tone(1800, 1000, 0.05, 'square', 0.035); tone(2600, 2300, 0.07, 'triangle', 0.03); noise(0.02, 0.04, 4500, 'highpass'); },
   boom() { noise(0.9, 0.5, 520); noise(0.25, 0.3, 2400); tone(110, 28, 0.6, 'sawtooth', 0.14); },
   pickup() { tone(520, 1040, 0.09, 'triangle', 0.1); tone(780, 1560, 0.12, 'triangle', 0.08, 0.07); },
   // Clockwork ratchet: three quick brass clicks climbing, then a soft bell.
@@ -653,9 +654,13 @@ function drawHands(tips) {
   }
   hctx.globalCompositeOperation = 'source-over';
   if (P.hitMark > 0) {
-    const a = P.hitMark / 0.2, r0 = ch * 0.014, r1 = ch * 0.03;
-    hctx.strokeStyle = P.hitKill ? `rgba(255,70,50,${a})` : `rgba(255,255,255,${a})`;
-    hctx.lineWidth = Math.max(2, ch * 0.004); hctx.lineCap = 'round';
+    const a = P.hitMark / 0.26, grow = 1 - a, r0 = ch * (0.014 + 0.006 * grow), r1 = ch * (0.032 + 0.008 * grow);
+    // Brass ring snaps outward behind the four ticks.
+    hctx.strokeStyle = P.hitKill ? `rgba(255,90,60,${a * 0.8})` : `rgba(235,185,90,${a * 0.8})`;
+    hctx.lineWidth = Math.max(2, ch * 0.003);
+    hctx.beginPath(); hctx.arc(cw / 2, ch / 2, r0 * 0.9, 0, Math.PI * 2); hctx.stroke();
+    hctx.strokeStyle = P.hitKill ? `rgba(255,70,50,${a})` : `rgba(255,214,130,${a})`;
+    hctx.lineWidth = Math.max(2.5, ch * 0.005); hctx.lineCap = 'round';
     hctx.beginPath();
     for (const [sx2, sy2] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { hctx.moveTo(cw / 2 + sx2 * r0, ch / 2 + sy2 * r0); hctx.lineTo(cw / 2 + sx2 * r1, ch / 2 + sy2 * r1); }
     hctx.stroke();
@@ -816,7 +821,7 @@ function hitscan(ang, slope, dmg) {
   }
   if (best) {
     damageEnemy(best, dmg); if (!best.prop) hal.hit = true;
-    P.hitMark = 0.2; P.hitKill = P.hitKill || !!best.dead;
+    P.hitMark = 0.26; P.hitKill = P.hitKill || !!best.dead;
   }
 }
 function fire() {
