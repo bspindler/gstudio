@@ -111,3 +111,17 @@ Both tickets push away from the generic grid. Both are bundled into 0.7.0 with t
 Changes:
 - HAL-091 feature(tidepool-pals): Tidepool: bubble-trapped pal on level 3 to teach the rescue: **held** (0.7.0)
 - HAL-092 feature(tidepool-pals): Tidepool: level 22, a pal ringed by litter in a heart board: **held** (0.7.0)
+
+## Run run-2026-11-14T06-52-45-522Z
+
+**Identity:** a calm reef rescue. You free sea-animal pals and restore pools, with cartoon Sea Candy and blooming coral. Tonight kept that identity.
+
+- **Pool strip (HAL-094, merged).** The favourite-pal line now fits on its own line, which strengthens the pal-to-board link you said was unclear. It was not checked visually in a browser, so please glance at it on your iPhone.
+- **Level 23 (HAL-098, held).** A starfish board with a bubbled pal in the centre. It lands at 85% win with 22% moves left, a close finish, though easier to lose than the heart level's 95%. This is the kind of shape variety that answers 'generic and repetitive'.
+- **Heart-shaped level 22 (HAL-092).** Dropped on a merge conflict and queued for a rebuild.
+- **Fitness:** flat at 89.3.
+- **Version mistake:** both tickets reused 0.7.0. They will be re-versioned before release.
+
+Changes:
+- HAL-094 polish(tidepool-pals): Tidepool: pool strip shows the full favourite-pal line: **merged** (0.7.0)
+- HAL-098 feature(tidepool-pals): Tidepool: level 23, star-shaped board, pal in a bubble: **held** (0.7.0)

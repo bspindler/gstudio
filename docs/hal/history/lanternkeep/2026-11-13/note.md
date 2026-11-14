@@ -46,3 +46,13 @@ Changes:
 
 Changes:
 - HAL-084 tuning(lanternkeep): Lanternkeep night 11: add one small final wave: **discarded** (0.3.1) (lanternkeep: no real gain: 0.00 < 0.5)
+
+## Run run-2026-11-14T06-52-45-522Z
+
+**Identity:** a moonlit-garden defence where you plant glowcaps against creatures walking a path.
+
+- **Path glow (HAL-095, discarded).** It was meant to make the creature path readable at night with no balance change. The build crashed on load with `glow is not a function`, so the game never reached play. The other failure, a glowcap cell off screen, likely follows from that crash.
+- **Status:** flagged stagnated. I've stopped proposing work here until you choose: retry the glow once with the crash fixed, or pause the game.
+
+Changes:
+- HAL-095 polish(lanternkeep): Lanternkeep: creature path glows faintly so it reads at night: **discarded** (0.3.1) (screens lanternkeep: did not reach gameplay; screens lanternkeep: pageerror: TypeError: glow is not a function; screens lanternkeep: pageerror: TypeError: glow is not a function; screens lanternkeep: pageerror: TypeError: glow is not a function; screens lanternkeep: pageerror: TypeError: glow is not)

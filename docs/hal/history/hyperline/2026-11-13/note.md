@@ -86,3 +86,16 @@ Changes:
 
 Changes:
 - HAL-093 feature(hyperline): Hyperline: new sector PULSE RAILS, side rails that blink: **held** (0.6.0)
+
+## Run run-2026-11-14T06-52-45-522Z
+
+**Identity:** a single-lane, jump-only neon runner, now with bloom on your restored 0.4.1 camera.
+
+- **PULSE RAILS** shipped on your 👍.
+- **CRUMBLE TRACK (HAL-099, held).** Panels glow and then fall away, which is a jump-timing mechanic in line with L-041. HYPERCORE becomes sector 11.
+- **Wall spacing.** The build also made padWall's wall spacing scale with speed so walls stay clearable at top speed. That slightly touches existing sectors, so watch for it.
+- **Fitness:** 99.88.
+- **Version mistake:** it reused 0.6.0. It needs a new minor version before release.
+
+Changes:
+- HAL-099 feature(hyperline): Hyperline: new sector CRUMBLE TRACK, panels fall away: **held** (0.6.0)

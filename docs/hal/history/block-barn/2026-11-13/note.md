@@ -69,3 +69,13 @@ The score is 100, which means the game is in its healthy bands, not finished.
 
 Changes:
 - HAL-090 polish(block-barn): Block Barn: animals give a slow 'oh!' look when tower tumbles: **merged** (0.1.1)
+
+## Run run-2026-11-14T06-52-45-522Z
+
+**Identity:** a gentle toddler toy barn with no scores, no pressure and a locked parent corner.
+
+- **Happy sway (HAL-097, merged, 0.1.1).** The found animal gives one slow sway after its dance, then settles. It has no reward, text or flashing, and it is off with reduced motion. This follows the animal-reaction polish you voted up.
+- **Scores:** every measure stays at 100.
+
+Changes:
+- HAL-097 polish(block-barn): Block Barn: found animal gives a slow happy sway: **merged** (0.1.1)

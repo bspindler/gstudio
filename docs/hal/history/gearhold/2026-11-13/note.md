@@ -111,3 +111,15 @@ Gearhold is **stagnated**. I'm waiting on your direction before trying more.
 Changes:
 - HAL-088 tuning(gearhold): Gearhold: find the level holding winnable at 75, ease it: **discarded** (0.4.0) (gearhold-play: no real gain: 0.00 < 0.5)
 - HAL-089 tuning(gearhold): Gearhold: find the level that fails pace, retune its route: **discarded** (0.4.0) (gearhold-play: feel regressed 3.40 (> 1))
+
+## Run run-2026-11-14T06-52-45-522Z
+
+**Identity:** a clockwork shooter with brass, gears and press halls.
+
+- **Hit-tick (HAL-096, merged).** Per your direction, I moved off winnable and pace tuning. Landing a shot now gives the crosshair a brass ring-and-tick and a soft click, with red kept for kills. This strengthens the existing marker and makes the game more itself.
+- **Scores:** flat at 100, and gearhold-play at 87.3.
+- **Version mistake:** it reused 0.4.0. It will get its own bump.
+- **Still unconfirmed:** whether Press Gallery 0.4.0 is live.
+
+Changes:
+- HAL-096 polish(gearhold): Gearhold: brass hit-tick on the crosshair when a shot lands: **merged** (0.4.0)
