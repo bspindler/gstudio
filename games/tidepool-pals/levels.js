@@ -27,8 +27,10 @@ export const poolOf = (n) => Math.floor((n - 1) / 10);
 const RAW = [
   L(1, 18, 4, [C(0, 12)], FULL, { intro: 'Tap two or more matching pals that touch.' }),
   L(2, 20, 4, [C(1, 18)], FULL, { intro: 'Clear 5 or more at once to make an urchin bomb. Tap it to blast the pals around it.' }),
-  L(3, 22, 4, [C(2, 16)], FULL, { tide: T(6, 2, 'up'),
-    intro: 'The tide turns! Watch the tide meter: after 6 moves the water drains for 2 moves, and the pals tumble up instead of down. New pals wash in from the bottom.' }),
+  L(3, 22, 4, [RESCUE(1), C(2, 16)],
+    ['.......', '.......', '.......', '...B...', '.......', '.......', '.......', '.......'],
+    { tide: T(6, 2, 'up'),
+      intro: 'A pal is trapped in a bubble! Clear pals right next to it twice to set it free. And the tide turns: after 6 moves the water drains for 2 moves, and the pals tumble up instead of down.' }),
   L(4, 22, 4, [C(0, 10), C(2, 10)], FULL, { tide: T(6, 2, 'up'),
     intro: 'Two goals this time: fill both to win. And a pal can help now: pick a helper below. It charges as you clear its colour; tap it when it glows.' }),
   L(5, 20, 4, [RESCUE(1), C(1, 16)],

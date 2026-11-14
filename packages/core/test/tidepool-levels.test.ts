@@ -32,7 +32,7 @@ describe('tidepool levels: hand-authored', () => {
     const intro = {
       tide: first((n) => f(n).tide),
       twoColour: first((n) => f(n).collectGoals >= 2),
-      rescue: first((n) => f(n).rescue > 0),
+      rescue: first((n) => levelDef(n).layout.join('').includes('P')), // stranded pals; the bubble pal on 3 is taught separately
       rock: first((n) => f(n).rock > 0),
       litter: first((n) => f(n).litter > 0),
       sideways: first((n) => f(n).sideways),

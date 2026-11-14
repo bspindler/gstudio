@@ -24,6 +24,15 @@ describe('tidepool pals: pal trapped in a bubble', () => {
     expect(goalStatus(def, newProgress())[0]).toMatchObject({ t: 'rescue', need: 1, got: 0, done: false });
   });
 
+  it('level 3 teaches it early: one bubble pal, a rescue goal, tide kept', () => {
+    const def = levelDef(3);
+    expect(validateLevel(def)).toEqual([]);
+    expect(def.layout.join('').split('B')).toHaveLength(2);
+    expect(def.goals[0]).toMatchObject({ t: 'rescue', n: 1 });
+    expect(def.tide).toBeTruthy();
+    expect(def.intro).toMatch(/bubble/i);
+  });
+
   it('is fixed and cannot be tapped', () => {
     const g = board();
     expect(isFixed(g[1]![1]!)).toBe(true);

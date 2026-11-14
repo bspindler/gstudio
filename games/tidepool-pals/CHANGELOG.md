@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.7.0 (2026-11-13)
 - Level 9 now has a pal trapped in a bubble on the board. Clear matches next to it twice to crack it open and free it, and freeing it counts toward the goal.
 - Each reef pool now has its own board look: a tint from the pool's colours, a little floor pattern (ripples, kelp, pebbles or sparkle) and a driftwood or coral frame.
+- Tidepool Pals: level 3 now has a pal trapped in a bubble, freed by clearing next to it twice, so you learn the rescue early.
 
 ## 0.6.1 (2026-11-13)
 - On shorter phone screens the pool strip no longer overlaps the Play, Pool, Album and Shop tabs; the board shrinks a little to make room.
