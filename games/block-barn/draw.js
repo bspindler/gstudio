@@ -7,8 +7,8 @@ const INK = '#4a3426';
 const S = `stroke="${INK}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"`;
 
 const eye = (x, y, r = 7) =>
-  `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" ${S}/><circle cx="${x + r * 0.15}" cy="${y + r * 0.15}" r="${r * 0.55}" fill="${INK}"/>` +
-  `<circle cx="${x + r * 0.35}" cy="${y - r * 0.2}" r="${r * 0.2}" fill="#fff"/>`;
+  `<g class="eye"><circle cx="${x}" cy="${y}" r="${r}" fill="#fff" ${S}/><circle cx="${x + r * 0.15}" cy="${y + r * 0.15}" r="${r * 0.55}" fill="${INK}"/>` +
+  `<circle cx="${x + r * 0.35}" cy="${y - r * 0.2}" r="${r * 0.2}" fill="#fff"/></g>`;
 const eyes = (x1, x2, y, r) => eye(x1, y, r) + eye(x2, y, r);
 const cheek = (x, y, r = 5) => `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 0.7}" fill="#ff8f8f" opacity=".55"/>`;
 const cheeks = (x1, x2, y, r) => cheek(x1, y, r) + cheek(x2, y, r);
