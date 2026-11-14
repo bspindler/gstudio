@@ -140,6 +140,20 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-14T06-00-05-178Z",
+      "at": "2026-11-14T06:34:43.288Z",
+      "scorers": {
+        "hyperline": {
+          "fitness": 100,
+          "measures": {
+            "inBand": 100,
+            "noSpikes": 100,
+            "reach": 100
+          }
+        }
+      }
     }
   ]
 }

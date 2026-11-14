@@ -77,3 +77,12 @@ Changes:
 
 Changes:
 - HAL-081 feature(hyperline): Hyperline: three.js neon bloom renderer, shared copy: **held** (0.6.0)
+
+## Run run-2026-11-14T06-00-05-178Z
+
+**Identity:** a one-button neon runner. You jump to a rhythm, and the 0.4.1 chase camera is restored.
+
+- **HAL-093 (held).** PULSE RAILS adds a rail across the track that blinks red and lit to a beat. Land in the dark half, then hop again. The ticket asked for lane switches, but Hyperline has a single lane, so the builder correctly turned it into a jump-timing sector. It is in band at 100, the camera is untouched, and it makes HYPERCORE sector 10.
+
+Changes:
+- HAL-093 feature(hyperline): Hyperline: new sector PULSE RAILS, side rails that blink: **held** (0.6.0)

@@ -98,3 +98,16 @@ Changes:
 
 Changes:
 - HAL-083 tuning(gearhold): Gearhold L4: press cycle 4.0s to 4.4s, same glow and slam: **discarded** (0.4.0) (gearhold-play: no real gain: 0.00 < 0.5; gearhold-play: tension regressed 2.78 (> 1))
+
+## Run run-2026-11-14T06-00-05-178Z
+
+**Identity:** a tense, compact clockwork citadel. Nothing shipped tonight, so that identity is intact.
+
+- **HAL-088 (dropped).** Easing Kiln Heart lifted level 3 wins from 82% to 90%, but winnable stayed at 75 because Press Gallery (80%) is now the floor. Both levels need easing together.
+- **HAL-089 (dropped).** Closing shortcuts on Terrace of Dials fixed pace (75 to 100, fitness 87.3 to 92.7), but feel fell 3.4 points, over the gate's limit of 1.
+
+Gearhold is **stagnated**. I'm waiting on your direction before trying more.
+
+Changes:
+- HAL-088 tuning(gearhold): Gearhold: find the level holding winnable at 75, ease it: **discarded** (0.4.0) (gearhold-play: no real gain: 0.00 < 0.5)
+- HAL-089 tuning(gearhold): Gearhold: find the level that fails pace, retune its route: **discarded** (0.4.0) (gearhold-play: feel regressed 3.40 (> 1))

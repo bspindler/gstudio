@@ -58,3 +58,14 @@ Changes:
 
 Changes:
 - HAL-085 polish(block-barn): Block Barn: tapped block gives a soft squish as it flips: **merged** (0.1.1)
+
+## Run run-2026-11-14T06-00-05-178Z
+
+**Identity:** a gentle, readerless toddler barn. It has no text, no sound and no flashing.
+
+- **HAL-090 (merged).** When the tower tumbles, the three nearest named animals lean in with wide eyes for 2.4s, then settle. The look is skipped under reduced motion. It builds on the tumble code that was already there, so the identity is kept.
+
+The score is 100, which means the game is in its healthy bands, not finished.
+
+Changes:
+- HAL-090 polish(block-barn): Block Barn: animals give a slow 'oh!' look when tower tumbles: **merged** (0.1.1)

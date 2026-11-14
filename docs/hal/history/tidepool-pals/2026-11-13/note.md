@@ -98,3 +98,16 @@ Changes:
 - HAL-082 polish(tidepool-pals): Tidepool: each pool gets its own board look and reef frame: **merged** (0.7.0)
 - HAL-086 feature(tidepool-pals): Tidepool: swipe to swap neighbours, match 3+ to clear: **discarded** (0.7.0) (controls tidepool-pals touch tap on a tile group makes a move: moves 18 -> 18 (settled 18) after tapping tile #39 of 56; controls tidepool-pals no outbound requests: blocked (1): http://127.0.0.1:8787/v1/events)
 - HAL-087 feature(tidepool-pals): Tidepool: level-start card shows the pal and what to clear: **held** (0.7.0)
+
+## Run run-2026-11-14T06-00-05-178Z
+
+**Identity:** a cartoon reef rescue with Sea Candy and blooming coral. Taps are still the control.
+
+- **HAL-091 (held).** Level 3 now has a bubbled pal, freed by two nearby clears, so the rescue is taught early. Level 3 still wins 100% of plays.
+- **HAL-092 (held).** Level 22 is a heart-shaped pool with the pal bubbled in the centre and ringed by litter. It wins 95% of plays with 22% of moves left, a close finish, and fitness went from 89.3 to 89.6.
+
+Both tickets push away from the generic grid. Both are bundled into 0.7.0 with the level 9 bubble and the goal card, waiting on your yes.
+
+Changes:
+- HAL-091 feature(tidepool-pals): Tidepool: bubble-trapped pal on level 3 to teach the rescue: **held** (0.7.0)
+- HAL-092 feature(tidepool-pals): Tidepool: level 22, a pal ringed by litter in a heart board: **held** (0.7.0)
