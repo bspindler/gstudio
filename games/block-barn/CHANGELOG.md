@@ -11,6 +11,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Named animals now give a slow, gentle blink every few seconds (and stay still with reduced motion).
 - Block Barn: a tapped block now gives a soft squish as it flips (skipped with reduced motion).
 - Block Barn: when the tower tumbles, the nearest named animals give one slow, wide-eyed look toward it and then settle (skipped with reduced motion).
+- When you find the animal the barn asked for, it now gives a slow, happy side-to-side sway after its dance, then settles.
 
 ## 0.1.0 (2026-11-13)
 - A toy barn full of big letter blocks: tap one and it flips into its animal while a voice says the letter and the name ("C... cow!"). Tap a named block to stack it, tap the tower to knock it down, and now and then the barn asks "Where's the duck?". All 26 letters, A ant to Z zebra, with no reading, no score and nothing to lose.

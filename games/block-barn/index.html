@@ -197,6 +197,10 @@
   .animal.blink .eye { transform-box: fill-box; transform-origin: 50% 50%; animation: blink 1.1s ease-in-out; }
   @keyframes blink { 40%, 60% { transform: scaleY(.12); } }
 
+  /* the animal the barn asked for finds its way to a slow, happy side-to-side sway, then settles */
+  .animal.sway .art { transform-box: fill-box; transform-origin: 50% 100%; animation: happy-sway 3s ease-in-out; }
+  @keyframes happy-sway { 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
+
   /* when the tower tumbles, the nearest named animals give one slow, wide-eyed "oh!" look toward it, then settle */
   .animal.oh .art { transform-box: fill-box; transform-origin: 50% 100%; animation: oh-lean 2.4s ease-in-out; }
   .animal.oh .eye { transform-box: fill-box; transform-origin: 50% 50%; animation: oh-eyes 2.4s ease-in-out; }
@@ -254,6 +258,7 @@
     .animal.look .art { animation: none; }
     .animal.blink .eye { animation: none; }
     .animal.look.nuz .art { animation: none; }
+    .animal.sway .art { animation: none; }
     .animal.oh .art { animation: none; }
     .animal.oh .eye { animation: none; }
     .falling { animation-name: fall-calm; }
@@ -728,6 +733,17 @@ function ohLook() {
     setTimeout(() => a.classList.remove('oh'), 3300);
   });
 }
+// The animal the barn asked for gives one slow, gentle side-to-side sway once its dance is done, then settles (CSS
+// only; never under reduced motion). No sound, no text, no score, no flashing.
+function happySway(l) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  setTimeout(() => {
+    const a = animalEl(l);
+    if (!a) return;
+    restart(a, 'sway');
+    setTimeout(() => a.classList.remove('sway'), 3200);
+  }, 2700);
+}
 // Each floor animal that is named blinks slowly at random intervals of several seconds (CSS only; never under
 // reduced motion). Plain Math.random keeps the seeded generator's sequence untouched. No sound, no score.
 function blinkLater(k) {
@@ -899,6 +915,7 @@ function tapAt(x, y) {
   else stackBlock(best.k);
   if (wasInvited && wasInvited === l && floor.includes(l)) {
     setTimeout(() => { const a = animalEl(l); if (a) { a.classList.remove('mv', 'alt1', 'alt2', 'alt3'); restart(a, 'dance'); sfx.happy(); } }, 700);
+    happySway(l);
   }
 }
 
