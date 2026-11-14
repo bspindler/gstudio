@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.7.0 (2026-11-13)
+- Level 9 now has a pal trapped in a bubble on the board. Clear matches next to it twice to crack it open and free it, and freeing it counts toward the goal.
+
 ## 0.6.1 (2026-11-13)
 - On shorter phone screens the pool strip no longer overlaps the Play, Pool, Album and Shop tabs; the board shrinks a little to make room.
 

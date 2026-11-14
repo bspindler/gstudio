@@ -1,6 +1,7 @@
 // Tidepool Pals levels. Pure data and a seeded generator, no DOM.
 // Layout: 8 rows of 7 characters. '.' pal, 'i' pal tangled in a net, 's' sand, 'l' litter (cans, rings, bottles),
-// 'o' rock pool (holds pals only at low tide), 'P' stranded pal, 'x' hole (not part of the pool).
+// 'o' rock pool (holds pals only at low tide), 'P' stranded pal, 'B' pal trapped in a bubble (freed by two clears
+// next to it, counts as a rescue), 'x' hole (not part of the pool).
 // Goals: { t:'collect', c, n } (colour index), { t:'litter' } / { t:'sand' } (clear all of it),
 // { t:'ice', n? } (untangle n pals, default all), { t:'rescue', n? } (rescue n stranded pals, default all).
 // Tide: { high, low, dir }: high tide for `high` moves (gravity down), then low tide for `low` moves (gravity `dir`).
@@ -41,9 +42,10 @@ const RAW = [
     { tide: T(6, 2, 'up'), intro: 'Litter! Clear pals right next to cans, rings and bottles to pick them up. Clean up all of it to win.' }),
   L(8, 24, 5, [C(4, 20)], FULL, { tide: T(4, 3, 'right'),
     intro: 'A sideways tide! At low tide this pool drains to the right: pals slide right and new ones wash in from the left. The arrow on the tide meter shows where the next tide pulls.' }),
-  L(9, 24, 5, [C(2, 20)],
-    ['x.....x', '.......', '.......', '.......', '.......', '.......', '.......', 'x.....x'],
-    { tide: T(5, 3, 'left'), intro: 'Pools come in all shapes. Clear 7 or more for a wave: it sweeps a whole row or column.' }),
+  L(9, 24, 5, [RESCUE(1), C(2, 14)],
+    ['x.....x', '.......', '.......', '.......', '...B...', '.......', '.......', 'x.....x'],
+    { tide: T(5, 3, 'left'),
+      intro: 'A pal is trapped in a bubble! Clear pals right next to it twice to crack it open and set it free. Clear 7 or more for a wave: it sweeps a whole row or column.' }),
   L(10, 24, 5, [ICE(4)],
     ['.......', '.......', '.......', '.i...i.', '.......', '.i...i.', '.......', '.......'],
     { tide: T(5, 3, 'up'), intro: 'Pals tangled in nets! Clear pals next to a net to untangle them. Tangled pals stay put, whatever the tide does, until they are free.' }),
@@ -88,7 +90,7 @@ const count = (def, ch) => def.layout.reduce((a, row) => a + [...row].filter((x)
 export function features(def) {
   const collectGoals = def.goals.filter((g) => g.t === 'collect').length;
   return { sand: count(def, 's'), litter: count(def, 'l'), ice: count(def, 'i'), holes: count(def, 'x'),
-    rock: count(def, 'o'), rescue: count(def, 'P'), tide: !!def.tide,
+    rock: count(def, 'o'), rescue: count(def, 'P') + count(def, 'B'), tide: !!def.tide,
     sideways: !!def.tide && def.tide.dir !== 'up', collectGoals, goals: def.goals.length, colors: def.colors };
 }
 /** Rough number of moves the goals take for a typical player. */
@@ -255,7 +257,7 @@ export function validateLevel(def) {
   if (!Array.isArray(def.layout) || def.layout.length !== ROWS) { e.push(`layout needs ${ROWS} rows`); return e; }
   def.layout.forEach((row, r) => {
     if (row.length !== COLS) e.push(`row ${r} needs ${COLS} cells`);
-    if (/[^.sixloP]/.test(row)) e.push(`row ${r} has an unknown cell`);
+    if (/[^.sixloPB]/.test(row)) e.push(`row ${r} has an unknown cell`);
   });
   const f = features(def);
   const playable = ROWS * COLS - f.holes, plain = count(def, '.');
@@ -301,7 +303,7 @@ export function validateLevel(def) {
   // rescue
   const hasRescue = def.goals.some((g) => g.t === 'rescue');
   if (f.rescue && !hasRescue) e.push('stranded pals without a rescue goal');
-  if (hasRescue) {
+  if (hasRescue && count(def, 'P')) {
     if (!['down', 'left', 'right'].includes(def.exit)) e.push('a rescue needs an exit edge');
     else {
       if (def.exit !== 'down' && def.tide?.dir !== def.exit) e.push('a side exit needs a low tide that pulls that way');

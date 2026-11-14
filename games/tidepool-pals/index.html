@@ -514,7 +514,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSa
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.6.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.7.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -798,7 +798,7 @@ function goalText(g) {
   if (g.t === 'collect') return `Collect ${g.need} ${TILE_NAME[g.c]}`;
   if (g.t === 'sand') return `Break all ${g.need} sand`;
   if (g.t === 'litter') return `Clean up ${g.need} litter`;
-  if (g.t === 'rescue') return `Rescue ${g.need} stranded pal${s}`;
+  if (g.t === 'rescue') return `Rescue ${g.need} pal${s}`;
   return `Untangle ${g.need} pal${s}`;
 }
 
@@ -809,7 +809,10 @@ let grid = [], mask = [], lvl = null, busy = false, ctx = 'win', view = 'map';
 const els = new Map(); // cell id -> tile element
 let idleT = 0;
 
+// A pal trapped in a bubble: a shiny shell over the stranded pal; a crack line shows once it has been hit.
+const bubbleSVG = (cracked) => `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#BFF1FF" fill-opacity=".28" stroke="#E6FBFF" stroke-width="2"/><ellipse cx="13" cy="12" rx="4.5" ry="2.6" fill="#fff" fill-opacity=".8" transform="rotate(-35 13 12)"/>${cracked ? '<path d="M24 5 L20 14 L26 19 L19 27 L23 35" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' : ''}</svg>`;
 function tileHTML(cell) {
+  if (cell.k === 'bubble') return LOST;
   if (cell.k === 'sand') return SAND;
   if (cell.k === 'litter') return LITTER[cell.v % 3];
   if (cell.k === 'lost') return LOST;
@@ -822,10 +825,11 @@ function tileLabel(cell) {
   if (cell.k === 'sand') return 'Sand';
   if (cell.k === 'litter') return LITTER_NAME[cell.v % 3] + ' (litter)';
   if (cell.k === 'lost') return 'Stranded pal: get it to the open water';
+  if (cell.k === 'bubble') return cell.hp > 1 ? 'Pal trapped in a bubble: clear pals next to it to crack it' : 'Cracked bubble: one more clear next to it frees the pal';
   if (cell.k === 'sp') return SP_NAME[cell.s] + (cell.s === 'whirl' ? ' (' + TILE_NAME[cell.c] + ')' : '');
   return (cell.ice ? 'Tangled ' : '') + TILE_NAME[cell.c];
 }
-const sig = (cell) => cell.k === 'pal' ? 'p' + cell.c : cell.k === 'sp' ? cell.s + cell.c : cell.k === 'litter' ? 'l' + cell.v : cell.k;
+const sig = (cell) => cell.k === 'pal' ? 'p' + cell.c : cell.k === 'sp' ? cell.s + cell.c : cell.k === 'litter' ? 'l' + cell.v : cell.k === 'bubble' ? 'b' + cell.hp : cell.k;
 function makeEl(cell) {
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'tile'; el.dataset.id = cell.id;
@@ -835,12 +839,12 @@ function makeEl(cell) {
 }
 function paint(el, cell) {
   el._sig = sig(cell);
-  el.innerHTML = `<span class="tl">${tileHTML(cell)}</span>${cell.ice ? `<span class="ice">${ICE}</span>` : ''}`;
+  el.innerHTML = `<span class="tl">${tileHTML(cell)}</span>${cell.ice ? `<span class="ice">${ICE}</span>` : ''}${cell.k === 'bubble' ? `<span class="ice">${bubbleSVG(cell.hp < 2)}</span>` : ''}`;
   el.classList.toggle('sp', cell.k === 'sp');
-  el.classList.toggle('lost', cell.k === 'lost');
+  el.classList.toggle('lost', cell.k === 'lost' || cell.k === 'bubble');
   el._ice = !!cell.ice;
   el.setAttribute('aria-label', tileLabel(cell));
-  if (cell.k === 'sand' || cell.k === 'litter' || cell.k === 'lost' || cell.ice) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled');
+  if (cell.k === 'sand' || cell.k === 'litter' || cell.k === 'lost' || cell.k === 'bubble' || cell.ice) el.setAttribute('aria-disabled', 'true'); else el.removeAttribute('aria-disabled');
 }
 function place(el, r, c) { el.style.transform = `translate(${c * 100}%,${r * 100}%)`; }
 function placeNow(el, r, c) { el.classList.add('now'); place(el, r, c); void el.offsetWidth; el.classList.remove('now'); }
@@ -1081,6 +1085,12 @@ function animateResult(res) {
     if (budget > 0) { burst(y, x, cell.k === 'litter' ? '#B9C7BD' : '#E8C27A', per); budget -= per; }
   }
   for (const { cell } of res.freed) { const t = els.get(cell.id); if (t) thaw(t, cell); }
+  if (res.cracked?.length) setTimeout(() => sfx.ice(), 90);
+  for (const { r: y, c: x, cell } of res.released || []) {
+    const t = els.get(cell.id); if (t) retire(t, cell.id, 'pop', 230);
+    burst(y, x, '#BFF1FF', 6); sfx.rescue(); buzz([20, 30, 20]);
+    setTimeout(() => floatAt(y, x, 'Freed!'), 30);
+  }
   for (const { cell } of res.recolored || []) {
     const t = els.get(cell.id); if (!t) continue;
     paint(t, cell); t.classList.remove('inked'); void t.offsetWidth; t.classList.add('inked');

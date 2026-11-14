@@ -4,6 +4,8 @@
 //        { id, k:'litter', v }       ocean litter: v 0 can, 1 plastic rings, 2 bottle (same rules as sand)
 //        { id, k:'sp', s, c }        a special: s 'bomb'|'wave-h'|'wave-v'|'whirl'
 //        { id, k:'lost' }            a stranded pal to rescue: not matchable, never destroyed, moves with gravity
+//        { id, k:'bubble', hp }      a pal trapped in a bubble ('B'): fixed; each clear next to it cracks it, the last
+//                                    crack frees the pal (counts as a rescue)
 // A null cell is either empty (waiting for a refill), a hole in the level's mask, or a rock pool at high tide.
 
 export const COLS = 7, ROWS = 8;
@@ -34,11 +36,13 @@ const inb = (g, r, c) => r >= 0 && r < g.length && c >= 0 && c < g[r].length;
 const isFreePal = (cell) => !!cell && cell.k === 'pal' && !cell.ice;
 const isBlock = (cell) => !!cell && (cell.k === 'sand' || cell.k === 'litter');
 /** Cells that never move with gravity: sand, litter and netted pals. */
-export const isFixed = (cell) => isBlock(cell) || (!!cell && cell.k === 'pal' && !!cell.ice);
+export const isFixed = (cell) => isBlock(cell) || (!!cell && cell.k === 'bubble') || (!!cell && cell.k === 'pal' && !!cell.ice);
+/** Clears next to a bubble that crack it before it frees its pal. */
+export const BUBBLE_HP = 2;
 const clone = (g) => g.map((row) => row.map((cell) => (cell ? { ...cell } : null)));
 
 /* ---------- layout ---------- */
-/** '.' pal, 'i' netted pal, 's' sand, 'l' litter, 'o' rock pool, 'P' stranded pal, 'x' hole. */
+/** '.' pal, 'i' netted pal, 's' sand, 'l' litter, 'o' rock pool, 'P' stranded pal, 'B' bubble pal, 'x' hole. */
 export function maskOf(def) { return def.layout.map((row) => [...row].map((ch) => ch !== 'x')); }
 /** Rock pools: part of the board, but they only hold pieces at low tide. */
 export function rockOf(def) { return def.layout.map((row) => [...row].map((ch) => ch === 'o')); }
@@ -56,6 +60,7 @@ export function buildBoard(def, rng, newId, phase = 'high') {
     if (ch === 's') return { id: newId(), k: 'sand' };
     if (ch === 'l') return { id: newId(), k: 'litter', v: (r * 3 + c * 2) % 3 };
     if (ch === 'P') return { id: newId(), k: 'lost' };
+    if (ch === 'B') return { id: newId(), k: 'bubble', hp: BUBBLE_HP };
     if (ch === 'i') return { id: newId(), k: 'pal', c: pick(), ice: true };
     return { id: newId(), k: 'pal', c: pick() };
   }));
@@ -157,8 +162,8 @@ export function cellsInEffect(g, r, c, e) {
 /* ---------- a tap ---------- */
 const K = (y, x) => y * 100 + x;
 function newResult(g, kind) {
-  return { ok: true, kind, grid: g, cleared: [], broke: [], freed: [], spawned: null, effects: [], recolored: [],
-    counts: { collect: {}, sand: 0, ice: 0, litter: 0 } };
+  return { ok: true, kind, grid: g, cleared: [], broke: [], freed: [], cracked: [], released: [], spawned: null, effects: [],
+    recolored: [], counts: { collect: {}, sand: 0, ice: 0, litter: 0, rescue: 0 } };
 }
 function clearAt(res, y, x) {
   const g = res.grid, cl = g[y][x];
@@ -173,6 +178,12 @@ function hitObstacle(res, y, x) {
   if (isBlock(cl)) {
     g[y][x] = null; res.broke.push({ r: y, c: x, cell: cl });
     if (cl.k === 'sand') res.counts.sand++; else res.counts.litter++;
+    return true;
+  }
+  if (cl.k === 'bubble') {
+    // Each hit cracks the bubble; the last one frees the pal inside, which swims off and counts as a rescue.
+    if (cl.hp > 1) { cl.hp--; res.cracked.push({ r: y, c: x, cell: { ...cl } }); return true; }
+    g[y][x] = null; res.released.push({ r: y, c: x, cell: cl }); res.counts.rescue++;
     return true;
   }
   if (cl.k === 'pal' && cl.ice) { cl.ice = false; res.freed.push({ r: y, c: x, cell: { ...cl } }); res.counts.ice++; return true; }
@@ -207,7 +218,7 @@ function runBlasts(res, queue, done) {
  */
 export function resolveTap(src, r, c, newId) {
   const cell = inb(src, r, c) ? src[r][c] : null;
-  if (!cell || isBlock(cell) || cell.k === 'lost' || (cell.k === 'pal' && cell.ice)) return { ok: false };
+  if (!cell || isBlock(cell) || cell.k === 'lost' || cell.k === 'bubble' || (cell.k === 'pal' && cell.ice)) return { ok: false };
   const g = clone(src);
   const res = newResult(g, 'group');
   const done = new Set();
@@ -434,10 +445,11 @@ export function applyAbility(src, id, r, c, rng, newId) {
   const at = inb(g, r, c) ? g[r][c] : null;
   if (ab.target && !inb(g, r, c)) return { ok: false };
   const blast = (effect) => {
-    const before = res.cleared.length + res.broke.length + res.freed.length;
+    const total = () => res.cleared.length + res.broke.length + res.freed.length + res.cracked.length + res.released.length;
+    const before = total();
     res.effects.push({ r, c, kind: 'helper', effect });
     runBlasts(res, [{ r, c, effect }], new Set());
-    return res.cleared.length + res.broke.length + res.freed.length > before;
+    return total() > before;
   };
   const recolor = (cells, colour) => {
     for (const [y, x] of cells) {
@@ -537,7 +549,7 @@ export function goalStatus(def, p) {
     if (goal.t === 'collect') { need = goal.n; got = p.collect[goal.c] || 0; }
     else if (goal.t === 'sand') { need = countIn(def, 's'); got = p.sand; }
     else if (goal.t === 'litter') { need = countIn(def, 'l'); got = p.litter || 0; }
-    else if (goal.t === 'rescue') { need = goal.n ?? countIn(def, 'P'); got = p.rescue || 0; }
+    else if (goal.t === 'rescue') { need = goal.n ?? countIn(def, 'P') + countIn(def, 'B'); got = p.rescue || 0; }
     else { need = goal.n ?? countIn(def, 'i'); got = p.ice; }
     got = Math.min(got, need);
     return { ...goal, need, got, done: got >= need };

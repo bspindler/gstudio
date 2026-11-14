@@ -25,7 +25,7 @@ const maskFrom = (rows: string[]): Mask => rows.map((row) => [...row].map((ch) =
 const show = (g: Grid) => g.map((row) => row.map((c) => {
   if (!c) return '*';
   if (c.k === 'pal') return c.ice ? 'n' : 'p';
-  return { sand: 's', litter: 'l', lost: 'P', sp: 'B' }[c.k];
+  return { sand: 's', litter: 'l', lost: 'P', sp: 'B', bubble: 'O' }[c.k];
 }).join(''));
 const at = (g: Grid, r: number, c: number) => g[r]![c];
 const CHECKER = Array.from({ length: ROWS }, (_, r) =>
