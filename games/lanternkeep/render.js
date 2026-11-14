@@ -539,6 +539,21 @@ export function createRenderer(canvas, opts = {}) {
       ctx.fillStyle = gr;
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     };
+    // the creature path glows faintly, like moonlit stone, with a slow breath
+    const pathGlow = () => {
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = rgba('#a89cff', 0.07 + 0.025 * Math.sin(t * 1.2));
+      ctx.lineWidth = s * 0.6;
+      for (const p of g.paths) {
+        ctx.beginPath();
+        p.pts.forEach((q, i) => (i ? ctx.lineTo(q.x * s, q.y * s) : ctx.moveTo(q.x * s, q.y * s)));
+        ctx.stroke();
+      }
+      ctx.restore();
+    };
+    pathGlow();
     glow(lx, ly - s * 0.2, s * (0.6 + 0.9 * life) * flick, COLOR.lantern, 0.55);
     for (const tw of g.towers) {
       const ready = tw.cd < 0.15 ? 1 : 0.6;

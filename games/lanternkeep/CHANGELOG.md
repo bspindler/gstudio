@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.3.1 (2026-11-14)
+- The creature path now glows faintly at night, with a slow moonlit breathing, so the route reads more clearly.
+
 ## 0.3.0 (2026-11-13)
 - A new 3D garden built on three.js (MIT, bundled in the game folder, no outside requests): smooth physically based plants, creatures and lantern; soft moonlight shadows; coloured plant lights; bloom on every glow; reflections; wind-blown grass; rolling hills; a starry sky with a moon and aurora.
 - Every model is rebuilt: lathed mushrooms with glowing spots, curling frost fronds with ice tips, spiked ember thistles, glass-like sun crystals, iridescent beetles, translucent moth wings, a wet-skinned Gloom Toad and a paper lantern that sways.
