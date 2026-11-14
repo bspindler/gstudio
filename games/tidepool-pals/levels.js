@@ -238,7 +238,15 @@ export function generateLevel(n) {
   return def;
 }
 
-export function levelDef(n) { return n >= 1 && n <= AUTHORED.length ? AUTHORED[n - 1] : generateLevel(n); }
+/* Hand-authored levels past the generated stretch: level 23 is a five-point starfish with a pal bubbled in the middle. */
+const SPECIAL = {
+  23: { ...L(23, 26, 5, [RESCUE(1), C(1, 16)],
+    ['xxx.xxx', 'xx...xx', '.......', '...B...', '.......', 'x.....x', 'x..x..x', 'x..x..x'],
+    { tide: T(5, 3, 'up'),
+      intro: 'A starfish pool! The bubbled pal sits in the middle: clear pals right next to it twice to set it free.' }),
+    pool: poolOf(23) },
+};
+export function levelDef(n) { return n >= 1 && n <= AUTHORED.length ? AUTHORED[n - 1] : SPECIAL[n] ?? generateLevel(n); }
 /** The level for number n, with its `pool` index. Same as levelDef; reef.js reads levelFor(n).pool. */
 export const levelFor = levelDef;
 

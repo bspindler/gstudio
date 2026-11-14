@@ -17,6 +17,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Each reef pool now has its own board look: a tint from the pool's colours, a little floor pattern (ripples, kelp, pebbles or sparkle) and a driftwood or coral frame.
 - Tidepool Pals: level 3 now has a pal trapped in a bubble, freed by clearing next to it twice, so you learn the rescue early.
 - The pool strip under the board now shows the full favourite-pal line on its own line, so you can see which pal the pool is for.
+- New level 23: a five-point starfish pool with a pal trapped in a bubble right in the middle.
 
 ## 0.6.1 (2026-11-13)
 - On shorter phone screens the pool strip no longer overlaps the Play, Pool, Album and Shop tabs; the board shrinks a little to make room.
