@@ -4,7 +4,7 @@
 // Gearhold runs in ?hal=<seed>&live mode (its own rAF loop runs update() with real input; we only *read* state()).
 // Touch drags go through CDP Input.dispatchTouchEvent, which Chromium turns into pointer events with
 // pointerType 'touch' (page.mouse would send pointerType 'mouse' even in a touch context).
-// Tidepool and Hyperline have no hook: one real primary action each, with a screenshot diff and a DOM check.
+// Tidepool and Hyperline have no hook: one real primary action each (Tidepool's is a tap or a swipe, as its board.js\n// declares), with a screenshot diff and a DOM check.
 // Block Barn: a real touch tap on a block (found through its ?hal hook, which is read-only here) must name it.
 // Lanternkeep's hook is read-only here: it says where a grid cell is on screen and what state the game is in.
 import type { Browser, BrowserContextOptions, CDPSession, Locator, Page } from 'playwright';
@@ -252,11 +252,18 @@ async function gearholdTouch(run: Run) {
   }
 }
 
+/**
+ * Tidepool plays whichever move its board.js declares (see packages/core/src/hal/tidepool-bot.ts): taps by default,
+ * or, with `export const MOVE = 'swap'`, a real touch swipe from one tile onto its right or lower neighbour. Either
+ * way the move must spend a move (#movesCount) and change the board (#board, #tiles .tile).
+ */
 async function tidepool(run: Run) {
   const G = 'tidepool-pals', { context, page, errors } = await run.open(PHONE, '/tidepool-pals/index.html');
   try {
     const start = page.locator('[data-act="start"]').first();
     await start.waitFor({ state: 'visible', timeout: 15_000 });
+    // A string specifier, so TypeScript doesn't try to resolve the page's URL as a module.
+    const kind = await page.evaluate((u) => import(u).then((m: { MOVE?: string }) => m.MOVE ?? 'tap'), '/tidepool-pals/board.js');
     await start.tap();
     await page.locator('#tiles .tile').first().waitFor({ state: 'visible', timeout: 5_000 });
     await wait(800); // entry animation
@@ -264,20 +271,38 @@ async function tidepool(run: Run) {
     const moves = () => page.locator('#movesCount').textContent();
     const m0 = await moves();
     const n = await page.locator('#tiles .tile').count();
-    let m1 = m0, tapped = -1;
-    for (let i = 0; i < Math.min(n, 40) && m1 === m0; i++) {
-      const b = await page.locator('#tiles .tile').nth(i).boundingBox();
-      if (!b) continue;
-      await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
-      await wait(60);
-      m1 = await moves(); tapped = i;
-      if (m1 === m0) await wait(250); // an invalid tap only shakes the tile
+    let m1 = m0, tried = '';
+    if (kind === 'swap') {
+      const cdp = await context.newCDPSession(page);
+      for (let i = 0; i < Math.min(n, 40) && m1 === m0; i++) {
+        const b = await page.locator('#tiles .tile').nth(i).boundingBox();
+        if (!b) continue;
+        const [x, y] = [b.x + b.width / 2, b.y + b.height / 2];
+        for (const [dx, dy, name] of [[b.width, 0, 'right'], [0, b.height, 'down']] as const) {
+          const path = Array.from({ length: 7 }, (_, k): [number, number] => [x + (dx * k) / 6, y + (dy * k) / 6]);
+          await touchDrag(cdp, path, () => wait(30));
+          await wait(120);
+          m1 = await moves(); tried = `swiping tile #${i} ${name}`;
+          if (m1 !== m0) break;
+          await wait(400); // a swap that makes no match slides back
+        }
+      }
+    } else {
+      for (let i = 0; i < Math.min(n, 40) && m1 === m0; i++) {
+        const b = await page.locator('#tiles .tile').nth(i).boundingBox();
+        if (!b) continue;
+        await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+        await wait(60);
+        m1 = await moves(); tried = `tapping tile #${i}`;
+        if (m1 === m0) await wait(250); // an invalid tap only shakes the tile
+      }
     }
     await wait(900); // pops, collapse and refill
     const after = await changed(page.locator('#board'), before);
     const m2 = await moves(); // re-read once the move has settled: the move must have stuck
     const ok = m0 !== null && m2 !== null && Number(m2) < Number(m0);
-    run.add(G, 'touch tap on a tile group makes a move', ok, `moves ${m0} -> ${m1} (settled ${m2}) after tapping tile #${tapped} of ${n}`);
+    const check = kind === 'swap' ? 'touch swipe swaps two tiles and makes a move' : 'touch tap on a tile group makes a move';
+    run.add(G, check, ok, `moves ${m0} -> ${m1} (settled ${m2}) after ${tried || 'no tile'} of ${n} (board.js MOVE: ${kind})`);
     run.add(G, 'board screenshot changes after the move', !before.equals(after), `${before.length} vs ${after.length} bytes`);
   } finally {
     run.noErrors(G, errors);
@@ -426,7 +451,7 @@ export async function runControlsCheck(opts: ControlsOptions = {}): Promise<Cont
     const want = (g: string) => !opts.games || opts.games.includes(g);
     if (want('gearhold')) await run.guard('gearhold', 'keyboard (desktop)', () => gearholdKeyboard(run));
     if (want('gearhold')) await run.guard('gearhold', 'touch (390x844)', () => gearholdTouch(run));
-    if (want('tidepool-pals')) await run.guard('tidepool-pals', 'touch tile tap', () => tidepool(run));
+    if (want('tidepool-pals')) await run.guard('tidepool-pals', 'touch move (tap or swipe)', () => tidepool(run));
     if (want('hyperline')) await run.guard('hyperline', 'tap and key', () => hyperline(run));
     if (want('block-barn')) await run.guard('block-barn', 'touch block tap', () => blockBarn(run));
     if (want('lanternkeep')) await run.guard('lanternkeep', 'tap, plant and keys', () => lanternkeep(run));
