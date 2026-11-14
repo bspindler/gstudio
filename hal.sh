@@ -10,6 +10,7 @@
 #   ./hal.sh now             launchd: start the nightly job right now, in the background (then: ./hal.sh logs)
 #   ./hal.sh stop            finish the current step, skip the rest, still write the note and report
 #   ./hal.sh logs [server]   follow the nightly log (or the report server's log)
+#   ./hal.sh restart-server  restart the report server (launchd), e.g. after a git pull changes Hal's code
 #   ./hal.sh report          print the latest report
 #   ./hal.sh install [--at HH:MM] | uninstall    add or remove the launchd jobs (nightly run + report server)
 #   ./hal.sh <anything else> passed straight to `npm run hal -- ...` (tell, notes, undo, ship, drop, spend, serve, ...)
@@ -63,6 +64,14 @@ case "$cmd" in
     launchctl kickstart "$DOMAIN/$NIGHTLY"
     echo "started the nightly job; follow it with: ./hal.sh logs"
     ;;
+  restart-server)
+    launchctl print "$DOMAIN/$SERVER" >/dev/null 2>&1 || { echo "report server not installed: ./hal.sh install" >&2; exit 1; }
+    launchctl kickstart -k "$DOMAIN/$SERVER"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      state=$(job_state "$SERVER"); case "$state" in *running*) break ;; esac; sleep 0.5
+    done
+    echo "report server: $state"
+    ;;
   logs)
     case "${1:-nightly}" in
       nightly) exec tail -n 50 -f "$HAL_DIR/logs/nightly.log" ;;
@@ -75,6 +84,6 @@ case "$cmd" in
     [ -n "$report" ] && [ -f "$report" ] || { echo "no report yet" >&2; exit 1; }
     cat "$report"
     ;;
-  help|-h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//' ;;
+  help|-h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' ;;
   *) hal "$cmd" "$@" ;;
 esac
