@@ -1,7 +1,7 @@
 // Turns seeded casual Hyperline runs into per-sector stats and 0..100 measures. Each sector is played from its own start
 // (createCourse(seed, sectorStart), as a practice run), so every sector gets the same sample and a change upstream
 // doesn't reshuffle the sectors after it (measurement v2, P3). A course the search bot cannot clear is a hard failure,
-// never a lower score.
+// never a lower score: each sector's own course, and the full course from 0 (the one daily mode plays, seams and all).
 import { createCourse, INTRO, PATTERNS } from '../../../../games/hyperline/lib/course.js';
 import { SECTOR_LEN, sectorAt } from '../../../../games/hyperline/lib/world.js';
 import { casualRun, clearable, HYPERLINE_CASUAL, SEARCH_BUDGET, type CasualRun, type Met } from './hyperline-bot.js';
@@ -185,5 +185,12 @@ export function scoreHyperline(range: { seeds: number; until: number }): ScoreRe
       else if (ok === 'unknown') hardFailures.push(`seed ${seed}, sector ${s}: clearability unknown`);
     }
   });
+  // The full course from 0 as well: daily mode (and endless from the start) plays it, and only it crosses the sector
+  // seams, where a pattern can run into the next sector's intro. No casual run plays it end to end, so it always runs.
+  for (let seed = 1; seed <= seeds; seed++) {
+    const ok = clearable(createCourse(seed), until);
+    if (ok === false) hardFailures.push(`seed ${seed}, full course: not clearable from 0m to ${until}m`);
+    else if (ok === 'unknown') hardFailures.push(`seed ${seed}, full course: clearability unknown`);
+  }
   return { game: 'hyperline', levels, measures, fitness, hardFailures, noise };
 }

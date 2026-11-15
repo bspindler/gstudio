@@ -7,8 +7,10 @@ import { HYPERLINE_UNTIL } from '../src/hal/scorers.js';
 import { tensionMeasure } from '../src/hal/tension.js';
 
 // pitSeed / unknownSeed target only the clearability check: casual runs always see the real course. earlySpike changes
-// the casual player's sector 0 (an extra spike cluster), to show later sectors don't move.
-const inject = vi.hoisted(() => ({ pitSeed: 0, unknownSeed: 0, inCasual: false, empty: false, earlySpike: false }));
+// the casual player's sector 0 (an extra spike cluster), to show later sectors don't move. seamPitSeed puts an
+// unjumpable pit across the sector 1/2 seam of the full course (createCourse(seed) from 0, the course daily mode
+// plays) only: no per-sector course and no casual run ever crosses that seam.
+const inject = vi.hoisted(() => ({ pitSeed: 0, unknownSeed: 0, seamPitSeed: 0, inCasual: false, empty: false, earlySpike: false }));
 const clearableCalls = vi.hoisted(() => ({ n: 0 }));
 vi.mock('../../../games/hyperline/lib/course.js', async (orig) => {
   const real = await orig<typeof import('../../../games/hyperline/lib/course.js')>();
@@ -22,6 +24,12 @@ vi.mock('../../../games/hyperline/lib/course.js', async (orig) => {
         const x = c.nextX;
         c.objs.push({ t: 'spike', x: x + 1, y: 0, inv: false }, { t: 'spike', x: x + 1.8, y: 0, inv: false });
         c.nextX = x + 7;
+      }
+      if (!inject.inCasual && seed === inject.seamPitSeed && startX === 0) {
+        const x = 2 * 250 - 6; // 6 m before the sector 2 seam, 14 m wide: no jump clears it
+        real.extendCourse(c, x + 40);
+        c.objs = c.objs.filter((o) => o.x < x - 2 || o.x > x + 16);
+        c.objs.splice(c.objs.findIndex((o) => o.x > x), 0, { t: 'pit', x, w: 14 }); // objs stay sorted by x
       }
       if (inject.inCasual || seed !== inject.pitSeed) return c;
       c.nextX = 1e9;
@@ -45,7 +53,7 @@ vi.mock('../src/hal/hyperline-bot.js', async (orig) => {
   };
 });
 
-const reset = () => { inject.pitSeed = 0; inject.unknownSeed = 0; inject.empty = false; inject.earlySpike = false; };
+const reset = () => { inject.pitSeed = 0; inject.unknownSeed = 0; inject.seamPitSeed = 0; inject.empty = false; inject.earlySpike = false; };
 
 const sec = (sector: number, reached: number, died: number): SectorStats =>
   ({ sector, reached, died, deathRate: reached ? died / reached : 0, causes: died ? { spike: died } : {}, clears: 0, nears: 0, close: 0 });
@@ -218,7 +226,8 @@ describe('scoreHyperline', () => {
     try {
       const r = scoreHyperline({ seeds: 4, until: 1900 });
       expect(r.hardFailures.length).toBeGreaterThan(0);
-      for (const f of r.hardFailures) expect(f).toMatch(/^seed 3, sector \d+: not clearable from \d+m to \d+m$/);
+      for (const f of r.hardFailures) expect(f).toMatch(/^seed 3, (sector \d+|full course): not clearable from \d+m to \d+m$/);
+      expect(r.hardFailures).toContain('seed 3, full course: not clearable from 0m to 1900m');
       expect(r.measures).toEqual(clean.measures);
       expect(r.fitness).toBe(clean.fitness);
       expect(r.levels).toEqual(clean.levels);
@@ -231,7 +240,19 @@ describe('scoreHyperline', () => {
     try {
       const f = scoreHyperline({ seeds: 3, until: 1900 }).hardFailures;
       expect(f.length).toBeGreaterThan(0);
-      for (const x of f) expect(x).toMatch(/^seed 3, sector \d+: clearability unknown$/);
+      for (const x of f) expect(x).toMatch(/^seed 3, (sector \d+|full course): clearability unknown$/);
+      expect(f).toContain('seed 3, full course: clearability unknown');
+    } finally { reset(); }
+  }, 60_000);
+
+  it('checks the full course from 0 too (daily mode plays it): a pattern unclearable only across a sector seam is caught', () => {
+    reset();
+    const clean = scoreHyperline({ seeds: 4, until: 1000 });
+    inject.seamPitSeed = 2;
+    try {
+      const r = scoreHyperline({ seeds: 4, until: 1000 });
+      expect(r.hardFailures).toEqual(['seed 2, full course: not clearable from 0m to 1000m']);
+      expect(r.levels).toEqual(clean.levels); // the casual player never crosses a seam: only the hard check sees it
     } finally { reset(); }
   }, 60_000);
 
@@ -250,7 +271,10 @@ describe('scoreHyperline', () => {
   // further. The default run took 49.8M steps (about 17 s on Brian's Mac) on 2026-11-15.
   // P3 plays every sector from its own start (100 runs per sector, not 100 runs that thin out), and the player reuses
   // one no-input walk for all the taps that land on it: 49.7M steps, about 15 s, on 2026-11-15. The budget stays.
-  const STEP_BUDGET = 60_000_000;
+  // The full-course clearability check from 0 (daily mode's course, the only one that crosses sector seams) is back
+  // beside the per-sector checks: +7.0M steps, 56.7M in all, about 23 s with other jobs running, on 2026-11-15.
+  // Raised to 70M so one more sector still fits.
+  const STEP_BUDGET = 70_000_000;
   it(`a full default run (100 seeds to HYPERLINE_UNTIL) takes under ${STEP_BUDGET / 1e6}M simulation steps`, () => {
     reset();
     work.steps = 0;
@@ -259,13 +283,14 @@ describe('scoreHyperline', () => {
     expect(work.steps).toBeLessThan(STEP_BUDGET);
   }, 120_000);
 
-  it('a seed whose casual run finished skips the clearability search (it already cleared that course)', () => {
+  it('a seed whose casual run finished skips that sector\'s clearability search (it already cleared that course)', () => {
     reset();
     inject.empty = true; // every casual run finishes
     clearableCalls.n = 0;
     try {
       expect(scoreHyperline({ seeds: 4, until: 400 }).hardFailures).toEqual([]);
-      expect(clearableCalls.n).toBe(0);
+      // Only the full-course check from 0 runs, once per seed: no casual run plays that course across the seams.
+      expect(clearableCalls.n).toBe(4);
     } finally { reset(); }
   });
 });

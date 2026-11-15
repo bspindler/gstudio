@@ -105,6 +105,16 @@ describe('casualRun', () => {
     }
   });
 
+  // Calibration of the human-timing player on the full course from 0 (the plain run): on 2026-11-15 the median death
+  // sector was 5.5 and 22 of 40 reached sector 5.
+  it('over seeds 1..40 the median death sector is 2..6 and at least 10% reach sector 5', () => {
+    const sectors = seeds(40).map((s) => casualRun(s, 1900).sector).sort((a, b) => a - b);
+    const median = (sectors[19]! + sectors[20]!) / 2;
+    expect(median).toBeGreaterThanOrEqual(2);
+    expect(median).toBeLessThanOrEqual(6);
+    expect(sectors.filter((s) => s >= 5).length).toBeGreaterThanOrEqual(4);
+  }, 60_000);
+
   it('a short target is reached with no cause', () => {
     const r = casualRun(1, 20);
     expect(r).toMatchObject({ dist: 20, cause: '' });
