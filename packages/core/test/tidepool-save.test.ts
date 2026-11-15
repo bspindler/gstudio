@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { EVENT_NAMES } from '../src/index.js';
 
 import {
-  BOOSTERS, DECOR, KEY, KEY_V1, STARTER_PAL, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, fresh,
+  BOOSTERS, DECOR, KEY, KEY_V1, STARTER_PAL, addPal, bankShell, buyBoosters, useBooster, buyDecor, buyPalWithSandDollars, fresh,
   loadSave, migrate, palEarned, pickHelper, recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, type LevelRun,
 } from '../../../games/tidepool-pals/save.js';
 
@@ -65,6 +65,29 @@ describe('tidepool save: no paid path to a random reward', () => {
       expect(bankShell(S, lvl)).toBe(false);
       expect(S.shells).toBe(0);
     }
+  });
+
+  it('a booster used during play costs its pearls, adds to the run, and marks it assisted: no shell on that win', () => {
+    for (const b of BOOSTERS) {
+      const S = { ...fresh(), pearls: 500 };
+      const lvl = run();
+      expect(useBooster(S, lvl, b.id)).toBe(true);
+      expect(S.pearls).toBe(500 - b.pearls);
+      expect(lvl.boosters).toEqual([b.id]);
+      expect(lvl.assisted).toBe(true);
+      expect(shellDrop(lvl, 0, 3)).toBe(false);
+      expect(bankShell(S, lvl)).toBe(false);
+    }
+  });
+
+  it('an in-play booster the player cannot afford, or an unknown one, changes nothing', () => {
+    const S = { ...fresh(), pearls: BOOSTERS[0]!.pearls - 1 };
+    const lvl = run();
+    expect(useBooster(S, lvl, BOOSTERS[0]!.id)).toBe(false);
+    expect(useBooster({ ...fresh(), pearls: 10_000 }, lvl, 'nope')).toBe(false);
+    expect(S.pearls).toBe(BOOSTERS[0]!.pearls - 1);
+    expect(lvl.assisted).toBe(false);
+    expect(lvl.boosters ?? []).toEqual([]);
   });
 
   it('boosters cost pearls, never shells, and do nothing when the player cannot afford them', () => {

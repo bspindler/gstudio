@@ -159,6 +159,16 @@ export function buyBoosters(S, lvl, ids) {
   return true;
 }
 
+/** Uses one booster during play, paid in pearls. Like a pre-level booster, it makes the run assisted (no shell on that win). */
+export function useBooster(S, lvl, id) {
+  const b = BOOSTERS.find((x) => x.id === id);
+  if (!b || S.pearls < b.pearls) return false;
+  S.pearls -= b.pearls;
+  lvl.boosters = [...(lvl.boosters || []), b.id];
+  lvl.assisted = true; lvl.shellDrop = false;
+  return true;
+}
+
 export const DECOR = [
   { id: 'starfish', name: 'Starfish', pearls: 80 },
   { id: 'kelp', name: 'Kelp Garden', pearls: 150 },

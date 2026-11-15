@@ -30,7 +30,9 @@ describe('tidepool-pals play layout', () => {
     expect(fn).toContain('poolProgress');
     expect(fn).toContain('levels cleaned up');
     expect(fn).not.toMatch(/setInterval|setTimeout|Date\.now|hurry|only \d|expires/i);
-    expect(html).toMatch(/startLevel[\s\S]*renderPoolPanel\(\);[\s\S]*armIdle\(\);\s*return true;/);
+    // The panel is drawn as the board is built; the idle hint wakes once the player taps Let's go on the mission card.
+    expect(html).toMatch(/startLevel[\s\S]*renderPoolPanel\(\);[\s\S]*beginLevel\(\);\s*return true;/);
+    expect(html).toMatch(/function beginLevel\(\)\s*\{[\s\S]*?armIdle\(\);\s*\}/);
   });
 
   it('shows the favourite-pal line on its own second line so it is not cut off', () => {

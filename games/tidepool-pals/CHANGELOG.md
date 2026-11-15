@@ -2,6 +2,12 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.8.0 (2026-11-15)
+- Every level opens straight onto its board, with a mission card on top: the goal in big words ("Collect 12 Coral"), the pals to get, the moves you have, and on the first levels a little picture of how to play. Tap "Let's go!" and you're in.
+- The goal chips on the board now say what they want ("Coral to collect", "to rescue"), not just a number.
+- On the first three levels a "Tap!" bubble points at a group of the pal you need, until your first move.
+- Boosters moved from the pre-level screen onto the board. From level 3, "Need a hand?" under the board offers +3 moves, an urchin or a wave whenever you want one. Tap once to pick, tap again to use. They still cost pearls, and a boosted level still doesn't wash up a shell.
+
 ## 0.7.1 (2026-11-14)
 - Sea Candy now pops with a soft pastel sugar-sparkle burst.
 

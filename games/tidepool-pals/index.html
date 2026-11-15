@@ -67,6 +67,7 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .gchip .gi{width:32px;height:32px;flex:none;position:relative}
 .gchip .gi svg{width:100%;height:100%;display:block;overflow:visible}
 .gchip b{font-family:var(--display);font-weight:400;font-size:22px;line-height:1;font-variant-numeric:tabular-nums}
+.gchip .gw{font-size:11px;font-weight:900;color:var(--mist);line-height:1.1;max-width:62px}
 .gchip.done b{color:var(--aqua)}
 .gchip.bump .gi{animation:bump .35s}
 .moves{flex:none;min-width:70px;text-align:center;background:var(--panel);box-shadow:var(--rim);border-radius:18px;padding:6px 10px}
@@ -137,6 +138,55 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes shk{20%{transform:translate(-3px,2px)}40%{transform:translate(3px,-2px)}60%{transform:translate(-2px,1px)}80%{transform:translate(2px,-1px)}}
 @keyframes shkL{10%{transform:translate(-6px,3px) rotate(-.6deg)}25%{transform:translate(6px,-4px) rotate(.6deg)}40%{transform:translate(-5px,3px)}55%{transform:translate(4px,-2px)}75%{transform:translate(-2px,1px)}}
 .hint{text-align:center;font-size:13px;color:var(--mist);font-weight:800;margin:8px 0 0;min-height:18px;position:relative;z-index:1}
+
+/* ---------- booster tray: boosters live on the board, used mid-level (tap to pick, tap again to use) ---------- */
+.tray{flex:none;width:100%;max-width:420px;margin-top:4px;position:relative;z-index:1}
+.tray .trayhead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 4px 4px}
+.tray .trayhead b{font-family:var(--display);font-weight:400;font-size:15px;color:var(--sand)}
+.tray .trayhead span{font-size:11px;color:var(--mist);font-weight:800;text-align:right}
+.tray .tbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tb{display:flex;align-items:center;justify-content:center;gap:6px;min-height:48px;border:2px solid transparent;border-radius:16px;padding:6px 8px;background:var(--panel);box-shadow:var(--rim);color:var(--foam);font:900 13px var(--body);cursor:pointer;touch-action:manipulation}
+.tb .bi{width:30px;height:30px;flex:none}
+.tb .bi svg{width:100%;height:100%;overflow:visible}
+.tb .bt{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;min-width:0;white-space:nowrap}
+.tb .bp{display:flex;align-items:center;gap:2px;color:var(--mist);font-size:12px}
+.tb .bp svg{width:13px;height:13px}
+.tb[aria-pressed="true"]{border-color:var(--sand);background:rgba(255,217,138,.16);animation:armed 1s ease-in-out infinite}
+.tb[aria-pressed="true"] .bp{color:var(--sand)}
+.tb[disabled]{opacity:.4;cursor:not-allowed}
+@keyframes armed{50%{box-shadow:0 0 0 4px rgba(255,217,138,.25)}}
+@media (prefers-reduced-motion:reduce){.tb[aria-pressed="true"]{animation:none}}
+.pop-in{animation:popin .5s cubic-bezier(.34,1.8,.6,1)}
+@keyframes popin{from{transform:scale(0)}}
+
+/* ---------- mission card: shown over the live board at the start of every level ---------- */
+.modal.mission{background:rgba(3,12,22,.5)}
+.mission .mcard{gap:10px;padding:20px 18px 16px}
+.mtitle{margin:0;font-size:28px;line-height:1.1}
+.mgoals{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+.mg{display:flex;align-items:center;gap:8px;background:rgba(10,32,51,.55);border-radius:16px;padding:8px 12px}
+.mg .gi{width:46px;height:46px;flex:none;animation:bob 1.6s ease-in-out infinite}
+.mg .gi svg{width:100%;height:100%;overflow:visible}
+.mg b{font-family:var(--display);font-weight:400;font-size:30px;line-height:1}
+.mg span{font-weight:900;font-size:13px;color:var(--mist);text-align:left;max-width:90px;line-height:1.15}
+@keyframes bob{50%{transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){.mg .gi{animation:none}}
+.mmoves{margin:0;font-weight:900;color:var(--mist)}
+.mmoves b{font-family:var(--display);font-weight:400;font-size:20px;color:var(--foam)}
+.how{display:flex;align-items:center;gap:12px;background:rgba(255,217,138,.12);border:1.5px solid rgba(255,217,138,.45);border-radius:16px;padding:10px 12px;text-align:left;font-weight:800;font-size:14px}
+.how .demo{position:relative;display:flex;flex:none}
+.how .demo .dt{width:30px;height:30px;margin-left:-6px}
+.how .demo .dt:first-child{margin-left:0}
+.how .demo .dt svg{width:100%;height:100%;overflow:visible}
+.how .demo .finger{position:absolute;right:-8px;bottom:-10px;width:26px;height:26px;animation:press 1.2s ease-in-out infinite}
+@keyframes press{50%{transform:translate(-3px,-3px) scale(.88)}}
+@media (prefers-reduced-motion:reduce){.how .demo .finger{animation:none}}
+.mission .mech{text-align:left}
+.mission .btn.buy{font-size:20px;min-height:56px}
+.coach{position:absolute;transform:translate(-50%,-150%);pointer-events:none;z-index:5;background:var(--sand);color:var(--ink);font:400 18px var(--display);padding:6px 12px;border-radius:14px;box-shadow:0 4px 0 rgba(0,0,0,.25);white-space:nowrap;animation:coach 1s ease-in-out infinite}
+.coach::after{content:'';position:absolute;left:50%;bottom:-7px;margin-left:-7px;border:7px solid transparent;border-bottom:0;border-top-color:var(--sand)}
+@keyframes coach{50%{transform:translate(-50%,-170%)}}
+@media (prefers-reduced-motion:reduce){.coach{animation:none}}
 
 /* ---------- pool panel: the pal and pool this level is restoring (decoration only) ---------- */
 .poolpanel{flex:0 0 auto;min-height:0;width:100%;max-width:420px;overflow:hidden;margin-top:6px}
@@ -486,6 +536,7 @@ button.card:active{transform:scale(.97)}
     </div>
     <div class="playzone">
       <div class="boardwrap" id="boardwrap"><div class="board" id="board" aria-label="Puzzle board"><div class="slots" id="slots"></div><div class="tiles" id="tiles"></div><div class="fx" id="fx"></div></div></div>
+      <div class="tray" id="tray" hidden></div>
       <p class="hint" id="hint"></p>
       <div class="poolpanel" id="poolPanel" aria-live="off"></div>
     </div>
@@ -512,15 +563,15 @@ button.card:active{transform:scale(.97)}
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { ABILITIES, GRAVITY, activeMask, applyAbility, buildBoard, collapse, counter, doubleCounts, goalStatus, goalsMet,
-  hasMoves, helperCharge, largestGroup, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveTap, rockOf,
+  group, hasMoves, helperCharge, largestGroup, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveTap, rockOf,
   shuffle, starsFor, tidePhase, tideTurns, turnTide, COLS, ROWS } from './board.js';
 import { HELPER_LEVEL, levelDef, withoutTides } from './levels.js';
-import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, buyDecor, buyPalWithSandDollars, loadSave, palEarned, pickHelper,
+import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, buyPalWithSandDollars, loadSave, palEarned, pickHelper,
   recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, writeSave } from './save.js';
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.7.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.8.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -785,7 +836,7 @@ $('pearlIcon').innerHTML = PEARL;
 }
 let toastT;
 function toast(msg) { document.querySelectorAll('.toast').forEach((t) => t.remove()); const t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t); clearTimeout(toastT); toastT = setTimeout(() => t.remove(), 2400); }
-function showModal(html, sheet = false) { mcard.innerHTML = html; modal.classList.toggle('sheet', sheet); modal.hidden = false; const b = mcard.querySelector('.btn.buy') || mcard.querySelector('button:not(.close)') || mcard.querySelector('button'); if (b) b.focus({ preventScroll: true }); }
+function showModal(html, sheet = false) { mcard.innerHTML = html; modal.classList.toggle('sheet', sheet === true); modal.classList.toggle('mission', sheet === 'mission'); modal.hidden = false; const b = mcard.querySelector('.btn.buy') || mcard.querySelector('button:not(.close)') || mcard.querySelector('button'); if (b) b.focus({ preventScroll: true }); }
 function closeModal() { modal.hidden = true; }
 function bumpEl(el) { el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
 function confetti() {
@@ -799,6 +850,14 @@ function confetti() {
 /** A level's chapter is its reef pool (reef.js), so the map, the level sheet and the HUD all use the same names. */
 function chapter(n) { return poolInfo(poolOf(n)).name; }
 function goalIcon(g) { return g.t === 'collect' ? TILES[g.c] : g.t === 'sand' ? SAND : g.t === 'litter' ? LITTER[0] : g.t === 'rescue' ? LOST : ICE_ICON; }
+/** What a goal chip on the board asks for, in two or three words. */
+function goalWord(g) {
+  if (g.t === 'collect') return `${TILE_NAME[g.c]} to collect`;
+  if (g.t === 'sand') return 'sand to break';
+  if (g.t === 'litter') return 'litter to clean';
+  if (g.t === 'rescue') return 'to rescue';
+  return 'to untangle';
+}
 function goalText(g) {
   const s = g.need > 1 ? 's' : '';
   if (g.t === 'collect') return `Collect ${g.need} ${TILE_NAME[g.c]}`;
@@ -963,17 +1022,21 @@ function drawExit() {
 const endProps = () => ({ tides: lvl.def.tide ? 'on' : levelDef(lvl.n).tide ? 'off' : 'none', helper: lvl.helper || 'none',
   tide_turns: lvl.turns, rescued: lvl.prog.rescue || 0, helper_uses: lvl.helperUses });
 function abandon() {
-  if (lvl && !lvl.over) { studio.track('level_end', { level: lvl.n, result: 'quit', score: 0, moves_left: lvl.moves, ...endProps() }); lvl.over = true; }
+  if (lvl && !lvl.over && !lvl.preview) { studio.track('level_end', { level: lvl.n, result: 'quit', score: 0, moves_left: lvl.moves, ...endProps() }); lvl.over = true; }
 }
 function freeCell() {
   const opts = [];
   for (let r = 2; r < ROWS - 2; r++) for (let c = 1; c < COLS - 1; c++) { const x = grid[r][c]; if (x && x.k === 'pal' && !x.ice) opts.push([r, c]); }
   return opts.length ? opts[Math.floor(rng() * opts.length)] : null;
 }
-function startLevel(n, picks = [], helperId = null) {
+/**
+ * Builds level n on the board. With `preview` the mission card is up over it: nothing is tracked and leaving does not
+ * count as quitting until the player taps Let's go (beginLevel).
+ */
+function startLevel(n, picks = [], helperId = null, { preview = false } = {}) {
   const def = playDef(n);
   const run = { n, def, moves: def.moves, prog: newProgress(), assisted: false, shellDrop: false, shellTaken: false, over: false, boosters: [], specials: 0, replay: (S.stars[n] || 0) > 0,
-    made: 0, turns: 0, phase: 'high', dir: 'down', rock: rockOf(def), exit: def.exit || null, helper: null, helperEarned: true, charge: 0, helperUses: 0, double: false };
+    made: 0, turns: 0, phase: 'high', dir: 'down', rock: rockOf(def), exit: def.exit || null, helper: null, helperEarned: true, charge: 0, helperUses: 0, double: false, preview };
   // A helper the player only has from a purchase counts as a boost (assisted: no shell), like boosters.
   if (helperId && n >= HELPER_LEVEL && !pickHelper(S, run, helperId)) return false;
   // Boosters are paid in pearls and mark the run assisted (no shell on this win).
@@ -1002,9 +1065,15 @@ function startLevel(n, picks = [], helperId = null) {
   hud(true);
   $('hint').textContent = `Level ${n} · ${chapter(n)}`;
   renderPoolPanel();
-  studio.track('level_start', { level: n, replay: lvl.replay, boosters: lvl.boosters.join(','), tides: lvl.def.tide ? 'on' : levelDef(n).tide ? 'off' : 'none', helper: lvl.helper || 'none' });
-  armIdle();
+  if (!preview) beginLevel();
   return true;
+}
+/** The player is in: track the start and wake the idle coach. */
+function beginLevel() {
+  lvl.preview = false;
+  studio.track('level_start', { level: lvl.n, replay: lvl.replay, boosters: lvl.boosters.join(','), tides: lvl.def.tide ? 'on' : levelDef(lvl.n).tide ? 'off' : 'none', helper: lvl.helper || 'none' });
+  renderTray();
+  armIdle();
 }
 
 /** Soft coral fans and anemone blooms tucked into the pool strip's corners. Brightness follows --bloom (restoration). */
@@ -1032,15 +1101,16 @@ function renderPoolPanel() {
       <p class="psub ppline">${palLine}</p>` : ''}</div></div>`;
 }
 
-/** The board leaves room under it for the level label and the pool strip, measured rather than guessed, so on a short
-    screen the board shrinks a little instead of the strip running onto the tabs. */
+/** The board leaves room under it for the booster tray, the level label and the pool strip, measured rather than
+    guessed, so on a short screen the board shrinks a little instead of the strip running onto the tabs. */
 function fitBelow() {
-  const zone = document.querySelector('.playzone'), hint = $('hint'), panel = $('poolPanel'); if (!zone || !hint || !panel) return;
+  const zone = document.querySelector('.playzone'), hint = $('hint'), panel = $('poolPanel'), tray = $('tray'); if (!zone || !hint || !panel) return;
   const outer = (el) => { const cs = getComputedStyle(el); return el.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0); };
   const gap = parseFloat(getComputedStyle(zone).rowGap) || 0;
-  zone.style.setProperty('--below', `${Math.ceil(outer(hint) + outer(panel) + 2 * gap)}px`);
+  const trayH = tray && !tray.hidden ? outer(tray) + gap : 0;
+  zone.style.setProperty('--below', `${Math.ceil(outer(hint) + outer(panel) + 2 * gap + trayH)}px`);
 }
-if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(fitBelow); ro.observe($('hint')); ro.observe($('poolPanel')); }
+if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(fitBelow); ro.observe($('hint')); ro.observe($('poolPanel')); ro.observe($('tray')); }
 
 /** A short happy wiggle for the pool strip's pal when a level is won (CSS only; skipped for reduced motion). */
 function wigglePal() {
@@ -1331,15 +1401,36 @@ function floatAt(r, c, text) { const s = document.createElement('span'); s.class
 function shake(size) { if (!motion()) return; const v = $('view-play'); v.classList.remove('shk-s', 'shk-l'); void v.offsetWidth; v.classList.add('shk-' + size); }
 
 /* ---------- idle hint: after ~6s without a move, the biggest group wiggles ---------- */
-function clearHint() { clearTimeout(idleT); document.querySelectorAll('.tile.hintme').forEach((t) => t.classList.remove('hintme')); }
+function clearHint() { clearTimeout(idleT); document.querySelectorAll('.tile.hintme').forEach((t) => t.classList.remove('hintme')); fxEl.querySelectorAll('.coach').forEach((x) => x.remove()); }
+/** The biggest group of a colour a collect goal still needs, so the hint also teaches the goal. */
+function goalGroup() {
+  const want = new Set(goalStatus(lvl.def, lvl.prog).filter((g) => g.t === 'collect' && !g.done).map((g) => g.c));
+  let best = [];
+  const seen = new Set();
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const x = grid[r][c];
+    if (!x || x.k !== 'pal' || x.ice || !want.has(x.c) || seen.has(r * COLS + c)) continue;
+    const g = group(grid, r, c);
+    for (const [gr, gc] of g) seen.add(gr * COLS + gc);
+    if (g.length >= 2 && g.length > best.length) best = g;
+  }
+  return best;
+}
+/** Before the first move of the first levels the coach shows up fast, with a "Tap!" bubble; later only after 6s idle. */
 function armIdle() {
   clearHint();
+  const teach = !!lvl && lvl.n <= 3 && lvl.made === 0;
   idleT = setTimeout(() => {
     if (!lvl || lvl.over || busy || view !== 'play' || !modal.hidden) return;
-    let cells = largestGroup(grid);
+    let cells = goalGroup();
+    if (!cells.length) cells = largestGroup(grid);
+    if (teach && cells.length) {
+      const [r, c] = cells.reduce((a, b) => (b[0] < a[0] ? b : a));
+      fxNode('coach', `left:${cx(c)};top:${cy(r)}`, 60_000).textContent = 'Tap!';
+    }
     if (!cells.length) for (let r = 0; r < ROWS && !cells.length; r++) for (let c = 0; c < COLS; c++) if (grid[r][c]?.k === 'sp') { cells = [[r, c]]; break; }
     for (const [r, c] of cells) els.get(grid[r][c].id)?.classList.add('hintme');
-  }, 6000);
+  }, teach ? 900 : 6000);
 }
 
 /* ---------- parallax tilt (pointer) ---------- */
@@ -1362,11 +1453,12 @@ function hud(reset = false) {
   if (!lvl) return;
   const gs = goalStatus(lvl.def, lvl.prog);
   if (reset) lastGot = [];
-  $('goals').innerHTML = gs.map((g, i) => `<div class="gchip${g.done ? ' done' : ''}${lastGot[i] !== undefined && lastGot[i] !== g.got ? ' bump' : ''}" aria-label="${goalText(g)}: ${g.done ? 'done' : (g.need - g.got) + ' to go'}"><span class="gi">${goalIcon(g)}</span><b>${g.done ? '✓' : g.need - g.got}</b></div>`).join('');
+  $('goals').innerHTML = gs.map((g, i) => `<div class="gchip${g.done ? ' done' : ''}${lastGot[i] !== undefined && lastGot[i] !== g.got ? ' bump' : ''}" aria-label="${goalText(g)}: ${g.done ? 'done' : (g.need - g.got) + ' to go'}"><span class="gi">${goalIcon(g)}</span><b>${g.done ? '✓' : g.need - g.got}</b>${gs.length <= 2 && !g.done ? `<span class="gw">${goalWord(g)}</span>` : ''}</div>`).join('');
   lastGot = gs.map((g) => g.got);
   $('movesCount').textContent = lvl.moves;
   $('movesBox').classList.toggle('low', lvl.moves <= 3);
   hudTideHelper();
+  renderTray();
 }
 /** Second HUD row: the helper (charge ring) and the tide meter (current tide, moves until it turns, next pull). */
 function hudTideHelper() {
@@ -1443,13 +1535,15 @@ function addMoves() {
 /** Called as the player leaves the win or out-of-moves screens. The SDK decides whether to actually ask. */
 function afterLevelScreen() { studio.feedback.maybePrompt(); }
 
-/* ---------- pre-level sheet with boosters ---------- */
-let picked = new Set(), sheetLevel = 1, sheetHelper = null, lastHelper = null;
+/* ---------- mission card: the level is built on the board, the card says what to do over it ---------- */
+let sheetLevel = 1, sheetHelper = null, lastHelper = null;
 function openLevel(n) {
-  sheetLevel = n; picked = new Set();
+  sheetLevel = n;
   // Remember the last helper, but only pre-pick one that was earned: a bought-only pal must be chosen on purpose.
   sheetHelper = n >= HELPER_LEVEL && lastHelper && S.album[lastHelper] && palEarned(S, lastHelper) ? lastHelper : null;
-  renderLevelSheet();
+  if (!startLevel(n, [], sheetHelper, { preview: true }) && !startLevel(n, [], null, { preview: true })) return;
+  if (!lvl.helper) sheetHelper = null;
+  renderMission();
 }
 /** One line per board mechanic the level uses, so every new idea is explained before play. */
 function mechanicsLines(def) {
@@ -1471,21 +1565,63 @@ function helperPicker(n) {
     ${sel ? `<p class="muted" style="margin-top:4px"><b style="color:var(--sand)">${selCr.name} · ${sel.name}:</b> ${sel.desc} Charges with ${sel.charge} ${TILE_NAME[sel.tc]} pals.</p>` : '<p class="fine">Pick a pal to bring along. It charges as you clear its colour.</p>'}
     ${bought ? `<p class="boostnote">Boosted: no shell this level. ${selCr.name} came from a purchase, so it counts as a boost. Find one in a shell to help for free.</p>` : ''}</div>`;
 }
-function renderLevelSheet() {
-  const n = sheetLevel, def = playDef(n), best = S.stars[n] || 0;
+const FINGER = `<svg viewBox="0 0 24 24"><path d="M9 11V4.5a1.5 1.5 0 0 1 3 0V10l5.2 1.1a2 2 0 0 1 1.6 2.2l-.7 5.2A3 3 0 0 1 15.1 21h-3.6a3 3 0 0 1-2.4-1.2L5.4 15a1.6 1.6 0 0 1 2.3-2.2L9 14z" fill="#FFF7E6" stroke="#0A2033" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+function renderMission() {
+  const n = sheetLevel, def = lvl.def, best = S.stars[n] || 0;
   const gs = goalStatus(def, newProgress());
-  const cost = BOOSTERS.filter((b) => picked.has(b.id)).reduce((a, b) => a + b.pearls, 0);
-  const boosted = picked.size || (sheetHelper && !palEarned(S, sheetHelper));
-  showModal(`<div class="sheethead"><div><div class="label">${chapter(n)}</div><h2>Level ${n}</h2></div><button class="close" data-act="close" aria-label="Close">${X_ICON}</button></div>
-    <div class="ggrid">${gs.map((g) => `<div class="g"><span class="gi">${goalIcon(g)}</span>${g.need}</div>`).join('')}<div class="g"><span class="gi" style="display:grid;place-items:center;font-family:var(--display);font-size:28px">${def.moves}</span>moves</div></div>
-    <p class="muted" style="text-align:center">${gs.map(goalText).join(' · ')}${best ? ` · Best: ${'★'.repeat(best)}${'☆'.repeat(3 - best)}` : ''}</p>
-    ${def.intro ? `<div class="intro"><b>New!</b><span>${def.intro}</span></div>` : ''}
+  const title = gs.length === 1 ? goalText(gs[0]) : 'Your mission';
+  const c = gs.find((g) => g.t === 'collect')?.c ?? 0;
+  // How to play, until the player has the hang of it (and again on any level that brings something new).
+  const how = n <= 3 ? `<div class="how"><span class="demo" aria-hidden="true"><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="finger">${FINGER}</span></span><span>Tap 2 or more matching pals that touch. They pop and count toward your goal.</span></div>` : '';
+  showModal(`<div class="label">Level ${n} · ${chapter(n)}</div>
+    <h2 class="mtitle">${title}</h2>
+    <div class="mgoals">${gs.map((g) => `<div class="mg"><span class="gi">${goalIcon(g)}</span><b>${g.need}</b>${gs.length > 1 ? `<span>${goalWord(g)}</span>` : ''}</div>`).join('')}</div>
+    <p class="mmoves">in <b>${def.moves}</b> moves${best ? ` · best ${'★'.repeat(best)}${'☆'.repeat(3 - best)}` : ''}</p>
+    ${how}
+    ${def.intro && n > 1 ? `<div class="intro"><b>New!</b><span>${def.intro}</span></div>` : ''}
     ${mechanicsLines(def)}
     ${helperPicker(n)}
-    <div><div class="label" style="margin-bottom:6px">Boosters (optional)</div>
-    <div class="boosts">${BOOSTERS.map((b) => { const on = picked.has(b.id), can = on || S.pearls - cost >= b.pearls; return `<button class="boost" data-act="boost" data-id="${b.id}" aria-pressed="${on}" ${can ? '' : 'disabled'}><span class="bi">${b.id === 'moves3' ? `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="url(#twave)"/><text x="20" y="27" text-anchor="middle" font-family="Bagel Fat One, sans-serif" font-size="18" fill="#fff">+3</text></svg>` : b.id === 'bomb' ? BOMB : WAVE_H}</span>${b.name}<span class="bp">${PEARL}${b.pearls}</span></button>`; }).join('')}</div>
-    <p class="fine" style="margin-top:6px">Boosted levels don't wash up a shell. Shells only come from levels cleared without boosters, extra moves or a bought helper.</p></div>
-    <button class="btn buy" data-act="start">${picked.size ? `Play with boosters · ${cost} pearls` : boosted ? 'Play boosted' : 'Play'}</button>`, true);
+    <button class="btn buy" data-act="start">Let's go!</button>
+    <button class="btn ghost sm" data-act="mission-map">Back to the map</button>`, 'mission');
+}
+
+/* ---------- booster tray (from level 3): tap one to pick it, tap again to use it now ---------- */
+let armedBoost = null, armT = 0;
+const BOOST_ICON = { moves3: `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="url(#twave)"/><text x="20" y="27" text-anchor="middle" font-family="Bagel Fat One, sans-serif" font-size="18" fill="#fff">+3</text></svg>` };
+const BOOST_NAME = { moves3: '+3 moves', bomb: 'Urchin', wave: 'Wave' };
+function renderTray() {
+  const tray = $('tray');
+  const show = !!lvl && !lvl.over && !lvl.preview && lvl.n >= 3;
+  if (tray.hidden === show) { tray.hidden = !show; fitBelow(); }
+  if (!show) { armedBoost = null; return; }
+  tray.innerHTML = `<div class="trayhead"><b>Need a hand?</b><span>Uses pearls · no shell this level</span></div>
+    <div class="tbs">${BOOSTERS.map((b) => {
+      const on = armedBoost === b.id, can = S.pearls >= b.pearls && !busy;
+      return `<button class="tb" data-act="tray" data-id="${b.id}" aria-pressed="${on}" ${can ? '' : 'disabled'} aria-label="${BOOST_NAME[b.id]}, ${b.pearls} pearls${on ? '. Tap again to use it' : ''}"><span class="bi">${BOOST_ICON[b.id] || (b.id === 'bomb' ? BOMB : WAVE_H)}</span><span class="bt">${on ? 'Tap to use' : BOOST_NAME[b.id]}<span class="bp">${PEARL}${b.pearls}</span></span></button>`;
+    }).join('')}</div>`;
+}
+function trayTap(id) {
+  if (!lvl || lvl.over || lvl.preview || busy) return;
+  clearTimeout(armT);
+  if (armedBoost !== id) { armedBoost = id; sfx.tap(); renderTray(); armT = setTimeout(() => { armedBoost = null; renderTray(); }, 3000); return; }
+  armedBoost = null;
+  const b = BOOSTERS.find((x) => x.id === id);
+  if (!useBooster(S, lvl, id)) { toast('Not enough pearls for that'); renderTray(); return; }
+  ev('booster_used', { level: lvl.n, booster: id, pearls: b.pearls, when: 'in_play' });
+  persist();
+  if (id === 'moves3') { lvl.moves += 3; bumpEl($('movesBox')); }
+  else {
+    const at = freeCell();
+    if (at) {
+      grid[at[0]][at[1]] = { id: newId(), k: 'sp', s: id === 'bomb' ? 'bomb' : 'wave-h', c: 0 };
+      render();
+      els.get(grid[at[0]][at[1]].id)?.classList.add('pop-in');
+      floatAt(at[0], at[1], BOOST_NAME[id] + '!');
+    }
+  }
+  sfx.tap();
+  pearlsChanged();
+  armIdle();
 }
 
 /* ---------- collection ---------- */
@@ -1853,10 +1989,15 @@ document.addEventListener('click', (e) => {
     case 'resume': showView('play'); break;
     case 'play-next': openLevel(S.level); break;
     case 'open-level': sfx.tap(); openLevel(+b.dataset.n); break;
-    case 'boost': { const id = b.dataset.id; picked.has(id) ? picked.delete(id) : picked.add(id); sfx.tap(); renderLevelSheet(); break; }
-    case 'pick-helper': { const id = b.dataset.id; sheetHelper = sheetHelper === id ? null : id; sfx.tap(); renderLevelSheet(); break; }
+    case 'tray': trayTap(b.dataset.id); break;
+    case 'pick-helper': { const id = b.dataset.id; sheetHelper = sheetHelper === id ? null : id; sfx.tap(); renderMission(); break; }
+    case 'mission-map': if (lvl && lvl.preview) lvl.over = true; closeModal(); showView('map'); break;
     case 'helper': onHelper(); break;
-    case 'start': closeModal(); if (!startLevel(sheetLevel, [...picked], sheetHelper)) renderLevelSheet(); else { lastHelper = sheetHelper || lastHelper; pearlsChanged(); } break;
+    case 'start': {
+      // A different helper picked on the card: rebuild the (untouched) board with it before play begins.
+      if ((lvl?.helper || null) !== sheetHelper && !startLevel(sheetLevel, [], sheetHelper, { preview: true })) { renderMission(); break; }
+      closeModal(); lastHelper = sheetHelper || lastHelper; beginLevel(); pearlsChanged(); break;
+    }
     case 'buy-moves':
       buy(CATALOG.moves).then((ok) => {
         if (ok) { ev('booster_used', { level: lvl.n, booster: 'moves5', pearls: 0 }); addMoves(); afterLevelScreen(); }

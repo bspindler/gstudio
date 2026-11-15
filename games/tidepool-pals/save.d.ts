@@ -32,4 +32,5 @@ export declare function pickHelper(S: Save, lvl: LevelRun, id: string | null): b
 export declare function sandDollarCost(rar: Rarity): number;
 export declare function buyPalWithSandDollars(S: Save, creature: { id: string; rar: Rarity }): boolean;
 export declare function buyBoosters(S: Save, lvl: LevelRun, ids: string[]): boolean;
+export declare function useBooster(S: Save, lvl: LevelRun, id: string): boolean;
 export declare function buyDecor(S: Save, id: string): boolean;
