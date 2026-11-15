@@ -6,7 +6,7 @@ import { SECTORS, SECTOR_LEN } from '../../../games/hyperline/lib/world.js';
 
 describe('hal scorers', () => {
   it('registers tidepool with its defaults', () => {
-    expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: TIDEPOOL_TO, seeds: 20 });
+    expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: TIDEPOOL_TO, seeds: 100 });
   });
   it('throws on unknown games, including prototype names', () => {
     expect(() => scorerFor('nope')).toThrow(/unknown game: nope/);
@@ -24,6 +24,8 @@ describe('hal scorers', () => {
   });
   it('registers all four games', () => {
     expect(Object.keys(SCORERS).sort()).toEqual(['gearhold', 'hyperline', 'lanternkeep', 'tidepool-pals']);
+    // Measurement v2, P1.3: enough seeds that seed luck stays inside the gate's noise band.
+    expect(scorerFor('lanternkeep').defaults).toEqual({ seeds: 12 });
     expect(scorerFor('hyperline').defaults).toEqual({ seeds: 100, until: HYPERLINE_UNTIL });
     expect(scorerFor('gearhold').defaults).toEqual({});
   });
@@ -43,7 +45,7 @@ describe('hal scorers', () => {
     it('is not in the core registry (core cannot import Playwright) and plays every Gearhold level x 50 seeds', () => {
       expect(Object.keys(SCORERS)).not.toContain('gearhold-play');
       const s = gearholdPlayScorer(async () => ({ records: [], errors: [] }));
-      expect(s.defaults).toEqual({ levels: LEVELS.length, seeds: 50, seedBase: 0 }); // follows the game: a new level is played too
+      expect(s.defaults).toEqual({ levels: LEVELS.length, seeds: 150, seedBase: 0 }); // follows the game: a new level is played too
       expect(s.validate({ levels: LEVELS.length, seeds: 50, seedBase: 0 })).toBeNull();
       expect(s.validate({ levels: 0, seeds: 50, seedBase: 0 })).toBe('--levels must be a positive integer');
       expect(s.validate({ levels: 3, seeds: 1.5, seedBase: 0 })).toBe('--seeds must be a positive integer');
@@ -84,7 +86,7 @@ describe('hal scorers', () => {
 describe('default ranges follow each game\'s content (new levels and sectors get scored)', () => {
   it('Tidepool: the hand-made levels plus 10 generated ones, at least 1-30', () => {
     expect(TIDEPOOL_TO).toBe(Math.max(30, AUTHORED.length + 10));
-    expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: TIDEPOOL_TO, seeds: 20 });
+    expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: TIDEPOOL_TO, seeds: 100 });
   });
   it('Hyperline: 150 units into the last (endless) sector, so every sector is run and reach is a fraction of the whole course', () => {
     expect(HYPERLINE_UNTIL).toBe((SECTORS.length - 1) * SECTOR_LEN + 150);

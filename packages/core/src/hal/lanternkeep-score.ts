@@ -28,7 +28,7 @@ export const LANTERNKEEP_BANDS = {
   watch: { lo: 0.3, hi: 0.6 },
 };
 
-export const LANTERNKEEP_DEFAULTS = { seeds: 4 };
+export const LANTERNKEEP_DEFAULTS = { seeds: 12 }; // 4 until measurement v2 P1.3 (2026-11-15): win rates moved in quarter steps
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
 const mean = (xs: number[]): number => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);

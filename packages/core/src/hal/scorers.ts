@@ -30,7 +30,7 @@ export const HYPERLINE_UNTIL = (SECTORS.length - 1) * SECTOR_LEN + 150;
 
 const tidepool: Scorer = {
   game: 'tidepool-pals',
-  defaults: { from: 1, to: TIDEPOOL_TO, seeds: 20 },
+  defaults: { from: 1, to: TIDEPOOL_TO, seeds: 100 },
   validate(r) {
     for (const k of ['from', 'to', 'seeds']) if (!Number.isInteger(r[k]) || (r[k] as number) < 1) return `--${k} must be a positive integer`;
     if ((r.from as number) > (r.to as number)) return '--from must not exceed --to';
