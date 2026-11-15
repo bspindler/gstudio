@@ -28,7 +28,7 @@ const swallowUp = (n: number, after = '') => `(() => {
 })();`;
 
 describe('runBlockBarnPlay', () => {
-  it('taps every kind of target at both viewports with no errors; the barn scores 100 on all five; two runs are identical', async () => {
+  it('taps every kind of target at both viewports with no errors; the barn scores 100 on all six; two runs are identical', async () => {
     const a = await runBlockBarnPlay();
     expect(a.errors).toEqual([]);
     for (const v of BLOCK_BARN_VIEWPORTS) {
@@ -64,7 +64,7 @@ describe('runBlockBarnPlay', () => {
     }
     const ra = scoreBlockBarn(a.records, a.page);
     expect(ra.hardFailures).toEqual([]);
-    expect(ra.measures).toEqual({ responsive: 100, noDeadEnds: 100, bigTargets: 100, alphabet: 100, calm: 100 });
+    expect(ra.measures).toEqual({ responsive: 100, noDeadEnds: 100, bigTargets: 100, alphabet: 100, calm: 100, variety: 100 });
 
     const b = await runBlockBarnPlay();
     expect(b.errors).toEqual([]);
@@ -342,11 +342,11 @@ describe('block barn instrumentation', () => {
 });
 
 describe('npm run hal -- score --game block-barn', () => {
-  it('prints a score report with the five measures', () => {
+  it('prints a score report with the six measures', () => {
     const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/hal.ts', 'score', '--game', 'block-barn'], { cwd: repo, encoding: 'utf8', timeout: 480_000 });
     expect(r.stderr).not.toMatch(/error|unknown game/i);
     expect(r.status).toBe(0);
-    for (const m of ['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm']) expect(r.stdout).toMatch(new RegExp(`^${m}: 100\\.0$`, 'm'));
+    for (const m of ['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm', 'variety']) expect(r.stdout).toMatch(new RegExp(`^${m}: 100\\.0$`, 'm'));
     expect(r.stdout).toMatch(/^fitness: 100\.0$/m);
   }, 500_000);
 });

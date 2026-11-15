@@ -1,6 +1,8 @@
-// Scores Block Barn (a toddler game) from a browser run of real taps (scripts/hal/block-barn-play.ts). Five measures,
+// Scores Block Barn (a toddler game) from a browser run of real taps (scripts/hal/block-barn-play.ts). Six measures,
 // each 100 when the barn is healthy: every tap answers at once, nothing is a dead end, every target is palm-sized,
-// every letter turns up with its picture and a voice, and nothing flashes or jumps in volume. Fitness is their mean.
+// every letter turns up with its picture and a voice, nothing flashes or jumps in volume, and a toddler's random taps
+// find enough different answers (capped: more stimulation never scores higher). Fitness is their mean. Calm below
+// 100 is also a hard failure, so it can never be traded for anything else.
 import type { ScoreReport } from './types.js';
 
 /** The hook's target kinds today. A kind the scorer has not heard of (new in the game) is measured like any other. */
@@ -71,7 +73,19 @@ export const BLOCK_BARN_ALPHABET_STEPS = 52;
 /** The toddler phase's random taps per viewport (scripts/hal/block-barn-play.ts toddlerPlan): answering ones, cancels on top. */
 export const BLOCK_BARN_TODDLER_TAPS = 60;
 
-export type BlockBarnViewStats = { viewport: BlockBarnViewport; taps: number; responsive: number; changed: number; bigTargets: number; kinds: BlockBarnKind[] };
+/**
+ * Reviewed variety targets (measurement v2, P3), per viewport, over the toddler phase's BLOCK_BARN_TODDLER_TAPS random
+ * answering taps: distinct response signatures and distinct features reached. Set below what today's barn finds
+ * (13-14 signatures, 9-10 of its 10 features), so the order luck of one seed can't cost points while removing a
+ * response or hiding a feature does; reaching more than the target scores no higher.
+ */
+export const BLOCK_BARN_VARIETY = { signatures: 10, features: 8 } as const;
+
+export type BlockBarnViewStats = {
+  viewport: BlockBarnViewport; taps: number; responsive: number; changed: number; bigTargets: number; kinds: BlockBarnKind[];
+  /** Distinct signatures and features among the toddler phase's random answers. */
+  signatures: number; features: number;
+};
 
 const AZ = 'abcdefghijklmnopqrstuvwxyz'.split('');
 const round2 = (x: number): number => Math.round(x * 100) / 100;
@@ -108,9 +122,14 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
 
   hardFailures.push(...gestureFailures(page.gestures ?? []));
 
+  const found = (viewport: BlockBarnViewport) => {
+    const gs = (page.gestures ?? []).filter((g) => g.viewport === viewport && g.phase === 'random' && expectedResponses(g) === 1 && g.responses > 0);
+    return { signatures: new Set(gs.map((g) => g.signature)).size, features: new Set(gs.map((g) => g.feature)).size };
+  };
   const levels: BlockBarnViewStats[] = BLOCK_BARN_VIEWPORTS.map((viewport) => {
     const rs = records.filter((r) => r.viewport === viewport), hers = targets.filter((t) => t.viewport === viewport && forHer(t));
     return {
+      ...found(viewport),
       viewport, taps: rs.length, responsive: pct(rs.filter(quick).length, rs.length), changed: pct(rs.filter((r) => r.changed).length, rs.length),
       bigTargets: pct(hers.filter(big).length, hers.length), kinds: [...new Set([...rs, ...targets.filter((t) => t.viewport === viewport)].map((r) => r.kind))].sort(),
     };
@@ -125,7 +144,15 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
     bigTargets: pct(hers.filter(big).length, hers.length),
     alphabet: pct(AZ.filter((l) => reached.has(l) && voiced.has(l) && pictured.has(l)).length, AZ.length),
     calm: (page.flashes > 0 ? 0 : 50) + (page.masterGain <= R.masterCap && page.peakGain <= R.peakCap ? 50 : 0),
+    variety: round2(levels.reduce((a, l) => a + varietyOf(l), 0) / levels.length),
   };
+  if (measures.calm < 100) {
+    const why: string[] = [];
+    if (page.flashes > 0) why.push(`${page.flashes} fast brightness change${page.flashes === 1 ? '' : 's'}`);
+    if (page.masterGain > R.masterCap) why.push(`master gain ${page.masterGain} over ${R.masterCap}`);
+    if (page.peakGain > R.peakCap) why.push(`loudest moment ${page.peakGain} over ${R.peakCap}`);
+    hardFailures.push(`calm ${measures.calm} (must be 100): ${why.join('; ')}`);
+  }
   const vals = Object.values(measures);
   return { game: 'block-barn', levels, measures, fitness: round2(vals.reduce((a, b) => a + b, 0) / vals.length), hardFailures };
 }
@@ -147,4 +174,10 @@ function gestureFailures(gestures: BlockBarnGesture[]): string[] {
   const shown = out.slice(0, MAX_GESTURE_FAILURES);
   if (out.length > shown.length) shown.push(`and ${out.length - shown.length} more gesture failures`);
   return [...shown, ...missing];
+}
+
+/** Half for distinct signatures, half for distinct features, each capped at its target. */
+function varietyOf(l: { signatures: number; features: number }): number {
+  const V = BLOCK_BARN_VARIETY;
+  return 50 * Math.min(1, l.signatures / V.signatures) + 50 * Math.min(1, l.features / V.features);
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, scoreBlockBarn, type BlockBarnGesture, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize,
+  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, BLOCK_BARN_VARIETY, scoreBlockBarn, type BlockBarnGesture, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize,
 } from '../src/hal/block-barn-score.js';
 import { blockBarnScorer, SCORERS } from '../src/hal/scorers.js';
 
@@ -18,12 +18,16 @@ const sizes = (): BlockBarnTargetSize[] => (['390x844', '1024x768'] as const).fl
 const gest = (over: Partial<BlockBarnGesture> = {}): BlockBarnGesture => ({
   viewport: '390x844', phase: 'random', gesture: 'tap', on: 'floor', state: '', responses: 1, signature: 'same|fx|1', feature: 'touch:fx', stuck: [], ...over,
 });
-/** The toddler phase at each viewport: every kind of gesture, each answered once (a cancel never), nothing stuck. */
+/**
+ * The toddler phase at each viewport: every kind of gesture, each answered once (a cancel never), nothing stuck; its
+ * 12 random answers are 12 different signatures reaching 12 features (over both variety targets).
+ */
 const gestures = (): BlockBarnGesture[] => (['390x844', '1024x768'] as const).flatMap((viewport) => [
-  ...(['tap', 'run', 'run', 'run', 'two', 'palm', 'press'] as const).map((gesture) => gest({ viewport, gesture })),
+  ...(['tap', 'run', 'run', 'run', 'two', 'palm', 'press'] as const).map((gesture, i) => gest({ viewport, gesture, signature: `s${i}`, feature: `f${i}` })),
   gest({ viewport, gesture: 'cancel', responses: 0, signature: '', feature: '' }),
   gest({ viewport, phase: 'combo', state: 'door', on: 'block', signature: 'name|slots|2', feature: 'name' }),
   gest({ viewport, phase: 'combo', state: 'dusk', on: 'block', signature: 'name|slots|2', feature: 'name' }),
+  ...[7, 8, 9, 10, 11].map((i) => gest({ viewport, signature: `s${i}`, feature: `f${i}` })),
 ]);
 const page = (over: Partial<BlockBarnPage> = {}): BlockBarnPage => ({
   letters: [...AZ], voiced: [...AZ], pictured: [...AZ], flashes: 0, masterGain: 0.5, peakGain: 0.12, leftBarn: false, targets: sizes(), gestures: gestures(), ...over,
@@ -35,11 +39,11 @@ describe('scoreBlockBarn', () => {
     expect(BLOCK_BARN_ALPHABET_STEPS).toBe(52);
   });
 
-  it('a healthy barn scores 100 on all five, fitness their mean', () => {
+  it('a healthy barn scores 100 on all six, fitness their mean', () => {
     const r = scoreBlockBarn(good(), page());
     expect(r.game).toBe('block-barn');
-    expect(Object.keys(r.measures)).toEqual(['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm']);
-    expect(r.measures).toEqual({ responsive: 100, noDeadEnds: 100, bigTargets: 100, alphabet: 100, calm: 100 });
+    expect(Object.keys(r.measures)).toEqual(['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm', 'variety']);
+    expect(r.measures).toEqual({ responsive: 100, noDeadEnds: 100, bigTargets: 100, alphabet: 100, calm: 100, variety: 100 });
     expect(r.fitness).toBe(100);
     expect(r.hardFailures).toEqual([]);
     expect(r.levels.map((l) => [l.viewport, l.taps])).toEqual([['390x844', 10], ['1024x768', 10]]);
@@ -52,7 +56,7 @@ describe('scoreBlockBarn', () => {
     const r = scoreBlockBarn(rs, page());
     expect(r.measures.responsive).toBe(95);
     expect(r.measures.noDeadEnds).toBe(100);
-    expect(r.fitness).toBe(99);
+    expect(r.fitness).toBe(99.17); // (95 + 5 x 100) / 6
   });
 
   it('a tap that changes nothing is a dead end and not responsive', () => {
@@ -99,6 +103,15 @@ describe('scoreBlockBarn', () => {
     expect(scoreBlockBarn(good(), page({ letters: [...AZ, 'a', '?'], voiced: [...AZ, '?'], pictured: [...AZ, '?'] })).measures.alphabet).toBe(100);
   });
 
+  it('calm below 100 is a hard failure, never a trade (measurement v2, P3)', () => {
+    expect(scoreBlockBarn(good(), page({ flashes: 2 })).hardFailures).toEqual(['calm 50 (must be 100): 2 fast brightness changes']);
+    expect(scoreBlockBarn(good(), page({ masterGain: 0.8, peakGain: 0.4 })).hardFailures)
+      .toEqual(['calm 50 (must be 100): master gain 0.8 over 0.5; loudest moment 0.4 over 0.15']);
+    expect(scoreBlockBarn(good(), page({ flashes: 1, peakGain: 0.2 })).hardFailures)
+      .toEqual(['calm 0 (must be 100): 1 fast brightness change; loudest moment 0.2 over 0.15']);
+    expect(scoreBlockBarn(good(), page()).hardFailures).toEqual([]);
+  });
+
   it('calm loses half for fast flashing and half for a sound over its cap', () => {
     expect(scoreBlockBarn(good(), page({ flashes: 1 })).measures.calm).toBe(50);
     expect(scoreBlockBarn(good(), page({ masterGain: 0.8 })).measures.calm).toBe(50);
@@ -143,7 +156,7 @@ describe('scoreBlockBarn: the toddler phase (measurement v2, P2)', () => {
   });
   it('anything left stuck after a gesture is a hard failure', () => {
     const gs = gestures();
-    gs[18] = { ...gs[18]!, stuck: ['the grown-up corner is open'] };
+    gs[23] = { ...gs[23]!, stuck: ['the grown-up corner is open'] };
     // gestures are numbered from 1 within their viewport
     expect(scoreBlockBarn(good(), page({ gestures: gs })).hardFailures).toEqual(['1024x768 combo tap 9 on block (door): stuck: the grown-up corner is open']);
   });
@@ -155,6 +168,38 @@ describe('scoreBlockBarn: the toddler phase (measurement v2, P2)', () => {
     const h = scoreBlockBarn(good(), page({ gestures: [...gs, ...gestures()] })).hardFailures;
     expect(h).toHaveLength(11);
     expect(h[10]).toBe('and 4 more gesture failures');
+  });
+});
+
+describe('scoreBlockBarn: variety (measurement v2, P3)', () => {
+  const random = (viewport: '390x844' | '1024x768', sigs: number, feats: number, n = 60): BlockBarnGesture[] =>
+    Array.from({ length: n }, (_, i) => gest({ viewport, signature: `s${i % sigs}`, feature: `f${i % feats}` }));
+  const both = (a: BlockBarnGesture[], b: BlockBarnGesture[]) => page({ gestures: [...a, ...b] });
+
+  it('pins the reviewed targets', () => {
+    expect(BLOCK_BARN_VARIETY).toEqual({ signatures: 10, features: 8 });
+  });
+  it('is capped: finding more than the targets never scores over 100', () => {
+    expect(scoreBlockBarn(good(), both(random('390x844', 40, 20), random('1024x768', 10, 8))).measures.variety).toBe(100);
+  });
+  it('half for distinct signatures, half for distinct features, per viewport, then the mean', () => {
+    // phone: 5 of 10 signatures (25) + 4 of 8 features (25) = 50; tablet: 100
+    const r = scoreBlockBarn(good(), both(random('390x844', 5, 4), random('1024x768', 10, 8)));
+    expect(r.measures.variety).toBe(75);
+    expect(r.levels.map((l) => [l.viewport, l.signatures, l.features])).toEqual([['390x844', 5, 4], ['1024x768', 10, 8]]);
+    expect(scoreBlockBarn(good(), both(random('390x844', 1, 1), random('1024x768', 1, 1))).measures.variety).toBe(11.25); // 5 + 6.25
+  });
+  it('reads only the random phase\'s answers: combinations, cancels and unanswered gestures add nothing', () => {
+    const extra = [
+      gest({ phase: 'combo', signature: 'c1', feature: 'g1' }), gest({ phase: 'combo', signature: 'c2', feature: 'g2' }),
+      gest({ gesture: 'cancel', responses: 0, signature: 'x', feature: 'y' }), gest({ responses: 0, signature: 'z', feature: 'w' }),
+    ];
+    const r = scoreBlockBarn(good(), both([...random('390x844', 5, 4), ...extra], random('1024x768', 10, 8)));
+    expect(r.measures.variety).toBe(75);
+  });
+  it('a viewport without random answers scores 0 there', () => {
+    const r = scoreBlockBarn(good(), both([gest({ phase: 'combo' })], random('1024x768', 10, 8)));
+    expect(r.measures.variety).toBe(50);
   });
 });
 
