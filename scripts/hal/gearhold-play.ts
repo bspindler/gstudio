@@ -15,6 +15,8 @@ import type { PageOutcome } from './gearhold-play-page.js';
 
 export type GearholdPlayOptions = {
   levels: number[]; seeds?: number; seedBase?: number;
+  /** Checkout whose games/ and packages/sdk/ are served (default: this one). Tests serve an edited copy. */
+  root?: string;
   /** Sim-time cap per run in seconds (default SIM_CAP, 240). Tests lower it to exercise 'timeout'. */
   simCap?: number;
   /** Wall-clock bound per page.evaluate batch in ms (default BATCH_TIMEOUT_MS); exceeding it is a 'hang' error. */
@@ -111,7 +113,7 @@ async function playOne(browser: Browser, origin: string, code: string, level: nu
 }
 
 /** Plays levels x seeds (seeds seedBase .. seedBase+seeds-1). Reuses one browser and one static server. */
-export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase = 0, simCap = SIM_CAP, batchTimeoutMs = BATCH_TIMEOUT_MS, initScript }: GearholdPlayOptions): Promise<GearholdPlayResult> {
+export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase = 0, simCap = SIM_CAP, batchTimeoutMs = BATCH_TIMEOUT_MS, initScript, root }: GearholdPlayOptions): Promise<GearholdPlayResult> {
   if (!Number.isInteger(seeds) || seeds < 1 || !Number.isInteger(seedBase) || seedBase < 0)
     throw new Error(`runGearholdPlay: seeds must be a positive integer and seedBase a non-negative integer (got ${seeds}, ${seedBase})`);
   const code = await policyBundle();
@@ -119,7 +121,7 @@ export async function runGearholdPlay({ levels, seeds = DEFAULT_SEEDS, seedBase 
   const records: PlayRecord[] = [], errors: string[] = [];
   try {
     browser = await launchBrowser(); // throws "browser unavailable: ..."
-    server = await serveGames();
+    server = await serveGames(root);
     for (const level of levels)
       for (let seed = seedBase; seed < seedBase + seeds; seed++) {
         const r = await playOne(browser, server.origin, code, level, seed, { cap: simCap, batchTimeoutMs, initScript });

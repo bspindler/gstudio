@@ -54,7 +54,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 - [x] **P0.4 Block Barn hook lists every tap zone.** `games/block-barn/index.html` `__hal.targets()` includes `door`
   and `sky` (from `doorBox()` / `skyBox()`); a test checks every `tapAt` branch kind appears in the hook's targets.
   `scripts/hal/block-barn-play.ts` fallback then taps them; `bigTargets` measures them.
-- [ ] **P0.5 Gearhold effects get their own random stream.** `games/gearhold/index.html`: particles, sparks, steam,
+- [x] **P0.5 Gearhold effects get their own random stream.** `games/gearhold/index.html`: particles, sparks, steam,
   smoke, cogs, muzzle draw from a separate seeded stream, so a visual-only change doesn't reshuffle gameplay.
   Test: a scorer run with an effect's count changed gives identical gearhold-play numbers. Re-baseline gearhold-play.
 

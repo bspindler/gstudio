@@ -1,7 +1,9 @@
 // Browser tests for the Gearhold play runner (HAL_BROWSER=1 npx vitest run --project hal-browser).
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { networkInterfaces } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { LEVELS } from '../../games/gearhold/levels.js';
@@ -24,6 +26,28 @@ describe('runGearholdPlay', () => {
       expect(r.hits).toBeLessThanOrEqual(r.shotsFired);
     }
   }, 120_000);
+
+  // Measurement v2, P0.5: visual effects draw from their own random stream, so a visual-only change (here: more
+  // sparks per bolt hit) leaves every gameplay outcome identical. Before, HAL-074 and HAL-101 (visual/audio only)
+  // were discarded for tension drops caused by reshuffled enemy behaviour.
+  it('a visual-only change (more sparks) leaves every PlayRecord identical', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'gearhold-fx-'));
+    try {
+      cpSync(join(process.cwd(), 'games', 'gearhold'), join(tmp, 'games', 'gearhold'), { recursive: true });
+      cpSync(join(process.cwd(), 'packages', 'sdk'), join(tmp, 'packages', 'sdk'), { recursive: true });
+      const page = join(tmp, 'games', 'gearhold', 'index.html');
+      const html = readFileSync(page, 'utf8');
+      const from = "sparks(ix, iy, iz, best ? 5 : 6, 'ember')";
+      expect(html).toContain(from);
+      writeFileSync(page, html.replace(from, "sparks(ix, iy, iz, best ? 11 : 13, 'ember')"));
+      const opts = { levels: [0, 2], seeds: 2, seedBase: 5 };
+      const a = await runGearholdPlay(opts);
+      const b = await runGearholdPlay({ ...opts, root: tmp });
+      expect(a.errors).toEqual([]);
+      expect(b.errors).toEqual([]);
+      expect(b.records).toEqual(a.records);
+    } finally { rmSync(tmp, { recursive: true, force: true }); }
+  }, 180_000);
 
   it('ends a run at the sim-time cap as a timeout with its cause', async () => {
     const { records, errors } = await runGearholdPlay({ levels: [1], seeds: 1, simCap: 3 });
