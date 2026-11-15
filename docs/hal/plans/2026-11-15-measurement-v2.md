@@ -31,8 +31,10 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 ## Rules for whoever works this plan
 
 - TDD: failing test first. `npm run typecheck` and `npm test` green before every commit.
-- Before every push: no Hal run in progress (`.data/hal/run.lock` pid alive), and `git log origin/main..refs/hal/main`
-  is empty (else cherry-pick those first, push, `git update-ref refs/hal/main <head>`).
+- Push only through this guard, which fails when a Hal run is live or Hal has unpushed commits:
+  `git fetch -q && [ ! -f .data/hal/run.lock ] && [ -z "$(git log --oneline origin/main..refs/hal/main)" ] && git push -q origin main && git update-ref refs/hal/main HEAD`.
+  If Hal has unpushed commits (and no run is live): cherry-pick `origin/main..refs/hal/main` onto main first, test,
+  then push through the guard. If a run is live, wait for it to finish.
 - Hal's nightly job is paused (`launchctl bootout`) while this runs; don't start Hal runs. Re-enable at the end.
 - An item that moves a game's numbers re-baselines that game in the same commit and says so in the message
   (`Hal-Baseline-Break: <game>`), and adds a line to that game's CHANGELOG only if game code changed.
