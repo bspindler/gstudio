@@ -201,12 +201,35 @@ export const PATTERNS = [
       }
       return { o, len: hx - gp - x + 0.5 };
     } },
+
+  // Sector 10: boost pads. A pad throws the runner over tall walls onto a short landing strip that ends at a pit:
+  // land, then tap in the short stretch before the edge. Single-lane, jump-only: the only input is that one tap.
+  { id: 'boost', sector: 10, weight: (s) => (s === 10 ? 2.6 : 1.1),
+    build(x, d, r, intro) {
+      const v = speedAt(x + 6), rp = v * PAD_AIR, px = x + 0.5;
+      const o = [{ t: 'pad', x: px, w: 1.4 }];
+      for (let wx = px + Math.max(3, 0.9 + v * 0.16), i = 0, n = 1 + (r() < 0.5 ? 1 : 0); i < n; i++) {
+        const ww = 1.6 + r() * 1.2;
+        o.push({ t: 'block', x: wx, w: ww, h: 3 }, { t: 'chip', x: wx + ww / 2, y: 3.6 });
+        wx += ww + 1.4;
+      }
+      // The landing strip: the arc comes down, and a wide spike field starts just after the first safe takeoff. The
+      // field is as long as it can be while the clear-jump window stays at `want` seconds, so the tap has to be timed.
+      const want = intro ? 0.065 : 0.085, left = px - 0.4 + rp;
+      let n = 4;
+      while (n < 14 && (spikeWindow(0, n + 1, v)[1] - spikeWindow(0, n + 1, v)[0]) / v >= want) n++;
+      const [lo0] = spikeWindow(0, n, v);
+      const sx = Math.max(left + 1, left + v * 0.05 - lo0); // takeoff window opens ~50 ms after landing
+      spikes(o, sx, n);
+      o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
+      return { o, len: sx + n * SW - x + 0.5 };
+    } },
 ];
 
 const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

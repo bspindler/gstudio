@@ -60,6 +60,8 @@ export const SECTORS = [
     pal: { sky: ['#050212', '#14083A', '#2A0F5E'], sun: ['#FF2BD6', '#22F0FF'], grid: '#FF2BD6', rail: '#7CFFEA', neon: '#FF2B5E', block: '#B98CFF' } },
   { name: 'CRUMBLE TRACK', hint: 'Panels glow, then fall away: leap each hole, land, and jump again.',
     pal: { sky: ['#0F0404', '#3A1208', '#6E2A0F'], sun: ['#FFE45C', '#FF8A3D'], grid: '#FF8A3D', rail: '#FFB86B', neon: '#FF2B5E', block: '#FFE45C' } },
+  { name: 'BOOST PADS', hint: 'Pads throw you over the walls: land on the strip, then tap before the edge.',
+    pal: { sky: ['#020812', '#0A2440', '#14508A'], sun: ['#7CFF6B', '#22F0FF'], grid: '#22F0FF', rail: '#7CFF6B', neon: '#FFE45C', block: '#22A8FF' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];

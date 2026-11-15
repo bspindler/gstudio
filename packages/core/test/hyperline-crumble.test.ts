@@ -5,10 +5,10 @@ import { AIR, SECTOR_LEN, sectorInfo, speedAt } from '../../../games/hyperline/l
 import { clearable } from '../src/hal/hyperline-bot.js';
 
 describe('hyperline CRUMBLE TRACK', () => {
-  it('is sector 10 for players, between PULSE RAILS and HYPERCORE, and introduces the crumble panels', () => {
+  it('is sector 10 for players, between PULSE RAILS and BOOST PADS, and introduces the crumble panels', () => {
     expect(sectorInfo(8).name).toBe('PULSE RAILS');
     expect(sectorInfo(9).name).toBe('CRUMBLE TRACK');
-    expect(sectorInfo(10).name).toBe('HYPERCORE');
+    expect(sectorInfo(10).name).toBe('BOOST PADS');
     expect(INTRO[9]).toBe('crumble');
   });
 
