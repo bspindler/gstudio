@@ -724,6 +724,16 @@ export function goalStatus(def, p) {
   });
 }
 export function goalsMet(def, p) { return goalStatus(def, p).every((g) => g.done); }
+/**
+ * Could `extra` more moves still win? No dark patterns: the out-of-moves screen offers +5 moves only when they could.
+ * Generous on purpose: each unfinished goal may need at most `extra` times the best one-move gain the player made
+ * toward it on this level (`best`, per goal, at least 1 a move), so the offer hides only when a goal is clearly out of reach.
+ */
+export function extraMovesCanWin(def, p, best, extra) {
+  const gs = goalStatus(def, p);
+  if (best.length !== gs.length) throw new Error(`best has ${best.length} entries for ${gs.length} goals`);
+  return gs.every((g, i) => g.done || g.need - g.got <= extra * Math.max(1, best[i] || 0));
+}
 export function starsFor(movesLeft, moves) {
   const f = movesLeft / moves;
   return f >= 0.25 ? 3 : f >= 0.1 ? 2 : 1;

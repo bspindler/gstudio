@@ -563,7 +563,7 @@ button.card:active{transform:scale(.97)}
 
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
-import { ABILITIES, GRAVITY, activeMask, applyAbility, bestSwap, buildBoard, collapse, counter, doubleCounts, ensureBubbles, goalStatus, goalsMet,
+import { ABILITIES, GRAVITY, activeMask, applyAbility, bestSwap, buildBoard, collapse, counter, doubleCounts, ensureBubbles, extraMovesCanWin, goalStatus, goalsMet,
   hasMoves, helperCharge, isFixed, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveMatches, resolveSwap, rockOf,
   shuffle, starsFor, tidePhase, tideTurns, turnTide, COLS, ROWS } from './board.js';
 import { HELPER_LEVEL, levelDef, withoutTides } from './levels.js';
@@ -572,7 +572,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, 
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.10.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.10.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1037,7 +1037,7 @@ function freeCell() {
 function startLevel(n, picks = [], helperId = null, { preview = false } = {}) {
   const def = playDef(n);
   const run = { n, def, moves: def.moves, prog: newProgress(), assisted: false, shellDrop: false, shellTaken: false, over: false, boosters: [], specials: 0, replay: (S.stars[n] || 0) > 0,
-    made: 0, turns: 0, phase: 'high', dir: 'down', rock: rockOf(def), exit: def.exit || null, helper: null, helperEarned: true, charge: 0, helperUses: 0, double: false, preview };
+    made: 0, turns: 0, phase: 'high', dir: 'down', rock: rockOf(def), exit: def.exit || null, helper: null, helperEarned: true, charge: 0, helperUses: 0, double: false, preview, best: def.goals.map(() => 0), snap: null };
   // A helper the player only has from a purchase counts as a boost (assisted: no shell), like boosters.
   if (helperId && n >= HELPER_LEVEL && !pickHelper(S, run, helperId)) return false;
   // Boosters are paid in pearls and mark the run assisted (no shell on this win).
@@ -1172,6 +1172,7 @@ function onSwipe(el, dr, dc) {
     return;
   }
   busy = true; lvl.moves--; lvl.made++;
+  lvl.snap = goalStatus(lvl.def, lvl.prog).map((g) => g.got); // this move's gain, cascades and rescues included, is read in check()
   // the two pieces trade places first, then the match pops
   if (other) { place(el, r2, c2); place(other, r, c); el._r = r2; el._c = c2; other._r = r; other._c = c; }
   setTimeout(() => finishMove(res, r2, c2), other && motion() ? 230 : 0);
@@ -1409,6 +1410,7 @@ function useHelper(r, c) {
 
 function check() {
   if (!lvl || lvl.over) return;
+  if (lvl.snap) { goalStatus(lvl.def, lvl.prog).forEach((g, i) => { lvl.best[i] = Math.max(lvl.best[i], g.got - lvl.snap[i]); }); lvl.snap = null; }
   if (goalsMet(lvl.def, lvl.prog)) { lvl.over = true; setTimeout(win, 380); return; }
   if (lvl.moves <= 0) { outOfMoves(); return; }
   if (!hasMoves(grid)) { shuffle(grid, rng, lvl.def.colors, newId); render(); toast('No matches left, so the tide reshuffled the pool'); }
@@ -1551,15 +1553,19 @@ function outOfMoves() {
 }
 function outOfMovesModal() {
   const left = goalStatus(lvl.def, lvl.prog).filter((g) => !g.done);
-  const close = left.every((g) => g.need - g.got <= Math.max(2, g.need * .15));
+  // No dark patterns: +5 moves (sold, or paid in pearls, which are also sold) is offered only when five more moves
+  // could still win (extraMovesCanWin). Otherwise the screen says so plainly and offers a fresh try, and no "So close!".
+  const canWin = extraMovesCanWin(lvl.def, lvl.prog, lvl.best, 5);
+  const close = canWin && left.every((g) => g.need - g.got <= Math.max(2, g.need * .15));
   showModal(`<div class="label">Out of moves</div><h2>${close ? 'So close!' : 'Out of moves'}</h2>
     <div class="ggrid">${left.map((g) => `<div class="g"><span class="gi">${goalIcon(g)}</span>${g.need - g.got} left</div>`).join('')}</div>
-    <p class="muted">Keep going? Extra moves count as a boost, so this level won't drop a shell.</p>
+    ${canWin ? `<p class="muted">Keep going? Extra moves count as a boost, so this level won't drop a shell.</p>
     <div class="row">
       ${offered(CATALOG.moves) ? `<button class="btn buy" data-act="buy-moves">${CATALOG.moves.title} · ${price(CATALOG.moves)}</button>` : ''}
       <button class="btn" data-act="pearl-moves" ${S.pearls < PEARL_MOVES ? 'disabled' : ''}>+5 moves · ${PEARL_MOVES} pearls</button>
       <button class="btn ghost" data-act="retry">Try again</button>
-    </div>`);
+    </div>` : `<p class="muted">That's more than five extra moves could clear, so a fresh try is your best bet.</p>
+    <div class="row"><button class="btn buy" data-act="retry">Try again</button><button class="btn ghost" data-act="map">Map</button></div>`}`);
 }
 // Extra moves (bought, or paid with pearls, which are also sold) make the level assisted: no shell on that win,
 // so no paid path leads to a random reward.

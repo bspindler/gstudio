@@ -95,4 +95,5 @@ export declare function newProgress(): Progress;
 export declare function addProgress(p: Progress, counts: Partial<Progress>): Progress;
 export declare function goalStatus(def: LevelDef, p: Progress): (Goal & { need: number; got: number; done: boolean })[];
 export declare function goalsMet(def: LevelDef, p: Progress): boolean;
+export declare function extraMovesCanWin(def: LevelDef, p: Progress, best: number[], extra: number): boolean;
 export declare function starsFor(movesLeft: number, moves: number): 1 | 2 | 3;
