@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.5.2 (2026-11-15)
+- Gearhold now renders with three.js, with soft glow around its lamps and light sources, and keeps the plain WebGL2 renderer as a fallback.
+
 ## 0.5.1 (2026-11-15)
 - Sparks, smoke, steam, shake and the muzzle flash now use their own randomness, separate from how enemies move and shoot. Nothing looks or plays differently; it just means a visual tweak can no longer change a fight.
 

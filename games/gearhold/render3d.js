@@ -1,6 +1,8 @@
 // Gearhold WebGL2 renderer: lit flat-shaded meshes with a sun shadow map, point lights, fog into the
 // sky, a procedural sky (gradient, sun, cloud sea, stars), billboard particles and a first-person pass.
-// No libraries. Vertex layout everywhere: position(3) normal(3) colour(3, sRGB) emissive(1).
+// This file is the plain fallback (no libraries); the game prefers the three.js renderer in render-three.js.
+// Vertex layout everywhere: position(3) normal(3) colour(3, sRGB) emissive(1).
+import { createThreeRenderer } from './render-three.js';
 
 // ---------- small matrix library (column-major) ----------
 export const M4 = {
@@ -224,7 +226,43 @@ function compile(gl, vs, fs) {
 
 const SHADOW_SIZE = 2048;
 
+// The renderer the game uses: three.js (render-three.js) when it starts, else this file's plain WebGL2 renderer.
+// If the three.js path throws while playing, it switches to the plain one for good and carries on.
 export function createRenderer(canvas) {
+  let impl = null, raw = null, size = null, lastBegin = null;
+  try { impl = createThreeRenderer(canvas, M4); } catch (e) { console.warn('gearhold: three.js renderer unavailable, using plain WebGL2:', e && e.message); }
+  if (!impl) { raw = createRawRenderer(canvas); if (!raw) return null; }
+  const rawMesh = (h) => (h.raw ||= raw.mesh(h.data));
+  const rawDraws = (draws) => draws.map((d) => ({ ...d, mesh: rawMesh(d.mesh) }));
+  function fallback(e) {
+    console.warn('gearhold: three.js renderer failed, using plain WebGL2:', e && e.message);
+    impl = null;
+    raw = createRawRenderer(canvas);
+    if (!raw) throw e;
+    if (size) raw.resize(size[0], size[1]);
+    if (lastBegin) raw.begin(lastBegin);
+  }
+  const via = (name, a) => {
+    if (impl) { try { return impl[name](...a); } catch (e) { fallback(e); } }
+    return raw[name](...a);
+  };
+  return {
+    mesh(data) { return { data, geo: impl ? impl.geometry(data) : null, raw: impl ? null : raw.mesh(data) }; },
+    free(h) {
+      if (h.geo) impl?.freeGeometry(h.geo);
+      if (h.raw) { raw.gl.deleteBuffer(h.raw.buf); raw.gl.deleteVertexArray(h.raw.vao); }
+    },
+    resize(w, h) { size = [w, h]; via('resize', [w, h]); },
+    begin(f) { lastBegin = f; via('begin', [f]); },
+    shadows(draws) { if (impl) { try { return impl.shadows(draws); } catch (e) { fallback(e); } } raw.shadows(rawDraws(draws)); },
+    sky(t) { via('sky', [t]); },
+    draw(draws) { if (impl) { try { return impl.draw(draws); } catch (e) { fallback(e); } } raw.draw(rawDraws(draws)); },
+    billboards(items) { via('billboards', [items]); },
+    viewmodel(data, proj, flash) { via('viewmodel', [data, proj, flash]); },
+  };
+}
+
+function createRawRenderer(canvas) {
   const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
   if (!gl) return null;
   const lit = compile(gl, LIT_VS, LIT_FS), depth = compile(gl, DEPTH_VS, DEPTH_FS);
