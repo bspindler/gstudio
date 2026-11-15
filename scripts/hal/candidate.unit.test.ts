@@ -526,15 +526,15 @@ describe('runCandidate (temp git repo)', () => {
     expect(old).not.toBe(now);
   });
 
-  it('gearhold is scored with both gearhold and gearhold-play, and the target applies where it is a measure', async () => {
-    expect(scorersFor('gearhold')).toEqual(['gearhold', 'gearhold-play']);
+  it('gearhold is judged by gearhold-play alone (the static walker became its hard failures, measurement v2 P3)', async () => {
+    expect(scorersFor('gearhold')).toEqual(['gearhold-play']);
     expect(scorersFor('hyperline')).toEqual(['hyperline']);
     const c = ctx({ cmds: { score: (dir, s) => { ran.push(`score:${s}@${dir}`); return result(s === 'gearhold-play' ? report(s, 42, { clear: 42 }) : report(s, 50, { walk: 50 })); } } },
       (cwd) => put(cwd, 'games/gearhold/game.js', 'export const speed = 1.5;\n'));
     const r = await runCandidate(ticket({ game: 'gearhold', target: 'clear', kind: 'feature' }), c);
     expect(r.reasons).toEqual([]);
     const wt = join(repo, '.data/hal/wt/HAL-1');
-    expect(ran.filter((x) => x.startsWith('score'))).toEqual([`score:gearhold@${wt}`, `score:gearhold-play@${wt}`]);
+    expect(ran.filter((x) => x.startsWith('score'))).toEqual([`score:gearhold-play@${wt}`]);
     expect(r.version).toBe('0.3.0'); // feature: minor bump of 0.2.0
     expect(parseTrailers(gitIn(repo, 'log', '-1', '--format=%B', HAL_MAIN))).toMatchObject({ scoreBefore: 40, scoreAfter: 42, kind: 'feature', game: 'gearhold' });
   });
