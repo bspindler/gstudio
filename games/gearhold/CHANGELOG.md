@@ -2,9 +2,10 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
-## 0.4.1 (2026-11-14)
+## 0.5.0 (2026-11-14)
 - Gearhold: toned down the amber glow so walls, floors and brass are easier to see; only real light sources still shine.
 - Gearhold: removed the sideways oval screen glow; the screen-edge shading is now round and fainter.
+- Terrace of Dials: ticking brass gear presses now guard the rooms on the way to the exit, so time your dash across the beat.
 
 ## 0.4.0 (2026-11-13)
 - A brass tick now flashes at the screen edge to show which direction damage came from.

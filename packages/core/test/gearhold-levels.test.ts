@@ -99,6 +99,16 @@ describe('gearhold levels', () => {
     }
   });
 
+  it('puts gear presses on the Terrace of Dials main route: full columns across the first room', () => {
+    const map = LEVELS[0]!.map;
+    const presses = find(map, 'u');
+    expect(presses.length).toBeGreaterThanOrEqual(6);
+    // two press columns span every row of the first room (rows 1-4, x 5-14), so crossing means timing a beat
+    const cols = new Set(presses.filter(([x, y]) => y >= 1 && y <= 4 && x >= 5 && x <= 14).map(([x]) => x));
+    expect(cols.size).toBeGreaterThanOrEqual(2);
+    for (const x of cols) for (let y = 1; y <= 4; y++) expect(map[y]![x], `column ${x} row ${y}`).toBe('u');
+  });
+
   it('places explosive canisters (o) somewhere in the campaign', () => {
     expect(FLOOR_THINGS).toContain('o');
     expect(LEVELS.some((l) => l.map.some((row) => row.includes('o')))).toBe(true);
