@@ -1,6 +1,8 @@
 // Night Watch: an endless garden. Waves are generated from a fixed seed, so every player and every
 // run faces the same nights; only your plants and timing differ. The best wave reached is kept locally.
 const WAVES = 60;
+const RAMP_FROM = 14; // waves up to here (0-based) are unchanged
+const RAMP = 1.06;  // extra growth per wave after that
 
 function lcg(seed) {
   let s = seed >>> 0;
@@ -17,6 +19,7 @@ export function endlessLevel() {
   const waves = [];
   for (let i = 0; i < WAVES; i++) {
     let budget = 260 * Math.pow(1.13, i); // total creature health to send this wave
+    if (i > RAMP_FROM) budget *= Math.pow(RAMP, i - RAMP_FROM); // the late nights swell faster
     const pool = POOL.filter(([, from]) => i >= from);
     const wave = [];
     if (i > 0 && i % 10 === 9) { wave.push(['mothmother', 1 + Math.floor(i / 20), 4, 2]); budget *= 0.5; }
@@ -26,7 +29,7 @@ export function endlessLevel() {
     for (let k = 0; k < kinds; k++) {
       const [type, , hp] = pool[Math.floor(rnd() * pool.length)];
       const count = Math.max(3, Math.round(budget / kinds / hp));
-      const gap = Math.max(0.15, Math.min(1.2, 14 / count));
+      const gap = Math.max(i > RAMP_FROM ? 0.06 : 0.15, Math.min(1.2, 14 / count)) // late waves also arrive denser, so they press harder without lasting for hours;
       wave.push([type, count, Math.round(gap * 100) / 100, at]);
       at += 2 + rnd() * 3;
     }

@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.3.2 (2026-11-15)
 - Lanternkeep: between waves, a few fireflies drift in to the lantern for a calm breather.
+- Night Watch's late waves now swell faster and arrive closer together, so the endless night ends sooner.
 
 ## 0.3.1 (2026-11-14)
 - The creature path now glows faintly at night, with a slow moonlit breathing, so the route reads more clearly.
