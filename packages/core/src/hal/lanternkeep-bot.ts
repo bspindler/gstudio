@@ -1,6 +1,7 @@
 // A plain greedy Lanternkeep player, used by the balance tests and Hal's scorer. It is not clever: it builds on
 // a tile that covers a lot of path, rotates through the plants it has, grows plants instead of spreading once it
-// has a few, picks branches by plant, and fires the Flare when creatures crowd the lantern. It never calls a wave
+// has a few, picks branches by plant, and fires the Flare when creatures crowd the lantern. Once every plant is
+// fully grown and gold piles up, it plants again past its style's cap rather than hoarding. It never calls a wave
 // early. The game itself has no randomness, so variety comes from `style` (how many plants it will keep) and
 // `seed` (which of the best few tiles it picks). If no style can win a night, an attentive person will struggle
 // too; if doing nothing wins, the night is broken.
@@ -51,6 +52,9 @@ function pickTile(g: Game, type: TowerType, rnd: (() => number) | null): { c: nu
   return top[Math.floor(rnd() * top.length)]!;
 }
 
+/** Overflow planting starts when gold exceeds this many times the next plant's cost. */
+export const OVERFLOW_GOLD = 2;
+
 const ROTATION: TowerType[] = ['glowcap', 'glowcap', 'frost', 'ember', 'sunspire', 'ember', 'glowcap', 'sunspire'];
 
 export function playLanternkeep(level: Level, opts: LanternkeepBotOptions = {}): LanternkeepPlay {
@@ -66,9 +70,12 @@ export function playLanternkeep(level: Level, opts: LanternkeepBotOptions = {}):
     for (let guard = 0; guard < 50; guard++) {
       const type = rotation[k % rotation.length]!;
       const cost = buildCost(g, type);
-      const tile = g.towers.length < maxTowers ? pickTile(g, type, rnd) : null;
-      const minCov = TOWERS[type].tiers[0]!.range * 1.5;
       const canUpgrade = upgrades && g.towers.some((t) => upgradeCost(t) !== null);
+      // A person doesn't sit on a pile of gold while the garden falls: once every plant is fully grown and gold
+      // is plentiful, plant again, past the style's cap and on thinner tiles (measurement v2 P2).
+      const overflow = upgrades && g.towers.length > 0 && !canUpgrade && g.gold > OVERFLOW_GOLD * cost;
+      const tile = g.towers.length < maxTowers || overflow ? pickTile(g, type, rnd) : null;
+      const minCov = overflow ? 1 : TOWERS[type].tiers[0]!.range * 1.5;
       if (tile && tile.cov >= minCov && !(wantUpgrade && canUpgrade)) {
         if (g.gold < cost) return;
         place(g, type, tile.c, tile.r);

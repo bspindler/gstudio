@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { LEVELS } from '../../../games/lanternkeep/lib/levels.js';
 import type { Level } from '../../../games/lanternkeep/lib/sim.js';
-import { LANTERNKEEP_BANDS, lanternkeepProblems, nightMeasures, playLanternkeep, scoreLanternkeep, SCORERS, type NightStats } from '../src/hal/index.js';
+import { PERKS, sparksSpent } from '../../../games/lanternkeep/lib/meta.js';
+import {
+  LANTERNKEEP_BANDS, LANTERNKEEP_STYLES, isCloseWin, lanternkeepProblems, nightMeasures, nightPerks, playLanternkeep, playWatch,
+  scoreLanternkeep, SCORERS, typicalPerks, type LanternkeepPlay, type NightStats,
+} from '../src/hal/index.js';
 
 const night = (n: number, winRate: number): NightStats => ({ n, name: `n${n}`, plays: 16, wins: Math.round(winRate * 16), winRate, closeWins: 0, avgLivesFrac: 1, errors: [] });
 
@@ -24,6 +28,70 @@ describe('hal lanternkeep: measures', () => {
     expect(nightMeasures([], 0.45).watch).toBe(100);
     expect(nightMeasures([], 0.1).watch).toBeLessThan(50);
     expect(nightMeasures([], 1).watch).toBe(0);
+  });
+
+  it('scores Night Watch reach per style, so one style in band does not carry the rest', () => {
+    expect(nightMeasures([], [0.45, 0.5, 0.4, 0.55]).watch).toBe(100);
+    expect(nightMeasures([], [0.45, 1, 1, 1]).watch).toBe(25);
+  });
+});
+
+describe('hal lanternkeep: close wins (operator decision D3)', () => {
+  const p = (won: boolean, lives: number, maxLives = 20): LanternkeepPlay => ({ won, stars: won ? 1 : 0, lives, maxLives, wave: 1, towers: 1, gold: 0, flares: 0 });
+  it('is a win with under half the lives left', () => {
+    expect(isCloseWin(p(true, 9))).toBe(true);
+    expect(isCloseWin(p(true, 10))).toBe(false);
+    expect(isCloseWin(p(true, 18))).toBe(false); // missed three stars, but comfortable
+    expect(isCloseWin(p(false, 0))).toBe(false);
+    expect(isCloseWin(p(true, 11, 23))).toBe(true); // perk lives count in the whole
+  });
+});
+
+describe('hal lanternkeep: typical perks', () => {
+  it('spends the sparks a player has, in the order the perk screen lists them', () => {
+    expect(typicalPerks(0)).toEqual([]);
+    expect(typicalPerks(2)).toEqual([]);
+    expect(typicalPerks(4)).toEqual(['wick']);
+    expect(typicalPerks(10)).toEqual(['wick', 'purse', 'spores']);
+    for (let s = 0; s <= 45; s++) expect(sparksSpent(typicalPerks(s))).toBeLessThanOrEqual(s);
+    expect(typicalPerks(99)).toEqual(PERKS.map((x) => x.id));
+  });
+
+  it('gives night n the perks of about two stars per earlier night', () => {
+    expect(nightPerks(1)).toEqual({});
+    expect(nightPerks(3)).toEqual({ lives: 3 });
+    expect(nightPerks(6)).toEqual({ lives: 3, gold: 40, glowcapDiscount: 0.2 });
+  });
+});
+
+describe('hal lanternkeep: night watch plays', () => {
+  it('play on until the lantern falls, not until a safety stop', () => {
+    const p = playWatch(LANTERNKEEP_STYLES[0]!, 1);
+    expect(p.won).toBe(false);
+    expect(p.lives).toBe(0);
+  }, 30_000);
+});
+
+describe('hal lanternkeep: bot spending', () => {
+  // A long straight lane with a slow trickle of tough creatures: one plant can't hold it alone.
+  const lane = (gold: number): Level => ({
+    name: 't', intro: '', lives: 20, gold, towers: ['glowcap'], paths: [[[4, -1], [4, 12]]],
+    waves: Array.from({ length: 6 }, () => [['beetle', 6, 1.5]] as Level['waves'][number]),
+  });
+
+  it('plants past its cap once every plant is fully grown and gold piles up', () => {
+    const p = playLanternkeep(lane(3000), { maxTowers: 1 });
+    expect(p.towers).toBeGreaterThan(1);
+  });
+
+  it('keeps its cap while gold is short or upgrades are off', () => {
+    expect(playLanternkeep(lane(3000), { maxTowers: 1, upgrades: false }).towers).toBe(1);
+    expect(playLanternkeep(lane(60), { maxTowers: 1 }).towers).toBeLessThanOrEqual(1);
+  });
+
+  it('stops hoarding on a hard night (night 14, four plants)', () => {
+    const p = playLanternkeep(LEVELS[13]!, { maxTowers: 4, seed: 1 });
+    expect(p.towers).toBeGreaterThan(4);
   });
 });
 
