@@ -51,7 +51,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
   Tests in `packages/core/test/hal-*.test.ts`.
 - [x] **P0.3 Fix tickets use polish mode.** `candidate.ts`: a `kind: 'fix'` ticket with a target is gated in polish
   mode (no gain needed; target gain still reported). Test with a fix ticket whose target doesn't move.
-- [ ] **P0.4 Block Barn hook lists every tap zone.** `games/block-barn/index.html` `__hal.targets()` includes `door`
+- [x] **P0.4 Block Barn hook lists every tap zone.** `games/block-barn/index.html` `__hal.targets()` includes `door`
   and `sky` (from `doorBox()` / `skyBox()`); a test checks every `tapAt` branch kind appears in the hook's targets.
   `scripts/hal/block-barn-play.ts` fallback then taps them; `bigTargets` measures them.
 - [ ] **P0.5 Gearhold effects get their own random stream.** `games/gearhold/index.html`: particles, sparks, steam,

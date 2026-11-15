@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.2.1 (2026-11-15)
+- The barn doors and the window are now big enough for small fingers on every phone: the wall along the top is never shorter than 88 px. The hay tower's blocks stay big on short phones too.
+
 ## 0.2.0 (2026-11-14)
 - Block Barn: neighbouring animals now and then turn to each other with a slow, gentle peek.
 - Tap the big barn doors and they swing open: your animals trot inside one by one and peek out of the window; tap again and they trot back out.

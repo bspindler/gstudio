@@ -33,13 +33,14 @@
     overscroll-behavior: none;
   }
 
-  /* ---- the barn: a wall along the top (at most 15% of the height), then the floor, filled edge to edge.
+  /* ---- the barn: a wall along the top (10-15% of the height, never under 88px so the door and window are big
+     enough to tap), then the floor, filled edge to edge.
      Everything is sized from the screen with CSS grid and container units: two big columns with the tower beside
      them on a tall phone, three columns with the tower in the corner on other portrait screens, one big row of
      taller blocks on landscape screens. ---- */
   #barn { position: fixed; inset: 0; overflow: hidden; touch-action: none; display: grid;
-    grid-template-rows: clamp(calc(64px + env(safe-area-inset-top, 0px)), 10%, 15%) minmax(0, 1fr); }
-  @media (min-aspect-ratio: 5 / 4) { #barn { grid-template-rows: clamp(calc(64px + env(safe-area-inset-top, 0px)), 14.5%, 15%) minmax(0, 1fr); } }
+    grid-template-rows: clamp(calc(88px + env(safe-area-inset-top, 0px)), 10%, 15%) minmax(0, 1fr); }
+  @media (min-aspect-ratio: 5 / 4) { #barn { grid-template-rows: clamp(calc(88px + env(safe-area-inset-top, 0px)), 14.5%, 15%) minmax(0, 1fr); } }
   #wall { position: relative; overflow: hidden; container-type: size;
     background:
       linear-gradient(180deg, rgba(0,0,0,.18), rgba(0,0,0,0) 30%),
@@ -250,7 +251,7 @@
 
   /* ---- the tower ---- */
   #tower { grid-area: tower; position: relative; container-type: size; min-width: 0; min-height: 0; pointer-events: none; }
-  #tower > * { --T: min((100cqw - 24px) * .8, (100cqh - 44px) / 5.25, 160px); }
+  #tower > * { --T: min((100cqw - 24px) * .8, (100cqh - 44px) / 5, 160px); }
   #tprobe { position: absolute; visibility: hidden; left: 0; top: 0; }
   #tower .bale { position: absolute; left: 6px; right: 6px; bottom: 0; height: 38px; border-radius: 10px;
     background: repeating-linear-gradient(90deg, #e9c55c 0 7px, #d9ad3e 7px 9px); box-shadow: inset 0 0 0 4px #c99a32, 0 5px 0 rgba(0,0,0,.15); }
@@ -377,7 +378,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.2.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.2.1', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1227,11 +1228,15 @@ if (new URLSearchParams(location.search).has('hal')) {
   manualClock = true;
   const box = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
   window.__hal = {
-    state: () => ({ floor: [...floor], named: floor.filter((l) => named.has(l)), tower: tower.blocks(), corner: cornerOpen, speaking, invited }),
+    state: () => ({ floor: [...floor], named: floor.filter((l) => named.has(l)), tower: tower.blocks(), corner: cornerOpen, speaking, invited, door: doorOpen, dusk }),
+    // Every zone tapAt routes is listed here (a test checks), so the robot taps it and its size is measured.
     targets: () => {
       const c = cornerBtn.getBoundingClientRect();
+      const sk = skyBox();
       return [
         ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
+        { kind: 'door', ...box(doorBox()) },
+        ...(sk ? [{ kind: 'sky', ...box(sk) }] : []),
         { kind: 'floor', ...box(applyLayout().floorBox) },
         { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
       ];

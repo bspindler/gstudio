@@ -33,7 +33,7 @@ describe('runBlockBarnPlay', () => {
     expect(a.errors).toEqual([]);
     for (const v of BLOCK_BARN_VIEWPORTS) {
       const kinds = new Set(a.records.filter((r) => r.viewport === v).map((r) => r.kind));
-      expect([...kinds].sort(), v).toEqual(['animal', 'block', 'corner', 'floor', 'tower']);
+      expect([...kinds].sort(), v).toEqual(['animal', 'block', 'corner', 'door', 'floor', 'sky', 'tower']);
       expect(a.page.targets.filter((t) => t.viewport === v).length, `${v}: every target measured before every tap`).toBeGreaterThan(5 * a.records.filter((r) => r.viewport === v).length);
     }
     expect([...a.page.letters].sort()).toEqual(AZ);

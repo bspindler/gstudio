@@ -6,8 +6,8 @@ import type { Browser, CDPSession, Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closeAll, launchBrowser, newHalContext, serveGames, type HalContext, type StaticServer } from './browser.js';
 
-type Target = { kind: 'block' | 'animal' | 'tower' | 'floor' | 'corner'; letter?: string; x: number; y: number; w: number; h: number };
-type State = { floor: string[]; named: string[]; tower: string[]; corner: boolean; speaking: string | null; invited: string | null };
+type Target = { kind: 'block' | 'animal' | 'tower' | 'floor' | 'corner' | 'door' | 'sky'; letter?: string; x: number; y: number; w: number; h: number };
+type State = { floor: string[]; named: string[]; tower: string[]; corner: boolean; speaking: string | null; invited: string | null; door?: boolean; dusk?: boolean };
 
 let server: StaticServer, browser: Browser;
 const opened: HalContext[] = [];
@@ -376,6 +376,24 @@ describe('block barn page', () => {
     expect((await state(page)).tower).toHaveLength(2);
     await tap(page, await find(page, 'tower'));
     expect((await state(page)).tower).toEqual([]);
+  });
+
+  // Measurement v2, P0.4: every zone tapAt routes is a hook target, so the player taps it and bigTargets measures it.
+  // The doors (HAL-115) and the sky (HAL-120) shipped without being listed, so the scorer never touched them.
+  it('the hook lists the doors and the sky, and tapping each toggles its state', async () => {
+    const { page } = await open();
+    const ts = await targets(page);
+    for (const kind of ['door', 'sky'] as const) {
+      const t = ts.find((x) => x.kind === kind);
+      expect(t, `${kind} target`).toBeDefined();
+      expect(Math.min(t!.w, t!.h), `${kind} size`).toBeGreaterThanOrEqual(88);
+    }
+    expect((await state(page)).door).toBe(false);
+    await tap(page, await find(page, 'door'));
+    expect((await state(page)).door).toBe(true);
+    expect((await state(page)).dusk).toBe(false);
+    await tap(page, await find(page, 'sky'));
+    expect((await state(page)).dusk).toBe(true);
   });
 
   it('two fingers at once count as one tap', async () => {
