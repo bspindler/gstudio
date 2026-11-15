@@ -40,7 +40,7 @@ describe('scoreHyperline', () => {
   it('pins the bands', () => {
     expect(HYPERLINE_BANDS).toEqual({
       early: { upTo: 1, minSurvive: 0.8 }, minSurvive: 0.4, maxSurvive: 0.97, spikeJump: 0.3, minSample: 8,
-      reach: { lo: 0.35, hi: 0.65 },
+      reach: { lo: 0.35, hi: 0.65, ref: 2650 },
     });
   });
 
@@ -90,7 +90,7 @@ describe('scoreHyperline', () => {
     expect(sectorMeasures([sec(0, 7, 6), sec(1, 1, 1)], 0.5).noSpikes).toBe(100);
   });
 
-  it('reach is 100 inside [lo, hi] of until and falls linearly to 0 at 0 and at 1', () => {
+  it('reach is 100 inside [lo, hi] of reach.ref and falls linearly to 0 at 0 and at 1', () => {
     expect(reachScore(0.5)).toBe(100);
     expect(reachScore(0.35)).toBe(100);
     expect(reachScore(0.65)).toBe(100);
@@ -99,6 +99,15 @@ describe('scoreHyperline', () => {
     expect(reachScore(0.175)).toBeCloseTo(50, 6);
     expect(reachScore(0)).toBe(0);
     expect(reachScore(1)).toBe(0);
+  });
+
+  it('reach is measured against a fixed distance, so a longer course (a new sector) does not lower it', () => {
+    reset();
+    const a = scoreHyperline({ seeds: 8, until: 1900 });
+    const b = scoreHyperline({ seeds: 8, until: 1900 + 250 });
+    expect(b.levels.length).toBeGreaterThanOrEqual(a.levels.length);
+    expect(b.measures.reach).toBe(a.measures.reach);
+    expect(HYPERLINE_BANDS.reach.ref).toBeGreaterThan(0);
   });
 
   it('inBand needs sectors 2+ to be no easier than maxSurvive; sectors 0-1 keep only the lower bound', () => {

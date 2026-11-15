@@ -42,7 +42,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 
 ## P0: unblock (serial, /loop)
 
-- [ ] **P0.1 Hyperline reach doesn't shrink per sector.** `packages/core/src/hal/hyperline-score.ts` `reachScore`,
+- [x] **P0.1 Hyperline reach doesn't shrink per sector.** `packages/core/src/hal/hyperline-score.ts` `reachScore`,
   `scorers.ts` `HYPERLINE_UNTIL`. Score reach against a fixed distance (today's 2650) or as a median-death-sector
   band, not a fraction of the growing course. Test: adding a dummy sector to the course leaves `reach` unchanged.
 - [ ] **P0.2 Tension per D1.** `gate.ts` (tension regressions are notes unless targeted; result gets `notes`),

@@ -22,7 +22,7 @@ export type Scorer = {
 
 // The default ranges follow each game's own content, so a level or sector Hal (or Brian) adds is played and scored
 // like the rest: every Gearhold level; Tidepool's hand-made levels plus 10 generated ones (at least 1-30); Hyperline
-// up to 150 units into its last, endless sector (so `reach` stays a fraction of the whole course).
+// up to 150 units into its last, endless sector (reach is judged against a fixed distance, HYPERLINE_BANDS.reach.ref).
 /** Tidepool levels scored by default: the hand-made ones and 10 generated after them, at least 30. */
 export const TIDEPOOL_TO = Math.max(30, AUTHORED.length + 10);
 /** Hyperline's default `until`: 150 units into the final sector. */

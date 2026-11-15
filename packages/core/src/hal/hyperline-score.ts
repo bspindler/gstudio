@@ -14,11 +14,13 @@ export type SectorStats = { sector: number; reached: number; died: number; death
  * - later sectors need survival in [minSurvive, maxSurvive]; above maxSurvive is too easy.
  * - spikeJump: a death-rate rise between consecutive sectors that counts as a spike, judged only
  *   when both sectors were reached by >= minSample runs (fewer is seed luck, not a spike).
- * - reach: median casual distance / until scores 100 inside [lo, hi], falling linearly to 0 at 0 and 1.
+ * - reach: median casual distance / ref scores 100 inside [lo, hi], falling linearly to 0 at 0 and 1. `ref` is a fixed
+ *   distance (the scored course length when the band was set, 2026-11-15), not `until`: the course grows by a sector
+ *   at a time, and a fraction of a growing course would mark every new sector down whatever its quality.
  */
 export const HYPERLINE_BANDS = {
   early: { upTo: 1, minSurvive: 0.8 }, minSurvive: 0.4, maxSurvive: 0.97, spikeJump: 0.3, minSample: 8,
-  reach: { lo: 0.35, hi: 0.65 },
+  reach: { lo: 0.35, hi: 0.65, ref: 2650 },
 };
 
 const round2 = (x: number): number => Math.round(x * 100) / 100;
@@ -36,7 +38,7 @@ function sectorStats(sector: number, runs: CasualRun[]): SectorStats {
   return { sector, reached, died: deaths.length, deathRate: reached ? deaths.length / reached : 0, causes };
 }
 
-/** 0..100 for a median-distance fraction of until: 100 inside the reach band, linear to 0 at 0 and at 1. */
+/** 0..100 for a median-distance fraction of reach.ref: 100 inside the reach band, linear to 0 at 0 and at 1. */
 export function reachScore(frac: number): number {
   const { lo, hi } = HYPERLINE_BANDS.reach;
   const f = Math.min(1, Math.max(0, frac));
@@ -45,7 +47,7 @@ export function reachScore(frac: number): number {
   return 100;
 }
 
-/** The three measures from per-sector stats and the median distance as a fraction of until. */
+/** The three measures from per-sector stats and the median distance as a fraction of reach.ref. */
 export function sectorMeasures(levels: SectorStats[], reachFrac: number): Measures {
   const { early, minSurvive, maxSurvive, spikeJump, minSample } = HYPERLINE_BANDS;
   const inBandOk = (l: SectorStats): boolean => {
@@ -77,7 +79,7 @@ export function scoreHyperline(range: { seeds: number; until: number }): ScoreRe
   const runs = Array.from({ length: seeds }, (_, i) => casualRun(i + 1, until));
   const levels: SectorStats[] = [];
   for (let s = 0; s <= sectorAt(until - 1); s++) levels.push(sectorStats(s, runs));
-  const measures = sectorMeasures(levels, median(runs.map((r) => r.dist)) / until);
+  const measures = sectorMeasures(levels, median(runs.map((r) => r.dist)) / HYPERLINE_BANDS.reach.ref);
 
   const hardFailures: string[] = [];
   for (let seed = 1; seed <= seeds; seed++) {
