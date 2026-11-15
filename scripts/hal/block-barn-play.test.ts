@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import type { Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { BLOCK_BARN_RULES, BLOCK_BARN_VIEWPORTS, scoreBlockBarn } from '../../packages/core/src/hal/block-barn-score.js';
+import { BLOCK_BARN_RULES, BLOCK_BARN_TODDLER_TAPS, BLOCK_BARN_VIEWPORTS, scoreBlockBarn } from '../../packages/core/src/hal/block-barn-score.js';
 import { closeAll, launchBrowser, newHalContext, repo, serveGames, type StaticServer } from './browser.js';
 import { instrumentScript, runBlockBarnPlay } from './block-barn-play.js';
 
@@ -44,6 +44,24 @@ describe('runBlockBarnPlay', () => {
     expect(a.page.peakGain).toBeGreaterThan(0.05);
     expect(a.page.peakGain).toBeLessThanOrEqual(BLOCK_BARN_RULES.peakCap);
     for (const r of a.records) expect(r.ms, `${r.viewport} ${r.kind}`).toBeLessThan(50);
+    // The toddler phase: every gesture at every viewport, each answered once (a cancel never), nothing stuck.
+    for (const v of BLOCK_BARN_VIEWPORTS) {
+      const gs = a.page.gestures.filter((g) => g.viewport === v), random = gs.filter((g) => g.phase === 'random');
+      expect([...new Set(random.map((g) => g.gesture))].sort(), v).toEqual(['cancel', 'palm', 'press', 'run', 'tap', 'two']);
+      expect(random.filter((g) => g.gesture !== 'cancel'), v).toHaveLength(BLOCK_BARN_TODDLER_TAPS);
+      expect(random.some((g) => g.on === 'gap'), `${v}: some taps land in the gaps`).toBe(true);
+      expect(random.some((g) => g.gesture === 'press' && g.on === 'corner'), `${v}: a 1 s press on the corner`).toBe(true);
+      for (const g of gs) {
+        expect(g.responses, `${v} ${g.phase} ${g.gesture} on ${g.on}`).toBe(g.gesture === 'cancel' ? 0 : 1);
+        expect(g.stuck, `${v} ${g.phase} ${g.gesture} on ${g.on}`).toEqual([]);
+      }
+      const combo = (state: string, feature: string) => gs.some((g) => g.phase === 'combo' && g.state === state && g.feature === feature);
+      for (const f of ['name', 'touch:fx', 'stack', 'touch:slots']) expect(combo('door', f), `${v}: ${f} with the doors open`).toBe(true);
+      expect(combo('door', 'knock') || combo('door', 'touch:bale-bump+fx'), `${v}: the tower with the doors open`).toBe(true);
+      for (const f of ['name', 'stack', 'door']) expect(combo('dusk', f), `${v}: ${f} at dusk`).toBe(true);
+      expect(combo('door+dusk', 'knock') || combo('door+dusk', 'touch:bale-bump+fx'), `${v}: the tower with the doors open at dusk`).toBe(true);
+      expect(gs.at(-1), `${v}: a plain tap still answers at the end`).toMatchObject({ phase: 'combo', state: '', responses: 1, feature: 'touch:fx' });
+    }
     const ra = scoreBlockBarn(a.records, a.page);
     expect(ra.hardFailures).toEqual([]);
     expect(ra.measures).toEqual({ responsive: 100, noDeadEnds: 100, bigTargets: 100, alphabet: 100, calm: 100 });
@@ -55,7 +73,35 @@ describe('runBlockBarnPlay', () => {
     const shape = (rs: typeof a.records) => rs.map(({ ms: _ms, ...r }) => r);
     expect(shape(b.records)).toEqual(shape(a.records));
     expect(b.page).toEqual(a.page);
-  }, 400_000);
+  }, 900_000);
+
+  it('a barn that answers every finger of a two-finger tap or a palm fails: more than one response', async () => {
+    // The barn's own handlers ignore extra fingers; this one (on the document, so inside the dispatch) does not.
+    const extra = `document.addEventListener('pointerup', (e) => { if (e.isTrusted && !e.isPrimary) document.getElementById('fx').append(document.createElement('i')); });`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: extra });
+    expect(r.errors).toEqual([]);
+    const two = r.page.gestures.filter((g) => g.gesture === 'two'), palm = r.page.gestures.filter((g) => g.gesture === 'palm');
+    expect(two.map((g) => g.responses)).toEqual([2, 2, 2]);
+    expect(palm.map((g) => g.responses)).toEqual([5, 5, 5]);
+    const h = scoreBlockBarn(r.records, r.page).hardFailures;
+    expect(h).toContainEqual(expect.stringMatching(/^390x844 random two \d+ on \w+.*: 2 responses, expected 1$/));
+    expect(h).toContainEqual(expect.stringMatching(/^390x844 random palm \d+ on \w+.*: 5 responses, expected 1$/));
+  }, 200_000);
+
+  it('a grown-up corner that loses the lift after a 1 s press is stuck counting, then opens: a hard failure', async () => {
+    // The corner never hears a finger lift after 0.9 s or more (the scripted 3 s hold opens it before the lift anyway).
+    const lost = `(() => { let downAt = 0; const add = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (t, f, o) {
+        if (this && this.id === 'corner' && t === 'pointerdown') return add.call(this, t, (e) => { downAt = performance.now(); f(e); }, o);
+        if (this && this.id === 'corner' && (t === 'pointerup' || t === 'pointercancel' || t === 'pointerleave')) return add.call(this, t, (e) => { if (performance.now() - downAt < 900) f(e); }, o);
+        return add.call(this, t, f, o);
+      }; })();`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: lost });
+    const press = r.page.gestures.find((g) => g.gesture === 'press' && g.on === 'corner')!;
+    expect(press.stuck).toContain('the grown-up corner is still counting a hold');
+    expect(r.page.gestures.some((g) => g.stuck.includes('the grown-up corner is open'))).toBe(true);
+    expect(scoreBlockBarn(r.records, r.page).hardFailures).toContainEqual(expect.stringMatching(/^390x844 random press \d+ on corner.*: stuck: the grown-up corner is still counting a hold/));
+  }, 200_000);
 
   it('a tap answered only 300 ms later (by a timer) is not answered at all', async () => {
     // The first tap (the hay of a fresh barn) reaches the barn again 300 ms later, as an untrusted re-dispatch.
@@ -297,10 +343,10 @@ describe('block barn instrumentation', () => {
 
 describe('npm run hal -- score --game block-barn', () => {
   it('prints a score report with the five measures', () => {
-    const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/hal.ts', 'score', '--game', 'block-barn'], { cwd: repo, encoding: 'utf8', timeout: 280_000 });
+    const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/hal.ts', 'score', '--game', 'block-barn'], { cwd: repo, encoding: 'utf8', timeout: 480_000 });
     expect(r.stderr).not.toMatch(/error|unknown game/i);
     expect(r.status).toBe(0);
     for (const m of ['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm']) expect(r.stdout).toMatch(new RegExp(`^${m}: 100\\.0$`, 'm'));
     expect(r.stdout).toMatch(/^fitness: 100\.0$/m);
-  }, 300_000);
+  }, 500_000);
 });

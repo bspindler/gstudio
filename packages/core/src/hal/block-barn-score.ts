@@ -17,6 +17,24 @@ export type BlockBarnRecord = { kind: BlockBarnKind; letter?: string; ms: number
 /** One target as the hook listed it before a tap (every target, in every state visited), in CSS px. */
 export type BlockBarnTargetSize = { kind: BlockBarnKind; viewport: BlockBarnViewport; w: number; h: number };
 
+/** The toddler phase's gestures (scripts/hal/block-barn-play.ts): one finger, a run of taps, two fingers, a palm, a 1 s press, a cancel. */
+export type BlockBarnGestureKind = 'tap' | 'run' | 'two' | 'palm' | 'press' | 'cancel';
+/**
+ * One toddler gesture. `phase`: 'random' for the seeded random taps, 'combo' for the scripted taps in a state
+ * combination (doors open, dusk). `on`: the hook target kind under the first finger ('gap' when none); `state`: the
+ * barn's flags as it landed ('door', 'dusk', 'door+dusk' or ''). `responses`: how many times the page answered it
+ * (each release, and each extra finger's press, that changed the page; or once, on the first press, when nothing else
+ * did). `signature`: what the answer was (the state change, where in the barn it showed, how many sounds started);
+ * `feature`: the thing it reached (a state change such as 'name' or 'door', else where it showed). `stuck`: what the
+ * gesture left stuck (read from the hook's state and the page).
+ */
+export type BlockBarnGesture = {
+  viewport: BlockBarnViewport; phase: 'random' | 'combo'; gesture: BlockBarnGestureKind; on: string; state: string;
+  responses: number; signature: string; feature: string; stuck: string[];
+};
+/** A cancelled touch is not a tap: it must answer nothing. Every other gesture answers exactly once. */
+export const expectedResponses = (g: Pick<BlockBarnGesture, 'gesture'>): number => (g.gesture === 'cancel' ? 0 : 1);
+
 /** Page-level facts from the run. */
 export type BlockBarnPage = {
   /** Letters that reached the floor in the bounded alphabet walk. */
@@ -38,6 +56,8 @@ export type BlockBarnPage = {
   targets: BlockBarnTargetSize[];
   /** The page navigated away from the barn. */
   leftBarn: boolean;
+  /** The toddler phase at each viewport, in order. */
+  gestures: BlockBarnGesture[];
 };
 
 /**
@@ -48,6 +68,8 @@ export type BlockBarnPage = {
 export const BLOCK_BARN_RULES = { responsiveMs: 100, minTarget: 88, flashMs: 333, masterCap: 0.5, peakCap: 0.15 } as const;
 /** The alphabet walk's bound: stack-and-refill steps, two trips round the 26-letter rotation. */
 export const BLOCK_BARN_ALPHABET_STEPS = 52;
+/** The toddler phase's random taps per viewport (scripts/hal/block-barn-play.ts toddlerPlan): answering ones, cancels on top. */
+export const BLOCK_BARN_TODDLER_TAPS = 60;
 
 export type BlockBarnViewStats = { viewport: BlockBarnViewport; taps: number; responsive: number; changed: number; bigTargets: number; kinds: BlockBarnKind[] };
 
@@ -84,6 +106,8 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
   for (const v of BLOCK_BARN_VIEWPORTS) if (!records.some((r) => r.viewport === v)) hardFailures.push(`no taps at ${v}`);
   for (const v of BLOCK_BARN_VIEWPORTS) if (!targets.some((t) => t.viewport === v)) hardFailures.push(`no targets measured at ${v}`);
 
+  hardFailures.push(...gestureFailures(page.gestures ?? []));
+
   const levels: BlockBarnViewStats[] = BLOCK_BARN_VIEWPORTS.map((viewport) => {
     const rs = records.filter((r) => r.viewport === viewport), hers = targets.filter((t) => t.viewport === viewport && forHer(t));
     return {
@@ -104,4 +128,23 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
   };
   const vals = Object.values(measures);
   return { game: 'block-barn', levels, measures, fitness: round2(vals.reduce((a, b) => a + b, 0) / vals.length), hardFailures };
+}
+
+const MAX_GESTURE_FAILURES = 10;
+/** Every gesture answers exactly once (a cancel never) and leaves nothing stuck; each viewport ran the toddler phase. */
+function gestureFailures(gestures: BlockBarnGesture[]): string[] {
+  const out: string[] = [], missing: string[] = [];
+  for (const v of BLOCK_BARN_VIEWPORTS) {
+    const gs = gestures.filter((g) => g.viewport === v);
+    if (!gs.length) { missing.push(`no toddler gestures at ${v}`); continue; }
+    gs.forEach((g, i) => {
+      const what = `${v} ${g.phase} ${g.gesture} ${i + 1} on ${g.on}${g.state ? ` (${g.state})` : ''}`;
+      const want = expectedResponses(g);
+      if (g.responses !== want) out.push(`${what}: ${g.responses} response${g.responses === 1 ? '' : 's'}, expected ${want}`);
+      if (g.stuck?.length) out.push(`${what}: stuck: ${g.stuck.join('; ')}`);
+    });
+  }
+  const shown = out.slice(0, MAX_GESTURE_FAILURES);
+  if (out.length > shown.length) shown.push(`and ${out.length - shown.length} more gesture failures`);
+  return [...shown, ...missing];
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, scoreBlockBarn, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize,
+  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, scoreBlockBarn, type BlockBarnGesture, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize,
 } from '../src/hal/block-barn-score.js';
 import { blockBarnScorer, SCORERS } from '../src/hal/scorers.js';
 
@@ -15,8 +15,18 @@ const good = (): BlockBarnRecord[] => (['390x844', '1024x768'] as const).flatMap
 const sizes = (): BlockBarnTargetSize[] => (['390x844', '1024x768'] as const).flatMap((viewport) =>
   (['block', 'block', 'block', 'block', 'block', 'animal', 'animal', 'tower', 'floor', 'corner'] as const).map((kind) =>
     ({ kind, viewport, w: kind === 'corner' ? 46 : 160, h: kind === 'corner' ? 46 : 160 })));
+const gest = (over: Partial<BlockBarnGesture> = {}): BlockBarnGesture => ({
+  viewport: '390x844', phase: 'random', gesture: 'tap', on: 'floor', state: '', responses: 1, signature: 'same|fx|1', feature: 'touch:fx', stuck: [], ...over,
+});
+/** The toddler phase at each viewport: every kind of gesture, each answered once (a cancel never), nothing stuck. */
+const gestures = (): BlockBarnGesture[] => (['390x844', '1024x768'] as const).flatMap((viewport) => [
+  ...(['tap', 'run', 'run', 'run', 'two', 'palm', 'press'] as const).map((gesture) => gest({ viewport, gesture })),
+  gest({ viewport, gesture: 'cancel', responses: 0, signature: '', feature: '' }),
+  gest({ viewport, phase: 'combo', state: 'door', on: 'block', signature: 'name|slots|2', feature: 'name' }),
+  gest({ viewport, phase: 'combo', state: 'dusk', on: 'block', signature: 'name|slots|2', feature: 'name' }),
+]);
 const page = (over: Partial<BlockBarnPage> = {}): BlockBarnPage => ({
-  letters: [...AZ], voiced: [...AZ], pictured: [...AZ], flashes: 0, masterGain: 0.5, peakGain: 0.12, leftBarn: false, targets: sizes(), ...over,
+  letters: [...AZ], voiced: [...AZ], pictured: [...AZ], flashes: 0, masterGain: 0.5, peakGain: 0.12, leftBarn: false, targets: sizes(), gestures: gestures(), ...over,
 });
 
 describe('scoreBlockBarn', () => {
@@ -108,6 +118,43 @@ describe('scoreBlockBarn', () => {
     const bad = scoreBlockBarn(rs, page());
     expect(bad.hardFailures).toEqual([expect.stringMatching(/record 2 .*ms is not finite/)]);
     expect(bad.levels[0]!.taps).toBe(9);
+  });
+});
+
+describe('scoreBlockBarn: the toddler phase (measurement v2, P2)', () => {
+  it('every gesture answered once (a cancel never) and nothing stuck is no failure', () => {
+    expect(scoreBlockBarn(good(), page()).hardFailures).toEqual([]);
+  });
+  it('a two-finger tap or a palm answered twice is a hard failure; so is a tap nothing answers', () => {
+    const gs = gestures();
+    gs[4] = { ...gs[4]!, responses: 2 }; // two fingers
+    gs[5] = { ...gs[5]!, responses: 5 }; // a palm
+    gs[1] = { ...gs[1]!, responses: 0 }; // a run's tap
+    expect(scoreBlockBarn(good(), page({ gestures: gs })).hardFailures).toEqual([
+      '390x844 random run 2 on floor: 0 responses, expected 1',
+      '390x844 random two 5 on floor: 2 responses, expected 1',
+      '390x844 random palm 6 on floor: 5 responses, expected 1',
+    ]);
+  });
+  it('a cancelled touch that answers is a hard failure; the state it landed in is named', () => {
+    const gs = gestures();
+    gs[7] = { ...gs[7]!, responses: 1, state: 'door+dusk' };
+    expect(scoreBlockBarn(good(), page({ gestures: gs })).hardFailures).toEqual(['390x844 random cancel 8 on floor (door+dusk): 1 response, expected 0']);
+  });
+  it('anything left stuck after a gesture is a hard failure', () => {
+    const gs = gestures();
+    gs[18] = { ...gs[18]!, stuck: ['the grown-up corner is open'] };
+    // gestures are numbered from 1 within their viewport
+    expect(scoreBlockBarn(good(), page({ gestures: gs })).hardFailures).toEqual(['1024x768 combo tap 9 on block (door): stuck: the grown-up corner is open']);
+  });
+  it('no toddler gestures at a viewport is a hard failure', () => {
+    expect(scoreBlockBarn(good(), page({ gestures: gestures().filter((g) => g.viewport === '390x844') })).hardFailures).toEqual(['no toddler gestures at 1024x768']);
+  });
+  it('lists at most 10 gesture failures, then how many more', () => {
+    const gs = Array.from({ length: 14 }, () => gest({ responses: 2 }));
+    const h = scoreBlockBarn(good(), page({ gestures: [...gs, ...gestures()] })).hardFailures;
+    expect(h).toHaveLength(11);
+    expect(h[10]).toBe('and 4 more gesture failures');
   });
 });
 
