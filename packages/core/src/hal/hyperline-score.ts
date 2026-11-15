@@ -3,6 +3,7 @@
 import { createCourse } from '../../../../games/hyperline/lib/course.js';
 import { sectorAt } from '../../../../games/hyperline/lib/world.js';
 import { casualRun, clearable, type CasualRun } from './hyperline-bot.js';
+import { bootstrapNoise } from './noise.js';
 import type { Measures, ScoreReport } from './types.js';
 
 export type SectorStats = { sector: number; reached: number; died: number; deathRate: number; causes: Record<string, number> };
@@ -77,9 +78,15 @@ export function scoreHyperline(range: { seeds: number; until: number }): ScoreRe
     if (!Number.isInteger(v) || v < 1) throw new Error(`scoreHyperline: ${k} must be a positive integer, got ${v}`);
   }
   const runs = Array.from({ length: seeds }, (_, i) => casualRun(i + 1, until));
-  const levels: SectorStats[] = [];
-  for (let s = 0; s <= sectorAt(until - 1); s++) levels.push(sectorStats(s, runs));
-  const measures = sectorMeasures(levels, median(runs.map((r) => r.dist)) / HYPERLINE_BANDS.reach.ref);
+  const statsOf = (rs: CasualRun[]): SectorStats[] => {
+    const out: SectorStats[] = [];
+    for (let s = 0; s <= sectorAt(until - 1); s++) out.push(sectorStats(s, rs));
+    return out;
+  };
+  const measuresOf = (rs: CasualRun[]): Measures => sectorMeasures(statsOf(rs), median(rs.map((r) => r.dist)) / HYPERLINE_BANDS.reach.ref);
+  const levels = statsOf(runs);
+  const measures = measuresOf(runs);
+  const noise = bootstrapNoise(seeds, (idx) => { const m = measuresOf(idx.map((i) => runs[i]!)); return { measures: m, fitness: round2(mean(Object.values(m))) }; });
 
   const hardFailures: string[] = [];
   for (let seed = 1; seed <= seeds; seed++) {
@@ -87,5 +94,5 @@ export function scoreHyperline(range: { seeds: number; until: number }): ScoreRe
     if (ok === false) hardFailures.push(`seed ${seed}: not clearable to ${until}m`);
     else if (ok === 'unknown') hardFailures.push(`seed ${seed}: clearability unknown`);
   }
-  return { game: 'hyperline', levels, measures, fitness: round2(mean(Object.values(measures))), hardFailures };
+  return { game: 'hyperline', levels, measures, fitness: round2(mean(Object.values(measures))), hardFailures, noise };
 }

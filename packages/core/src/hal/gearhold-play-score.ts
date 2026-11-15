@@ -1,4 +1,5 @@
 // Scores Gearhold gunplay from robot play records (browser runs). Two-sided so a softer, emptier or more generous game never scores higher.
+import { bootstrapNoise } from './noise.js';
 import type { ScoreReport } from './types.js';
 import { tensionMeasure } from './tension.js';
 
@@ -48,6 +49,20 @@ function feelScore(r: number): number {
 }
 
 export function scoreGearholdPlay(records: PlayRecord[]): ScoreReport<LevelPlayStats> {
+  const report = scoreRecords(records);
+  if (!report.levels.length) return report;
+  // Seed noise: resample whole seeds (each seed's runs on every level together) and re-score.
+  const valid = records.filter((r) => Number.isFinite(r.seed) && ['win', 'dead', 'timeout'].includes(r.result));
+  const seeds = [...new Set(valid.map((r) => r.seed))].sort((a, b) => a - b);
+  const bySeed = new Map(seeds.map((sd) => [sd, valid.filter((r) => r.seed === sd)]));
+  const noise = bootstrapNoise(seeds.length, (idx) => {
+    const r = scoreRecords(idx.flatMap((i) => bySeed.get(seeds[i]!)!));
+    return { measures: r.measures, fitness: r.fitness };
+  });
+  return { ...report, noise };
+}
+
+function scoreRecords(records: PlayRecord[]): ScoreReport<LevelPlayStats> {
   if (records.length === 0) throw new Error('scoreGearholdPlay: no play records');
   const B = GEARHOLD_PLAY_BANDS;
   const hardFailures: string[] = [];

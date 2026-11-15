@@ -6,6 +6,7 @@ import { LEVELS } from '../../../../games/lanternkeep/lib/levels.js';
 import { COLS, ENEMIES, ROWS, TOWERS, TOWER_ORDER, pathCells, type Level } from '../../../../games/lanternkeep/lib/sim.js';
 import { LANTERNKEEP_STYLES, playLanternkeep, type LanternkeepPlay } from './lanternkeep-bot.js';
 import { bandScore, tensionMeasure } from './tension.js';
+import { bootstrapNoise } from './noise.js';
 import type { ScoreReport } from './types.js';
 
 export type NightStats = {
@@ -91,31 +92,48 @@ export function scoreLanternkeep(range: { seeds: number } = LANTERNKEEP_DEFAULTS
   const { seeds } = range;
   if (!Number.isInteger(seeds) || seeds < 1) throw new Error(`scoreLanternkeep: seeds must be a positive integer, got ${seeds}`);
   const hardFailures: string[] = [];
-  const nights: NightStats[] = [];
+  const perStyle = LANTERNKEEP_STYLES.length;
+  // Plays are seed-major (seed 1's styles, then seed 2's, ...), so seed index i owns plays [i*perStyle, (i+1)*perStyle).
+  const pick = (ps: LanternkeepPlay[], idx: number[]): LanternkeepPlay[] => idx.flatMap((i) => ps.slice(i * perStyle, (i + 1) * perStyle));
+  const played: Array<{ n: number; name: string; ps: LanternkeepPlay[]; errors: string[] }> = [];
   LEVELS.forEach((level, i) => {
     const n = i + 1;
     const errors = lanternkeepProblems(level);
     for (const e of errors) hardFailures.push(`night ${n}: ${e}`);
-    if (errors.length) { nights.push({ n, name: level.name, plays: 0, wins: 0, winRate: 0, closeWins: 0, avgLivesFrac: 0, errors }); return; }
+    if (errors.length) { played.push({ n, name: level.name, ps: [], errors }); return; }
     const ps = plays(level, seeds);
-    const wins = ps.filter((p) => p.won);
-    if (!wins.length) hardFailures.push(`night ${n}: no bot style or seed can win it`);
+    if (!ps.some((p) => p.won)) hardFailures.push(`night ${n}: no bot style or seed can win it`);
     if (playLanternkeep(level, { maxTowers: 0 }).won) hardFailures.push(`night ${n}: won by planting nothing`);
-    nights.push({
-      n, name: level.name, plays: ps.length, wins: wins.length, winRate: round2(wins.length / ps.length),
+    played.push({ n, name: level.name, ps, errors: [] });
+  });
+  const nightsOf = (idx: number[]): NightStats[] => played.map(({ n, name, ps: all, errors }) => {
+    if (errors.length) return { n, name, plays: 0, wins: 0, winRate: 0, closeWins: 0, avgLivesFrac: 0, errors };
+    const ps = pick(all, idx);
+    const wins = ps.filter((p) => p.won);
+    return {
+      n, name, plays: ps.length, wins: wins.length, winRate: round2(wins.length / ps.length),
       closeWins: wins.filter((p) => p.stars < 3).length,
       avgLivesFrac: round2(mean(ps.map((p) => p.lives / p.maxLives))), errors: [],
-    });
+    };
   });
 
   const watch = endlessLevel();
   const watchProblems = lanternkeepProblems(watch);
   for (const e of watchProblems) hardFailures.push(`night watch: ${e}`);
-  const watchFrac = watchProblems.length ? 0 : median(plays(watch, seeds).map((p) => p.wave)) / watch.waves.length;
+  const watchPlays = watchProblems.length ? [] : plays(watch, seeds);
+  const watchFracOf = (idx: number[]): number => (watchProblems.length ? 0 : median(pick(watchPlays, idx).map((p) => p.wave)) / watch.waves.length);
 
-  const measures = nightMeasures(nights.filter((l) => !l.errors.length), watchFrac);
-  // Fitness stays the balance measures' mean; tension is reported and gated beside it (tension.ts).
-  const fitness = round2(mean(Object.values(measures)));
-  measures.tension = tensionMeasure(nights.map((l) => ({ n: l.n, wins: l.wins, close: l.closeWins })), { skipUpTo: LANTERNKEEP_BANDS.early.upTo });
-  return { game: 'lanternkeep', levels: nights, measures, fitness, hardFailures };
+  const measuresOf = (idx: number[]): { measures: Record<string, number>; fitness: number } => {
+    const ns = nightsOf(idx);
+    const measures = nightMeasures(ns.filter((l) => !l.errors.length), watchFracOf(idx));
+    // Fitness stays the balance measures' mean; tension is reported and gated beside it (tension.ts).
+    const fitness = round2(mean(Object.values(measures)));
+    measures.tension = tensionMeasure(ns.map((l) => ({ n: l.n, wins: l.wins, close: l.closeWins })), { skipUpTo: LANTERNKEEP_BANDS.early.upTo });
+    return { measures, fitness };
+  };
+  const every = Array.from({ length: seeds }, (_, i) => i);
+  const nights = nightsOf(every);
+  const { measures, fitness } = measuresOf(every);
+  const noise = bootstrapNoise(seeds, measuresOf);
+  return { game: 'lanternkeep', levels: nights, measures, fitness, hardFailures, noise };
 }

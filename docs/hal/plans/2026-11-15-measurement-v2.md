@@ -62,7 +62,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 
 - [x] **P1.1 `ScoreReport.noise` and the D2 gate.** `types.ts`, `baseline.ts` (validate optional `noise`), `gate.ts`.
   Tests: noisy measures tolerate more; no `noise` = today's behaviour.
-- [ ] **P1.2 Scorers report noise.** Each scorer estimates a per-measure standard error (bootstrap over seeds, fixed
+- [x] **P1.2 Scorers report noise.** Each scorer estimates a per-measure standard error (bootstrap over seeds, fixed
   RNG, e.g. 200 resamples, from per-seed records it already has): `tidepool-score.ts`, `gearhold-play-score.ts`,
   `hyperline-score.ts`, `lanternkeep-score.ts`. Block Barn and static Gearhold are deterministic: noise 0.
 - [ ] **P1.3 More seeds.** `scorers.ts` defaults: Tidepool 20 → 100, Gearhold-play → 150 (check the run fits Hal's
