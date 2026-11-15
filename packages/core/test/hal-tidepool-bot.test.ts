@@ -111,4 +111,24 @@ describe('playLevel', () => {
       }
     }
   });
+
+  it('`more` plays on past `extra`: identical to a level with that many more moves', () => {
+    let lostWithExtra = 0;
+    for (const n of [11, 19, 28]) {
+      for (const s of seeds(5)) {
+        const def = levelDef(n);
+        const { wonWithExtra, wonWithMore, ...base } = playLevel(def, s, board, { extra: 5, more: def.moves });
+        expect(base).toEqual(playLevel(def, s));
+        expect(wonWithExtra).toBe(playLevel({ ...def, moves: def.moves + 5 }, s).won);
+        expect(wonWithMore).toBe(playLevel({ ...def, moves: def.moves * 2 }, s).won);
+        if (wonWithExtra) expect(wonWithMore).toBe(true);
+        else lostWithExtra++;
+      }
+    }
+    expect(lostWithExtra).toBeGreaterThan(0); // the `more` path past a +5 loss ran
+  });
+
+  it('`more` must be at least `extra`', () => {
+    expect(() => playLevel(levelDef(1), 1, board, { extra: 5, more: 3 })).toThrow(/more/);
+  });
 });

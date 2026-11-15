@@ -1,7 +1,9 @@
 // The Hal robot: a deterministic greedy player for one Tidepool level, built on the game's own engine.
 // Turn order mirrors games/tidepool-pals/index.html (move, settle, tide turn, settle), and ensureBubbles runs where the
 // game runs it (after building the board, after each collapse in settle). No helpers, boosters or continues; `extra`
-// plays on after a loss with more moves, exactly as a level with that many more moves would (the scorer's +5 check).
+// plays on after a loss with more moves, exactly as a level with that many more moves would (the scorer's +5 check),
+// and `more` (at least `extra`) plays on further to that many extra moves in all (the scorer's check that the robot's
+// losses respond to moves at all, so a +5 verdict says something about the level rather than the robot).
 //
 // Rescue-aware: a candidate move is valued on the board after its settle (and the tide turn it triggers), played out on
 // a copy with a throwaway random stream, so stranded pals reaching the exit count as rescues and pals moving nearer
@@ -153,11 +155,13 @@ function chooseSwap(e: Engine & SwapFns, x: Ctx, grid: Grid, newId: () => number
   return best;
 }
 
-/** A play, plus with `extra`: whether the loss would have been won with that many more moves. */
-export type TidepoolPlay = PlayResult & { wonWithExtra?: boolean };
+/** A play, plus with `extra` / `more`: whether the loss would have been won with that many more moves. */
+export type TidepoolPlay = PlayResult & { wonWithExtra?: boolean; wonWithMore?: boolean };
 
-export function playLevel(def: LevelDef, seed: number, e: Engine = board, opts: { extra?: number } = {}): TidepoolPlay {
+export function playLevel(def: LevelDef, seed: number, e: Engine = board, opts: { extra?: number; more?: number } = {}): TidepoolPlay {
   const extra = opts.extra ?? 0;
+  const more = opts.more ?? 0;
+  if (more > 0 && more < extra) throw new Error(`playLevel: more (${more}) must be at least extra (${extra})`);
   const kind = moveKind(e);
   const swap = e as Engine & SwapFns;
   const rng = e.mulberry32(e.hashSeed(`${def.n}:${seed}`));
@@ -225,21 +229,24 @@ export function playLevel(def: LevelDef, seed: number, e: Engine = board, opts: 
     return true;
   };
 
-  const ranOut = play();
+  let ranOut = play();
   const won = e.goalsMet(def, prog);
-  const result = finish(won);
-  if (extra > 0) {
-    let wonWithExtra = won;
-    if (!won && ranOut) {
-      // A level with `extra` more moves plays exactly this far, then turns the tide this last move skipped (it only
-      // turns while moves are left) and plays on.
-      moves = extra;
+  const result: TidepoolPlay = finish(won);
+  let given = 0;
+  /** Plays on to `total` extra moves in all; whether the level is won by then. */
+  const playOn = (total: number): boolean => {
+    if (!e.goalsMet(def, prog) && ranOut && total > given) {
+      // A level with more moves plays exactly this far, then turns the tide this last move skipped (it only turns
+      // while moves are left) and plays on.
+      moves = total - given;
+      given = total;
       if (e.tideTurns(def.tide, made)) tideTurn();
-      play();
-      wonWithExtra = e.goalsMet(def, prog);
+      ranOut = play();
     }
-    return { ...result, wonWithExtra };
-  }
+    return e.goalsMet(def, prog);
+  };
+  if (extra > 0) result.wonWithExtra = playOn(extra);
+  if (more > 0) result.wonWithMore = playOn(more);
   return result;
 
   function finish(won: boolean): PlayResult {
