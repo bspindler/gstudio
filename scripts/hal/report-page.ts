@@ -245,7 +245,7 @@ function asksBlock(c: CandidateResult): string {
 <p class="small">Why: ${esc(clip(a.why, 500))}</p>
 <p class="small muted">Judge files: ${files(a.paths)}. Game change: ${a.gameFiles.length ? files(a.gameFiles) : 'none'}.</p>
 <p class="small muted">It passed every check (tripwires, tests, typecheck, scores, screens and controls) with both changes together. Hal never applies a judge change itself: 👍 ships both, 👎 drops both.</p>
-<details class="asks-details" open><summary class="small">The judge change, in full</summary><pre class="asks-diff"><code>${esc(a.diff)}</code></pre></details>
+${a.paths.some((p) => !/\.test\.ts$/.test(p)) ? `<p class="small asks-title"><strong>This changes how Hal scores or checks the game, so the change graded itself:</strong> the scores and checks above ran with the changed judge, against a baseline from the old one. Read the judge change as a change to the rules, and re-baseline this game after shipping.</p>\n` : ''}<details class="asks-details" open><summary class="small">The judge change, in full</summary><pre class="asks-diff"><code>${esc(a.diff)}</code></pre></details>
 </div>`;
 }
 
