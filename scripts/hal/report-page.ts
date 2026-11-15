@@ -21,6 +21,11 @@ export type ReportView = {
   report: ViewReport; note: string;
   feedback: { votes: ViewVote[]; undos: ViewUndo[]; held?: HeldDecision[] };   // this run's (store.feedbackFor); held: decisions on its held features
   notes: Note[];                                          // every thread Brian has not cleared, for Tell Hal
+  /**
+   * Every held feature still waiting for Brian, from any run (the server reads refs/hal/held/ and the newest report
+   * holding each), with the run that holds it. Absent: this report's own held changes.
+   */
+  waiting?: Array<{ run: string; change: CandidateResult }>;
   /** What Hal has learned across nights (lessons.json), oldest first. */
   lessons?: Lesson[];
   approvals: string[];                                    // approved liability items
@@ -111,12 +116,32 @@ function header(v: ReportView, merged: number, dropped: number, needYou: number)
 </header>`;
 }
 
+/**
+ * The note without its own list of asks ("Where I need your direction" and the like): every ask is a card under
+ * Needs you, so the note tells the night's story and each decision shows once. The block runs from its heading (a
+ * markdown heading or a line that is only bold) to the next such heading.
+ */
+export function withoutAsks(md: string): string {
+  const lines = md.split('\n');
+  const heading = (l: string) => /^\s*(?:#{1,6}\s+\S|\*\*[^*]+\*\*:?\s*\S?)/.test(l) && !/^\s*(?:[-*+]|\d+[.)])\s/.test(l);
+  const asks = (l: string) => /^\s*(?:#{1,6}\s+|\*\*)\s*(?:where (?:i|hal) needs? you|where i need your|what i need from you|your calls|decisions? for you|needs? you)/i.test(l);
+  const out: string[] = [];
+  let skipping = false;
+  for (const l of lines) {
+    if (asks(l)) { skipping = true; continue; }
+    if (skipping && heading(l)) skipping = false;
+    if (!skipping) out.push(l);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function director(v: ReportView): string {
-  if (!v.note.trim()) return '';
+  const note = withoutAsks(v.note);
+  if (!note) return '';
   const r = v.report;
   // A reply starts a Tell Hal thread tied to this report, so Hal knows which note it answers (next run).
   return `<section><h2>${esc("Director's note")}</h2><div class="card note">
-${noteHtml(v.note)}
+${noteHtml(note)}
 <p class="sign">— Hal · ${usd(r.spend.api)} API, ${usd(r.spend.subscription)} subscription</p>
 <form method="post" action="/tell" class="reply-form note-reply">${hidden('run', r.runId)}${hidden('ref', r.runId)}<textarea name="text" rows="2" maxlength="2000" required placeholder="Reply to Hal&#39;s note" aria-label="Reply to the Director's note"></textarea><button type="submit" class="tonal inline">Reply</button></form>
 </div></section>`;
@@ -208,15 +233,15 @@ function heldState(pass: string, fb: ReportView['feedback']): State | null {
 }
 
 /** A new feature that passed every check and waits for Brian: try it, then ship or drop it. */
-function heldCard(v: ReportView, c: CandidateResult): string {
-  const run = v.report.runId;
+function heldCard(v: ReportView, c: CandidateResult, run = v.report.runId): string {
+  const from = hidden('from', v.report.runId); // come back to this page, not the run that holds the feature
   const t = c.ticket;
   const lead = c.changelog?.trim() || c.summary?.trim() || '';
   const shot = (which: 'before' | 'after') =>
     `<figure class="shot"><img src="${esc(`/shot?run=${encodeURIComponent(run)}&pass=${encodeURIComponent(c.pass)}&which=${which}`)}" alt="${esc(`${cap(which)}: ${t.title}`)}" loading="lazy"><figcaption class="tag">${cap(which)}</figcaption></figure>`;
   const forms = `<div class="grid2 votes">
-<form method="post" action="/vote" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}<input type="text" name="comment" maxlength="500" placeholder="Comment" aria-label="Comment on shipping ${esc(t.title)}"><button type="submit" class="good">👍 Ship it</button></form>
-<form method="post" action="/undo" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}<input type="text" name="reason" maxlength="500" placeholder="Why not? (optional)" aria-label="Reason to drop ${esc(t.title)}"><button type="submit" class="warn">👎 Drop it</button></form>
+<form method="post" action="/vote" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}${from}<input type="text" name="comment" maxlength="500" placeholder="Comment" aria-label="Comment on shipping ${esc(t.title)}"><button type="submit" class="good">👍 Ship it</button></form>
+<form method="post" action="/undo" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}${from}<input type="text" name="reason" maxlength="500" placeholder="Why not? (optional)" aria-label="Reason to drop ${esc(t.title)}"><button type="submit" class="warn">👎 Drop it</button></form>
 </div>`;
   return `<article class="card change held">
 <div class="label">${esc(cap(t.kind))} · ${esc(gameName(t.game))}${c.version ? ` ${esc(c.version)}` : ''} · ${esc(c.pass)}</div>
@@ -230,11 +255,6 @@ ${withState(heldState(c.pass, v.feedback), forms)}
 </article>`;
 }
 
-function waiting(v: ReportView, list: CandidateResult[]): string {
-  if (!list.length) return '';
-  return `<section><h2>Waiting for your OK</h2><p class="small muted held-hint">New features passed every check but ship only when you say so. Try one, then ship or drop it.</p><div class="changes-grid">${list.map((c) => heldCard(v, c)).join('\n')}</div></section>`;
-}
-
 function changes(v: ReportView, cards: CandidateResult[]): string {
   if (!cards.length) return '';
   return `<section><h2>Changes</h2><div class="changes-grid">${cards.map((c) => changeCard(v, c)).join('\n')}</div></section>`;
@@ -243,30 +263,56 @@ function changes(v: ReportView, cards: CandidateResult[]): string {
 /** Brian tapped "Leave it" on this call in this run: the newest vote on the item is down. */
 const isDeclined = (v: ReportView, item: string) => v.feedback.votes.filter((x) => x.item === item).at(-1)?.vote === 'down';
 
-function calls(v: ReportView): string {
+/** A liability item Hal may not decide: Approve or Leave it. */
+function callCard(v: ReportView, t: Ticket): string {
   const r = v.report;
-  if (!r.calls.length) return '';
-  const approved = new Set(v.approvals.map(normItem));
-  const cards = r.calls.map((t: Ticket) => {
-    const item = t.liability ?? '';
-    const isApproved = approved.has(normItem(item));
-    const declined = isDeclined(v, item);
-    const forms = `<div class="grid2">
+  const item = t.liability ?? '';
+  const isApproved = new Set(v.approvals.map(normItem)).has(normItem(item));
+  const forms = `<div class="grid2">
 <form method="post" action="/approve">${hidden('run', r.runId)}${hidden('item', item)}<button type="submit" class="primary">Approve</button></form>
 <form method="post" action="/decline">${hidden('run', r.runId)}${hidden('item', item)}<button type="submit">Leave it</button></form>
 </div>`;
-    const action = isApproved
-      ? `<div class="state">${pill('Approved; Hal builds it next run', 'good')}</div>`
-      : withState(declined ? { text: 'Left it for now', tone: 'accent' } : null, forms);
-    return `<div class="card call">
+  const action = isApproved
+    ? `<div class="state">${pill('Approved; Hal builds it next run', 'good')}</div>`
+    : withState(isDeclined(v, item) ? { text: 'Left it for now', tone: 'accent' } : null, forms);
+  return `<div class="card call">
 <div class="label">${esc(cap(t.kind))} · ${esc(gameName(t.game))}</div>
 <h3>${esc(t.title)}</h3>
 <p class="small muted">${esc(clip(t.why, 300))}</p>
 <p class="ask small">Needs your OK for: <strong>${esc(item)}</strong></p>
 ${action}
 </div>`;
-  });
-  return `<section><h2>Your calls</h2>${cards.join('\n')}</section>`;
+}
+
+/** Held features still waiting, from any run; this report's own held changes when the server gave none. */
+function waitingList(v: ReportView): Array<{ run: string; change: CandidateResult }> {
+  return v.waiting ?? v.report.changes.filter((c) => c.verdict === 'held').map((change) => ({ run: v.report.runId, change }));
+}
+const isAsked = (n: Note) => n.status === 'asked';
+
+/** How many things wait on Brian: undecided held features and calls, and Hal's open questions. */
+function needCount(v: ReportView): number {
+  const decided = (pass: string) => (v.feedback.held ?? []).some((h) => h.pass === pass);
+  const approved = new Set(v.approvals.map(normItem));
+  const calls = v.report.calls.filter((t) => !approved.has(normItem(t.liability ?? '')) && !isDeclined(v, t.liability ?? ''));
+  return waitingList(v).filter((w) => !decided(w.change.pass)).length + calls.length + v.notes.filter(isAsked).length;
+}
+
+/**
+ * Everything that waits on Brian, in one place and once each: held features (Try, Ship, Drop), liability calls
+ * (Approve, Leave it) and the questions Hal asked in a thread (answered right here; Tell Hal leaves them out).
+ */
+function needsYou(v: ReportView): string {
+  const run = v.report.runId;
+  const held = waitingList(v).map((w) => heldCard(v, w.change, w.run));
+  const calls = v.report.calls.map((t) => callCard(v, t));
+  const asked = v.notes.filter(isAsked).sort((a, b) => lastAt(b).localeCompare(lastAt(a))).map((n) => thread(v, n, run));
+  if (!held.length && !calls.length && !asked.length) return '';
+  return `<section class="needs"><h2>Needs you</h2><p class="small muted held-hint">Each decision shows here once. New features passed every check and ship only when you say so; try one first.</p>
+${held.length ? `<div class="changes-grid">${held.join('\n')}</div>` : ''}
+${calls.join('\n')}
+${asked.length ? `<ul class="threads">${asked.join('\n')}</ul>` : ''}
+</section>`;
 }
 
 const NOTE_STATUS: Record<string, [string, State['tone']]> = {
@@ -297,8 +343,8 @@ ${older.length ? `<details class="rest"><summary>Earlier messages (${older.lengt
 function tell(v: ReportView): string {
   const run = v.report.runId;
   const opts = gameOptions(v.games);
-  // Threads waiting on Brian first, then by newest message.
-  const order = [...v.notes].sort((a, b) => Number(b.status === 'asked') - Number(a.status === 'asked') || lastAt(b).localeCompare(lastAt(a)));
+  // Hal's questions are under Needs you; the rest, newest message first.
+  const order = v.notes.filter((n) => !isAsked(n)).sort((a, b) => lastAt(b).localeCompare(lastAt(a)));
   const threads = order.map((n) => thread(v, n, run));
   return `<section class="tell"><h2>Tell Hal</h2>
 <form method="post" action="/tell" class="card compose stack">${hidden('run', run)}
@@ -580,14 +626,11 @@ export function renderReport(v: ReportView): string {
   // Every merged change but a fix is a card (feature, polish, tuning, and any kind added later), so none goes unshown.
   const cards = merged.filter((c) => c.ticket.kind !== 'fix');
   const fixed = merged.filter((c) => c.ticket.kind === 'fix');
-  const held = r.changes.filter((c) => c.verdict === 'held');
   const gone = r.changes.filter((c) => c.verdict !== 'merged' && c.verdict !== 'held');
-  const approved = new Set(v.approvals.map(normItem));
-  const needYou = r.calls.filter((t) => !approved.has(normItem(t.liability ?? '')) && !isDeclined(v, t.liability ?? '')).length;
   const plan = r.planned ?? [];
-  const main = [waiting(v, held), director(v), play(v), calls(v), changes(v, cards), standings(v), lessons(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
+  const main = [needsYou(v), director(v), play(v), changes(v, cards), standings(v), lessons(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
   const side = `${runHal(v, r.runId)}\n<div class="side-rest">${tell(v)}\n${recent(v, r.runId)}</div>`;
-  return shell(`Hal · ${r.night}`, header(v, merged.length, gone.length, needYou + held.length), main, side, v.flash);
+  return shell(`Hal · ${r.night}`, header(v, merged.length, gone.length, needCount(v)), main, side, v.flash);
 }
 
 /** The page before Hal's first report: Run Hal and the latest reports only. */

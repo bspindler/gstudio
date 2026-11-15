@@ -402,7 +402,8 @@ describe('final fix 1: Play and refs/hal/main', () => {
     await seed();
     const calls: string[][] = [];
     const html = await (await get(mkG(async (a) => { calls.push(a); return Buffer.from('4\n'); }), '/')).text();
-    expect(calls).toEqual([['rev-list', '--count', 'HEAD..refs/hal/main']]);
+    expect(calls.filter((c) => c[0] === 'rev-list')).toEqual([['rev-list', '--count', 'HEAD..refs/hal/main']]);
+    expect(calls.map((c) => c[0]).sort()).toEqual(['for-each-ref', 'rev-list']); // and the held features, for Needs you
     expect(html).toContain('Play shows your checkout, which is 4 Hal commits behind. Run <code>git pull</code> on the Mac');
   });
   it('shows nothing when not behind, on a git failure, on junk output, or with no git', async () => {
@@ -757,15 +758,45 @@ describe('held features (ship it / drop it, and try it first)', () => {
       expect((await get(app, p)).status, p).toBe(404);
     expect((await mkGit().request(`${H}/preview/HAL-010/gearhold/index.html`)).status).toBe(404); // no token
   });
-  it('the report shows it under "Waiting for your OK" with Try it, Ship it and Drop it', async () => {
+  it('the report shows it under "Needs you" with Try it, Ship it and Drop it', async () => {
     await seedHeld();
     const html = await (await get(mk(), '/')).text();
-    const i = html.indexOf('Waiting for your OK');
+    const i = html.indexOf('Needs you');
     expect(i).toBeGreaterThan(-1);
     const sec = html.slice(i, html.indexOf('</section>', i));
     expect(sec).toContain('href="/preview/HAL-010/gearhold/index.html"');
     expect(sec).toContain('👍 Ship it');
     expect(sec).toContain('👎 Drop it');
+  });
+  it('a feature held in an earlier run, still under refs/hal/held/, is under Needs you on the latest report; decided ones are not', async () => {
+    const OLD = 'run-2026-11-09T08-00-00-000Z';
+    await seed(OLD, false, {});
+    const p = join(halDir, 'runs', OLD, 'report.json');
+    const r = JSON.parse(await readFile(p, 'utf8'));
+    r.changes.push(heldChange, change('HAL-011', ticket('T10', 'gearhold', 'feature', 'A second level'), 'held', { commit: HELD_SHA }));
+    await writeFile(p, JSON.stringify(r));
+    await seed(RUN, true, {});
+    await writeFile(join(halDir, 'feedback.json'), JSON.stringify({ votes: [], undos: [], held: [{ pass: 'HAL-011', run: OLD, decision: 'drop', status: 'done', at: 'x' }] }));
+    const app = createServerApp({
+      halDir, token: TOKEN, games: ['tidepool-pals', 'gearhold'], now: () => new Date('2026-11-11T09:00:00Z'),
+      isAlive: () => alive, startTimeOf: () => startedAt, spawnRun: (o) => { spawned.push(o); },
+      git: async (args) => {
+        if (args[0] === 'for-each-ref') return Buffer.from('refs/hal/held/HAL-010\nrefs/hal/held/HAL-011\nrefs/hal/held/not-a-pass\n');
+        throw new Error('no');
+      },
+    });
+    const html = await (await get(app, '/')).text();
+    const i = html.indexOf('Needs you');
+    const sec = html.slice(i, html.indexOf('</section>', i));
+    expect(sec).toContain('A checkpoint at the key');
+    expect(sec).toContain(`name="run" value="${OLD}"`);
+    expect(sec).toContain(`name="from" value="${RUN}"`);
+    expect(sec).not.toContain('A second level'); // dropped already
+    // shipping it from the latest page acts on the old run and comes back to the latest page
+    const res = await post(app, '/vote', form({ run: OLD, pass: 'HAL-010', from: RUN }));
+    expect(res.status).toBe(303);
+    expect(res.headers.get('location')).toBe('/');
+    expect(spawned.map((x) => x.args)).toEqual([['ship', 'HAL-010']]);
   });
   it('a held feature with a score drop says so on its card', async () => {
     await seed(RUN, true, {});

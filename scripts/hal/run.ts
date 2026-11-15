@@ -788,6 +788,8 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       results: J(R.deep({
         ...(reportOnly ? { reportOnly: 'this run was report-only: it planned but built nothing, by design' } : {}),
         changes: changes.map(brief), planned: planned.map(plannedBrief), calls, warnings,
+        // Held features from any night still waiting on Brian's Ship or Drop: each is a card on his report already.
+        waiting: (await listHeld(d.repo, { git: c.raw }).catch(() => [] as Held[])).map((h) => ({ pass: h.pass, title: h.subject })),
       })),
       notes: J(notesNow.map(noteForPrompt)),
       stagnation,

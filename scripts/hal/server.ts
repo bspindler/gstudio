@@ -16,6 +16,7 @@ import { defaultAlive, defaultStartTime, lockLive } from './lock-live.js';
 import { LIST_HEAD, renderReport, renderRunHalOnly, renderRunsIndex } from './report-page.js';
 import { phaseProgress, STATUS_JS, type StatusJson } from './status-client.js';
 import type { SpendDay } from '@studio/core/hal';
+import type { CandidateResult } from './candidate.js';
 import type { RunReport } from './run.js';
 import { GIT_TIMEOUT_MS, gitEnv } from './git.js';
 import { createStore } from './store.js';
@@ -30,6 +31,7 @@ export const RUNS_PER_PAGE = 25;
 /** A history image Hal committed: the only paths /shot will read out of git. */
 const SHOT_PATH = /^docs\/hal\/history\/([a-z0-9-]+)\/\d{4}-\d{2}-\d{2}\/(HAL-\d+)-(before|after)\.jpg$/;
 const PASS = /^HAL-\d+$/;
+const RUN_ID = /^run-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
 
 export type RunLock = { pid: number; runId: string; startedAt: string; phase?: string; trigger?: 'nightly' | 'manual' };
 export type SpawnRun = (o: { args: string[]; logPath: string }) => void;
@@ -197,10 +199,33 @@ export function createServerApp(d: ServerDeps) {
     }
     return out.sort((x, y) => y.endedAt.localeCompare(x.endedAt));
   };
+  /**
+   * Every held feature still waiting for Brian, from any run: the passes under refs/hal/held/ (this report's own held
+   * changes when git can't say), each with the newest report that holds it. A pass with a done decision is left out.
+   */
+  const waitingOf = async (r: RunReport): Promise<Array<{ run: string; change: CandidateResult }>> => {
+    let passes: string[] | null = null;
+    if (d.git) {
+      try {
+        const out = (await d.git(['for-each-ref', '--format=%(refname)', 'refs/hal/held/'])).toString('utf8');
+        passes = out.split('\n').map((l) => l.trim().slice('refs/hal/held/'.length)).filter((x) => PASS.test(x));
+      } catch { passes = null; }
+    }
+    const done = new Set(((await store.readFeedback()).held ?? []).filter((h) => h.status === 'done').map((h) => h.pass));
+    if (passes === null) return r.changes.filter((c) => c.verdict === 'held' && !done.has(c.pass)).map((change) => ({ run: r.runId, change }));
+    const want = new Set(passes.filter((x) => !done.has(x)));
+    const found = new Map<string, { run: string; change: CandidateResult }>();
+    for (const n of want.size ? await runNames() : []) {
+      const run = n === r.runId ? r : await loadRun(n);
+      for (const c of run?.changes ?? []) if (c.verdict === 'held' && want.has(c.pass) && !found.has(c.pass)) found.set(c.pass, { run: run!.runId, change: c });
+      if (found.size === want.size) break;
+    }
+    return [...found.values()].sort((a, b) => Number(a.change.pass.slice(4)) - Number(b.change.pass.slice(4)));
+  };
   /** This run's feedback, plus any done undo of one of its passes recorded under another run (e.g. a CLI `hal undo`). */
-  const feedbackOf = async (r: RunReport) => {
+  const feedbackOf = async (r: RunReport, alsoPasses: string[] = []) => {
     const [own, all] = await Promise.all([store.feedbackFor(r.runId), store.readFeedback()]);
-    const passes = new Set(r.changes.map((x) => x.pass).filter(Boolean));
+    const passes = new Set([...r.changes.map((x) => x.pass).filter(Boolean), ...alsoPasses]);
     const elsewhere = all.undos.filter((u) => u.run !== r.runId && u.status === 'done' && !!u.pass && passes.has(u.pass));
     const held = (all.held ?? []).filter((h) => passes.has(h.pass));
     return { votes: own.votes, undos: [...own.undos, ...elsewhere].sort((a, b) => String(a.at).localeCompare(String(b.at))), held };
@@ -212,16 +237,16 @@ export function createServerApp(d: ServerDeps) {
   const merged = (r: RunReport, pass: unknown) =>
     typeof pass === 'string' && PASS.test(pass) ? r.changes.find((x) => x.pass === pass && (x.verdict === 'merged' || x.verdict === 'held')) ?? null : null;
   /** Ship or drop a held feature: now when Hal is free (`hal ship|drop`), else the next run applies the saved decision. */
-  const decideHeld = async (c: Context, r: RunReport, pass: string, decision: 'ship' | 'drop') => {
+  const decideHeld = async (c: Context, r: RunReport, pass: string, decision: 'ship' | 'drop', to = r.runId) => {
     const done = ((await store.readFeedback()).held ?? []).some((h) => h.pass === pass && h.status === 'done');
-    if (done) return back(c, r.runId, 'Already decided');
+    if (done) return back(c, to, 'Already decided');
     await store.recordHeld({ pass, run: r.runId, decision, status: 'pending' });
-    if (running()) return back(c, r.runId, `${decision === 'ship' ? 'Ship' : 'Drop'} queued: Hal is busy, so the next run applies it`);
+    if (running()) return back(c, to, `${decision === 'ship' ? 'Ship' : 'Drop'} queued: Hal is busy, so the next run applies it`);
     try {
       if (!spawnRun) throw new Error('no spawn');
       spawnRun({ args: [decision, pass], logPath: join(d.halDir, 'logs', `${decision}-${stamp(now())}.log`) });
-    } catch { return back(c, r.runId, `${decision === 'ship' ? 'Ship' : 'Drop'} queued: the next run applies it`); }
-    return back(c, r.runId, decision === 'ship' ? 'Shipping: Hal puts it on main, runs ci:local and pushes' : 'Dropped');
+    } catch { return back(c, to, `${decision === 'ship' ? 'Ship' : 'Drop'} queued: the next run applies it`); }
+    return back(c, to, decision === 'ship' ? 'Shipping: Hal puts it on main, runs ci:local and pushes' : 'Dropped');
   };
 
   /** Commits on refs/hal/main that HEAD lacks (Play serves the checkout), or undefined: no ref, no git, or a failure. */
@@ -243,11 +268,12 @@ export function createServerApp(d: ServerDeps) {
       games: d.games, runs: await recentRuns(), latestRunId: latestRunId(d.halDir), ...(flash ? { flash: flash.slice(0, 300) } : {}),
     };
     if (!report) return c.html(renderRunHalOnly(base));
+    const waiting = await waitingOf(report);
     const [note, feedback, notes, approvals, playUrl, behind, lessons] = await Promise.all([
-      readNote(report.runId), feedbackOf(report), store.readNotes(), store.readApprovals(),
+      readNote(report.runId), feedbackOf(report, waiting.map((w) => w.change.pass)), store.readNotes(), store.readApprovals(),
       d.devUrl ? d.devUrl().catch(() => null) : Promise.resolve(null), behindHal(), store.readLessons(),
     ]);
-    return c.html(renderReport({ ...base, report, note, feedback, notes, approvals: approvals.map((a) => a.item), playUrl, lessons, ...(behind ? { behindHal: behind } : {}) }));
+    return c.html(renderReport({ ...base, report, note, feedback, notes, waiting, approvals: approvals.map((a) => a.item), playUrl, lessons, ...(behind ? { behindHal: behind } : {}) }));
   };
 
   app.get('/', async (c) => page(c, await loadRun(latestRunId(d.halDir))));
@@ -324,6 +350,8 @@ export function createServerApp(d: ServerDeps) {
     return c.redirect(!run || run === latestRunId(d.halDir) ? '/' : `/runs/${encodeURIComponent(run)}`, 303);
   };
   const bad = (c: Context) => c.text('bad request', 400);
+  /** The page a form came from (a held feature's card on a later report carries `from`), else the run it acts on. */
+  const backTo = (b: Record<string, unknown>, r: RunReport) => (typeof b.from === 'string' && RUN_ID.test(b.from) ? b.from : r.runId);
   /** The parsed form, or null when the body is not a form we can read (a malformed multipart throws): the caller 400s. */
   const form = async (c: Context): Promise<Record<string, unknown> | null> => {
     try { return (await c.req.parseBody()) as Record<string, unknown>; } catch { return null; }
@@ -339,7 +367,7 @@ export function createServerApp(d: ServerDeps) {
       const comment = oneLine(b.comment, 500);
       if (ch.verdict === 'held') {
         await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'up', ...(comment ? { comment } : {}) });
-        return decideHeld(c, r, ch.pass, 'ship');
+        return decideHeld(c, r, ch.pass, 'ship', backTo(b, r));
       }
       // A repeat tap of the same Keep records nothing new: the newest vote on this pass in this run already says it.
       const last = (await store.feedbackFor(r.runId)).votes.filter((v) => v.item === ch.pass).at(-1);
@@ -359,7 +387,7 @@ export function createServerApp(d: ServerDeps) {
       if (ch.verdict === 'held') {
         const given = oneLine(b.reason, 500);
         await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'down', ...(given ? { comment: given } : {}) });
-        return decideHeld(c, r, ch.pass, 'drop');
+        return decideHeld(c, r, ch.pass, 'drop', backTo(b, r));
       }
       // Already asked for on this run, or already undone by any run (a CLI `hal undo`, another report).
       const { undos } = await store.readFeedback();

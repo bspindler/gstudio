@@ -107,7 +107,7 @@ describe('renderReport', () => {
     r.planned = [ticket('T7', 'gearhold', 'feature', 'A boss rush mode')];
     const html = renderReport(view({}, r));
     // The header, then the panel (Run Hal first, so it leads on a phone), then the report.
-    const order = ['Good morning. Here&#39;s what changed.', 'Run Hal', 'Tell Hal', 'Earlier reports', 'Director&#39;s note', 'Play', 'Your calls', 'Changes',
+    const order = ['Good morning. Here&#39;s what changed.', 'Run Hal', 'Tell Hal', 'Earlier reports', 'Needs you', 'Director&#39;s note', 'Play', 'Changes',
       'Where each game stands', 'What got fixed (1)', 'Tried and dropped (1)', 'Planned, not built (1)', 'Warnings'];
     const body = html.slice(html.indexOf('<body'));
     const at = order.map((t) => body.indexOf(t));
@@ -182,7 +182,7 @@ describe('renderReport', () => {
 
   it('a call has Approve and Leave it; an approved call says so', () => {
     const html = renderReport(view());
-    const calls = section(html, 'Your calls');
+    const calls = section(html, 'Needs you');
     expect(calls).toContain('Add a leaderboard');
     expect(calls).toContain('network host api.leaders.test');
     const fs = forms(calls);
@@ -190,7 +190,7 @@ describe('renderReport', () => {
     expect(fs.find((f) => f.action === '/decline')!.fields).toEqual({ run: RUN, item: 'network host api.leaders.test' });
     expect(calls).toContain('Approve');
     expect(calls).toContain('Leave it');
-    const approved = section(renderReport(view({ approvals: ['network host api.leaders.test'] })), 'Your calls');
+    const approved = section(renderReport(view({ approvals: ['network host api.leaders.test'] })), 'Needs you');
     expect(approved).toContain('Approved; Hal builds it next run');
     expect(forms(approved).find((f) => f.action === '/approve')).toBeUndefined();
     // approving it removes it from "need you"
@@ -225,7 +225,7 @@ describe('renderReport', () => {
     expect(one).toMatch(/<div class="msg me">[\s\S]*Make the cannon louder[\s\S]*<div class="msg hal">[\s\S]*Done in HAL-004/);
   });
 
-  it('threads: a note Hal asked about comes first, says so, and its reply box asks for an answer; long threads fold their start', () => {
+  it('threads: a note Hal asked about is under Needs you, says so, and its reply box asks for an answer; long threads fold their start', () => {
     const msgs = Array.from({ length: 9 }, (_, i) => ({ from: (i % 2 ? 'hal' : 'brian') as 'hal' | 'brian', text: `m${i}`, at: `2026-11-11T2${i}:00:00Z`.replace('T29', 'T23') }));
     const html = renderReport(view({
       notes: [
@@ -235,9 +235,10 @@ describe('renderReport', () => {
       ],
     }));
     const tell = section(html, 'Tell Hal');
-    expect(tell.indexOf('id="N-002"')).toBeLessThan(tell.indexOf('id="N-003"'));
+    expect(tell).not.toContain('id="N-002"');
     expect(tell.indexOf('id="N-003"')).toBeLessThan(tell.indexOf('id="N-001"'));
-    const asked = tell.slice(tell.indexOf('id="N-002"'), tell.indexOf('id="N-003"'));
+    const needs = section(html, 'Needs you');
+    const asked = needs.slice(needs.indexOf('id="N-002"'));
     expect(asked).toContain('>Hal asked you<');
     expect(asked).toContain('placeholder="Answer Hal"');
     const long = tell.slice(tell.indexOf('id="N-001"'));
@@ -287,7 +288,7 @@ describe('renderReport', () => {
     expect(page).toContain('Wednesday, Nov 11 · manual run');
     expect(page).toContain('Planned, not built (2)');
     expect(page).toContain('Tune Kiln Heart');
-    for (const gone of ['Changes</h2>', 'Your calls', 'What got fixed', 'Tried and dropped', 'Warnings', 'Director&#39;s note']) expect(page, gone).not.toContain(gone);
+    for (const gone of ['Changes</h2>', 'Needs you', 'What got fixed', 'Tried and dropped', 'Warnings', 'Director&#39;s note']) expect(page, gone).not.toContain(gone);
     expect(page).toContain('Where each game stands');
     expect(page).toContain('Tell Hal');
     expect(page).toContain('Run Hal');
@@ -437,6 +438,62 @@ describe('renderReport', () => {
     expect(renderReport(view({ feedback: { votes: [{ run: RUN, item: LIAB, game: 'hyperline', vote: 'down', at: 'x' }], undos: [] } }))).toContain('0 need you');
     // a later up vote on the item (not a decline any more) counts it again
     expect(renderReport(view({ feedback: { votes: [{ run: RUN, item: LIAB, game: 'hyperline', vote: 'down', at: 'x' }, { run: RUN, item: LIAB, game: 'hyperline', vote: 'up', at: 'y' }], undos: [] } }))).toContain('1 need you');
+  });
+
+  it('Needs you: held features from any run, calls and Hal\'s questions in one list, each asked once', () => {
+    const OTHER = 'run-2026-11-10T08-00-00-000Z';
+    const held = change('HAL-010', ticket('T8', 'gearhold', 'feature', 'A checkpoint at the key'), 'held', { version: '0.3.0', changelog: 'Checkpoints.', shots: { before: 'b.jpg', after: 'a.jpg' } });
+    const html = renderReport(view({
+      waiting: [{ run: OTHER, change: held }],
+      notes: [
+        { id: 'N-001', at: '2026-11-11T20:00:00Z', game: 'gearhold', text: 'Make the cannon louder', status: 'acted', reply: 'Done' },
+        { id: 'N-002', at: '2026-11-10T20:00:00Z', game: 'gearhold', text: 'louder?', status: 'asked', reply: 'How loud?' },
+      ],
+    }));
+    const needs = section(html, 'Needs you');
+    // the held feature from an earlier run: Try, Ship and Drop act on its own run and come back to this page
+    expect(needs).toContain('A checkpoint at the key');
+    expect(needs).toContain('href="/preview/HAL-010/gearhold/index.html"');
+    expect(needs).toContain(`/shot?run=${OTHER}&amp;pass=HAL-010`);
+    const fs = forms(needs);
+    expect(fs.find((f) => f.action === '/vote')!.fields).toEqual({ run: OTHER, pass: 'HAL-010', from: RUN });
+    expect(fs.find((f) => f.action === '/undo')!.fields).toEqual({ run: OTHER, pass: 'HAL-010', from: RUN });
+    // the liability call
+    expect(fs.find((f) => f.action === '/approve')!.fields).toEqual({ run: RUN, item: 'network host api.leaders.test' });
+    // Hal's question, with its answer box, and only here
+    expect(needs).toContain('How loud?');
+    expect(fs.find((f) => f.action === '/notes/reply')!.fields).toEqual({ run: RUN, id: 'N-002' });
+    expect(section(html, 'Tell Hal')).not.toContain('id="N-002"');
+    expect(section(html, 'Tell Hal')).toContain('id="N-001"');
+    // one place: no second list of held features or calls
+    expect(html).not.toContain('Waiting for your OK');
+    expect(html).not.toContain('Your calls');
+    expect(html).toMatch(/>3 need you</);
+  });
+
+  it('Needs you is left out when nothing needs Brian', () => {
+    const r = fullReport();
+    r.calls = [];
+    const html = renderReport(view({}, r));
+    expect(html).not.toContain('Needs you');
+    expect(html).toContain('0 need you');
+  });
+
+  it('the Director\'s note leaves out its own list of asks: they are in Needs you, once', () => {
+    const note = [
+      '**What changed**', '- Gearhold glow cut.', '',
+      '**Where I need your direction**', '1. **Release Block Barn 0.2.0?**', '2. Swipe: take the test off the list.', '',
+      '**Housekeeping:** replayed two commits.',
+    ].join('\n');
+    const dir = section(renderReport(view({ note })), 'Director');
+    expect(dir).toContain('Gearhold glow cut.');
+    expect(dir).toContain('replayed two commits.');
+    expect(dir).not.toContain('Where I need');
+    expect(dir).not.toContain('Release Block Barn');
+    expect(dir).not.toContain('Swipe: take the test');
+    const heading = renderReport(view({ note: '## What changed\nA.\n\n## Where I need you\n- Ship it?\n\n## Next\nB.' }));
+    expect(section(heading, 'Director')).not.toContain('Ship it?');
+    expect(section(heading, 'Director')).toContain('B.');
   });
 
   it('final fix 8: no merges says "overnight" only for a nightly run', () => {
