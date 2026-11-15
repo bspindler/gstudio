@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import * as board from '../../../games/tidepool-pals/board.js';
 import type { LevelDef } from '../../../games/tidepool-pals/board.js';
 import { levelDef } from '../../../games/tidepool-pals/levels.js';
-import { playLevel } from '../src/hal/tidepool-bot.js';
+import { playLevel, type Engine } from '../src/hal/tidepool-bot.js';
 
 const seeds = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -68,5 +69,46 @@ describe('playLevel', () => {
     expect(r.shuffles).toBe(50);
     expect(r.won).toBe(false);
     expect(r.movesUsed).toBe(0);
+  });
+
+  it('calls ensureBubbles where the game does: after building the board and after every collapse', () => {
+    // index.html: startLevel runs ensureBubbles right after buildBoard; settle runs it right after each collapse.
+    const calls: string[] = [];
+    const spy: Engine = {
+      ...board,
+      buildBoard: (...a: Parameters<typeof board.buildBoard>) => { calls.push('build'); return board.buildBoard(...a); },
+      collapse: (...a: Parameters<typeof board.collapse>) => { calls.push('collapse'); return board.collapse(...a); },
+      ensureBubbles: (...a: Parameters<typeof board.ensureBubbles>) => { calls.push('bubbles'); return board.ensureBubbles(...a); },
+    };
+    playLevel(levelDef(9), 3, spy);
+    expect(calls[0]).toBe('build');
+    expect(calls[1]).toBe('bubbles');
+    expect(calls.filter((c) => c === 'collapse').length).toBeGreaterThan(5);
+    calls.forEach((c, i) => { if (c === 'collapse') expect(calls[i + 1]).toBe('bubbles'); });
+  });
+
+  it('a rescue goal larger than the bubbles on the board is winnable (ensureBubbles places the next one)', () => {
+    const layout = ['.......', '.......', '.......', '...B...', '.......', '.......', '.......', '.......'];
+    const def: LevelDef = { n: 9997, moves: 40, colors: 3, goals: [{ t: 'rescue', n: 2 }], layout };
+    expect(seeds(10).some((s) => playLevel(def, s).won)).toBe(true);
+  });
+
+  it('is rescue-aware: plays the settle out and steers stranded pals toward the exit', () => {
+    // Greedy-on-goals alone won 0.27 of these on average (20 seeds, 2026-11-15); a rough rescue-aware bot about 0.5.
+    const ns = [11, 15, 19, 25, 26];
+    const rate = ns.reduce((a, n) => a + seeds(20).filter((s) => playLevel(levelDef(n), s).won).length / 20, 0) / ns.length;
+    expect(rate).toBeGreaterThanOrEqual(0.45);
+  });
+
+  it('extra moves continue the same play: identical to a level with that many more moves', () => {
+    for (const n of [5, 11, 15, 19, 25, 26]) {
+      for (const s of seeds(4)) {
+        const def = levelDef(n);
+        const r = playLevel(def, s, board, { extra: 5 });
+        const { wonWithExtra, ...base } = r;
+        expect(base).toEqual(playLevel(def, s));
+        expect(wonWithExtra).toBe(playLevel({ ...def, moves: def.moves + 5 }, s).won);
+      }
+    }
   });
 });
