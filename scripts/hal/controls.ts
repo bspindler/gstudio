@@ -262,8 +262,9 @@ async function tidepool(run: Run) {
   try {
     const start = page.locator('[data-act="start"]').first();
     await start.waitFor({ state: 'visible', timeout: 15_000 });
-    // A string specifier, so TypeScript doesn't try to resolve the page's URL as a module.
-    const kind = await page.evaluate((u) => import(u).then((m: { MOVE?: string }) => m.MOVE ?? 'tap'), '/tidepool-pals/board.js');
+    // A source string, not a function: a bundler or vitest would rewrite a function's import() into a helper the page
+    // doesn't have (__vite_ssr_dynamic_import__).
+    const kind = await page.evaluate<string>("import('/tidepool-pals/board.js').then((m) => m.MOVE ?? 'tap')");
     await start.tap();
     await page.locator('#tiles .tile').first().waitFor({ state: 'visible', timeout: 5_000 });
     await wait(800); // entry animation

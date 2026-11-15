@@ -78,12 +78,14 @@ const FLOWS: Record<string, FlowFn> = {
   async 'tidepool-pals'(page, origin, shoot, flow) {
     await step('load map', async () => {
       await page.goto(`${origin}/tidepool-pals/index.html`);
-      await page.waitForSelector('#view-map [data-act="play-next"], #view-map [data-act="resume"]', { timeout: T });
+      // A new player lands on level 1 with its mission card up; a returning one on the map.
+      // :visible on each, since a comma list resolves to its first match in the page (here, the hidden map button).
+      await page.locator('#view-map [data-act="play-next"]:visible, #view-map [data-act="resume"]:visible, #modal [data-act="start"]:visible').first().waitFor({ timeout: T });
     });
     await settle(page);
-    await shoot(); // title / map
-    // A new player's first level sheet opens by itself; otherwise press Play to open it.
-    await step('open level sheet', async () => {
+    await shoot(); // map, or level 1's mission card over the board
+    // A new player's first mission card opens by itself; otherwise press Play to open it.
+    await step('open mission card', async () => {
       await page.waitForTimeout(SETTLE);
       if (await page.locator('#modal').isHidden()) await page.locator('#view-map [data-act="play-next"], #view-map [data-act="resume"]').first().click({ timeout: T });
       await page.locator('#modal [data-act="start"]').waitFor({ state: 'visible', timeout: T });
