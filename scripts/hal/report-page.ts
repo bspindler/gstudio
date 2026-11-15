@@ -29,7 +29,7 @@ export type ReportView = {
   /** What Hal has learned across nights (lessons.json), oldest first. */
   lessons?: Lesson[];
   approvals: string[];                                    // approved liability items
-  status: { running: boolean; phase?: string; startedAt?: string };
+  status: { running: boolean; phase?: string; startedAt?: string; series?: { at: number; of: number } };
   /** latest.json's run when the page was rendered: /hal.js offers the new report once a newer one exists. */
   latestRunId?: string | null;
   spendToday: number; capUsd: number;
@@ -424,7 +424,7 @@ function runHal(v: RunHalView, run: string): string {
   const opts = gameOptions(v.games);
   return `<section class="runhal" aria-labelledby="runhal-h"><div class="card run-card stack" data-hal-status data-running="${s.running ? '1' : '0'}" data-latest="${esc(v.latestRunId ?? '')}">
 <h2 id="runhal-h">Run Hal</h2>
-<p class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><strong data-state>${s.running ? 'Running' : 'Idle'}</strong> <span data-phase>${s.running ? esc(s.phase ?? 'starting') : ''}</span><br>
+<p class="status" role="status" aria-live="polite"><span class="dot" aria-hidden="true"></span><strong data-state>${s.running ? 'Running' : 'Idle'}</strong> <span data-series>${s.running && s.series ? `Run ${s.series.at} of ${s.series.of} · ` : ''}</span><span data-phase>${s.running ? esc(s.phase ?? 'starting') : ''}</span><br>
 <span class="small" data-since>${s.running && s.startedAt ? `since ${esc(when(s.startedAt, v.timeZone))}` : ''}</span></p>
 <progress data-progress max="1"${p !== null ? ` value="${p.toFixed(3)}"` : ''}${s.running ? '' : ' hidden'} aria-label="Run progress"></progress>
 <p class="small" data-spend>${esc(spendLine({ spendToday: v.spendToday, capUsd: v.capUsd, subscriptionToday: v.subscriptionToday ?? 0, ...(s.running && typeof v.runSpend === 'number' ? { runSpend: v.runSpend } : {}) }))}</p>
@@ -433,6 +433,8 @@ function runHal(v: RunHalView, run: string): string {
 <form method="post" action="/run" class="stack" data-run-form${s.running ? ' hidden' : ''}>${hidden('run', run)}
 <label class="label" for="run-game">Game</label>
 <select name="game" id="run-game"><option value="">All games</option>${opts}</select>
+<label class="label" for="run-times">Runs in a row</label>
+<select name="times" id="run-times">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}"${n === 1 ? ' selected' : ''}>${n}</option>`).join('')}</select>
 <label class="check"><input type="checkbox" name="reportOnly" value="1"> Report only (plan, don't build)</label>
 <button type="submit" class="primary">Run now</button>
 </form>

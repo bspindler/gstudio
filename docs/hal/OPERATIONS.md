@@ -29,7 +29,7 @@ Then:
 
 ```sh
 npm run hal -- setup        # makes .hal.env with HAL_TOKEN, prints the morning-report bookmark for your phone
-npm run hal -- install      # nightly run at 01:00 (--at HH:MM to change) and the report server, via launchd
+npm run hal -- install      # nightly run at 01:00 (--at HH:MM to change, --times N for N runs in a row) and the report server, via launchd
 npm run hal -- uninstall    # removes both launchd jobs
 ```
 
@@ -46,6 +46,7 @@ and director run on Opus. Set `HAL_IMPLEMENTER_MODEL` or `HAL_MODEL` in `.hal.en
 npm run hal -- run --report-only   # play and plan, build nothing, push nothing: a safe look
 npm run hal -- run                 # a full run now (subscription billing; --billing api to use credits)
 npm run hal -- run --game gearhold --kind fix --max-tickets 2 --no-push
+npm run hal -- run --times 3       # three runs in a row (1-10), each with its own report and push
 npm run hal -- stop                # finish the current step, skip the rest, still write the note and report
 npm run hal -- undo HAL-012 --reason "felt worse"   # reverts that pass as a new version, then pushes (--no-push to keep it local)
 npm run hal -- tell "more juice on Hyperline coins" --game hyperline   # a note for the planner
@@ -55,6 +56,12 @@ npm run hal -- approve "<item exactly as the report names it>"   # say yes to a 
 npm run hal -- spend               # API spend today and the last 7 days
 npm run hal -- serve               # the morning report on this Mac (--lan for your phone)
 ```
+
+**Runs in a row.** `--times N` (1 to 10) runs Hal N times back to back, from the CLI, from Run now ("Runs in a row",
+1 to 5) or every night (`install --times N`). Each run is an ordinary run: its own report, note and push, and the
+next one plans from what the last one did. The series stops early when a run fails, when you press Stop (the current
+run finishes as usual and the rest are skipped), or when the daily API cap is reached. While it runs, the Run Hal card
+says "Run 2 of 3".
 
 API spend is capped at $20 a day. Hal stops slicing at $19.50, so one call that overruns its slice still stays under
 the cap, and it always keeps $1 back for the night's note.

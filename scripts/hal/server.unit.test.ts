@@ -82,7 +82,7 @@ describe('GET / with no report yet', () => {
   it('shows the phase when locked by a live pid, idle when the pid is dead', async () => {
     await lock();
     const page = async () => (await get(mk(), '/')).text();
-    expect(await page()).toContain('<strong data-state>Running</strong> <span data-phase>scoring');
+    expect(await page()).toContain('<strong data-state>Running</strong> <span data-series></span><span data-phase>scoring');
     alive = false;
     expect(await page()).toContain('Idle');
   });
@@ -555,6 +555,15 @@ describe('POST', () => {
     expect(spawned[0]!.args).toEqual(['run', '--billing', 'subscription', '--game', 'gearhold', '--report-only']);
     expect(spawned[0]!.logPath).toBe(join(halDir, 'logs', 'run-2026-11-11T09-00-00-000Z.log'));
   });
+  it('/run with times runs that many in a row (--times), 1 is a plain run, and junk is refused', async () => {
+    await post(mk(), '/run', 'times=3');
+    expect(spawned[0]!.args).toEqual(['run', '--billing', 'subscription', '--times', '3']);
+    await post(mk(), '/run', 'times=1');
+    expect(spawned[1]!.args).toEqual(['run', '--billing', 'subscription']);
+    for (const bad of ['times=0', 'times=11', 'times=2.5', 'times=x', 'times=--nightly'])
+      expect((await post(mk(), '/run', bad)).status, bad).toBe(400);
+    expect(spawned).toHaveLength(2);
+  });
   it('/run with no scope runs everything', async () => {
     const r = await post(mk(), '/run');
     expect(r.status).toBe(303);
@@ -588,7 +597,7 @@ describe('POST', () => {
     await lock(); // startedAt 2026-11-11T08:00:00Z
     const get = async () => (await mk().request(`${H}/`, { headers: { cookie: `hal_token=${TOKEN}` } })).text();
     startedAt = new Date('2026-11-11T07:59:59Z'); // the run itself
-    expect(await get()).toContain('<strong data-state>Running</strong> <span data-phase>scoring');
+    expect(await get()).toContain('<strong data-state>Running</strong> <span data-series></span><span data-phase>scoring');
     expect((await post(mk(), '/run')).status).toBe(303);
     expect(spawned).toEqual([]);
     startedAt = new Date('2026-11-11T08:30:00Z'); // another process reusing the pid

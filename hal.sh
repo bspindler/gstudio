@@ -5,14 +5,14 @@
 #   ./hal.sh                 status: launchd jobs, a run in progress, the latest report
 #   ./hal.sh run [flags]     standalone: a full run now, in this terminal (Mac kept awake). Flags pass through:
 #                              --report-only  --game <slug>  --kind fix|tuning|polish|feature  --max-tickets N
-#                              --no-push  --billing api
+#                              --no-push  --billing api  --times N (N runs in a row, 1-10)
 #   ./hal.sh look            standalone: play and plan only; builds nothing, pushes nothing
 #   ./hal.sh now             launchd: start the nightly job right now, in the background (then: ./hal.sh logs)
 #   ./hal.sh stop            finish the current step, skip the rest, still write the note and report
 #   ./hal.sh logs [server]   follow the nightly log (or the report server's log)
 #   ./hal.sh restart-server  restart the report server (launchd), e.g. after a git pull changes Hal's code
 #   ./hal.sh report          print the latest report
-#   ./hal.sh install [--at HH:MM] | uninstall    add or remove the launchd jobs (nightly run + report server)
+#   ./hal.sh install [--at HH:MM] [--times N] | uninstall   add or remove the launchd jobs (nightly run + report server)
 #   ./hal.sh <anything else> passed straight to `npm run hal -- ...` (tell, notes, undo, ship, drop, spend, serve, ...)
 set -euo pipefail
 

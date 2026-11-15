@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { loadHalEnv, parseHalEnv } from './env.js';
 import { dryRun, install, parseAt, uninstall, type Launchctl } from './launchd.js';
+import { parseTimes } from './series.js';
 import { SERVER_PORT, createServerApp, probeDevUrl, realGit, realSpawnRun } from './server.js';
 
 export const OPS_COMMANDS = ['serve', 'setup', 'install', 'uninstall'] as const;
@@ -95,7 +96,7 @@ const realWhich = (bin: string): string | null => {
 const realLaunchctl: Launchctl = (a) => { execFileSync('launchctl', a, { stdio: 'ignore' }); };
 
 function installCmd(cmd: 'install' | 'uninstall', rest: string[], d: OpsDeps): number {
-  const { values } = parseArgs({ args: rest, options: { 'dry-run': { type: 'boolean' }, at: { type: 'string' } } });
+  const { values } = parseArgs({ args: rest, options: { 'dry-run': { type: 'boolean' }, at: { type: 'string' }, times: { type: 'string' } } });
   const home = d.home ?? homedir();
   const claude = (d.which ?? realWhich)('claude');
   const opts = {
@@ -105,6 +106,7 @@ function installCmd(cmd: 'install' | 'uninstall', rest: string[], d: OpsDeps): n
     repo: d.repo ?? defaultRepo(),
     halDir: d.halDir,
     at: values.at ? parseAt(values.at) : undefined,
+    times: values.times !== undefined ? parseTimes(values.times) : undefined,
     agentsDir: d.agentsDir ?? join(home, 'Library', 'LaunchAgents'),
     launchctl: d.launchctl ?? realLaunchctl,
   };

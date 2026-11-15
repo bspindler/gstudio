@@ -8,6 +8,8 @@ export const SERVER_LABEL = 'com.gstudio.hal.server';
 
 export type PlistOpts = {
   execPath: string; repo: string; halDir: string; at?: { hour: number; minute: number };
+  /** Runs in a row each night (`install --times N`); 1 or absent is one run. */
+  times?: number;
   /** Directory holding the claude binary (resolved at install time); omitted on a dry run that cannot find it. */
   claudeDir?: string;
   home: string;
@@ -62,7 +64,8 @@ ${extra}  <key>StandardOutPath</key>
 export function nightlyPlist(o: PlistOpts): string {
   const at = o.at ?? { hour: 1, minute: 0 };
   const npm = join(dirname(o.execPath), 'npm');
-  return plist(NIGHTLY_LABEL, o, ['/usr/bin/caffeinate', '-is', npm, 'run', 'hal', '--', 'run', '--nightly'],
+  const times = o.times && o.times > 1 ? ['--times', String(o.times)] : [];
+  return plist(NIGHTLY_LABEL, o, ['/usr/bin/caffeinate', '-is', npm, 'run', 'hal', '--', 'run', '--nightly', ...times],
     `  <key>StartCalendarInterval</key>\n  <dict>\n    <key>Hour</key>\n    <integer>${at.hour}</integer>\n    <key>Minute</key>\n    <integer>${at.minute}</integer>\n  </dict>\n`,
     'nightly.log');
 }

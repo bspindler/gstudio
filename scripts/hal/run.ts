@@ -65,6 +65,8 @@ export type RunOptions = {
   /** Billing the run starts with. A subscription limit switches the rest of the run to the API. */
   billing: Billing;
   push: boolean;
+  /** This run's place in a `--times N` series (series.ts); absent for a single run. Shown on the Run Hal card. */
+  series?: { at: number; of: number };
 };
 
 /** Hal's own checks of its main (not of a candidate): real ones run check-entry isolated and sandboxed in `dir`. */
@@ -474,7 +476,7 @@ export async function runNight(o: RunOptions, d: RunDeps): Promise<number> {
   const startedAt = d.now();
   let runId = `run-${stamp(startedAt)}`;
   for (let i = 2; existsSync(c.store.runDir(runId)); i++) runId = `run-${stamp(startedAt)}-${i}`;
-  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: 'lock', trigger: o.trigger }, d.isAlive, d.startTimeOf);
+  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: 'lock', trigger: o.trigger, ...(o.series ? { series: o.series } : {}) }, d.isAlive, d.startTimeOf);
   if ('busy' in lock) {
     c.log(`busy: run ${lock.busy.runId} (pid ${lock.busy.pid}) is running since ${lock.busy.startedAt}`);
     return 2;

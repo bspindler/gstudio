@@ -22,6 +22,8 @@ export type StatusJson = {
   running: boolean;
   phase?: string;
   startedAt?: string;
+  /** The running run's place in a `--times N` series; absent for a single run. */
+  series?: { at: number; of: number };
   /** 0..1, or null when unknown (the bar is then indeterminate). */
   progress: number | null;
   /** latest.json's run: the page offers the new report when it differs from the one it was rendered with. */
@@ -60,6 +62,7 @@ export const STATUS_JS = `(() => {
   function render(s) {
     el.dataset.running = s.running ? '1' : '0';
     set('[data-state]', s.running ? 'Running' : 'Idle');
+    set('[data-series]', s.running && s.series ? 'Run ' + s.series.at + ' of ' + s.series.of + ' · ' : '');
     set('[data-phase]', s.running ? (s.phase || 'starting') : '');
     started = s.running && s.startedAt ? new Date(s.startedAt) : null;
     set('[data-since]', '');

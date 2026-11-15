@@ -349,7 +349,7 @@ describe('renderReport', () => {
     const run = section(html, 'Run Hal');
     expect(run).toContain('data-hal-status data-running="1"');
     expect(run).toContain(`data-latest="${RUN}"`);
-    expect(run).toMatch(/<strong data-state>Running<\/strong> <span data-phase>build HAL-003 \(2\/4\) &lt;x&gt;<\/span>/);
+    expect(run).toMatch(/<strong data-state>Running<\/strong> <span data-series><\/span><span data-phase>build HAL-003 \(2\/4\) &lt;x&gt;<\/span>/);
     expect(run).toMatch(/since Nov 12, 8:00\sAM/);
     expect(run).toMatch(/<progress data-progress max="1" value="0\.375"/); // build 2 of 4
     expect(run).toContain('Today: $3.50 of $20.00 API · $4.25 subscription · this run $1.10');
@@ -494,6 +494,15 @@ describe('renderReport', () => {
     const heading = renderReport(view({ note: '## What changed\nA.\n\n## Where I need you\n- Ship it?\n\n## Next\nB.' }));
     expect(section(heading, 'Director')).not.toContain('Ship it?');
     expect(section(heading, 'Director')).toContain('B.');
+  });
+
+  it('Run Hal: a "Runs in a row" choice (1 to 5) on Run now; while a series runs the status says which run it is on', () => {
+    const idle = renderReport(view());
+    const f = forms(idle).find((x) => x.action === '/run')!;
+    expect(f.body).toMatch(/<select name="times"[^>]*>[\s\S]*<option value="1" selected>1<\/option>[\s\S]*<option value="5">5<\/option>/);
+    const busy = renderReport(view({ status: { running: true, phase: 'build (1/3)', startedAt: '2026-11-12T08:00:00Z', series: { at: 2, of: 3 } } }));
+    expect(busy).toContain('<span data-series>Run 2 of 3 · </span>');
+    expect(renderReport(view({ status: { running: true, phase: 'plan' } }))).toContain('<span data-series></span>');
   });
 
   it('final fix 8: no merges says "overnight" only for a nightly run', () => {

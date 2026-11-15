@@ -16,6 +16,7 @@ import { CHECK_TIMEOUT_MS, defaultCommands, resolveTools } from './candidate.js'
 import { runClaude, type ClaudeDeps } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import { loadHalEnv } from './env.js';
+import { runSeries, seriesStopReason, takeTimes } from './series.js';
 import { runNight, STOP_FILE, heldCommand, undoCommand, type CiLocal, type PlayPort, type RunDeps, type RunOptions } from './run.js';
 import { entryCheck } from './run-util.js';
 import type { ScreensResult } from './screens.js';
@@ -95,8 +96,10 @@ export async function runRunCommand(c: RunCommand, rest: string[], d: RunCmdDeps
     return 0;
   }
   if (c === 'run') {
-    const o = parseRunArgs(rest, d.games);
-    return runNight(o, (d.makeDeps ?? (() => realRunDeps(repo, d.halDir)))());
+    const { times, rest: args } = takeTimes(rest);
+    const o = parseRunArgs(args, d.games);
+    const deps = d.makeDeps ?? (() => realRunDeps(repo, d.halDir));
+    return runSeries(times, (series) => runNight(series ? { ...o, series } : o, deps()), () => seriesStopReason(d.halDir, STOP_FILE), (s) => console.log(s));
   }
   if (c === 'ship' || c === 'drop') {
     const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { 'no-push': { type: 'boolean' } } });

@@ -19,6 +19,7 @@ import type { SpendDay } from '@studio/core/hal';
 import type { CandidateResult } from './candidate.js';
 import type { RunReport } from './run.js';
 import { GIT_TIMEOUT_MS, gitEnv } from './git.js';
+import { parseTimes } from './series.js';
 import { createStore } from './store.js';
 
 export const SERVER_PORT = 5180;
@@ -33,7 +34,7 @@ const SHOT_PATH = /^docs\/hal\/history\/([a-z0-9-]+)\/\d{4}-\d{2}-\d{2}\/(HAL-\d
 const PASS = /^HAL-\d+$/;
 const RUN_ID = /^run-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
 
-export type RunLock = { pid: number; runId: string; startedAt: string; phase?: string; trigger?: 'nightly' | 'manual' };
+export type RunLock = { pid: number; runId: string; startedAt: string; phase?: string; trigger?: 'nightly' | 'manual'; series?: { at: number; of: number } };
 export type SpawnRun = (o: { args: string[]; logPath: string }) => void;
 export type ServerDeps = {
   halDir: string;
@@ -263,7 +264,7 @@ export function createServerApp(d: ServerDeps) {
     const flash = getCookie(c, FLASH);
     if (flash !== undefined) deleteCookie(c, FLASH, { path: '/' });
     const base = {
-      status: lock ? { running: true, phase: lock.phase, startedAt: lock.startedAt } : { running: false },
+      status: lock ? { running: true, phase: lock.phase, startedAt: lock.startedAt, ...(lock.series ? { series: lock.series } : {}) } : { running: false },
       ...spendOf(await store.loadSpendToday(), lock?.runId), capUsd: DAILY_CAP_USD,
       games: d.games, runs: await recentRuns(), latestRunId: latestRunId(d.halDir), ...(flash ? { flash: flash.slice(0, 300) } : {}),
     };
@@ -297,6 +298,7 @@ export function createServerApp(d: ServerDeps) {
     const lock = running();
     const body: StatusJson = {
       running: !!lock, ...(lock?.phase ? { phase: lock.phase } : {}), ...(lock?.startedAt ? { startedAt: lock.startedAt } : {}),
+      ...(lock?.series ? { series: lock.series } : {}),
       progress: lock ? phaseProgress(lock.phase) : null, latestRunId: latestRunId(d.halDir),
       ...spendOf(await store.loadSpendToday(), lock?.runId), capUsd: DAILY_CAP_USD,
     };
@@ -481,7 +483,11 @@ export function createServerApp(d: ServerDeps) {
     if (!body) return bad(c);
     const game = typeof body.game === 'string' && body.game !== '' ? body.game : null;
     if (game !== null && !d.games.includes(game)) return c.text('unknown game', 400);
-    const args = ['run', '--billing', 'subscription', ...(game ? ['--game', game] : []), ...(body.reportOnly ? ['--report-only'] : [])];
+    let times = 1;
+    if (body.times !== undefined && body.times !== '') {
+      try { times = parseTimes(typeof body.times === 'string' ? body.times : undefined); } catch { return c.text('bad times', 400); }
+    }
+    const args = ['run', '--billing', 'subscription', ...(game ? ['--game', game] : []), ...(body.reportOnly ? ['--report-only'] : []), ...(times > 1 ? ['--times', String(times)] : [])];
     if (!spawnRun) return c.text('cannot start runs here', 500);
     try {
       spawnRun({ args, logPath: join(d.halDir, 'logs', `run-${stamp(now())}.log`) });

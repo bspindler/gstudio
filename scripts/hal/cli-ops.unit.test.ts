@@ -63,6 +63,10 @@ describe('plists', () => {
     expect(x).toContain('&amp;'); expect(x).toContain('a&lt;b&gt;');
     expect(x).not.toMatch(/a<b>|node & co/);
   });
+  it('nightly honours --times: N runs in a row each night', () => {
+    expect(nightlyPlist({ ...o, times: 3 })).toMatch(/<string>--nightly<\/string>\s*<string>--times<\/string>\s*<string>3<\/string>/);
+    expect(nightlyPlist({ ...o, times: 1 })).not.toContain('--times');
+  });
   it('nightly honours --at', () => {
     expect(nightlyPlist({ ...o, at: { hour: 3, minute: 30 } })).toMatch(/<integer>3<\/integer>[\s\S]*<integer>30<\/integer>/);
   });
