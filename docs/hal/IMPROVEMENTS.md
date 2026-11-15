@@ -93,6 +93,29 @@ locked files (`recorder.js`, `audio/**`, every `SOURCES.md`, the `childDirected`
 **Open:** a real-iPhone check that speech and sound effects unlock; Brian's recordings (`docs/block-barn-recording.md`);
 HTTPS hosting, needed for in-game recording.
 
+## 10. Measurement v2: the scores steer again (added 2026-11-15)
+
+**Weak:** the 2026-11-15 review (five per-game reviews, 123 ledger passes) found only 11 of 73 kept passes moved
+fitness. Seed noise beat the gate's 0.5 gain / 1.0 tolerance, tension vetoed real gains, the bots couldn't see the
+games' mechanics, some measures punished growth or moved in 25-point steps, and fix tickets were thrown out for "no gain".
+**Done 2026-11-15 (plan `docs/hal/plans/2026-11-15-measurement-v2.md`):**
+- Gate: a tension drop is a note unless the ticket targets tension, and the opening levels 1-5 don't count toward
+  tension (D1). Tolerance and min gain widen with each measure's seed noise, `max(flat, 2·√(seB²+seA²))` (D2).
+  Fix tickets only need to avoid making things worse.
+- Every seeded scorer reports per-measure noise (a bootstrap over seeds), with more seeds: Tidepool 100, Gearhold 150,
+  Lanternkeep 12. Gearhold's visual effects have their own random stream.
+- Bots that play like people: Tidepool rescues pals and keeps bubbles; Gearhold waits out presses and shoots within
+  11 tiles; Hyperline taps with human timing noise; Lanternkeep spends its gold and plays with typical perks; Block
+  Barn has a seeded toddler phase (runs, palms, presses, cancels) over 12 seeds.
+- Measures that see design: Gearhold per-level band scores (static scorer out of fitness, new-level path); Hyperline
+  per-sector `fair`, `bites` and `tension`, scored from each sector's own start; Tidepool tiered win-rate bands with
+  a ceiling and `variety`, with `plusFive` reported beside fitness and never a target (hard rule 4); Lanternkeep
+  `watch` per style and "close" = under half the lives (D3); Block Barn `variety`, with `calm` below 100 a hard failure.
+- Baselines broke on purpose (the new numbers see more): Lanternkeep 81.75 → 53.61, Hyperline 99.88 → 90.19, Tidepool
+  87.0 → 89.81, Gearhold-play 87.37 → 87.47, Block Barn 100.
+**Open:** Block Barn's scorer now takes about 5 min (real-time browser play); the fake-clock follow-up in the plan
+should cut it. Watch the first nights for gains that the wider noise bands now reject.
+
 ## 8. Smaller issues
 
 - A CI-triggered undo tells players a change "failed an automated check", internal detail they don't need.

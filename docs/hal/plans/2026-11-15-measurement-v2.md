@@ -1,6 +1,6 @@
 # Hal measurement v2: make the scores steer again
 
-Status: in progress (started 2026-11-15). Worked by a `/loop` (P0, P1, one item per turn) and then a Workflow
+Status: P0-P3 done 2026-11-15; Hal re-enable and first run pending. Worked by a `/loop` (P0, P1, one item per turn) and then a Workflow
 (P2, P3, one agent per game in its own worktree, each with an independent review). Tick an item when it is
 committed and pushed.
 
@@ -72,32 +72,32 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 
 ## P2: bots that play like people (Workflow, one agent per game)
 
-- [ ] **Tidepool** `tidepool-bot.ts`: rescue-aware `value()` (play the settle out on a copy; reward rescues and pals
+- [x] **Tidepool** `tidepool-bot.ts`: rescue-aware `value()` (play the settle out on a copy; reward rescues and pals
   nearer the exit); call `ensureBubbles` at start and in settle exactly as `index.html` does.
-- [ ] **Gearhold** `gearhold-bot.ts`: read `press.js` (`pressState`, `PRESS`) and wait out warn/down press cells;
+- [x] **Gearhold** `gearhold-bot.ts`: read `press.js` (`pressState`, `PRESS`) and wait out warn/down press cells;
   cap firing range at ~10–12 tiles.
-- [ ] **Hyperline** `hyperline-bot.ts`: aim for the middle of the feasible jump window; fire at target +
+- [x] **Hyperline** `hyperline-bot.ts`: aim for the middle of the feasible jump window; fire at target +
   N(0, σ≈30 ms) plus a reaction delay (seeded). Re-pin slip/σ so early sectors stay in band.
-- [ ] **Lanternkeep** `lanternkeep-bot.ts`: spend past `maxTowers` when nothing is left to upgrade and gold is
+- [x] **Lanternkeep** `lanternkeep-bot.ts`: spend past `maxTowers` when nothing is left to upgrade and gold is
   plentiful; `lanternkeep-score.ts` plays each night with the perks a typical player owns by then (~2 stars a night).
-- [ ] **Block Barn** `block-barn-play.ts`: a seeded "toddler" phase (random taps incl. gaps, 3–6-tap runs on one
+- [x] **Block Barn** `block-barn-play.ts`: a seeded "toddler" phase (random taps incl. gaps, 3–6-tap runs on one
   target, two-finger/palm touches, a 1 s press, a cancel) plus state combos (doors open, dusk). Every gesture gives
   exactly one response and nothing sticks.
 
 ## P3: measures that see design (Workflow, same agents, after their P2)
 
-- [ ] **Gearhold** `gearhold-play-score.ts`: winnable, pace and feel scored per level with `bandScore` and averaged
+- [x] **Gearhold** `gearhold-play-score.ts`: winnable, pace and feel scored per level with `bandScore` and averaged
   (no 25-point steps); feel per level, not pooled. Retire static `gearhold` from fitness (keep walker problems as
   hard failures). New-level gate path: existing levels' per-level scores must hold; the new level must be within
   tolerance of its band.
-- [ ] **Hyperline** `hyperline-score.ts`: per-pattern `fair` (p10 timing window ≥ ~50 ms) and `bites` (each sector's
+- [x] **Hyperline** `hyperline-score.ts`: per-pattern `fair` (p10 timing window ≥ ~50 ms) and `bites` (each sector's
   intro mechanic kills the noisy bot 3–25% per encounter); score each sector from its own start
   (`createCourse(seed, startX)`); add tension (near-miss rate under the noisy bot).
-- [ ] **Tidepool** `tidepool-score.ts`: tiered win-rate bands with a ceiling (1–5 ≥ 0.9; 6–15 0.7–0.95; 16+ 0.45–0.85);
+- [x] **Tidepool** `tidepool-score.ts`: tiered win-rate bands with a ceiling (1–5 ≥ 0.9; 6–15 0.7–0.95; 16+ 0.45–0.85);
   a "+5 helps" measure (win-rate gain replaying with 5 more moves) that also lists levels where the offer should
   hide; a variety measure across neighbouring levels.
-- [ ] **Lanternkeep**: `watch` narrowed or per style so it stops adding a free 33 points.
-- [ ] **Block Barn** `block-barn-score.ts`: capped `variety` / discovery (distinct responses and features reached per
+- [x] **Lanternkeep**: `watch` narrowed or per style so it stops adding a free 33 points.
+- [x] **Block Barn** `block-barn-score.ts`: capped `variety` / discovery (distinct responses and features reached per
   60 random taps) against a reviewed target; `calm` below 100 is a hard failure.
 
 ## Follow-ups (after this plan)
