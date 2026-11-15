@@ -12,3 +12,10 @@ Changes:
 - HAL-121 tuning(gearhold): Gearhold: Terrace presses bar the doorway on the slam: **discarded** (0.5.1) (gearhold-play: no real gain: 0.00 < 0.5)
 - HAL-123 feature(gearhold): Gearhold: three.js renderer, WebGL2 kept as fallback: **discarded** (0.6.0) (screens gearhold: did not reach gameplay; screens gearhold: flow: load failed (page.evaluate: TypeError: Cannot set properties of undefined (setting 'needsUpdate')))
 - HAL-124 feature(gearhold): Gearhold: level 5 Cog Bridge, turning gear platforms: **held** (0.6.0)
+
+## Run run-2026-11-15T18-52-03-456Z
+
+**Gearhold 0.5.2: three.js makeover merged (HAL-127).** It keeps the brass clockwork look: same lighting, fog, shadows and sky, rebuilt on the shared three.js copy. Bloom is limited to light sources, which honours your N-018 complaint about too much glow. If three.js fails at startup or while running, the game falls back to the old renderer. The play score moved from 87.5 to 87.7. The risk is that scoring timed out four times, so the renderer has not been seen loading in a browser, and the last version crashed on load. Cog Bridge (HAL-124) is still waiting on you.
+
+Changes:
+- HAL-127 fix(gearhold): Gearhold: fix three.js renderer crash on load: **merged** (0.5.2)
