@@ -11,6 +11,17 @@ import type { Measures, ScoreReport } from './types.js';
 export const GATE = { minGain: 0.5, tolerance: 1.0, ceiling: 100, soft: ['tension'] as readonly string[] } as const;
 
 /**
+ * The gate's band for one measure: the flat value (GATE.tolerance or GATE.minGain), widened to two standard errors of
+ * the difference when the reports carry noise (operator decision D2, 2026-11-15). Fixed seed sets moved scores more
+ * than the flat 0.5 / 1.0 (Gearhold tension 35.0 / 20.9 / 21.9 on three seed blocks), so keeps and discards near the
+ * line were luck. No noise on either side: the flat value, as before.
+ */
+export function noiseBand(flat: number, seBefore: number | undefined, seAfter: number | undefined): number {
+  const b = Number.isFinite(seBefore) ? seBefore! : 0, a = Number.isFinite(seAfter) ? seAfter! : 0;
+  return Math.max(flat, 2 * Math.sqrt(b * b + a * a));
+}
+
+/**
  * `atCeiling`: score mode, but the target was already within minGain of the ceiling, so it was judged holding the line.
  * `notes`: soft-measure drops that did not discard, for the change's card and the report.
  */
@@ -46,6 +57,8 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
     if (!finite(now)) reasons.push(`after measure ${name} is not a finite number: ${String(now)}`);
   }
 
+  const band = (flat: number, key: string): number => noiseBand(flat, before.noise?.[key], after.noise?.[key]);
+  const fmtBand = (x: number): string => (Number.isInteger(x) ? String(x) : x.toFixed(2)); // "1" as before; "2.83" when noise widened it
   let gain = 0;
   let atCeiling = false;
   if (mode === 'polish') {
@@ -53,7 +66,8 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
     if (!finite(before.fitness)) reasons.push(`before fitness is not a finite number: ${String(before.fitness)}`);
     else if (finite(after.fitness)) {
       gain = after.fitness - before.fitness;
-      if (-gain > GATE.tolerance) reasons.push(`fitness regressed ${(-gain).toFixed(2)} (> ${GATE.tolerance})`);
+      const tol = band(GATE.tolerance, 'fitness');
+      if (-gain > tol) reasons.push(`fitness regressed ${(-gain).toFixed(2)} (> ${fmtBand(tol)})`);
     }
   } else {
     const b = target ? own(before.measures, target) : before.fitness;
@@ -65,8 +79,12 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
       if (b > GATE.ceiling - GATE.minGain) {
         atCeiling = true;
         const fb = before.fitness, fa = after.fitness;
-        if (finite(fb) && finite(fa) && fb - fa > GATE.tolerance) reasons.push(`fitness regressed ${(fb - fa).toFixed(2)} (> ${GATE.tolerance})`);
-      } else if (gain < GATE.minGain) reasons.push(`no real gain: ${gain.toFixed(2)} < ${GATE.minGain}`);
+        const tol = band(GATE.tolerance, 'fitness');
+        if (finite(fb) && finite(fa) && fb - fa > tol) reasons.push(`fitness regressed ${(fb - fa).toFixed(2)} (> ${fmtBand(tol)})`);
+      } else {
+        const need = band(GATE.minGain, target ?? 'fitness');
+        if (gain < need) reasons.push(`no real gain: ${gain.toFixed(2)} < ${fmtBand(need)}`);
+      }
     }
   }
 
@@ -74,8 +92,8 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
   for (const [name, was] of Object.entries(before.measures)) {
     const now = own(after.measures, name);
     if (now === undefined) reasons.push(`${name} missing from the after report (treated as a regression)`);
-    else if (finite(was) && finite(now) && was - now > GATE.tolerance) {
-      const why = `${name} regressed ${(was - now).toFixed(2)} (> ${GATE.tolerance})`;
+    else if (finite(was) && finite(now) && was - now > band(GATE.tolerance, name)) {
+      const why = `${name} regressed ${(was - now).toFixed(2)} (> ${fmtBand(band(GATE.tolerance, name))})`;
       (GATE.soft.includes(name) && name !== target ? notes : reasons).push(why);
     }
   }

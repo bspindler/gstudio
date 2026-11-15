@@ -17,4 +17,9 @@ export type Measures = Record<string, number>;
 export type ScoreReport<L = LevelStats> = {
   game: string; levels: L[]; measures: Measures; fitness: number;
   hardFailures: string[]; // non-empty means the gate must discard
+  /**
+   * Optional standard error per measure (and `fitness`), in score points, from resampling the scorer's seeds. The gate
+   * widens its tolerance and min gain to cover it (gate.ts noiseBand, operator decision D2). Deterministic scorers omit it.
+   */
+  noise?: Measures;
 };

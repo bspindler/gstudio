@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compareScores, GATE } from '../src/hal/gate.js';
+import { compareScores, GATE, noiseBand } from '../src/hal/gate.js';
 import type { ScoreReport, Measures } from '../src/hal/types.js';
 
 function report(fitness: number, measures: Measures = {}, hardFailures: string[] = [], levelCount = 20): ScoreReport {
@@ -190,5 +190,46 @@ describe('compareScores: soft measures (tension)', () => {
 
   it('no notes field when nothing soft regressed', () => {
     expect(compareScores(report(80, { tension: 50 }), report(80, { tension: 50 }), { mode: 'polish' }).notes).toBeUndefined();
+  });
+});
+
+// Operator decision D2 (2026-11-15, measurement v2): tolerance and min gain are noise-aware. A scorer reports a
+// standard error per measure (and for fitness) in ScoreReport.noise; the gate uses max(flat, 2·√(seB² + seA²)).
+describe('compareScores: noise-aware tolerance (D2)', () => {
+  const noisy = (fitness: number, measures: Measures, noise: Measures): ScoreReport => ({ ...report(fitness, measures), noise });
+
+  it('noiseBand is max(flat, 2·√(seB² + seA²)) and the flat value without noise', () => {
+    expect(noiseBand(1, undefined, undefined)).toBe(1);
+    expect(noiseBand(1, 0.1, 0.1)).toBe(1);
+    expect(noiseBand(1, 3, 4)).toBe(10);
+    expect(noiseBand(0.5, 3, undefined)).toBe(6);
+  });
+
+  it('a drop inside the noise band is not a regression', () => {
+    const r = compareScores(noisy(80, { winnable: 75 }, { winnable: 3, fitness: 1 }), noisy(80, { winnable: 70 }, { winnable: 3, fitness: 1 }), { mode: 'polish' });
+    expect(r.keep).toBe(true);
+  });
+
+  it('a drop past the noise band still discards, and the reason names the band', () => {
+    const r = compareScores(noisy(80, { winnable: 75 }, { winnable: 1 }), noisy(80, { winnable: 70 }, { winnable: 1 }), { mode: 'polish' });
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toMatch(/winnable regressed 5\.00 \(> 2\.83\)/);
+  });
+
+  it('a target gain inside the noise is not a real gain', () => {
+    const r = compareScores(noisy(80, { inBand: 70 }, { inBand: 2 }), noisy(81, { inBand: 72 }, { inBand: 2 }), { mode: 'score', target: 'inBand' });
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toMatch(/no real gain: 2\.00 < 5\.66/);
+  });
+
+  it('fitness uses noise.fitness in polish mode', () => {
+    const before = noisy(80, {}, { fitness: 2 }), after = noisy(77, {}, { fitness: 2 });
+    expect(compareScores(before, after, { mode: 'polish' }).keep).toBe(true);
+    expect(compareScores(report(80), report(77), { mode: 'polish' }).keep).toBe(false);
+  });
+
+  it('reports without noise behave exactly as before', () => {
+    expect(compareScores(report(70, { inBand: 50 }), report(70, { inBand: 48.9 }), { mode: 'polish' }).keep).toBe(false);
+    expect(compareScores(report(70, { inBand: 50 }), report(70.4, { inBand: 50.4 }), { mode: 'score', target: 'inBand' }).keep).toBe(false);
   });
 });

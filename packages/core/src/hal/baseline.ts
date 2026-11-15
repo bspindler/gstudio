@@ -20,6 +20,7 @@ function checkReport(r: unknown): ScoreReport<unknown> {
   if (!isObj(r.measures) || !Object.values(r.measures).every(num)) bad('measures must map names to finite numbers');
   if (!num(r.fitness)) bad('fitness must be a finite number');
   if (!Array.isArray(r.hardFailures) || !r.hardFailures.every((x) => typeof x === 'string')) bad('hardFailures must be a string array');
+  if (r.noise !== undefined && (!isObj(r.noise) || !Object.values(r.noise).every((v) => num(v) && (v as number) >= 0))) bad('noise must map names to non-negative finite numbers');
   return r as ScoreReport<unknown>;
 }
 

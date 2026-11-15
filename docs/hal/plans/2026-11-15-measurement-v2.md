@@ -60,7 +60,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 
 ## P1: cut the noise (serial, /loop)
 
-- [ ] **P1.1 `ScoreReport.noise` and the D2 gate.** `types.ts`, `baseline.ts` (validate optional `noise`), `gate.ts`.
+- [x] **P1.1 `ScoreReport.noise` and the D2 gate.** `types.ts`, `baseline.ts` (validate optional `noise`), `gate.ts`.
   Tests: noisy measures tolerate more; no `noise` = today's behaviour.
 - [ ] **P1.2 Scorers report noise.** Each scorer estimates a per-measure standard error (bootstrap over seeds, fixed
   RNG, e.g. 200 resamples, from per-seed records it already has): `tidepool-score.ts`, `gearhold-play-score.ts`,

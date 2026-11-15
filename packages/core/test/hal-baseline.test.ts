@@ -10,6 +10,11 @@ describe('hal baseline', () => {
     expect(parseScoreReport(JSON.stringify(report))).toEqual(report);
     expect(parseBaseline(JSON.stringify({ range, report }), 'g', K)).toEqual({ range, report });
   });
+  it('accepts an optional noise map of non-negative finite numbers, and rejects a bad one (D2)', () => {
+    const withNoise = { ...report, noise: { a: 0.5, fitness: 0.2 } };
+    expect(parseScoreReport(JSON.stringify(withNoise))).toEqual(withNoise);
+    for (const noise of [3, [], { a: 'x' }, { a: -1 }]) expect(() => parseScoreReport(JSON.stringify({ ...report, noise }))).toThrow(/corrupt baseline/);
+  });
   it('rejects garbage and wrong shapes', () => {
     for (const j of ['{', '{}', 'null', '[]', JSON.stringify({ ...report, fitness: null }), JSON.stringify({ ...report, measures: { a: 'x' } }),
       JSON.stringify({ ...report, levels: 3 }), JSON.stringify({ ...report, game: 1 }), JSON.stringify({ ...report, hardFailures: [1] })]) {
