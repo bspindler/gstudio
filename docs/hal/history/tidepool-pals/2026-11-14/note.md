@@ -20,3 +20,19 @@ Identity: rescuing trapped pals on a living reef with tides. The level 9 fix pro
 
 Changes:
 - HAL-112 fix(tidepool-pals): Tidepool: level 9 always spawns a freeable bubbled pal: **discarded** (0.7.1) (tidepool-pals: no real gain: 0.00 < 0.5)
+
+## Run run-2026-11-15T06-00-05-095Z
+
+**Identity:** a calm reef where you rescue named pals and restore pools, with sea candy and blooming coral, never a candy-match clone.
+
+- **Merged:** level 9's rescue safety net (HAL-116, 0.7.1), with a unit test. Score is flat at 89.28, as expected for a bug fix.
+- **Held:** swipe-to-swap (HAL-118). Tension 51.4 and fitness 90.5 after retuning move budgets.
+  - The pals, the trapped pal and the tides are kept.
+  - Rescue levels still trip the robot.
+  - It is not confirmed that the mission card and the coach bubble teach swiping.
+  - Its 0.8.0 label clashes with your mission-card build.
+- HAL-087's goal card overlaps the new mission card, as you expected.
+
+Changes:
+- HAL-116 fix(tidepool-pals): Tidepool: level 9 always spawns a freeable bubbled pal: **merged** (0.7.1)
+- HAL-118 feature(tidepool-pals): Tidepool: swipe to swap neighbours, match 3+ to clear: **held** (0.8.0)

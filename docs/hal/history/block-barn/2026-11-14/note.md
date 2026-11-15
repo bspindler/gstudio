@@ -7,3 +7,13 @@ Identity: a calm toddler toy of alphabet blocks and named animals, with no score
 
 Changes:
 - HAL-115 feature(block-barn): Block Barn: tap the barn door and animals trot inside: **held** (0.2.0)
+
+## Run run-2026-11-15T06-00-05-095Z
+
+**Identity:** a gentle toddler toy-box with no goals or pressure.
+
+- **Held:** tap the sky for a slow dusk and napping animals (HAL-120). It is a new interaction, not a gesture. It has no text, sound, timer or reward, and reduced motion makes it instant. The score stays at 100 (in band).
+- The barn doors (HAL-115) are live.
+
+Changes:
+- HAL-120 feature(block-barn): Block Barn: tap the sky for a slow dusk; animals nap: **held** (0.2.0)

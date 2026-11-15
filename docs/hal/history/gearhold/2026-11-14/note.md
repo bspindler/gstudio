@@ -21,3 +21,14 @@ Identity: a brass clockwork dungeon of presses, crystals and arches. Tonight aim
 Changes:
 - HAL-113 fix(gearhold): Gearhold: cut bloom strength and raise its threshold: **merged** (0.4.1)
 - HAL-114 fix(gearhold): Gearhold: remove the sideways oval screen glow: **merged** (0.4.1)
+
+## Run run-2026-11-15T06-00-05-095Z
+
+**Identity:** a brass clockwork citadel you time your way through.
+
+- **Held:** gear presses on Terrace of Dials' main route (HAL-119). They fit the identity and add more going on, but scores and pace are unchanged because the bot ignores them.
+- **Next:** presses that block the doorway on the down-beat, so timing actually matters.
+- The three.js makeover (HAL-110) and Cog Bridge (HAL-111) are still held. When they ship, bloom stays restrained after your N-018 note.
+
+Changes:
+- HAL-119 feature(gearhold): Gearhold: ticking wall-dial hazards on Terrace main route: **held** (0.5.0)
