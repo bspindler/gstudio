@@ -1,0 +1,19 @@
+{
+  "night": "2026-11-15",
+  "runs": [
+    {
+      "run": "run-2026-11-15T11-18-08-061Z",
+      "at": "2026-11-15T11:58:42.368Z",
+      "scorers": {
+        "hyperline": {
+          "fitness": 99.88,
+          "measures": {
+            "inBand": 100,
+            "noSpikes": 100,
+            "reach": 99.65
+          }
+        }
+      }
+    }
+  ]
+}
