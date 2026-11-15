@@ -172,7 +172,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.5.2', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.5.3', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -488,6 +488,8 @@ function overheadCamera() {
   const eye = [mw / 2, h, mh / 2];
   return { eye, view: M4.lookAt(eye, [mw / 2, 0, mh / 2], turned ? [1, 0, 0] : [0, 0, -1]), proj: M4.persp(vfov, asp, 0.5, h + 200) };
 }
+/** What is drawn over the world (the hands, the HUD, screen effects, messages, touch controls): left out of the overhead shots. */
+const OVERLAY_IDS = ['hands', 'hud', 'vignette', 'hurt', 'glow', 'msg', 'touchui'];
 function machineDraws(e, t, out) {
   const yaw = Math.PI / 2 - e.face;
   const dead = !!e.dead, mesh = MESH[e.kind];
@@ -1320,7 +1322,7 @@ if (HAL) {
     // Rendering only; update() and the robot's inputs are unchanged.
     overhead(on = true) {
       hal.overhead = !!on;
-      for (const id of ['hands', 'hud', 'vignette', 'hurt', 'glow', 'msg', 'touchui']) { const n = $(id); if (n) n.style.visibility = hal.overhead ? 'hidden' : ''; }
+      for (const id of OVERLAY_IDS) { const n = $(id); if (n) n.style.visibility = hal.overhead ? 'hidden' : ''; }
     },
     levels() { return LEVELS.length; },
   };

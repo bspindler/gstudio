@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as board from '../../../games/tidepool-pals/board.js';
 import type { Counts, Grid } from '../../../games/tidepool-pals/board.js';
-import { levelDef } from '../../../games/tidepool-pals/levels.js';
+import { tidepoolLevel as levelDef } from '../src/hal/fixtures/tidepool-levels.js';
 import { moveKind, playLevel, type Engine, type MoveResult } from '../src/hal/tidepool-bot.js';
 
 const seeds = (n: number) => Array.from({ length: n }, (_, i) => i + 1);

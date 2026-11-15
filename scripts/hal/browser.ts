@@ -158,3 +158,22 @@ export async function closeAll(browser?: Browser, server?: StaticServer): Promis
   await browser?.close().catch(() => {});
   await server?.close().catch(() => {});
 }
+
+/**
+ * Lanternkeep: a free tile to plant on at the start of a night, 3,2 when it is free, else the nearest free one (ties:
+ * reading order), by the game's own rules (sim.canBuild). Source text, so it runs in the page against whichever tree
+ * is served; the controls and screenshot checks tap it on night 1 (LANTERNKEEP_PLANT_CELL), never a pinned tile.
+ */
+export const LANTERNKEEP_PLANT_CELL_FN = `(level, sim) => {
+  const g = sim.createGame(level);
+  let best = null, bestD = Infinity;
+  for (let r = 0; r < sim.ROWS; r++) for (let c = 0; c < sim.COLS; c++) {
+    if (!sim.canBuild(g, c, r)) continue;
+    const d = Math.abs(c - 3) + Math.abs(r - 2);
+    if (d < bestD) { best = [c, r]; bestD = d; }
+  }
+  if (!best) throw new Error('lanternkeep: no free tile on ' + level.name);
+  return best;
+}`;
+/** In the page (served at /): night 1's plant cell, as [col, row]. */
+export const LANTERNKEEP_PLANT_CELL = `Promise.all([import('/lanternkeep/lib/levels.js'), import('/lanternkeep/lib/sim.js')]).then(([{ LEVELS }, sim]) => (${LANTERNKEEP_PLANT_CELL_FN})(LEVELS[0], sim))`;

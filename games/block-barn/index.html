@@ -378,7 +378,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.2.2', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.2.3', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1065,6 +1065,23 @@ function hitBoxes() {
   out.push({ kind: 'tower', ...towerBox() });
   return out;
 }
+/**
+ * Every zone tapAt routes, plus the bare hay and the grown-up corner, as CSS px boxes: what the test robot taps and
+ * measures (its ?hal hook returns this list). A new tappable thing gets its box here too; a test checks this list
+ * against tapAt's branches.
+ */
+function tapZones() {
+  const box = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
+  const c = cornerBtn.getBoundingClientRect();
+  const sk = skyBox();
+  return [
+    ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
+    { kind: 'door', ...box(doorBox()) },
+    ...(sk ? [{ kind: 'sky', ...box(sk) }] : []),
+    { kind: 'floor', ...box(applyLayout().floorBox) },
+    { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
+  ];
+}
 function distTo(b, x, y) {
   const dx = Math.max(b.x - x, 0, x - (b.x + b.w)), dy = Math.max(b.y - y, 0, y - (b.y + b.h));
   return Math.hypot(dx, dy);
@@ -1231,21 +1248,11 @@ reseed(seedNow);
 // robot decides when 8 s have passed. Nothing here touches the network: the SDK is in no-ingest mode above.
 if (new URLSearchParams(location.search).has('hal')) {
   manualClock = true;
-  const box = (r) => ({ x: r.x, y: r.y, w: r.w, h: r.h });
   window.__hal = {
     state: () => ({ floor: [...floor], named: floor.filter((l) => named.has(l)), tower: tower.blocks(), corner: cornerOpen, speaking, invited, door: doorOpen, dusk }),
-    // Every zone tapAt routes is listed here (a test checks), so the robot taps it and its size is measured.
-    targets: () => {
-      const c = cornerBtn.getBoundingClientRect();
-      const sk = skyBox();
-      return [
-        ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
-        { kind: 'door', ...box(doorBox()) },
-        ...(sk ? [{ kind: 'sky', ...box(sk) }] : []),
-        { kind: 'floor', ...box(applyLayout().floorBox) },
-        { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
-      ];
-    },
+    // The game's own zone list (tapZones, next to tapAt; a test checks it against tapAt), so the robot taps every zone
+    // and measures its size, and a new zone needs no change here.
+    targets: () => tapZones(),
     idle: (ms) => advanceQuiet(Number(ms) || 0),
     seed: (n) => reseed(Number(n) || 0),
   };

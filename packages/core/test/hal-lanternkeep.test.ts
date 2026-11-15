@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { LEVELS } from '../../../games/lanternkeep/lib/levels.js';
 import type { Level } from '../../../games/lanternkeep/lib/sim.js';
-import { PERKS, sparksSpent } from '../../../games/lanternkeep/lib/meta.js';
+import { PERKS, canTake, modsFor, sparksSpent } from '../../../games/lanternkeep/lib/meta.js';
+import { TYPICAL_STARS_PER_NIGHT } from '../src/hal/lanternkeep-score.js';
 import {
   LANTERNKEEP_BANDS, LANTERNKEEP_STYLES, isCloseWin, lanternkeepProblems, nightMeasures, nightPerks, playLanternkeep, playWatch,
   scoreLanternkeep, SCORERS, typicalPerks, type LanternkeepPlay, type NightStats,
@@ -48,19 +49,30 @@ describe('hal lanternkeep: close wins (operator decision D3)', () => {
 });
 
 describe('hal lanternkeep: typical perks', () => {
+  // Checked against the game's own perk list and spark rules (meta.js), never a list of today's perks: Hal may add,
+  // reorder or reprice perks without touching this protected file.
+  const total = sparksSpent(PERKS.map((p) => p.id));
+  const stars = Array.from({ length: total + 3 }, (_, s) => s);
+
   it('spends the sparks a player has, in the order the perk screen lists them', () => {
-    expect(typicalPerks(0)).toEqual([]);
-    expect(typicalPerks(2)).toEqual([]);
-    expect(typicalPerks(4)).toEqual(['wick']);
-    expect(typicalPerks(10)).toEqual(['wick', 'purse', 'spores']);
-    for (let s = 0; s <= 45; s++) expect(sparksSpent(typicalPerks(s))).toBeLessThanOrEqual(s);
-    expect(typicalPerks(99)).toEqual(PERKS.map((x) => x.id));
+    for (const s of stars) {
+      const owned = typicalPerks(s);
+      const order = owned.map((id) => PERKS.findIndex((p) => p.id === id));
+      expect(order.every((k, i) => k >= 0 && (i === 0 || k > order[i - 1]!)), `${s}: in the perk screen's order`).toBe(true);
+      expect(sparksSpent(owned), `${s}: within the sparks`).toBeLessThanOrEqual(s);
+      // Taken top to bottom: the first perk the sparks cover is lit, and nothing left over could still be lit.
+      const first = PERKS.find((p) => canTake(s, [], p.id));
+      if (first) expect(owned[0], `${s}: the first affordable perk`).toBe(first.id);
+      else expect(owned, `${s}: nothing affordable`).toEqual([]);
+      for (const p of PERKS) if (!owned.includes(p.id)) expect(canTake(s, owned, p.id), `${s}: ${p.id} left unlit with sparks to spare`).toBe(false);
+    }
+    expect(typicalPerks(total)).toEqual(PERKS.map((p) => p.id));
+    expect(typicalPerks(total + 50)).toEqual(PERKS.map((p) => p.id));
   });
 
-  it('gives night n the perks of about two stars per earlier night', () => {
-    expect(nightPerks(1)).toEqual({});
-    expect(nightPerks(3)).toEqual({ lives: 3 });
-    expect(nightPerks(6)).toEqual({ lives: 3, gold: 40, glowcapDiscount: 0.2 });
+  it('gives night n the perks of TYPICAL_STARS_PER_NIGHT stars per earlier night', () => {
+    expect(nightPerks(1)).toEqual(modsFor(typicalPerks(0)));
+    for (let n = 1; n <= LEVELS.length + 1; n++) expect(nightPerks(n), `night ${n}`).toEqual(modsFor(typicalPerks(TYPICAL_STARS_PER_NIGHT * (n - 1))));
   });
 });
 
@@ -89,8 +101,21 @@ describe('hal lanternkeep: bot spending', () => {
     expect(playLanternkeep(lane(60), { maxTowers: 1 }).towers).toBeLessThanOrEqual(1);
   });
 
-  it('stops hoarding on a hard night (night 14, four plants)', () => {
-    const p = playLanternkeep(LEVELS[13]!, { maxTowers: 4, seed: 1 });
+  // A copy of night 14 as it was on 2026-11-15, so this checks the bot, not the night: Hal may retune or move the
+  // real one without touching this protected file.
+  const HARD_NIGHT: Level = {
+    name: 'Ashen Loop', intro: '', lives: 20, hpMul: 1.2, region: 'ember', towers: ['glowcap', 'frost', 'ember', 'sunspire'], gold: 360,
+    paths: [[[-1, 11], [1, 11], [1, 1], [7, 1], [7, 11], [3, 11]]],
+    waves: [
+      [['moth', 30, 0.3]], [['beetle', 16, 0.6]], [['firefly', 50, 0.14], ['wisp', 10, 0.5, 3]], [['mossback', 6, 1.2], ['beetle', 12, 0.6, 2]],
+      [['toad', 4, 2.5]], [['wisp', 30, 0.3], ['moth', 30, 0.25, 2]], [['mothmother', 2, 4], ['mossback', 4, 1.5, 2]],
+      [['beetle', 30, 0.35], ['firefly', 40, 0.15, 2]], [['toad', 4, 2], ['mothmother', 1, 1, 6], ['mossback', 6, 1, 3]],
+    ],
+  } as Level;
+
+  it('stops hoarding on a hard night (four plants, a long loop)', () => {
+    expect(lanternkeepProblems(HARD_NIGHT)).toEqual([]);
+    const p = playLanternkeep(HARD_NIGHT, { maxTowers: 4, seed: 1 });
     expect(p.towers).toBeGreaterThan(4);
   });
 });

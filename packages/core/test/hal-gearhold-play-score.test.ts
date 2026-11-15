@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { LEVELS } from '../../../games/gearhold/levels.js';
 import { GEARHOLD_PLAY_BANDS, scoreGearholdPlay as scoreWith, type PlayRecord } from '../src/hal/gearhold-play-score.js';
+import { walkLevel } from '../src/hal/gearhold-walk.js';
 
 /** A sealed hall whose walker route is `k` tiles (S at x=1, the exit at x=k+2). */
 const hall = (k: number): string[] => [
@@ -162,7 +163,9 @@ describe('scoreGearholdPlay', () => {
   it("uses the game's own maps by default", () => {
     const r = scoreWith(block(0, 10, 9));
     expect(r.hardFailures).toEqual([]);
-    expect(r.levels[0]!.routeTiles).toBe(28);
+    // The first level's own route, whatever its map is today.
+    expect(r.levels[0]!.routeTiles).toBe(walkLevel(LEVELS[0]!.map).route.length - 1);
+    expect(r.levels[0]!.routeTiles).not.toBe(72); // not the injected test halls
     expect(LEVELS.length).toBeGreaterThan(0);
   });
 

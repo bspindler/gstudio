@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { levelDef, validateLevel, withoutTides } from '../../../games/tidepool-pals/levels.js';
+import { tidepoolLevel } from '../src/hal/fixtures/tidepool-levels.js';
 import { TIDEPOOL_BANDS, goalReachOf, inBandOf, levelTags, plusFiveOf, scoreTidepool, tierBand, varietyScore } from '../src/hal/tidepool-score.js';
 
-const inject = vi.hoisted(() => ({ bad: false }));
+// `frozen` plays the frozen copies of the levels (fixtures/tidepool-levels.ts) instead of the game's: a test that needs
+// a level with a given character (one the robot cannot win) uses them, so retuning the game never touches this file.
+const inject = vi.hoisted(() => ({ bad: false, frozen: false }));
 vi.mock('../../../games/tidepool-pals/levels.js', async (orig) => {
   const real = await orig<typeof import('../../../games/tidepool-pals/levels.js')>();
   return {
     ...real,
+    levelDef: (n: number) => (inject.frozen ? tidepoolLevel(n) : real.levelDef(n)),
     validateLevel: (def: Parameters<typeof real.validateLevel>[0]) =>
       inject.bad && def.n === 3 ? ['bad layout'] : real.validateLevel(def),
   };
@@ -76,7 +80,9 @@ describe('scoreTidepool', () => {
   });
 
   it('the robot-stuck levels get no +5 verdict and are listed', () => {
-    const r = scoreTidepool({ from: 11, to: 11, seeds: 20 });
+    inject.frozen = true; // level 11 as it was on 2026-11-15: the robot fails it whatever its move budget
+    let r: ReturnType<typeof scoreTidepool>;
+    try { r = scoreTidepool({ from: 11, to: 11, seeds: 20 }); } finally { inject.frozen = false; }
     const l11 = r.levels[0]!;
     expect(l11.winRateDoubled).toBeGreaterThanOrEqual(l11.winRatePlusFive);
     expect(l11.botStuck).toBe(true);
@@ -84,6 +90,7 @@ describe('scoreTidepool', () => {
   });
 
   it('variety: back-to-back repeats score lower; the opening is left out', () => {
+    const levelDef = tidepoolLevel; // frozen copies: two generated levels with the same tags, and a mixed run
     const a = levelDef(25), b = levelDef(26);
     expect(levelTags({ ...a, n: 10 })).toEqual(levelTags({ ...b, n: 11 }));
     expect(varietyScore([{ ...a, n: 10 }, { ...b, n: 11 }])).toBe(0);
