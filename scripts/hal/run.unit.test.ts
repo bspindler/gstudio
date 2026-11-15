@@ -430,6 +430,44 @@ describe('new features wait for Brian', () => {
   }, 120_000);
 });
 
+describe('"Hal asks": a protected-change request is held and recorded', () => {
+  const JUDGE = 'packages/core/test/hal-hyperline-score.test.ts';
+  const SECTOR = T('T7', 'A fourth sector', { kind: 'feature' });
+  const WHY = 'hal-hyperline-score.test.ts pins 3 sectors';
+  it('held with its why: the ledger says "held: asks", the report carries the diff, and the next planner sees it waiting', async () => {
+    put(repo, JUDGE, 'import x;\nexpect(sectors).toBe(3);\n// end\n');
+    gitIn(repo, 'add', JUDGE);
+    gitIn(repo, 'commit', '-q', '-m', 'judge');
+    gitIn(repo, 'push', '-q', 'origin', 'main');
+    const base = fakeClaude({ tickets: [SECTOR] });
+    const claude: RunDeps['claude'] = async (call) => {
+      if (call.role !== 'implementer') return base(call);
+      calls.push(call);
+      put(call.cwd, 'games/hyperline/game.js', 'export const speed = 1;\nexport const sectors = 4;\n');
+      put(call.cwd, 'hal-asks.patch', `diff --git a/${JUDGE} b/${JUDGE}\n--- a/${JUDGE}\n+++ b/${JUDGE}\n@@ -1,3 +1,3 @@\n import x;\n-expect(sectors).toBe(3);\n+expect(sectors).toBe(SECTORS.length);\n // end\n`);
+      return ok(`Done.\n${J({ changelog: 'A fourth sector.', summary: 'Added sector 4.', asks: WHY })}`);
+    };
+    await runNight(opts(), deps({ claude }));
+    const r = readReport();
+    expect(r.changes.map((c) => c.verdict)).toEqual(['held']);
+    const pass = r.changes[0]!.pass;
+    expect(r.changes[0]!.asks).toMatchObject({ why: WHY, paths: [JUDGE] });
+    expect(r.changes[0]!.asks!.diff).toContain('+expect(sectors).toBe(SECTORS.length);');
+    const ledger = JSON.parse(read(halDir, 'ledger.json')) as { passes: Array<{ id: string; kept: boolean; reasons: string[] }> };
+    expect(ledger.passes.find((x) => x.id === pass)).toMatchObject({ kept: true, reasons: [`held: asks: ${WHY}`] });
+    expect(gitIn(origin, 'show', `refs/heads/main:${JUDGE}`)).toContain('toBe(3)'); // never pushed by Hal
+    calls.length = 0;
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [] }) })); // builds nothing: the held change still applies
+    expect(calls.find((c) => c.role === 'planner')!.prompt).toContain(`- ${pass}: feature(hyperline): A fourth sector (Hal asks: waiting for Brian to OK a judge-file change: ${WHY})`);
+    // 👍 ships both through the same path as a feature: replayed onto refs/hal/main, ci:local, pushed.
+    const ci = vi.fn(async () => ({ ok: true, detail: 'passed' }));
+    expect(await heldCommand('ship', pass, { push: true }, deps({ ciLocal: ci }))).toBe(0);
+    expect(gitIn(origin, 'show', `refs/heads/main:${JUDGE}`)).toContain('SECTORS.length');
+    expect(gitIn(origin, 'show', 'refs/heads/main:games/hyperline/game.js')).toContain('sectors = 4');
+    expect(ci).toHaveBeenCalledWith(halHead());
+  }, 180_000);
+});
+
 describe('models per role', () => {
   it('the implementer runs on implementerModel; the planner and director on model', async () => {
     await runNight(opts(), deps({ model: 'plan-model', implementerModel: 'build-model' }));

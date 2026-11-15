@@ -29,6 +29,8 @@ export type CliDeps = {
    * the gate's own isolated check instead of scoring here, where Claude Code's sandbox cannot launch a browser.
    */
   askHal?: (scorer: string) => Promise<unknown>;
+  /** The checkout `git` and `asks check` read (default: two levels above halDir, i.e. <repo>/.data/hal -> <repo>). */
+  repo?: string;
 };
 
 class Exit extends Error {
@@ -72,9 +74,18 @@ export async function main(argv: string[], deps: CliDeps): Promise<number> {
   }
 }
 
-async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck, now, askHal }: CliDeps): Promise<number> {
+async function run(argv: string[], { scorers, halDir, runScreens, runControlsCheck, now, askHal, repo }: CliDeps): Promise<number> {
   const ledgerPath = join(halDir, 'ledger.json');
   const [command, ...rest] = argv;
+  // Read-only history and the "Hal asks" dry run (git-read.ts): the implementer's only git, inside its sandbox.
+  if (command === 'git' || command === 'asks') {
+    const { asksCheck, runGitRead } = await import('./git-read.js');
+    const root = repo ?? join(halDir, '..', '..');
+    if (command === 'git') return runGitRead(rest, root);
+    const { values: v, positionals } = parseArgs({ args: rest, options: { game: { type: 'string' } }, allowPositionals: true });
+    if (positionals.join(' ') !== 'check' || typeof v.game !== 'string' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(v.game)) return fail('usage: npm run hal -- asks check --game <slug>');
+    return asksCheck(root, v.game);
+  }
   // Game slugs, not scorer names: gearhold-play is Gearhold's second scorer, not a game (tell --game, Run now, run --game).
   const games = gameSlugs(Object.keys(scorers));
   if (isStoreCommand(command)) return runStoreCommand(command, rest, { halDir, now, games });

@@ -75,7 +75,8 @@ worktree as it is at that moment, with the same sandboxed check its gate runs af
 results. That includes the browser-played `gearhold-play`, which takes about 30 seconds. Hal serves at most 12 scores
 per build, always with the gate's defaults, and only for the ticket's own game. It refuses when the build has changed
 Hal's scorer code (`scripts/hal/**`, `packages/core/src/hal/**`, `package.json`). None of this replaces the gate: Hal
-scores the final tree again on its own.
+scores the final tree again on its own. (A "Hal asks" patch is not applied during the build, so these mid-build scores
+use main's judge; the final scores run on game change + patch together.)
 
 ### Lanternkeep (added 2026-11-13)
 
@@ -134,6 +135,38 @@ but stays off `main`, under "Waiting for your OK" at the top of the report. **�
 feature built it, in a new tab. **👍 Ship it** puts it on `main`, runs ci:local and pushes. **👎 Drop it** throws it
 away (the planner reads your reason). The same from the terminal: `npm run hal -- ship HAL-0xx` or
 `npm run hal -- drop HAL-0xx`. If Hal is busy, your decision is saved and the next run applies it.
+
+**Hal asks to change its judge.** Sometimes a build needs one of Hal's own judge files changed: a protected test or
+scorer that hard-codes a level count, or a `// ---- hal hook` block that lists the tap targets a new tappable thing
+must join. The implementer then builds the game change as usual and proposes the judge change as a patch
+(`hal-asks.patch` in its worktree, plus a one-line why). Hal never lets it edit a judge file itself. Hal checks the
+request before anything else:
+
+- The patch may touch only judge files: `scripts/hal/**`, `packages/core/src/hal/**`,
+  `packages/core/test/hal-*.test.ts`, and the ticket game's `// ---- hal hook` block (inside the block only). Anything
+  else protected (`policy.yaml`, `markets.yaml`, `CLAUDE.md`, compliance, gateway and policy code, `.hal.env`,
+  `.data/`, `infra/`, `.github/`, vendor folders, `package*.json`, tsconfig and vitest config, Block Barn's audio,
+  recorder and `SOURCES.md`) is refused outright, and so are Hal's own guard rails (tripwires, gate, budget, sandbox,
+  the candidate pipeline, Claude's tools, git plumbing, score broker, run, ship, server, prompts). The whole build is
+  then discarded, with the reason in the ledger.
+- At most 8 files and 32 KB; added or modified regular files only (no deletes, renames, mode changes, symlinks or
+  binaries); no secrets.
+- The game change alone must pass every tripwire, as always. Then the patch is applied to it (as a git tree object,
+  never through the worktree), and the two together go through every tripwire again, with the patch's files exempt
+  only from the protected-path and scope rules, never from the secret, payment, network or other content rules. Tests,
+  typecheck, scores, screens and controls all run on the combined tree.
+
+If anything fails, the build is discarded as usual. If everything passes, it is held like a new feature (whatever the
+ticket's kind) and shows under "Needs you" as **Hal asks to change its judge**: the why, the judge diff in full, what
+the game change touched, and the check results. **👍 Ship both** goes through the same ship path as a feature (onto
+`main`, ci:local, push); **👎 Drop both** throws both away. Hal never applies a judge change itself. While it waits,
+the ledger records the pass as `held: asks: <why>` and the planner sees it in its held list, so it is not planned again.
+
+**Read-only history in a build.** The implementer can run `npm run hal -- git log|show|diff|blame ...` in its
+worktree, to find an earlier value (say, an old `cameraFor`). Only those four subcommands and their read-only options
+are allowed; git runs with no pager, hooks, external diff, textconv, signature checks, system or global config,
+optional locks or protocols. The sandbox is the hard limit: the worktree's git data lives under the checkout's `.git`,
+outside everything the implementer may write, so no git command can move a ref or write an object there.
 
 **What Hal has learned.** Each night the director may write up to five lessons, short and specific things the
 results showed, such as "Gearhold: moving a repair crystal fixed `supplied`" (in `.data/hal/lessons.json`). It

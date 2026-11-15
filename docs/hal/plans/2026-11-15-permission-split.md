@@ -32,19 +32,19 @@ becomes a request to Brian instead of a dead end.
 
 ## B. "Hal asks": a blocked build becomes a request to Brian
 
-- [ ] The implementer contract gets a way to say "needs a protected change": the game change it built plus a proposed
+- [x] The implementer contract gets a way to say "needs a protected change": the game change it built plus a proposed
   patch to the protected file(s), with a one-line why. Allowed only for judge files (`scripts/hal/**`,
   `packages/core/src/hal/**`, `packages/core/test/hal-*.test.ts`, hook blocks). Never for policy, markets, CLAUDE.md,
   compliance, gateway, `.hal.env`, `.data/`, `infra/`, `.github/`, vendor, `package*.json`: those are refused outright.
-- [ ] Hal holds the candidate like a feature (`refs/hal/held/HAL-xxx`), with the patch attached, and runs every check it
+- [x] Hal holds the candidate like a feature (`refs/hal/held/HAL-xxx`), with the patch attached, and runs every check it
   can on game change + patch together (tripwires on the game part; tests, scores and gate on the combined tree).
-- [ ] The report's "Needs you" shows the request: why, the protected diff in full, the game change, the checks. 👍 applies
+- [x] The report's "Needs you" shows the request: why, the protected diff in full, the game change, the checks. 👍 applies
   both (operator action, `hal ship`), runs ci:local, pushes; 👎 drops both. Hal never applies a protected patch itself.
-- [ ] The planner prompt says when to use it (content growth that a judge file blocks), not as a way around a measure.
+- [x] The planner prompt says when to use it (content growth that a judge file blocks), not as a way around a measure.
 
 ## C. Read-only git history for the implementer
 
-- [ ] The implementer can run read-only history commands (`git log`, `git show`, `git diff` between commits) on its
+- [x] The implementer can run read-only history commands (`git log`, `git show`, `git diff` between commits) on its
   worktree, and nothing that writes refs, the index or the work tree, or reaches the network.
 
 ## Done when

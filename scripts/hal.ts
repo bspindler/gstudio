@@ -30,6 +30,7 @@ const code = await main(process.argv.slice(2), {
   scorers,
   ...(scoreDir ? { askHal: (scorer: string) => askHalToScore(scoreDir, scorer) } : {}),
   halDir: join(repo, '.data', 'hal'),
+  repo,
   runScreens: async (o) => (await import('./hal/screens.js')).runScreens(o),
   runControlsCheck: async () => (await import('./hal/controls.js')).runControlsCheck(),
 });

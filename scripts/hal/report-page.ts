@@ -233,7 +233,23 @@ function heldState(pass: string, fb: ReportView['feedback']): State | null {
   return h.error ? { text: 'It no longer applied to the game, so Hal will rebuild it', tone: 'warn' } : { text: h.version ? `Shipped in v${h.version}` : 'Shipped', tone: 'good' };
 }
 
-/** A new feature that passed every check and waits for Brian: try it, then ship or drop it. */
+/**
+ * "Hal asks" (asks.ts): what a held protected-change request adds to its card. The why, the judge files and Hal's own
+ * diff of them in full (escaped, monospace), what the game change touched, and that every check ran on both together.
+ */
+function asksBlock(c: CandidateResult): string {
+  const a = c.asks!;
+  const files = (xs: string[]) => xs.map((p) => `<code>${esc(p)}</code>`).join(', ');
+  return `<div class="asks-box">
+<p class="asks-title"><strong>Hal asks to change its judge</strong></p>
+<p class="small">Why: ${esc(clip(a.why, 500))}</p>
+<p class="small muted">Judge files: ${files(a.paths)}. Game change: ${a.gameFiles.length ? files(a.gameFiles) : 'none'}.</p>
+<p class="small muted">It passed every check (tripwires, tests, typecheck, scores, screens and controls) with both changes together. Hal never applies a judge change itself: 👍 ships both, 👎 drops both.</p>
+<details class="asks-details" open><summary class="small">The judge change, in full</summary><pre class="asks-diff"><code>${esc(a.diff)}</code></pre></details>
+</div>`;
+}
+
+/** A new feature (or a "Hal asks" request) that passed every check and waits for Brian: try it, then ship or drop it. */
 function heldCard(v: ReportView, c: CandidateResult, run = v.report.runId): string {
   const from = hidden('from', v.report.runId); // come back to this page, not the run that holds the feature
   const t = c.ticket;
@@ -241,13 +257,14 @@ function heldCard(v: ReportView, c: CandidateResult, run = v.report.runId): stri
   const shot = (which: 'before' | 'after') =>
     `<figure class="shot"><img src="${esc(`/shot?run=${encodeURIComponent(run)}&pass=${encodeURIComponent(c.pass)}&which=${which}`)}" alt="${esc(`${cap(which)}: ${t.title}`)}" loading="lazy"><figcaption class="tag">${cap(which)}</figcaption></figure>`;
   const forms = `<div class="grid2 votes">
-<form method="post" action="/vote" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}${from}<input type="text" name="comment" maxlength="500" placeholder="Comment" aria-label="Comment on shipping ${esc(t.title)}"><button type="submit" class="good">👍 Ship it</button></form>
-<form method="post" action="/undo" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}${from}<input type="text" name="reason" maxlength="500" placeholder="Why not? (optional)" aria-label="Reason to drop ${esc(t.title)}"><button type="submit" class="warn">👎 Drop it</button></form>
+<form method="post" action="/vote" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}${from}<input type="text" name="comment" maxlength="500" placeholder="Comment" aria-label="Comment on shipping ${esc(t.title)}"><button type="submit" class="good">${c.asks ? '👍 Ship both' : '👍 Ship it'}</button></form>
+<form method="post" action="/undo" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}${from}<input type="text" name="reason" maxlength="500" placeholder="Why not? (optional)" aria-label="Reason to drop ${esc(t.title)}"><button type="submit" class="warn">${c.asks ? '👎 Drop both' : '👎 Drop it'}</button></form>
 </div>`;
-  return `<article class="card change held">
-<div class="label">${esc(cap(t.kind))} · ${esc(gameName(t.game))}${c.version ? ` ${esc(c.version)}` : ''} · ${esc(c.pass)}</div>
+  return `<article class="card change held${c.asks ? ' asks' : ''}">
+<div class="label">${esc(cap(t.kind))} · ${esc(gameName(t.game))}${c.version ? ` ${esc(c.version)}` : ''} · ${esc(c.pass)}${c.asks ? ' · <span class="asks-tag">Hal asks</span>' : ''}</div>
 <h3>${esc(t.title)}</h3>
 ${lead ? `<p class="lead">${esc(clip(lead, 700))}</p>` : ''}
+${c.asks ? asksBlock(c) : ''}
 <a class="btn tonal try" href="/preview/${esc(encodeURIComponent(c.pass))}/${esc(encodeURIComponent(t.game))}/index.html" target="_blank" rel="noopener">▶ Try it</a>
 ${c.shots ? `<div class="grid2 shots">${shot('before')}${shot('after')}</div>${c.shotsOf ? `<p class="shots-of small muted">Showing ${esc(clip(c.shotsOf, 80))}, the part this change touched</p>` : ''}` : ''}
 ${scoreLine(c)}
@@ -560,6 +577,11 @@ const REPORT_CSS = `
 .num{flex:none;font-variant-numeric:tabular-nums}
 .why{margin:6px 0 0}
 .held{border-color:var(--accent)}
+.held.asks{border-color:var(--warn);border-width:2px}
+.asks-box{border:1px dashed var(--warn);border-radius:12px;padding:10px 12px;margin:0 0 12px}
+.asks-title{margin:0 0 6px;color:var(--warn)}
+.asks-tag{color:var(--warn);font-weight:600}
+.asks-diff{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.4;max-height:420px;overflow:auto;white-space:pre;margin:8px 0 0;padding:8px;border-radius:8px;background:var(--surface-2,rgba(127,127,127,.12))}
 .held .try{margin:0 0 12px}
 .held-hint{margin:-4px 0 12px}
 .lessons-hint{margin-top:12px}

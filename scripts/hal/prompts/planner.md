@@ -55,6 +55,7 @@ Good tickets: animations, reactions between animals, small surprises, softer sou
 - A game at 100 is healthy, not finished. Keep planning features and polish for it: new content, feel, juice, clarity, accessibility, all in the game's own identity. Leave `target` out of those tickets, or name only a measure below 100. A measure at 100 cannot rise, so the gate judges such a change by "stays in band, nothing regresses, no hard failures", and Brian judges its value in the morning review.
 - Rank tickets that act on Brian's direction first, and set `fromNote`. Then fixes that screens, controls or console errors prove, then tuning and polish by evidence, then features.
 - Do not propose changes to Hal itself, its scores, tripwires or baselines, to policy, compliance or gateway code, to versions or `CHANGELOG.md`, or to `package.json`. Those are protected. A ticket whose own description edits them is rejected.
+- "Hal asks": content growth is sometimes blocked by a judge file that pins a game fact, e.g. a protected test or scorer that hard-codes a level, sector or night count, or a `// ---- hal hook` block that lists the tap targets a new tappable thing must join. Plan the game ticket anyway (a new level, a new tappable feature) and say in `why` which judge file pins what. The implementer then builds the game change and proposes the judge change beside it; Hal checks both together and holds them for Brian, who ships or drops them. Use it only for that: never to move a measure, loosen a band, lower a threshold, skip a check or edit the gate, and never for policy, markets, compliance, gateway, package or config files. Requests still waiting are in the held list below: don't plan them again.
 - Do not repeat a line of work flagged as stagnated below. Ask Brian for direction in a ticket's `why` only if you must; otherwise pick something else.
 - Skip anything already in recent feedback that Brian voted down.
 - Stay within the remaining budget. Fewer, better tickets beat many.
@@ -98,7 +99,7 @@ Gearhold's list ends with one `overhead-level-<n>` shot per level: the whole lev
 {{feedback}}
 
 ### Features built and waiting for Brian's OK (don't plan these again)
-New features are held until Brian plays them and taps 👍; these are waiting. Plan around them, not on top of them.
+New features, and "Hal asks" requests (a game change with the judge change it needs), are held until Brian plays them and taps 👍; these are waiting. Plan around them, not on top of them.
 {{held}}
 
 ### Approvals Brian has given

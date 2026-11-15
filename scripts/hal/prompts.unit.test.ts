@@ -127,6 +127,44 @@ describe('implementer contract', () => {
   });
 });
 
+describe('"Hal asks": the implementer contract and the prompts (plan 2026-11-15 part B)', () => {
+  it('asks carries a one-line why next to a full changelog and summary', () => {
+    expect(parseImplementerOutput('{"changelog":"A weathervane spins","summary":"Added the vane","asks":"The hook lists the tap zones; the vane needs one"}'))
+      .toEqual({ changelog: 'A weathervane spins', summary: 'Added the vane', asks: 'The hook lists the tap zones; the vane needs one' });
+  });
+  it('an empty or null asks is no request; a multi-line or non-string one breaks the contract; asks needs the changelog and summary', () => {
+    const done = { changelog: 'a', summary: 'b' };
+    expect(parseImplementerOutput('{"changelog":"a","summary":"b","asks":""}')).toEqual(done);
+    expect(parseImplementerOutput('{"changelog":"a","summary":"b","asks":null}')).toEqual(done);
+    expect(parseImplementerOutput('{"changelog":"a","summary":"b","asks":"x\\ny"}')).toBeNull();
+    expect(parseImplementerOutput('{"changelog":"a","summary":"b","asks":3}')).toBeNull();
+    expect(parseImplementerOutput('{"asks":"why"}')).toBeNull();
+  });
+  it('blocked wins over asks (nothing is held)', () => {
+    expect(parseImplementerOutput('{"changelog":"a","summary":"b","asks":"why","blocked":"no"}')).toEqual({ changelog: 'a', summary: 'b', blocked: 'no' });
+  });
+  it('the implementer prompt explains the request: the file, the format, the judge files, and what it may never be used for', () => {
+    const p = loadPrompt('implementer');
+    expect(p).toContain('"asks"');
+    expect(p).toContain('hal-asks.patch');
+    expect(p).toContain('npm run hal -- asks check');
+    expect(p).toMatch(/never .*(move a measure|loosen a band|skip a check|gate)/is);
+    expect(p).toMatch(/policy\.yaml/);
+  });
+  it('the implementer prompt offers read-only git history', () => {
+    const p = loadPrompt('implementer');
+    expect(p).toContain('npm run hal -- git log');
+    expect(p).toContain('npm run hal -- git show');
+    expect(p).toContain('npm run hal -- git diff');
+  });
+  it('the planner prompt says when a ticket may lead to a request, and that it never moves a measure', () => {
+    const p = loadPrompt('planner');
+    expect(p).toMatch(/Hal asks/);
+    expect(p).toMatch(/hard-coded|pins/);
+    expect(p).toMatch(/never .*(move a measure|loosen a band|skip a check|gate)/is);
+  });
+});
+
 describe('planner.md Block Barn section', () => {
   const p = loadPrompt('planner');
   const sec = p.slice(p.indexOf('## Block Barn'), p.indexOf('## How to plan'));

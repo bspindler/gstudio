@@ -16,4 +16,6 @@ Fix your change so these checks pass, the way you would fix any failing build:
 
 If the failure is not caused by your change (for example, it is in another game, or in code you may not touch and your change does not affect it), do not work around it: answer with `blocked` and say what fails and why it is not yours.
 
+If you asked for a judge change (`asks`), Hal applied your `hal-asks.patch` for these checks and has taken it back out of the worktree again. Keep `asks` in your answer to keep that patch; write `hal-asks.patch` again only to change it.
+
 Finish with the same output contract as before. `changelog` and `summary` describe the whole change, not only this fix.

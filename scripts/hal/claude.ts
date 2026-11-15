@@ -109,7 +109,9 @@ export function roleAllowedTools(role: ClaudeRole): string[] {
   switch (role) {
     case 'planner': return [];
     case 'implementer':
-      return ['Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)'];
+      // `hal -- git` is read-only history and `hal -- asks check` a dry run of a "Hal asks" patch (git-read.ts); the
+      // sandbox keeps the shared .git (outside the worktree) read-only whatever they run.
+      return ['Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)', 'Bash(npm run hal -- git:*)', 'Bash(npm run hal -- asks check:*)'];
     case 'director': return [];
   }
 }
@@ -190,7 +192,9 @@ export function implementerSandboxSettings(call: Pick<ClaudeCall, 'cwd' | 'denyR
       autoAllowBashIfSandboxed: false,
       excludedCommands: [],
       network: { allowedDomains: [], strictAllowlist: true, allowLocalBinding: true },
-      // Worktree git metadata stays outside allowWrite on purpose: the allowed Bash is only npm test/typecheck/hal score; Hal does every git write itself, unsandboxed.
+      // Worktree git metadata (<repo>/.git/worktrees/<pass> and the shared <repo>/.git) stays outside allowWrite on
+      // purpose: `npm run hal -- git ...` (read-only history, git-read.ts) can read it but never write a ref, object,
+      // index or config there. Hal does every git write itself, unsandboxed.
       // Never the shared tmpdir (tsx's transform cache there is loaded by Hal itself): the worktree and the call's own dir.
       filesystem: { denyRead, allowWrite: [call.cwd, ...(call.tmpDir ? [call.tmpDir] : []), ...(call.scoreDir ? [call.scoreDir] : [])] },
       credentials: { envVars: SANDBOX_DENIED_ENV.map((name) => ({ name, mode: 'deny' })) },

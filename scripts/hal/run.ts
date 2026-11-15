@@ -752,7 +752,8 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
             ts: d.now().toISOString(), game: t.game, change: t.title, ...(t.target !== undefined ? { target: t.target } : {}),
             fitness: Number.isFinite(after?.fitness) ? after!.fitness : Number.isFinite(before?.fitness) ? before!.fitness : 0,
             baseline: Number.isFinite(before?.fitness) ? before!.fitness : null, measures: after?.measures ?? {},
-            kept: r.verdict === 'merged' || r.verdict === 'held', reasons: r.reasons, costUsd: r.costUsd,
+            // A held "Hal asks" candidate is recorded as such, so the planner doesn't plan it again while it waits.
+            kept: r.verdict === 'merged' || r.verdict === 'held', reasons: r.verdict === 'held' && r.asks ? [`held: asks: ${r.asks.why}`, ...r.reasons] : r.reasons, costUsd: r.costUsd,
             ...(r.verdict === 'discarded' && isHalFault(r.reasons) ? { halFault: true } : {}),
           }, pass);
           await writeJsonAtomic(ledgerPath, R.deep(ledger));
@@ -791,7 +792,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
         ...(reportOnly ? { reportOnly: 'this run was report-only: it planned but built nothing, by design' } : {}),
         changes: changes.map(brief), planned: planned.map(plannedBrief), calls, warnings,
         // Held features from any night still waiting on Brian's Ship or Drop: each is a card on his report already.
-        waiting: (await listHeld(d.repo, { git: c.raw }).catch(() => [] as Held[])).map((h) => ({ pass: h.pass, title: h.subject })),
+        waiting: (await listHeld(d.repo, { git: c.raw }).catch(() => [] as Held[])).map((h) => ({ pass: h.pass, title: h.subject, ...(h.asks ? { asks: h.asks } : {}) })),
       })),
       notes: J(notesNow.map(noteForPrompt)),
       stagnation,
@@ -989,7 +990,7 @@ function plannerVars(o: RunOptions, d: RunDeps, c: Common, p: PlanInputs): Recor
     notes: J(p.open.map(noteForPrompt)),
     stagnation: stagnationText(o.games, p.ledger),
     lessons: p.lessons,
-    held: p.held.length ? p.held.map((h) => `- ${h.pass}: ${h.subject}`).join('\n') : '(none)',
+    held: p.held.length ? p.held.map((h) => `- ${h.pass}: ${h.subject}${h.asks ? ` (Hal asks: waiting for Brian to OK a judge-file change: ${h.asks})` : ''}`).join('\n') : '(none)',
     budget: left
       ? `${fmt(Math.max(0, DAILY_CAP_USD - apiSpent(left)))} of API credits left today; each ticket's implementer gets up to ${fmt(sliceFor(left, 'implementer'))}. At most ${o.maxTickets} tickets will be built.`
       : `At most ${o.maxTickets} tickets will be built.`,
@@ -1033,7 +1034,7 @@ function stagnationText(games: string[], l: Ledger | null): string {
 }
 const brief = (r: CandidateResult) => ({
   pass: r.pass, game: r.ticket.game, kind: r.ticket.kind, title: r.ticket.title, why: r.ticket.why, verdict: r.verdict, reasons: r.reasons,
-  version: r.version, changelog: r.changelog, summary: r.summary,
+  version: r.version, changelog: r.changelog, summary: r.summary, ...(r.asks ? { asks: { why: r.asks.why, files: r.asks.paths } } : {}),
   fitness: Object.fromEntries(Object.keys({ ...r.scoresBefore, ...r.scoresAfter }).map((s) => [s, { before: r.scoresBefore[s]?.fitness ?? null, after: r.scoresAfter[s]?.fitness ?? null }])),
 });
 

@@ -28,7 +28,11 @@ export function renderPrompt(template: string, vars: Record<string, string>): st
 export const loadPrompt = (role: PromptRole): string =>
   readFileSync(fileURLToPath(new URL(`./prompts/${role}.md`, import.meta.url)), 'utf8');
 
-export type ImplementerOutput = { changelog: string; summary: string; blocked?: string };
+/**
+ * `asks`: "Hal asks" (asks.ts). The game change is built, and the implementer wrote the protected (judge) change it
+ * needs as a unified diff in hal-asks.patch; this is its one-line why. Hal holds the result for Brian.
+ */
+export type ImplementerOutput = { changelog: string; summary: string; blocked?: string; asks?: string };
 
 /** The last top-level JSON object in the text, validated against the implementer contract; null if none or invalid. */
 export function parseImplementerOutput(text: string): ImplementerOutput | null {
@@ -49,5 +53,7 @@ export function parseImplementerOutput(text: string): ImplementerOutput | null {
   // An empty or null `blocked` is "not blocked": models echo the contract example's field back empty (HAL-021..030).
   const isBlank = (x: unknown) => x === null || (typeof x === 'string' && x.trim() === '');
   if (o.blocked !== undefined && !isBlank(o.blocked)) return line(o.blocked) ? { changelog: line(o.changelog) ? o.changelog : '', summary: line(o.summary) ? o.summary : '', blocked: o.blocked } : null;
-  return line(o.changelog) && line(o.summary) ? { changelog: o.changelog, summary: o.summary } : null;
+  if (!(line(o.changelog) && line(o.summary))) return null;
+  if (o.asks !== undefined && !isBlank(o.asks)) return line(o.asks) ? { changelog: o.changelog, summary: o.summary, asks: o.asks } : null;
+  return { changelog: o.changelog, summary: o.summary };
 }
