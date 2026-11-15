@@ -116,6 +116,6 @@ export function scoreLanternkeep(range: { seeds: number } = LANTERNKEEP_DEFAULTS
   const measures = nightMeasures(nights.filter((l) => !l.errors.length), watchFrac);
   // Fitness stays the balance measures' mean; tension is reported and gated beside it (tension.ts).
   const fitness = round2(mean(Object.values(measures)));
-  measures.tension = tensionMeasure(nights.map((l) => ({ wins: l.wins, close: l.closeWins })));
+  measures.tension = tensionMeasure(nights.map((l) => ({ n: l.n, wins: l.wins, close: l.closeWins })), { skipUpTo: LANTERNKEEP_BANDS.early.upTo });
   return { game: 'lanternkeep', levels: nights, measures, fitness, hardFailures };
 }

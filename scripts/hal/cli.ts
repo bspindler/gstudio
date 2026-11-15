@@ -221,6 +221,7 @@ async function run(argv: string[], { scorers, halDir, runScreens, runControlsChe
       write(ledgerPath, next);
       if (res.keep) write(baselinePath, { range, report: after });
       console.log(`${res.keep ? 'KEEP' : 'DISCARD'} (gain ${res.gain.toFixed(2)}): ${res.reasons.join('; ')}`);
+      if ('notes' in res && res.notes?.length) console.log(`noted (not discarded): ${res.notes.join('; ')}`);
       return res.keep ? 0 : 2;
     }
     default:

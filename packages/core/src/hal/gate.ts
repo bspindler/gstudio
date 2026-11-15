@@ -2,11 +2,19 @@
 // Hard failures always discard; they are never traded against score.
 import type { Measures, ScoreReport } from './types.js';
 
-/** Score points. Scores and measures run 0-100, and 100 means every band is healthy (`ceiling`). */
-export const GATE = { minGain: 0.5, tolerance: 1.0, ceiling: 100 } as const;
+/**
+ * Score points. Scores and measures run 0-100, and 100 means every band is healthy (`ceiling`).
+ * `soft`: measures whose drop discards only when the ticket targets them; otherwise the drop is a note on the change.
+ * Tension is soft by operator decision D1 (2026-11-15): as a veto it threw out real balance gains (Lanternkeep HAL-059,
+ * +4.6 fitness, for tension -4.2) and visual-only changes that reshuffled the bot's luck.
+ */
+export const GATE = { minGain: 0.5, tolerance: 1.0, ceiling: 100, soft: ['tension'] as readonly string[] } as const;
 
-/** `atCeiling`: score mode, but the target was already within minGain of the ceiling, so it was judged holding the line. */
-export type GateResult = { keep: boolean; gain: number; reasons: string[]; atCeiling?: true };
+/**
+ * `atCeiling`: score mode, but the target was already within minGain of the ceiling, so it was judged holding the line.
+ * `notes`: soft-measure drops that did not discard, for the change's card and the report.
+ */
+export type GateResult = { keep: boolean; gain: number; reasons: string[]; atCeiling?: true; notes?: string[] };
 
 /**
  * Gate modes. `score`: a gain of at least GATE.minGain on the target measure (or on fitness when there is no target),
@@ -62,13 +70,19 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
     }
   }
 
+  const notes: string[] = [];
   for (const [name, was] of Object.entries(before.measures)) {
     const now = own(after.measures, name);
     if (now === undefined) reasons.push(`${name} missing from the after report (treated as a regression)`);
     else if (finite(was) && finite(now) && was - now > GATE.tolerance) {
-      reasons.push(`${name} regressed ${(was - now).toFixed(2)} (> ${GATE.tolerance})`);
+      const why = `${name} regressed ${(was - now).toFixed(2)} (> ${GATE.tolerance})`;
+      (GATE.soft.includes(name) && name !== target ? notes : reasons).push(why);
     }
   }
 
-  return { keep: reasons.length === 0, gain, reasons, ...(atCeiling ? { atCeiling: true as const } : {}) };
+  return {
+    keep: reasons.length === 0, gain, reasons,
+    ...(atCeiling ? { atCeiling: true as const } : {}),
+    ...(notes.length ? { notes } : {}),
+  };
 }

@@ -53,7 +53,7 @@ export function scoreTidepool(opts: { from: number; to: number; seeds: number })
   };
   // Fitness stays the balance measures' mean; tension is reported and gated beside it (tension.ts).
   const fitness = round2(mean(Object.values(measures)));
-  measures.tension = tensionMeasure(levels.map((l) => ({ wins: l.wins ?? 0, close: l.closeWins ?? 0 })));
+  measures.tension = tensionMeasure(levels.map((l) => ({ n: l.n, wins: l.wins ?? 0, close: l.closeWins ?? 0 })), { skipUpTo: early.upTo });
   return {
     game: 'tidepool-pals',
     levels,

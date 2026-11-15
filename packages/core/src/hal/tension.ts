@@ -17,8 +17,13 @@ export function bandScore(x: number, [lo, hi]: readonly [number, number]): numbe
   return 100;
 }
 
-/** The tension measure: the mean band score of the levels with enough wins (100 when none qualify; win-rate measures cover that). */
-export function tensionMeasure(levels: Array<{ wins: number; close: number }>): number {
-  const scored = levels.filter((l) => l.wins >= TENSION_MIN_WINS).map((l) => bandScore(l.close / l.wins, TENSION_BAND));
+/**
+ * The tension measure: the mean band score of the levels with enough wins (100 when none qualify; win-rate measures
+ * cover that). `skipUpTo`: levels numbered up to it are left out. The opening must feel good (a game's early band asks
+ * for near-certain wins), so its comfortable wins are by design, not dullness (operator decision D1, 2026-11-15).
+ */
+export function tensionMeasure(levels: Array<{ n?: number; wins: number; close: number }>, opts: { skipUpTo?: number } = {}): number {
+  const skip = opts.skipUpTo ?? 0;
+  const scored = levels.filter((l) => (l.n ?? Infinity) > skip && l.wins >= TENSION_MIN_WINS).map((l) => bandScore(l.close / l.wins, TENSION_BAND));
   return scored.length ? Math.round((scored.reduce((a, b) => a + b, 0) / scored.length) * 100) / 100 : 100;
 }

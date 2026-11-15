@@ -218,6 +218,7 @@ ${lead ? `<p class="lead">${esc(clip(lead, 700))}</p>` : ''}
 ${more ? `<details class="how"><summary class="small">How Hal did it</summary><p class="small muted">${esc(clip(more, 1500))}</p></details>` : ''}
 ${c.shots ? `<div class="grid2 shots">${shot('before')}${shot('after')}</div>${c.shotsOf ? `<p class="shots-of small muted">Showing ${esc(clip(c.shotsOf, 80))}, the part this change touched</p>` : ''}` : ''}
 ${scoreLine(c)}
+${c.scoreNotes?.length ? `<p class="small delta warn score-notes">Also moved: ${esc(c.scoreNotes.map((n) => clip(n, 160)).join('; '))}.</p>` : ''}
 ${withState(changeState(c.pass, v.feedback), forms)}
 </article>`;
 }

@@ -24,3 +24,11 @@ describe('tension', () => {
     expect(tense.fitness).toBe(comfy.fitness);
   });
 });
+
+describe('tension skips the opening (D1, 2026-11-15)', () => {
+  it('levels numbered <= skipUpTo do not count', () => {
+    const levels = [{ n: 1, wins: 20, close: 0 }, { n: 2, wins: 20, close: 0 }, { n: 6, wins: 20, close: 6 }];
+    expect(tensionMeasure(levels)).toBeCloseTo(100 / 3, 1);
+    expect(tensionMeasure(levels, { skipUpTo: 5 })).toBe(100);
+  });
+});

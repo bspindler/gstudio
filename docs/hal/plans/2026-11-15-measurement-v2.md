@@ -45,7 +45,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 - [x] **P0.1 Hyperline reach doesn't shrink per sector.** `packages/core/src/hal/hyperline-score.ts` `reachScore`,
   `scorers.ts` `HYPERLINE_UNTIL`. Score reach against a fixed distance (today's 2650) or as a median-death-sector
   band, not a fraction of the growing course. Test: adding a dummy sector to the course leaves `reach` unchanged.
-- [ ] **P0.2 Tension per D1.** `gate.ts` (tension regressions are notes unless targeted; result gets `notes`),
+- [x] **P0.2 Tension per D1.** `gate.ts` (tension regressions are notes unless targeted; result gets `notes`),
   `candidate.ts` (notes go to `scoreNotes`), `tension.ts` (`tensionMeasure` takes an `exclude` / early cut),
   `lanternkeep-score.ts` (exclude nights ≤ `early.upTo`), `tidepool-score.ts` (exclude its early band, if any).
   Tests in `packages/core/test/hal-*.test.ts`.

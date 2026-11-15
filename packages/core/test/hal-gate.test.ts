@@ -84,7 +84,7 @@ describe('compareScores', () => {
     expect(missingBefore.reasons.join(' ')).toContain('inBand');
   });
   it('exposes the gate constants', () => {
-    expect(GATE).toEqual({ minGain: 0.5, tolerance: 1.0, ceiling: 100 });
+    expect(GATE).toEqual({ minGain: 0.5, tolerance: 1.0, ceiling: 100, soft: ['tension'] });
   });
 });
 
@@ -154,5 +154,41 @@ describe('compareScores at the ceiling (a healthy game keeps improving)', () => 
     expect(r.keep).toBe(false);
     expect(r.atCeiling).toBeUndefined();
     expect(r.reasons.join(' ')).toContain('no real gain');
+  });
+});
+
+// Operator decision D1 (2026-11-15, measurement v2): tension is not a veto. A tension drop discards only when the
+// ticket targets tension; otherwise it is a note that travels with the change.
+describe('compareScores: soft measures (tension)', () => {
+  it('tension is a soft measure', () => {
+    expect(GATE.soft).toContain('tension');
+  });
+
+  it('polish: a tension drop is a note, not a discard', () => {
+    const r = compareScores(report(80, { inBand: 80, tension: 50 }), report(84, { inBand: 84, tension: 45 }), { mode: 'polish' });
+    expect(r.keep).toBe(true);
+    expect(r.reasons).toEqual([]);
+    expect(r.notes?.join(' ')).toMatch(/tension regressed 5\.00/);
+  });
+
+  it('score mode on another target: a tension drop is a note, the target gain still counts', () => {
+    const r = compareScores(report(86, { inBand: 73, tension: 49 }), report(91, { inBand: 80, tension: 45 }), { mode: 'score', target: 'inBand' });
+    expect(r.keep).toBe(true);
+    expect(r.notes?.length).toBe(1);
+  });
+
+  it('a ticket that targets tension is still gated on it', () => {
+    const r = compareScores(report(80, { tension: 50 }), report(80, { tension: 45 }), { mode: 'score', target: 'tension' });
+    expect(r.keep).toBe(false);
+    expect(r.reasons.join(' ')).toMatch(/no real gain/);
+  });
+
+  it('a hard (non-soft) measure regression still discards, and a missing tension still counts as missing', () => {
+    expect(compareScores(report(80, { inBand: 80, tension: 50 }), report(80, { inBand: 70, tension: 50 }), { mode: 'polish' }).keep).toBe(false);
+    expect(compareScores(report(80, { tension: 50 }), report(80, {}), { mode: 'polish' }).keep).toBe(false);
+  });
+
+  it('no notes field when nothing soft regressed', () => {
+    expect(compareScores(report(80, { tension: 50 }), report(80, { tension: 50 }), { mode: 'polish' }).notes).toBeUndefined();
   });
 });

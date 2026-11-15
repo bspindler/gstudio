@@ -543,6 +543,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       // declines a new level. The drop goes on its card. Broken scores (hard failures, non-finite, missing) still discard.
       const soft = (r: string) => ctx.hold === true && (/ regressed \d/.test(r) || /^no real gain/.test(r));
       for (const r of g.reasons) (soft(r) ? (res.scoreNotes ??= []) : reasons).push(`${s}: ${r}`);
+      for (const n of g.notes ?? []) (res.scoreNotes ??= []).push(`${s}: ${n}`); // soft measures (tension): noted, not discarded
     }
     if (reasons.length) discard(...reasons);
     let sc: ScreensResult;
