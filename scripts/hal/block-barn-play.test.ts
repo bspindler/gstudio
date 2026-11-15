@@ -3,12 +3,13 @@
 import { spawnSync } from 'node:child_process';
 import type { Browser } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { BLOCK_BARN_RULES, BLOCK_BARN_VIEWPORTS, scoreBlockBarn } from '../../packages/core/src/hal/block-barn-score.js';
+import { BLOCK_BARN_RULES, BLOCK_BARN_TODDLER_TAPS, BLOCK_BARN_VIEWPORTS, scoreBlockBarn } from '../../packages/core/src/hal/block-barn-score.js';
 import { closeAll, launchBrowser, newHalContext, repo, serveGames, type StaticServer } from './browser.js';
-import { instrumentScript, runBlockBarnPlay } from './block-barn-play.js';
+import { instrumentScript, runBlockBarnPlay, TODDLER_SEEDS } from './block-barn-play.js';
 
 const AZ = 'abcdefghijklmnopqrstuvwxyz'.split('');
-const PHONE = { viewports: ['390x844' as const] };
+/** The phone only, one toddler seed. */
+const PHONE = { viewports: ['390x844' as const], toddlerSeeds: [TODDLER_SEEDS[0]!] };
 /** Replaces the hook as soon as the game installs it: `body` gets `v` (the real hook) and may wrap its methods. */
 const wrapHook = (body: string): string => `
   Object.defineProperty(window, '__hal', { configurable: true, set(v) {
@@ -28,7 +29,7 @@ const swallowUp = (n: number, after = '') => `(() => {
 })();`;
 
 describe('runBlockBarnPlay', () => {
-  it('taps every kind of target at both viewports with no errors; the barn scores 100 on all five; two runs are identical', async () => {
+  it('taps every kind of target at both viewports with no errors; the barn scores 100 on all six; two runs are identical', async () => {
     const a = await runBlockBarnPlay();
     expect(a.errors).toEqual([]);
     for (const v of BLOCK_BARN_VIEWPORTS) {
@@ -44,9 +45,35 @@ describe('runBlockBarnPlay', () => {
     expect(a.page.peakGain).toBeGreaterThan(0.05);
     expect(a.page.peakGain).toBeLessThanOrEqual(BLOCK_BARN_RULES.peakCap);
     for (const r of a.records) expect(r.ms, `${r.viewport} ${r.kind}`).toBeLessThan(50);
+    // The toddler phase: every gesture at every viewport, in every seed, each answered once (a cancel never), nothing
+    // stuck; every seed starts on a fresh barn.
+    for (const v of BLOCK_BARN_VIEWPORTS) {
+      const gs = a.page.gestures.filter((g) => g.viewport === v);
+      expect([...new Set(gs.filter((g) => g.phase === 'random').map((g) => g.seed))], v).toEqual([...TODDLER_SEEDS]);
+      for (const seed of TODDLER_SEEDS) {
+        const random = gs.filter((g) => g.phase === 'random' && g.seed === seed), at = `${v} seed ${seed}`;
+        expect([...new Set(random.map((g) => g.gesture))].sort(), at).toEqual(['cancel', 'palm', 'press', 'run', 'tap', 'two']);
+        expect(random.filter((g) => g.gesture !== 'cancel'), at).toHaveLength(BLOCK_BARN_TODDLER_TAPS);
+        expect(random[0]!.state, `${at}: a fresh barn`).toBe('');
+        expect(random.some((g) => g.on === 'gap'), `${at}: some taps land in the gaps`).toBe(true);
+        expect(random.some((g) => g.gesture === 'press' && g.on === 'corner'), `${at}: a 1 s press on the corner`).toBe(true);
+      }
+      for (const g of gs) {
+        expect(g.responses, `${v} ${g.phase} ${g.gesture} on ${g.on}`).toBe(g.gesture === 'cancel' ? 0 : 1);
+        expect(g.stuck, `${v} ${g.phase} ${g.gesture} on ${g.on}`).toEqual([]);
+      }
+      const combo = (state: string, feature: string) => gs.some((g) => g.phase === 'combo' && g.state === state && g.feature === feature);
+      for (const f of ['name', 'touch:fx', 'stack', 'touch:slots']) expect(combo('door', f), `${v}: ${f} with the doors open`).toBe(true);
+      expect(combo('door', 'knock') || combo('door', 'touch:bale-bump+fx'), `${v}: the tower with the doors open`).toBe(true);
+      for (const f of ['name', 'stack', 'door']) expect(combo('dusk', f), `${v}: ${f} at dusk`).toBe(true);
+      expect(combo('door+dusk', 'knock') || combo('door+dusk', 'touch:bale-bump+fx'), `${v}: the tower with the doors open at dusk`).toBe(true);
+      expect(gs.filter((g) => g.phase === 'combo').at(-1), `${v}: a plain tap still answers at the end`).toMatchObject({ phase: 'combo', state: '', responses: 1, feature: 'touch:fx' });
+    }
     const ra = scoreBlockBarn(a.records, a.page);
     expect(ra.hardFailures).toEqual([]);
-    expect(ra.measures).toEqual({ responsive: 100, noDeadEnds: 100, bigTargets: 100, alphabet: 100, calm: 100 });
+    expect(ra.measures).toEqual({ responsive: 100, noDeadEnds: 100, bigTargets: 100, alphabet: 100, calm: 100, variety: 100 });
+    expect(ra.levels.map((l) => l.seeds)).toEqual([TODDLER_SEEDS.length, TODDLER_SEEDS.length]);
+    expect(ra.noise).toMatchObject({ responsive: 0, noDeadEnds: 0, bigTargets: 0, alphabet: 0, calm: 0 });
 
     const b = await runBlockBarnPlay();
     expect(b.errors).toEqual([]);
@@ -55,7 +82,61 @@ describe('runBlockBarnPlay', () => {
     const shape = (rs: typeof a.records) => rs.map(({ ms: _ms, ...r }) => r);
     expect(shape(b.records)).toEqual(shape(a.records));
     expect(b.page).toEqual(a.page);
-  }, 400_000);
+  }, 1_800_000);
+
+  it('a barn that answers every finger of a two-finger tap or a palm fails: more than one response', async () => {
+    // The barn's own handlers ignore extra fingers; this one (on the document, so inside the dispatch) does not.
+    const extra = `document.addEventListener('pointerup', (e) => { if (e.isTrusted && !e.isPrimary) document.getElementById('fx').append(document.createElement('i')); });`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: extra });
+    expect(r.errors).toEqual([]);
+    const two = r.page.gestures.filter((g) => g.gesture === 'two'), palm = r.page.gestures.filter((g) => g.gesture === 'palm');
+    expect(two.map((g) => g.responses)).toEqual([2, 2, 2]);
+    expect(palm.map((g) => g.responses)).toEqual([5, 5, 5]);
+    const h = scoreBlockBarn(r.records, r.page).hardFailures;
+    expect(h).toContainEqual(expect.stringMatching(/^390x844 random two \d+ on \w+.*: 2 responses, expected 1$/));
+    expect(h).toContainEqual(expect.stringMatching(/^390x844 random palm \d+ on \w+.*: 5 responses, expected 1$/));
+  }, 200_000);
+
+  it('pressed state is no answer: a cancel on the grown-up corner (its ring starts, then stops) answers nothing', async () => {
+    // The corner's own pressed state (its .holding ring) starts at the press and stops at the lift or the cancel; a short
+    // tap and a 1 s press there still answer once, with the puff alone. A palm or two fingers on it answer once too.
+    const corner = { corner: true } as const;
+    const toddlerSteps = [{ gesture: 'cancel', ...corner }, { gesture: 'tap', ...corner }, { gesture: 'cancel', ...corner }, { gesture: 'press', ...corner }, { gesture: 'run', n: 3, ...corner }, { gesture: 'two', ...corner }, { gesture: 'palm', ...corner }] as const;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, toddlerSteps: [...toddlerSteps] });
+    expect(r.errors).toEqual([]);
+    const random = r.page.gestures.filter((g) => g.phase === 'random');
+    expect(random.map((g) => [g.gesture, g.responses])).toEqual([['cancel', 0], ['tap', 1], ['cancel', 0], ['press', 1], ['run', 1], ['run', 1], ['run', 1], ['two', 1], ['palm', 1]]);
+    for (const g of random.filter((x) => ['tap', 'press', 'run'].includes(x.gesture))) expect(g.feature, g.gesture).toBe('touch:fx'); // the puff, not the ring
+    expect(scoreBlockBarn(r.records, r.page).hardFailures.filter((h) => !h.includes('1024x768'))).toEqual([]);
+  }, 200_000);
+
+  it('a pressed look on an extra finger is no answer; an extra finger that changes the barn for good is', async () => {
+    // Every extra finger lights up while it is down (a class on the fx layer, put back when it lifts).
+    const lit = `document.addEventListener('pointerdown', (e) => { if (e.isTrusted && !e.isPrimary) document.getElementById('fx').classList.add('lit-' + e.pointerId); });
+      document.addEventListener('pointerup', (e) => { if (e.isTrusted && !e.isPrimary) document.getElementById('fx').classList.remove('lit-' + e.pointerId); });`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: lit, toddlerSteps: [{ gesture: 'two' }, { gesture: 'palm' }, { gesture: 'two' }] });
+    expect(r.errors).toEqual([]);
+    expect(r.page.gestures.filter((g) => g.phase === 'random').map((g) => g.responses)).toEqual([1, 1, 1]);
+    // The same light that stays on after the lift is an answer of its own, on every extra finger.
+    const stays = `document.addEventListener('pointerdown', (e) => { if (e.isTrusted && !e.isPrimary) document.getElementById('fx').classList.add('lit-' + e.pointerId + '-' + performance.now()); });`;
+    const s = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: stays, toddlerSteps: [{ gesture: 'two' }, { gesture: 'palm' }] });
+    expect(s.page.gestures.filter((g) => g.phase === 'random').map((g) => g.responses)).toEqual([2, 5]);
+  }, 200_000);
+
+  it('a grown-up corner that loses the lift after a 1 s press is stuck counting, then opens: a hard failure', async () => {
+    // The corner never hears a finger lift after 0.9 s or more (the scripted 3 s hold opens it before the lift anyway).
+    const lost = `(() => { let downAt = 0; const add = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (t, f, o) {
+        if (this && this.id === 'corner' && t === 'pointerdown') return add.call(this, t, (e) => { downAt = performance.now(); f(e); }, o);
+        if (this && this.id === 'corner' && (t === 'pointerup' || t === 'pointercancel' || t === 'pointerleave')) return add.call(this, t, (e) => { if (performance.now() - downAt < 900) f(e); }, o);
+        return add.call(this, t, f, o);
+      }; })();`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, initScript: lost });
+    const press = r.page.gestures.find((g) => g.gesture === 'press' && g.on === 'corner')!;
+    expect(press.stuck).toContain('the grown-up corner is still counting a hold');
+    expect(r.page.gestures.some((g) => g.stuck.includes('the grown-up corner is open'))).toBe(true);
+    expect(scoreBlockBarn(r.records, r.page).hardFailures).toContainEqual(expect.stringMatching(/^390x844 random press \d+ on corner.*: stuck: the grown-up corner is still counting a hold/));
+  }, 200_000);
 
   it('a tap answered only 300 ms later (by a timer) is not answered at all', async () => {
     // The first tap (the hay of a fresh barn) reaches the barn again 300 ms later, as an untrusted re-dispatch.
@@ -296,11 +377,11 @@ describe('block barn instrumentation', () => {
 });
 
 describe('npm run hal -- score --game block-barn', () => {
-  it('prints a score report with the five measures', () => {
-    const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/hal.ts', 'score', '--game', 'block-barn'], { cwd: repo, encoding: 'utf8', timeout: 280_000 });
+  it('prints a score report with the six measures', () => {
+    const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/hal.ts', 'score', '--game', 'block-barn'], { cwd: repo, encoding: 'utf8', timeout: 1_080_000 });
     expect(r.stderr).not.toMatch(/error|unknown game/i);
     expect(r.status).toBe(0);
-    for (const m of ['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm']) expect(r.stdout).toMatch(new RegExp(`^${m}: 100\\.0$`, 'm'));
+    for (const m of ['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm', 'variety']) expect(r.stdout).toMatch(new RegExp(`^${m}: 100\\.0$`, 'm'));
     expect(r.stdout).toMatch(/^fitness: 100\.0$/m);
-  }, 300_000);
+  }, 1_100_000);
 });

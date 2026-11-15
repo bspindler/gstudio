@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.2.2 (2026-11-15)
+- A palm or two fingers that touch the grown-up corner along with the barn now count as one tap: the barn answers once, and the corner no longer puffs or starts its ring at the same time.
+
 ## 0.2.1 (2026-11-15)
 - The barn doors and the window are now big enough for small fingers on every phone: the wall along the top is never shorter than 88 px. The hay tower's blocks stay big on short phones too.
 
