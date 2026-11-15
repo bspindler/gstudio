@@ -72,6 +72,7 @@ export declare function turnTide(g: Grid, mask: Mask, rock: Mask, phase: Phase, 
   newId: () => number): { phase: Phase; dir: Dir; washed: Placed[]; counts: Counts; spawned: Spawn[] };
 export declare function atExit(mask: Mask, r: number, c: number, exit: Dir): boolean;
 export declare function rescueLost(g: Grid, mask: Mask, exit: Dir | null | undefined): Placed[];
+export declare function ensureBubbles(g: Grid, def: LevelDef, mask: Mask, p: Progress): Placed[];
 export declare function hasMoves(g: Grid): boolean;
 export declare function shuffle(g: Grid, rng: () => number, colors: number, newId: () => number): void;
 export declare function helperCharge(counts: Partial<Counts>, id: string): number;

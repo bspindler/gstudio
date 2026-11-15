@@ -373,6 +373,34 @@ export function rescueLost(g, mask, exit) {
   return out;
 }
 
+/**
+ * Safety net for bubble rescue goals (mutates g): if fewer bubble pals are on the board than the goal still needs
+ * (missing at level start, or lost in a collapse), a fresh one is placed where the level put it, or on the nearest
+ * free pal. Only for levels with bubbles and no stranded pals. Returns [{r,c,cell}] for the bubbles placed.
+ */
+export function ensureBubbles(g, def, mask, p) {
+  const placed = [];
+  if (countIn(def, 'B') === 0 || countIn(def, 'P') > 0) return placed;
+  const rescue = goalStatus(def, p).find((s) => s.t === 'rescue');
+  if (!rescue || rescue.done) return placed;
+  let onBoard = 0;
+  for (const row of g) for (const cell of row) if (cell?.k === 'bubble') onBoard++;
+  const homes = [];
+  def.layout.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === 'B') homes.push([r, c]); }));
+  for (let missing = rescue.need - rescue.got - onBoard; missing > 0; missing--) {
+    const spots = [];
+    for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) if (mask[r][c] && isFreePal(g[r][c])) spots.push([r, c]);
+    if (!spots.length) break;
+    const [hr, hc] = homes[0] || [0, 0];
+    spots.sort((a, b) => Math.abs(a[0] - hr) + Math.abs(a[1] - hc) - Math.abs(b[0] - hr) - Math.abs(b[1] - hc));
+    const [r, c] = spots[0];
+    const cell = { id: Math.max(0, ...g.flat().map((x) => x?.id ?? 0)) + 1, k: 'bubble', hp: BUBBLE_HP };
+    g[r][c] = cell;
+    placed.push({ r, c, cell });
+  }
+  return placed;
+}
+
 /* ---------- moves and shuffles ---------- */
 export function hasMoves(g) {
   for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) {

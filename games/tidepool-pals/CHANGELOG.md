@@ -10,6 +10,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.7.1 (2026-11-14)
 - Sea Candy now pops with a soft pastel sugar-sparkle burst.
+- Level 9 now always has a trapped pal in a bubble to rescue, so the level can always be won.
 
 ## 0.7.0 (2026-11-13)
 - Level 9 now has a pal trapped in a bubble on the board. Clear matches next to it twice to crack it open and free it, and freeing it counts toward the goal.

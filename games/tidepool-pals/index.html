@@ -562,7 +562,7 @@ button.card:active{transform:scale(.97)}
 
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
-import { ABILITIES, GRAVITY, activeMask, applyAbility, buildBoard, collapse, counter, doubleCounts, goalStatus, goalsMet,
+import { ABILITIES, GRAVITY, activeMask, applyAbility, buildBoard, collapse, counter, doubleCounts, ensureBubbles, goalStatus, goalsMet,
   group, hasMoves, helperCharge, largestGroup, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveTap, rockOf,
   shuffle, starsFor, tidePhase, tideTurns, turnTide, COLS, ROWS } from './board.js';
 import { HELPER_LEVEL, levelDef, withoutTides } from './levels.js';
@@ -1052,6 +1052,7 @@ function startLevel(n, picks = [], helperId = null, { preview = false } = {}) {
   boardEl.classList.remove('low', 'tidal', 'aim');
   mask = maskOf(def);
   grid = buildBoard(def, rng, newId, 'high');
+  ensureBubbles(grid, def, mask, lvl.prog);
   for (const id of lvl.boosters) {
     if (id === 'moves3') lvl.moves += 3;
     const at = id === 'moves3' ? null : freeCell();
@@ -1218,6 +1219,7 @@ function animateResult(res) {
 /** Gravity in the current tide's direction, then any stranded pal at the exit swims off, until nothing moves. */
 function settle(done) {
   const { spawned } = collapse(grid, active(), rng, lvl.def.colors, newId, lvl.dir);
+  ensureBubbles(grid, lvl.def, mask, lvl.prog); // a rescue bubble is never missing while the goal is open
   render(fromOf(spawned));
   setTimeout(() => {
     const saved = rescueLost(grid, active(), lvl.exit);
