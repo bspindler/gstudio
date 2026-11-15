@@ -111,3 +111,34 @@ describe('casualRun', () => {
     expect(r.jumps).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe('casualRun from a sector start (measurement v2, P3)', () => {
+  it('runs createCourse(seed, from) from `from`, and from 0 is the plain run', () => {
+    expect(casualRun(3, 600, HYPERLINE_CASUAL, 0)).toEqual(casualRun(3, 600));
+    const r = casualRun(3, 1250, HYPERLINE_CASUAL, 1000);
+    expect(r.dist).toBeGreaterThan(1000);
+    expect(r.dist).toBeLessThanOrEqual(1250);
+    expect(r.sector).toBe(4);
+    expect(casualRun(3, 1250, HYPERLINE_CASUAL, 1000)).toEqual(r);
+  });
+
+  it("meets the sector's intro pattern first and counts the patterns it reached", () => {
+    for (const s of seeds(5)) {
+      const r = casualRun(s, 1000, HYPERLINE_CASUAL, 750); // TWIN FANGS opens with 'twin'
+      expect(r.enc.twin).toBeGreaterThanOrEqual(1);
+      expect(Object.values(r.enc).every((n) => Number.isInteger(n) && n > 0)).toBe(true);
+    }
+  });
+
+  it('near misses and clears fire in real runs (planning no longer sets the flags they read)', () => {
+    const runs = seeds(40).map((s) => casualRun(s, 250));
+    const clears = runs.reduce((a, r) => a + r.clears, 0), nears = runs.reduce((a, r) => a + r.nears, 0);
+    expect(clears).toBeGreaterThan(0);
+    expect(nears).toBeGreaterThan(0);
+    expect(nears).toBeLessThanOrEqual(clears);
+  });
+
+  it('clearable can start from a sector start too', () => {
+    expect(clearable(createCourse(7, 500), 600, SEARCH_BUDGET, 500)).toBe(true);
+  });
+});

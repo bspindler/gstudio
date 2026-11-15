@@ -63,11 +63,13 @@ function search(starts: Runner[], c: Course, until: number, budget: number): Fou
 /**
  * A search bot. From every grounded frame it may jump or wait. Holding (jumping on the landing
  * frame) is allowed; otherwise it decides only every 8th frame (15 Hz), so a course that needs a
- * frame-perfect tap fails. If the bot reaches the target distance, a human can too.
- * Returns 'unknown' when it explores more than `budget` states without an answer.
+ * frame-perfect tap fails. If the bot reaches the target distance, a human can too. `from`: where the run starts (0,
+ * or a sector start for createCourse(seed, from)). Returns 'unknown' when it explores more than `budget` states without an answer.
  */
-export function clearable(c: Course, until: number, budget: number = SEARCH_BUDGET): boolean | 'unknown' {
-  return search([createRunner()], c, until, budget).ok;
+export function clearable(c: Course, until: number, budget: number = SEARCH_BUDGET, from = 0): boolean | 'unknown' {
+  const r = createRunner();
+  r.x += from; // a run from a sector start, as index.html runnerAt()
+  return search([r], c, until, budget).ok;
 }
 
 /**
@@ -96,7 +98,14 @@ const CONTINUE = 0.5;
 export type JumpWindow = { lo: number; hi: number; deathX: number; p: string };
 /** One hazard met: its pattern, the window width in ms (0: none found), and where the tap went, ms from the middle. */
 export type Met = { p: string; ms: number; off: number };
-export type CasualRun = { dist: number; sector: number; cause: string; jumps: number; windows: Met[]; killer: string };
+/**
+ * `killer`: the pattern that killed the run ('' if it finished). `enc`: pattern instances reached (by pattern id).
+ * `clears` / `nears`: spikes cleared, and cleared with a near miss (the game's own 'clear' and 'near' events).
+ */
+export type CasualRun = {
+  dist: number; sector: number; cause: string; jumps: number; windows: Met[]; killer: string;
+  enc: Record<string, number>; clears: number; nears: number;
+};
 
 const KILLER: Record<string, string> = { spike: 'spike', block: 'block', fall: 'pit', wall: 'pit', bar: 'bar', gate: 'gate', rail: 'rail' };
 
@@ -110,9 +119,31 @@ export function killerPattern(r: Runner, c: Course): string {
   return p;
 }
 
-/** Tap at `from` (a TAP_BUFFER press), then no input: alive past deathX, with a surviving continuation from there. */
-function tapClears(from: Runner, c: Course, deathX: number): boolean {
-  const s: Runner = { ...from, landed: false };
+/** A walk of the no-input future from some state: each live state by frame, and whether it reached the goal. */
+type Walk = { at: Map<number, Runner>; ok: boolean };
+
+/**
+ * Whether doing nothing from s reaches goal. Two runners in the same state on the same frame have the same future (the
+ * sim depends on x, which the frame fixes, and on y, vy, grounded and flip), so a walk is reused by every tap that
+ * lands on it: neighbouring taps land on the same stretch of track a frame apart.
+ */
+function idleReaches(s: Runner, c: Course, goal: number, walks: Walk[]): boolean {
+  for (const w of walks) {
+    const q = w.at.get(s.steps);
+    if (q && q.y === s.y && q.vy === s.vy && q.grounded === s.grounded && q.flip === s.flip) return w.ok;
+  }
+  const g: Runner = { ...s }, at = new Map<number, Runner>([[g.steps, { ...g }]]);
+  while (!g.dead && g.x < goal) { stepSim(g, c, false); if (!g.dead) at.set(g.steps, { ...g }); }
+  walks.push({ at, ok: !g.dead });
+  return !g.dead;
+}
+
+/**
+ * Tap at traj[k] (a TAP_BUFFER press), then no input: alive past deathX, with a surviving continuation from there
+ * (doing nothing, or failing that, the search bot's moves within PLAN_BUDGET).
+ */
+function tapClears(traj: Runner[], k: number, c: Course, deathX: number, walks: Walk[]): boolean {
+  const s: Runner = { ...traj[k]!, landed: false };
   let tapped = false;
   for (let i = 0; s.x < deathX; i++) {
     const ev = stepSim(s, c, !tapped && i < TAP_BUFFER);
@@ -122,7 +153,7 @@ function tapClears(from: Runner, c: Course, deathX: number): boolean {
   if (!tapped) return false;
   const goal = deathX + speedAt(deathX) * CONTINUE;
   if (!s.grounded && !advance(s, c, goal, false)) return false;
-  return search([s], c, goal, PLAN_BUDGET).ok === true;
+  return idleReaches(s, c, goal, walks) || search([s], c, goal, PLAN_BUDGET).ok === true;
 }
 
 /**
@@ -133,7 +164,8 @@ function tapClears(from: Runner, c: Course, deathX: number): boolean {
  * edges are refined frame by frame. Null when no frame clears it.
  */
 function windowIn(traj: Runner[], c: Course, deathX: number): { lo: number; hi: number } | null {
-  const ok = (k: number) => tapClears(traj[k]!, c, deathX);
+  const walks: Walk[] = [];
+  const ok = (k: number) => tapClears(traj, k, c, deathX, walks);
   const n = traj.length;
   let best: { lo: number; hi: number } | null = null, run: { lo: number; hi: number } | null = null;
   for (let k = n - 1; k >= Math.max(0, n - 1 - SCAN); k -= STRIDE) {
@@ -169,17 +201,31 @@ function gauss(rng: () => number): number {
   return Math.sqrt(-2 * Math.log(1 - rng())) * Math.cos(2 * Math.PI * rng());
 }
 
+/** Pattern instances (course groups) that start in [from, x]: the ones a run that got to x met. */
+function encounters(c: Course, from: number, x: number): Record<string, number> {
+  const enc: Record<string, number> = {}, seen = new Set<number>();
+  for (const o of c.objs) {
+    if (o.x > x) break;
+    if (o.g === undefined || seen.has(o.g)) continue;
+    seen.add(o.g);
+    if (o.x >= from && o.p) enc[o.p] = (enc[o.p] ?? 0) + 1;
+  }
+  return enc;
+}
+
 /**
- * One seeded casual run of createCourse(seed) to `until`. The player plans on its own copy of the course (built from
- * the same seed), so planning never sets the flags the real run's events read (near misses, clears, chips).
+ * One seeded casual run of createCourse(seed, from) from `from` (0, or a sector start: a practice run) to `until`. The
+ * player plans on its own copy of the course (built from the same seed), so planning never sets the flags the real
+ * run's events read (near misses, clears, chips): sharing the course used to mean near/clear never fired.
  */
-export function casualRun(seed: number, until: number, casual: CasualParams = HYPERLINE_CASUAL): CasualRun {
-  const c = createCourse(seed), pc = createCourse(seed);
-  const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+export function casualRun(seed: number, until: number, casual: CasualParams = HYPERLINE_CASUAL, from = 0): CasualRun {
+  const c = createCourse(seed, from), pc = createCourse(seed, from);
+  const rng = mulberry32((seed ^ 0x9e3779b9 ^ Math.imul(Math.round(from), 0x27d4eb2d)) >>> 0);
   const lag = rng() * casual.lag;
   const r = createRunner();
+  r.x += from;
   const windows: Met[] = [];
-  let jumps = 0, traj: Runner[] = [], base = 0, g: Runner | null = null, planned = false, tapAt = -1;
+  let clears = 0, nears = 0, jumps = 0, traj: Runner[] = [], base = 0, g: Runner | null = null, planned = false, tapAt = -1;
   while (!r.dead && r.x < until) {
     if (!planned) {
       // The ghost runs from the last jump on; with no input the runner follows it exactly, so it only needs extending.
@@ -195,12 +241,15 @@ export function casualRun(seed: number, until: number, casual: CasualParams = HY
         } else windows.push({ p, ms: 0, off: 0 });
       }
     }
-    const jumped = stepSim(r, c, tapAt >= 0 && r.steps >= tapAt && r.steps < tapAt + TAP_BUFFER).some((e) => e.t === 'jump');
-    if (jumped) jumps++;
+    let jumped = false;
+    for (const e of stepSim(r, c, tapAt >= 0 && r.steps >= tapAt && r.steps < tapAt + TAP_BUFFER)) {
+      if (e.t === 'jump') { jumped = true; jumps++; } else if (e.t === 'clear') clears++; else if (e.t === 'near') nears++;
+    }
     // A jump, or a tap that ran out unused, changes the future: look again from here.
     if (jumped || (tapAt >= 0 && r.steps >= tapAt + TAP_BUFFER)) { planned = false; tapAt = -1; g = null; }
   }
   // Crossing `until` counts as finishing, even if that same step also hit something.
-  if (r.x >= until) return { dist: until, sector: sectorAt(Math.max(0, until - 1)), cause: '', jumps, windows, killer: '' };
-  return { dist: r.x, sector: sectorAt(r.x), cause: r.dead, jumps, windows, killer: killerPattern(r, c) };
+  const tail = { jumps, windows, enc: encounters(c, from, Math.min(r.x, until) + PS), clears, nears };
+  if (r.x >= until) return { dist: until, sector: sectorAt(Math.max(0, until - 1)), cause: '', killer: '', ...tail };
+  return { dist: r.x, sector: sectorAt(r.x), cause: r.dead, killer: killerPattern(r, c), ...tail };
 }

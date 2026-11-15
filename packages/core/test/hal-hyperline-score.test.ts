@@ -1,22 +1,31 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { work } from '../src/hal/hyperline-bot.js';
-import { HYPERLINE_BANDS, reachScore, scoreHyperline, sectorMeasures, type SectorStats } from '../src/hal/hyperline-score.js';
+import { PATTERNS } from '../../../games/hyperline/lib/course.js';
+import { type CasualRun, type Met, work } from '../src/hal/hyperline-bot.js';
+import { bitesScore, chainedDist, fairScore, HYPERLINE_BANDS, reachScore, scoreHyperline, sectorMeasures, type SectorStats } from '../src/hal/hyperline-score.js';
 import { HYPERLINE_UNTIL } from '../src/hal/scorers.js';
+import { tensionMeasure } from '../src/hal/tension.js';
 
-// Injection targets only the clearability check: casual runs always see the real course.
-const inject = vi.hoisted(() => ({ pitSeed: 0, unknownSeed: 0, inCasual: false, empty: false }));
+// pitSeed / unknownSeed target only the clearability check: casual runs always see the real course. earlySpike changes
+// the casual player's sector 0 (an extra spike cluster), to show later sectors don't move.
+const inject = vi.hoisted(() => ({ pitSeed: 0, unknownSeed: 0, inCasual: false, empty: false, earlySpike: false }));
 const clearableCalls = vi.hoisted(() => ({ n: 0 }));
 vi.mock('../../../games/hyperline/lib/course.js', async (orig) => {
   const real = await orig<typeof import('../../../games/hyperline/lib/course.js')>();
   return {
     ...real,
-    createCourse: (seed: number) => {
-      const c = real.createCourse(seed);
+    createCourse: (seed: number, startX = 0) => {
+      const c = real.createCourse(seed, startX);
       if (inject.empty) { c.nextX = 1e9; return c; } // no obstacles at all: every run finishes
+      if (inject.earlySpike && startX === 0) {
+        real.extendCourse(c, 200);
+        const x = c.nextX;
+        c.objs.push({ t: 'spike', x: x + 1, y: 0, inv: false }, { t: 'spike', x: x + 1.8, y: 0, inv: false });
+        c.nextX = x + 7;
+      }
       if (inject.inCasual || seed !== inject.pitSeed) return c;
       c.nextX = 1e9;
-      c.objs.push({ t: 'pit', x: 8, w: 14 });
+      c.objs.push({ t: 'pit', x: startX + 8, w: 14 });
       return c;
     },
   };
@@ -25,63 +34,100 @@ vi.mock('../src/hal/hyperline-bot.js', async (orig) => {
   const real = await orig<typeof import('../src/hal/hyperline-bot.js')>();
   return {
     ...real,
-    casualRun: (seed: number, until: number) => {
+    casualRun: (...args: Parameters<typeof real.casualRun>) => {
       inject.inCasual = true;
-      try { return real.casualRun(seed, until); } finally { inject.inCasual = false; }
+      try { return real.casualRun(...args); } finally { inject.inCasual = false; }
     },
-    clearable: (c: Parameters<typeof real.clearable>[0], until: number, budget?: number) => {
+    clearable: (...args: Parameters<typeof real.clearable>) => {
       clearableCalls.n++;
-      return c.seed === inject.unknownSeed ? 'unknown' : real.clearable(c, until, budget);
+      return args[0].seed === inject.unknownSeed ? 'unknown' : real.clearable(...args);
     },
   };
 });
 
-const reset = () => { inject.pitSeed = 0; inject.unknownSeed = 0; inject.empty = false; };
+const reset = () => { inject.pitSeed = 0; inject.unknownSeed = 0; inject.empty = false; inject.earlySpike = false; };
 
 const sec = (sector: number, reached: number, died: number): SectorStats =>
-  ({ sector, reached, died, deathRate: reached ? died / reached : 0, causes: died ? { spike: died } : {} });
+  ({ sector, reached, died, deathRate: reached ? died / reached : 0, causes: died ? { spike: died } : {}, clears: 0, nears: 0, close: 0 });
+const met = (p: string, ...ms: number[]): Met[] => ms.map((m) => ({ p, ms: m, off: 0 }));
+const run = (o: Partial<CasualRun>): CasualRun =>
+  ({ dist: 0, sector: 0, cause: '', jumps: 0, windows: [], killer: '', enc: {}, clears: 0, nears: 0, ...o });
 
 describe('scoreHyperline', () => {
   it('pins the bands', () => {
     expect(HYPERLINE_BANDS).toEqual({
       early: { upTo: 1, minSurvive: 0.8 }, minSurvive: 0.4, maxSurvive: 0.97, spikeJump: 0.3, minSample: 8,
       reach: { lo: 0.35, hi: 0.65, ref: 2650 },
+      fair: { quantile: 0.1, minMs: 50 }, bites: [0.03, 0.25],
     });
   });
 
-  it('reports every sector, measures 0..100 and fitness as their mean', () => {
+  it('reports every sector from its own start, measures 0..100, fitness the balance measures\' mean, tension beside it', () => {
     reset();
     const r = scoreHyperline({ seeds: 8, until: 1900 });
     expect(r.game).toBe('hyperline');
     expect(r.levels.map((l) => l.sector)).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
     for (const l of r.levels) {
+      expect(l.reached).toBe(8); // every sector gets the same sample
       expect(l.deathRate).toBeGreaterThanOrEqual(0);
       expect(l.deathRate).toBeLessThanOrEqual(1);
       expect(l.died).toBeLessThanOrEqual(l.reached);
       expect(Object.values(l.causes).reduce((a, b) => a + b, 0)).toBe(l.died);
     }
-    expect(r.levels[0]!.reached).toBe(8);
-    expect(Object.keys(r.measures)).toEqual(['inBand', 'noSpikes', 'reach']);
-    const vals = Object.values(r.measures);
-    for (const v of vals) {
+    expect(Object.keys(r.measures)).toEqual(['inBand', 'noSpikes', 'reach', 'fair', 'bites', 'tension']);
+    for (const v of Object.values(r.measures)) {
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThanOrEqual(100);
       expect(v).toBe(Math.round(v * 100) / 100);
     }
+    const { tension, ...balance } = r.measures;
+    const vals = Object.values(balance);
     expect(r.fitness).toBe(Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100);
+    expect(tension).toBe(tensionMeasure(r.levels.map((l) => ({ n: l.sector, wins: l.reached - l.died, close: l.close })), { skipUpTo: HYPERLINE_BANDS.early.upTo }));
     expect(r.hardFailures).toEqual([]);
   }, 60_000);
 
-  it('noSpikes only judges consecutive sectors that were each reached by at least minSample runs', () => {
+  it('near misses fire in real runs, so tension has something to count', () => {
     reset();
     const r = scoreHyperline({ seeds: 20, until: 1900 });
-    const big = r.levels.filter((l) => l.reached >= HYPERLINE_BANDS.minSample);
-    expect(big.map((l) => l.sector)).toEqual(big.map((_, i) => i));
+    expect(r.levels.reduce((a, l) => a + l.clears, 0)).toBeGreaterThan(0);
+    expect(r.levels.reduce((a, l) => a + l.nears, 0)).toBeGreaterThan(0);
+    for (const l of r.levels) expect(l.close).toBeLessThanOrEqual(l.reached - l.died);
+  }, 60_000);
+
+  it('a change to an early sector does not reshuffle later ones (each sector is played from its own start)', () => {
+    reset();
+    const clean = scoreHyperline({ seeds: 8, until: 1000 });
+    inject.earlySpike = true;
+    try {
+      const r = scoreHyperline({ seeds: 8, until: 1000 });
+      expect(r.levels.slice(1)).toEqual(clean.levels.slice(1));
+    } finally { reset(); }
+  }, 60_000);
+
+  it('sees a CRUMBLE change: pits 45% wider change the report', () => {
+    reset();
+    const crumble = PATTERNS.find((p) => p.id === 'crumble')!, build = crumble.build;
+    const before = scoreHyperline({ seeds: 20, until: 2500 });
+    crumble.build = (x, d, r) => {
+      const out = build(x, d, r);
+      for (const o of out.o) if (o.t === 'pit') o.w = o.w! * 1.45;
+      return out;
+    };
+    try {
+      const after = scoreHyperline({ seeds: 20, until: 2500 });
+      expect(JSON.stringify(after)).not.toBe(JSON.stringify(before));
+      expect(after.levels[9]).not.toEqual(before.levels[9]);
+    } finally { crumble.build = build; }
+  }, 120_000);
+
+  it('noSpikes judges every consecutive pair once each sector has minSample runs', () => {
+    reset();
+    const r = scoreHyperline({ seeds: 8, until: 1900 });
     let spikes = 0;
-    for (let i = 1; i < big.length; i++) if (big[i]!.deathRate - big[i - 1]!.deathRate > HYPERLINE_BANDS.spikeJump) spikes++;
-    const pairs = big.length - 1;
-    expect(r.measures.noSpikes).toBe(pairs > 0 ? Math.round(100 * (1 - spikes / pairs) * 100) / 100 : 100);
-    // A course this short reaches only sector 0: no pairs, so no spikes.
+    for (let i = 1; i < r.levels.length; i++) if (r.levels[i]!.deathRate - r.levels[i - 1]!.deathRate > HYPERLINE_BANDS.spikeJump) spikes++;
+    expect(r.measures.noSpikes).toBe(Math.round(100 * (1 - spikes / (r.levels.length - 1)) * 100) / 100);
+    // A course this short has only sector 0: no pairs, so no spikes.
     expect(scoreHyperline({ seeds: 2, until: 100 }).measures.noSpikes).toBe(100);
   }, 60_000);
 
@@ -106,20 +152,51 @@ describe('scoreHyperline', () => {
     expect(reachScore(1)).toBe(0);
   });
 
+  it("reach chains a seed's sector runs: the distance of the first sector it died in, else until", () => {
+    const bySector = [
+      [run({ dist: 250 }), run({ dist: 250 })],
+      [run({ dist: 300, cause: 'spike' }), run({ dist: 500 })],
+      [run({ dist: 600, cause: 'fall' }), run({ dist: 600 })],
+    ];
+    expect(chainedDist(bySector, 0, 600)).toBe(300);
+    expect(chainedDist(bySector, 1, 600)).toBe(600);
+  });
+
   it('reach is measured against a fixed distance, so a longer course (a new sector) does not lower it', () => {
     reset();
-    const a = scoreHyperline({ seeds: 8, until: 1900 });
-    const b = scoreHyperline({ seeds: 8, until: 1900 + 250 });
-    expect(b.levels.length).toBeGreaterThanOrEqual(a.levels.length);
+    // Both courses run past the median distance, so the extra sector only adds runs the median never reaches.
+    const a = scoreHyperline({ seeds: 8, until: 2400 });
+    const b = scoreHyperline({ seeds: 8, until: 2400 + 250 });
+    expect(b.levels.length).toBe(a.levels.length + 1);
     expect(b.measures.reach).toBe(a.measures.reach);
     expect(HYPERLINE_BANDS.reach.ref).toBeGreaterThan(0);
-  });
+  }, 60_000);
 
   it('inBand needs sectors 2+ to be no easier than maxSurvive; sectors 0-1 keep only the lower bound', () => {
     // All sectors survive 100%: sectors 0-1 are in band, 2-3 are too easy.
     expect(sectorMeasures([sec(0, 20, 0), sec(1, 20, 0), sec(2, 20, 0), sec(3, 20, 0)], 0.5).inBand).toBe(50);
     // 97% survival is still in band.
     expect(sectorMeasures([sec(0, 100, 0), sec(1, 100, 0), sec(2, 100, 3)], 0.5).inBand).toBe(100);
+  });
+
+  it("fair: each pattern's p10 tap window against minMs, linear below it, averaged over patterns with minSample windows", () => {
+    expect(fairScore([...met('a', ...Array(20).fill(80)), ...met('b', ...Array(20).fill(25))])).toBe(75);
+    // p10 of ten windows 0, 10, ..., 90 ms is 10 ms: 20 points.
+    expect(fairScore(met('a', 0, 10, 20, 30, 40, 50, 60, 70, 80, 90))).toBe(20);
+    // Too few windows to judge: ignored, and no pattern to judge scores 100.
+    expect(fairScore(met('a', ...Array(7).fill(0)))).toBe(100);
+    expect(fairScore([])).toBe(100);
+  });
+
+  it("bites: each sector's intro kills 3-25% per encounter; an intro that never asks for a tap is not judged", () => {
+    const sector = (p: string, kills: number, n: number, taps = n) => Array.from({ length: n }, (_, i) =>
+      run({ killer: i < kills ? p : '', cause: i < kills ? 'spike' : '', enc: { [p]: 1 }, windows: met(p, ...(i < taps ? [100] : [])) }));
+    // Sector 3 'twin' kills 10%: in band. Sector 4 'mover' kills none: 0 points.
+    expect(bitesScore([[], [], [], sector('twin', 2, 20), sector('mover', 0, 20)])).toBe(50);
+    // Sector 1's bars never ask for a tap (no windows): left out.
+    expect(bitesScore([[], sector('bar', 0, 20, 0), [], sector('twin', 2, 20)])).toBe(100);
+    // 50% kills: halfway from 25% to 100% kills: 2/3 of the way down.
+    expect(bitesScore([[], [], [], sector('twin', 10, 20)])).toBeCloseTo((100 * 0.5) / 0.75, 1);
   });
 
   it('a trivially easy game (no obstacles, every run finishes) scores reach < 100 and inBand < 100', () => {
@@ -140,7 +217,8 @@ describe('scoreHyperline', () => {
     inject.pitSeed = 3;
     try {
       const r = scoreHyperline({ seeds: 4, until: 1900 });
-      expect(r.hardFailures).toEqual(['seed 3: not clearable to 1900m']);
+      expect(r.hardFailures.length).toBeGreaterThan(0);
+      for (const f of r.hardFailures) expect(f).toMatch(/^seed 3, sector \d+: not clearable from \d+m to \d+m$/);
       expect(r.measures).toEqual(clean.measures);
       expect(r.fitness).toBe(clean.fitness);
       expect(r.levels).toEqual(clean.levels);
@@ -151,7 +229,9 @@ describe('scoreHyperline', () => {
     reset();
     inject.unknownSeed = 3;
     try {
-      expect(scoreHyperline({ seeds: 3, until: 1900 }).hardFailures).toEqual(['seed 3: clearability unknown']);
+      const f = scoreHyperline({ seeds: 3, until: 1900 }).hardFailures;
+      expect(f.length).toBeGreaterThan(0);
+      for (const x of f) expect(x).toMatch(/^seed 3, sector \d+: clearability unknown$/);
     } finally { reset(); }
   }, 60_000);
 
@@ -168,6 +248,8 @@ describe('scoreHyperline', () => {
   // Raised to 60M with the human-timing player (measurement v2, P2): it scans each hazard's tap window (some 40 short
   // tap simulations per hazard, to aim at the middle) instead of two searches per 15 Hz decision, and it survives
   // further. The default run took 49.8M steps (about 17 s on Brian's Mac) on 2026-11-15.
+  // P3 plays every sector from its own start (100 runs per sector, not 100 runs that thin out), and the player reuses
+  // one no-input walk for all the taps that land on it: 49.7M steps, about 15 s, on 2026-11-15. The budget stays.
   const STEP_BUDGET = 60_000_000;
   it(`a full default run (100 seeds to HYPERLINE_UNTIL) takes under ${STEP_BUDGET / 1e6}M simulation steps`, () => {
     reset();
