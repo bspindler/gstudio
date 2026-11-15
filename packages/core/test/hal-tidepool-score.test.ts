@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { levelDef, validateLevel, withoutTides } from '../../../games/tidepool-pals/levels.js';
-import { TIDEPOOL_BANDS, scoreTidepool } from '../src/hal/tidepool-score.js';
+import { TIDEPOOL_BANDS, goalReachOf, inBandOf, levelTags, plusFiveOf, scoreTidepool, tierBand, varietyScore } from '../src/hal/tidepool-score.js';
 
 const inject = vi.hoisted(() => ({ bad: false }));
 vi.mock('../../../games/tidepool-pals/levels.js', async (orig) => {
@@ -15,7 +15,94 @@ vi.mock('../../../games/tidepool-pals/levels.js', async (orig) => {
 
 describe('scoreTidepool', () => {
   it('pins the bands', () => {
-    expect(TIDEPOOL_BANDS).toEqual({ early: { upTo: 5, minWin: 0.9 }, minWin: 0.25, wallDrop: 0.3 });
+    expect(TIDEPOOL_BANDS).toEqual({
+      early: { upTo: 5 },
+      tiers: [{ from: 1, band: [0.9, 1] }, { from: 6, band: [0.7, 0.95] }, { from: 16, band: [0.45, 0.85] }],
+      wallDrop: 0.3,
+      plusFive: { moves: 5, minLossRate: 0.05, helps: 0.2, target: 0.5, botMinConverted: 0.5 },
+      variety: { target: 0.5 },
+    });
+  });
+
+  it('win-rate bands are tiered, with a ceiling past the opening', () => {
+    expect(tierBand(1)).toEqual([0.9, 1]);
+    expect(tierBand(5)).toEqual([0.9, 1]);
+    expect(tierBand(6)).toEqual([0.7, 0.95]);
+    expect(tierBand(15)).toEqual([0.7, 0.95]);
+    expect(tierBand(16)).toEqual([0.45, 0.85]);
+    expect(tierBand(400)).toEqual([0.45, 0.85]);
+  });
+
+  it('inBand scores each level continuously against its tier', () => {
+    expect(inBandOf(3, 1)).toBe(100);
+    expect(inBandOf(3, 0.45)).toBeCloseTo(50, 5);
+    expect(inBandOf(10, 0.8)).toBe(100);
+    expect(inBandOf(10, 0.35)).toBeCloseTo(50, 5);
+    expect(inBandOf(20, 0.6)).toBe(100);
+    expect(inBandOf(20, 1)).toBe(0); // the ceiling: a level nobody loses past the opening is not in band
+    expect(inBandOf(20, 0.925)).toBeCloseTo(50, 5);
+  });
+
+  it('goalReach only rewards near misses on levels below their band', () => {
+    expect(goalReachOf(20, 0.6, 0.1)).toBe(100); // in band: how close its losses came is not scored
+    expect(goalReachOf(20, 0.95, 0.1)).toBe(100); // above band: inBand already says so
+    expect(goalReachOf(20, 0.3, 0.8)).toBeCloseTo(80, 5);
+    expect(goalReachOf(10, 0.5, 0.25)).toBeCloseTo(25, 5);
+  });
+
+  it('plusFive: how many losses 5 more moves would turn into wins, and whether the offer helps', () => {
+    // (win rate, with +5 moves, with the level's moves doubled)
+    expect(plusFiveOf(1, 1, 1)).toEqual({ helps: null, score: null, botStuck: null }); // no losses: the offer never shows
+    expect(plusFiveOf(0.97, 1, 1)).toEqual({ helps: null, score: null, botStuck: null }); // too few losses to judge
+    expect(plusFiveOf(0.5, 0.75, 1)).toEqual({ helps: true, score: 100, botStuck: false });
+    expect(plusFiveOf(0.5, 0.52, 0.9)).toMatchObject({ helps: false, botStuck: false });
+    expect(plusFiveOf(0.5, 0.52, 0.9).score).toBeCloseTo(8, 5);
+    expect(plusFiveOf(0, 0.1, 0.6).score).toBeCloseTo(20, 5);
+  });
+
+  it('plusFive gives no verdict where the robot fails whatever its move budget', () => {
+    // Level 11 at review: 59% won, 60% with +5, 66% with +40: the robot's losses are its own blind spot, not the level.
+    expect(plusFiveOf(0.59, 0.6, 0.66)).toEqual({ helps: null, score: null, botStuck: true });
+    expect(plusFiveOf(0.5, 0.5, 0.74)).toEqual({ helps: null, score: null, botStuck: true }); // under half the losses
+    expect(plusFiveOf(0.5, 0.5, 0.75)).toMatchObject({ helps: false, botStuck: false }); // half: judged
+  });
+
+  it('plusFive is reported beside fitness, never a measure (no ticket can target it, no gate can veto on it)', () => {
+    const r = scoreTidepool({ from: 11, to: 13, seeds: 10 });
+    expect(r.measures).not.toHaveProperty('plusFive');
+    expect(r.noise).not.toHaveProperty('plusFive');
+    expect(r.plusFive).toBeGreaterThanOrEqual(0);
+    expect(r.plusFive).toBeLessThanOrEqual(100);
+  });
+
+  it('the robot-stuck levels get no +5 verdict and are listed', () => {
+    const r = scoreTidepool({ from: 11, to: 11, seeds: 20 });
+    const l11 = r.levels[0]!;
+    expect(l11.winRateDoubled).toBeGreaterThanOrEqual(l11.winRatePlusFive);
+    expect(l11.botStuck).toBe(true);
+    expect(l11.plusFiveHelps).toBeNull();
+  });
+
+  it('variety: back-to-back repeats score lower; the opening is left out', () => {
+    const a = levelDef(25), b = levelDef(26);
+    expect(levelTags({ ...a, n: 10 })).toEqual(levelTags({ ...b, n: 11 }));
+    expect(varietyScore([{ ...a, n: 10 }, { ...b, n: 11 }])).toBe(0);
+    expect(varietyScore([levelDef(1), levelDef(2), levelDef(3)])).toBe(100); // pairs inside the opening don't count
+    const mixed = varietyScore([levelDef(16), levelDef(17), levelDef(18), levelDef(19)]);
+    expect(mixed).toBeGreaterThan(50);
+    expect(mixed).toBeLessThanOrEqual(100);
+    expect(levelTags(levelDef(19))).toEqual(expect.arrayContaining(['goal:rescue', 'goal:litter', 'tide:left', 'exit:left', 'stranded']));
+  });
+
+  it('lists the levels where +5 moves should not be offered', () => {
+    const r = scoreTidepool({ from: 11, to: 16, seeds: 10 });
+    for (const l of r.levels) {
+      expect(l.winRatePlusFive).toBeGreaterThanOrEqual(l.winRate);
+      expect(l.winRateDoubled).toBeGreaterThanOrEqual(l.winRatePlusFive);
+      expect([true, false, null]).toContain(l.plusFiveHelps);
+      expect([true, false, null]).toContain(l.botStuck);
+      if (l.botStuck) expect(l.plusFiveHelps).toBeNull();
+    }
   });
 
   it('reports every level in range', () => {
@@ -30,9 +117,10 @@ describe('scoreTidepool', () => {
 
   it('measures are 0..100 and fitness is their mean', () => {
     const r = scoreTidepool({ from: 1, to: 6, seeds: 4 });
-    expect(Object.keys(r.measures)).toEqual(['inBand', 'noWalls', 'goalReach', 'tension']);
+    expect(Object.keys(r.measures)).toEqual(['inBand', 'noWalls', 'goalReach', 'variety', 'tension']);
     for (const l of r.levels) expect(l.closeWins!).toBeLessThanOrEqual(l.wins!);
-    const vals = [r.measures.inBand!, r.measures.noWalls!, r.measures.goalReach!]; // fitness: the balance measures, not tension
+    // fitness: the balance measures, not tension
+    const vals = [r.measures.inBand!, r.measures.noWalls!, r.measures.goalReach!, r.measures.variety!];
     expect(r.measures.tension).toBeGreaterThanOrEqual(0);
     expect(r.measures.tension).toBeLessThanOrEqual(100);
     for (const v of vals) {
