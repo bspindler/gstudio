@@ -107,12 +107,15 @@ export type CasualRun = {
   enc: Record<string, number>; clears: number; nears: number;
 };
 
-const KILLER: Record<string, string> = { spike: 'spike', block: 'block', fall: 'pit', wall: 'pit', bar: 'bar', gate: 'gate', rail: 'rail' };
+// Death causes that are not the name of the obstacle kind that kills: falling into (or hitting the wall of) a pit. Every
+// other cause is its own kind (spike, block, bar, gate, rail), so a new obstacle the game adds is attributed without an
+// entry here.
+const KILLER: Record<string, string> = { fall: 'pit', wall: 'pit' };
 
 /** The pattern (o.p) of the object that killed a dead runner: the last object of the killing kind at or before it. */
 export function killerPattern(r: Runner, c: Course): string {
-  const t = KILLER[r.dead];
-  if (!t) return '';
+  if (!r.dead) return '';
+  const t = Object.hasOwn(KILLER, r.dead) ? KILLER[r.dead]! : r.dead;
   const x1 = r.x + PS;
   let p = '';
   for (let i = lowerBound(c.objs, r.x - 30); i < c.objs.length && c.objs[i]!.x <= x1 + 0.1; i++) if (c.objs[i]!.t === t) p = c.objs[i]!.p ?? '';

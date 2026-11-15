@@ -8,7 +8,7 @@
 // Block Barn: a real touch tap on a block (found through its ?hal hook, which is read-only here) must name it.
 // Lanternkeep's hook is read-only here: it says where a grid cell is on screen and what state the game is in.
 import type { Browser, BrowserContextOptions, CDPSession, Locator, Page } from 'playwright';
-import { closeAll, launchBrowser, newHalContext, serveGames, type StaticServer } from './browser.js';
+import { closeAll, LANTERNKEEP_PLANT_CELL, launchBrowser, newHalContext, serveGames, type StaticServer } from './browser.js';
 
 export type ControlCheck = { game: string; check: string; ok: boolean; detail: string; skipped?: string };
 export type ControlsOptions = {
@@ -225,13 +225,15 @@ async function gearholdTouch(run: Run) {
     }
     // swap without the scatter cannon: the message, and no weapon change
     {
-      const a = await state(page), [x, y] = await center(page, '#swap');
+      const shown = () => page.evaluate(() => { const m = document.getElementById('msg')!; return m.hidden ? '' : m.textContent ?? ''; });
+      const a = await state(page), [x, y] = await center(page, '#swap'), msg0 = await shown();
       await touchDrag(cdp, [[x, y]], () => wait(80));
       await wait(100);
       const b = await state(page);
-      const msg = await page.evaluate(() => { const m = document.getElementById('msg')!; return m.hidden ? '' : m.textContent ?? ''; });
-      run.add(G, 'touch tap #swap without scatter says so', msg === 'No second weapon yet.' && b.p.weapon === a.p.weapon,
-        `msg=${JSON.stringify(msg)} weapon ${a.p.weapon} -> ${b.p.weapon}`);
+      const msg = await shown();
+      // Any new message will do (its words are the game's), as long as one shows and the weapon stays.
+      run.add(G, 'touch tap #swap without scatter says so', msg.trim() !== '' && msg !== msg0 && b.p.weapon === a.p.weapon,
+        `msg ${JSON.stringify(msg0)} -> ${JSON.stringify(msg)} weapon ${a.p.weapon} -> ${b.p.weapon}`);
     }
     // with the scatter cannon (granted as a precondition; the taps stay real): each SWAP tap toggles
     {
@@ -347,7 +349,8 @@ async function lanternkeep(run: Run) {
     const resumed = !(await st()).paused;
     run.add(G, 'p pauses and Escape resumes', paused && resumed, `paused ${paused}, resumed ${resumed}`);
     const before = await st();
-    const pt = await page.evaluate(() => (window as any).__hal.cellPoint(3, 2));
+    const [c, r] = await page.evaluate<[number, number]>(LANTERNKEEP_PLANT_CELL); // a free tile of the served night 1
+    const pt = await page.evaluate(([c, r]) => (window as any).__hal.cellPoint(c, r), [c, r]);
     await page.touchscreen.tap(pt.x, pt.y);
     await wait(150);
     await tapEl('.card');

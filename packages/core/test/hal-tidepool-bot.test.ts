@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import * as board from '../../../games/tidepool-pals/board.js';
 import type { LevelDef } from '../../../games/tidepool-pals/board.js';
-import { levelDef } from '../../../games/tidepool-pals/levels.js';
+import { tidepoolLevel as levelDef } from '../src/hal/fixtures/tidepool-levels.js';
 import { playLevel, type Engine } from '../src/hal/tidepool-bot.js';
 
+// The robot is checked on frozen copies of the levels (fixtures/tidepool-levels.ts), so retuning, adding or renumbering
+// the game's levels never touches this protected file.
 const seeds = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 
 describe('playLevel', () => {

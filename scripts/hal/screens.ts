@@ -8,7 +8,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Browser, Page } from 'playwright';
-import { closeAll, launchBrowser, newHalContext, repo, serveGames, type HalContext, type StaticServer } from './browser.js';
+import { closeAll, LANTERNKEEP_PLANT_CELL, launchBrowser, newHalContext, repo, serveGames, type HalContext, type StaticServer } from './browser.js';
 
 export const DEFAULT_SCREENS_DIR = join(repo, '.data', 'hal', 'screens');
 export type ScreensResult = { game: string; shots: string[]; errors: string[]; reached: boolean; notes: string[]; blockedRequests: string[] };
@@ -132,7 +132,8 @@ const FLOWS: Record<string, FlowFn> = {
     await settle(page);
     await shoot(); // night 1, ready to plant
     await step('plant a glowcap', async () => {
-      await lkTapCell(page, 3, 2);
+      const [c, r] = await page.evaluate<[number, number]>(LANTERNKEEP_PLANT_CELL); // a free tile of the served night 1
+      await lkTapCell(page, c, r);
       await page.locator('.card').first().click({ force: true, timeout: T });
     });
     if ((await lkState(page)).towers !== 1) flow.notes.push('planting a glowcap did not add a plant');

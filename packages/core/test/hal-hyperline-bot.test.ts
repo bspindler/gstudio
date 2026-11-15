@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createCourse, type Course, type Obj } from '../../../games/hyperline/lib/course.js';
 import { createRunner, step } from '../../../games/hyperline/lib/sim.js';
 import { sectorAt, STEP } from '../../../games/hyperline/lib/world.js';
-import { casualRun, clearable, HYPERLINE_CASUAL, jumpWindow, SEARCH_BUDGET, TAP_BUFFER } from '../src/hal/hyperline-bot.js';
+import { casualRun, clearable, HYPERLINE_CASUAL, jumpWindow, killerPattern, SEARCH_BUDGET, TAP_BUFFER } from '../src/hal/hyperline-bot.js';
 
 const seeds = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 const bare = (objs: Obj[]): Course => { const c = createCourse(5); c.objs.length = 0; c.nextX = 1e9; c.objs.push(...objs.map((o) => ({ ...o }))); return c; };
@@ -19,6 +19,24 @@ describe('clearable', () => {
 
   it('a generous budget still clears a short course', () => {
     expect(clearable(createCourse(7), 100)).toBe(true);
+  });
+});
+
+describe('killerPattern', () => {
+  const dead = (cause: string, x = 10.5) => ({ ...createRunner(), x, dead: cause });
+  it("maps today's death causes to the obstacle that killed the runner", () => {
+    const c = bare([{ t: 'spike', x: 11, y: 0, inv: false, p: 'spikes', g: 0 }, { t: 'pit', x: 11, w: 3, p: 'gap' } as Obj]);
+    expect(killerPattern(dead('spike'), c)).toBe('spikes');
+    expect(killerPattern(dead('fall'), c)).toBe('gap');
+    expect(killerPattern(dead('wall'), c)).toBe('gap');
+    expect(killerPattern(dead(''), c)).toBe('');
+  });
+
+  // Content grows: a new obstacle whose death cause is its own kind (as every kind but pits is today) is attributed to
+  // its pattern with no edit to this protected bot, so its sector's bites and tap windows are judged like the rest.
+  it('attributes a death to an obstacle kind the bot has never heard of', () => {
+    const c = bare([{ t: 'pillar', x: 11, w: 1, p: 'pillars' } as unknown as Obj]);
+    expect(killerPattern(dead('pillar'), c)).toBe('pillars');
   });
 });
 

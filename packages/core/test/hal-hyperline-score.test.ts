@@ -5,6 +5,10 @@ import { type CasualRun, type Met, work } from '../src/hal/hyperline-bot.js';
 import { bitesScore, chainedDist, fairScore, HYPERLINE_BANDS, reachScore, scoreHyperline, sectorMeasures, type SectorStats } from '../src/hal/hyperline-score.js';
 import { HYPERLINE_UNTIL } from '../src/hal/scorers.js';
 import { tensionMeasure } from '../src/hal/tension.js';
+import { SECTOR_LEN, sectorAt } from '../../../games/hyperline/lib/world.js';
+
+/** The step budget per sector played (see the budget test below): 70M over the 8 sectors the default run played. */
+const STEP_BUDGET_PER_SECTOR = 8_750_000;
 
 // pitSeed / unknownSeed target only the clearability check: casual runs always see the real course. earlySpike changes
 // the casual player's sector 0 (an extra spike cluster), to show later sectors don't move. seamPitSeed puts an
@@ -115,17 +119,19 @@ describe('scoreHyperline', () => {
 
   it('sees a CRUMBLE change: pits 45% wider change the report', () => {
     reset();
+    // Played up to the end of the sector CRUMBLE belongs to, wherever the game puts it.
     const crumble = PATTERNS.find((p) => p.id === 'crumble')!, build = crumble.build;
-    const before = scoreHyperline({ seeds: 20, until: 2500 });
+    const at = crumble.sector, until = (at + 1) * SECTOR_LEN;
+    const before = scoreHyperline({ seeds: 20, until });
     crumble.build = (x, d, r) => {
       const out = build(x, d, r);
       for (const o of out.o) if (o.t === 'pit') o.w = o.w! * 1.45;
       return out;
     };
     try {
-      const after = scoreHyperline({ seeds: 20, until: 2500 });
+      const after = scoreHyperline({ seeds: 20, until });
       expect(JSON.stringify(after)).not.toBe(JSON.stringify(before));
-      expect(after.levels[9]).not.toEqual(before.levels[9]);
+      expect(after.levels[at]).not.toEqual(before.levels[at]);
     } finally { crumble.build = build; }
   }, 120_000);
 
@@ -274,8 +280,11 @@ describe('scoreHyperline', () => {
   // The full-course clearability check from 0 (daily mode's course, the only one that crosses sector seams) is back
   // beside the per-sector checks: +7.0M steps, 56.7M in all, about 23 s with other jobs running, on 2026-11-15.
   // Raised to 70M so one more sector still fits.
-  const STEP_BUDGET = 70_000_000;
-  it(`a full default run (100 seeds to HYPERLINE_UNTIL) takes under ${STEP_BUDGET / 1e6}M simulation steps`, () => {
+  // Permission split A (2026-11-15): the budget is per sector the default run plays (70M over 8 sectors then), so a
+  // sector the game adds brings its own share and never fails this test; a planner that searches much more still does.
+  const SECTORS_PLAYED = sectorAt(HYPERLINE_UNTIL - 1) + 1;
+  const STEP_BUDGET = SECTORS_PLAYED * STEP_BUDGET_PER_SECTOR;
+  it(`a full default run (100 seeds to HYPERLINE_UNTIL) takes under ${STEP_BUDGET_PER_SECTOR / 1e6}M simulation steps per sector`, () => {
     reset();
     work.steps = 0;
     scoreHyperline({ seeds: 100, until: HYPERLINE_UNTIL });

@@ -9,6 +9,8 @@ import {
   blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
   addFileToTree, adoptHeld, dropHeld, holdCandidate, linkNodeModules, listHeld, pushHalMain, replayHalOnto, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
 } from './git.js';
+import { LEVELS as GEARHOLD_LEVELS } from '../../games/gearhold/levels.js';
+import { AUTHORED as TIDEPOOL_AUTHORED } from '../../games/tidepool-pals/levels.js';
 
 const gitIn = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' }).trim();
 const put = (root: string, rel: string, data: string | Buffer) => { mkdirSync(dirname(join(root, rel)), { recursive: true }); writeFileSync(join(root, rel), data); };
@@ -30,14 +32,13 @@ describe('countArrayItems', () => {
     expect(countArrayItems('const MYLEVELS = [1, 2]', 'LEVELS')).toBeNull();
   });
   // Counts track the games, never a number: new levels are Brian's call (he declines them), not a test's.
+  // The static count must agree with the game's own module, however many levels it has and however they are written.
   it('reads the real games: Tidepool its hand-authored levels, Gearhold its map list', () => {
     const real = (f: string) => readFileSync(new URL(`../../games/${f}`, import.meta.url), 'utf8');
-    const tide = real('tidepool-pals/levels.js');
-    expect(countArrayItems(tide, 'RAW')).toBe((tide.match(/^ {2}L\(\d+,/gm) ?? []).length);
-    expect(countArrayItems(tide, 'RAW')).toBeGreaterThanOrEqual(1);
-    const gear = real('gearhold/levels.js');
-    expect(countArrayItems(gear, 'LEVELS')).toBe((gear.match(/^ {4}name: /gm) ?? []).length);
-    expect(countArrayItems(gear, 'LEVELS')).toBeGreaterThanOrEqual(3);
+    expect(countArrayItems(real('tidepool-pals/levels.js'), 'RAW')).toBe(TIDEPOOL_AUTHORED.length);
+    expect(TIDEPOOL_AUTHORED.length).toBeGreaterThanOrEqual(1);
+    expect(countArrayItems(real('gearhold/levels.js'), 'LEVELS')).toBe(GEARHOLD_LEVELS.length);
+    expect(GEARHOLD_LEVELS.length).toBeGreaterThanOrEqual(3);
   });
 });
 
