@@ -189,9 +189,12 @@ export type CandidateResult = {
   scoreNotes?: string[];
 };
 
-/** The scorers that judge a game: Gearhold has a static and a browser-played one. */
+/**
+ * The scorers that judge a game. Gearhold is judged by its browser-played scorer alone: the static map walker's
+ * measures left fitness, and its structural checks are gearhold-play hard failures (measurement v2 P3).
+ */
 export function scorersFor(game: string): string[] {
-  return game === 'gearhold' ? ['gearhold', 'gearhold-play'] : [game];
+  return game === 'gearhold' ? ['gearhold-play'] : [game];
 }
 
 /** Width and height from a JPEG's SOF header, or null if the bytes are not a JPEG (no SOI) or have no frame header. */

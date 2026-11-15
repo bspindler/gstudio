@@ -21,8 +21,59 @@ export function noiseBand(flat: number, seBefore: number | undefined, seAfter: n
   return Math.max(flat, 2 * Math.sqrt(b * b + a * a));
 }
 
+/** A level of a report that scores each level 0-100 on its own (gearhold-play, measurement v2 P3). */
+type ScoredLevel = { level: number; scores: Measures; noise?: Measures };
+const isObj = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
+function scoredLevels(r: ScoreReport<unknown>): ScoredLevel[] | null {
+  const ls = r.levels as unknown[];
+  return Array.isArray(ls) && ls.length > 0 && ls.every((l) => isObj(l) && Number.isFinite(l.level) && isObj(l.scores))
+    ? (ls as ScoredLevel[]) : null;
+}
+const round2 = (x: number): number => Math.round(x * 100) / 100;
+const fmtNum = (x: number): string => (Number.isInteger(x) ? String(x) : x.toFixed(2));
+
 /**
- * `atCeiling`: score mode, but the target was already within minGain of the ceiling, so it was judged holding the line.
+ * The new-level path (measurement v2 P3). When the after report has every level of the before report plus new ones,
+ * and both score each level on its own (`levels[i].scores`, whose means are the measures of the same names and whose
+ * measures' mean is fitness), a new level must not move the averages either way. Instead: every old level's scores
+ * must each hold within their noise band, and every new level's scores must be within their noise band of 100 (in
+ * band). The rest of the gate then sees the after report restricted to the old levels. Measures that are not
+ * per-level scores (tension) stay as reported. Null when the path does not apply: the plain gate, as before.
+ */
+function newLevelPath(before: ScoreReport<unknown>, after: ScoreReport<unknown>): { reasons: string[]; after: ScoreReport<unknown> } | null {
+  const b = scoredLevels(before), a = scoredLevels(after);
+  if (!b || !a) return null;
+  const old = new Set(b.map((l) => l.level));
+  const kept = a.filter((l) => old.has(l.level)), fresh = a.filter((l) => !old.has(l.level));
+  if (fresh.length === 0 || kept.length !== old.size) return null;
+  const reasons: string[] = [];
+  const keys = [...new Set(b.flatMap((l) => Object.keys(l.scores)))];
+  for (const was of b) {
+    const now = kept.find((l) => l.level === was.level)!;
+    for (const k of keys) {
+      const x = was.scores[k], y = now.scores[k];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue; // a missing per-level score: the measure checks catch it
+      const tol = noiseBand(GATE.tolerance, was.noise?.[k], now.noise?.[k]);
+      if (x! - y! > tol) reasons.push(`levels[${was.level}] ${k} regressed ${(x! - y!).toFixed(2)} (> ${fmtNum(tol)})`);
+    }
+  }
+  for (const l of fresh) {
+    for (const k of keys) {
+      const y = l.scores[k];
+      const need = GATE.ceiling - noiseBand(GATE.tolerance, undefined, l.noise?.[k]);
+      if (!Number.isFinite(y)) reasons.push(`new levels[${l.level}] ${k} is missing or not finite`);
+      else if (y! < need) reasons.push(`new levels[${l.level}] ${k} ${y!.toFixed(2)} is out of its band (needs >= ${fmtNum(round2(need))})`);
+    }
+  }
+  const measures: Measures = { ...after.measures };
+  const balance = keys.filter((k) => Object.hasOwn(after.measures, k));
+  for (const k of balance) measures[k] = round2(kept.reduce((s, l) => s + (l.scores[k] ?? 0), 0) / kept.length);
+  const fitness = balance.length ? round2(balance.reduce((s, k) => s + measures[k]!, 0) / balance.length) : after.fitness;
+  return { reasons, after: { ...after, levels: kept, measures, fitness } };
+}
+
+/**
+ * `atCeiling`: score mode,but the target was already within minGain of the ceiling, so it was judged holding the line.
  * `notes`: soft-measure drops that did not discard, for the change's card and the report.
  */
 export type GateResult = { keep: boolean; gain: number; reasons: string[]; atCeiling?: true; notes?: string[] };
@@ -49,6 +100,8 @@ export function compareScores(before: ScoreReport<unknown> | null, after: ScoreR
   if (!before) return { keep: false, gain: 0, reasons: ['no baseline to compare against'] };
 
   const reasons: string[] = after.hardFailures.map((f) => `hard failure: ${f}`);
+  const added = newLevelPath(before, after);
+  if (added) { reasons.push(...added.reasons); after = added.after; }
   const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
   const own = (m: Measures, k: string): number | undefined => (Object.hasOwn(m, k) ? m[k] : undefined);
 

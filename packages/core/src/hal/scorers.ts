@@ -49,6 +49,9 @@ const hyperline: Scorer = {
   score: (r) => scoreHyperline({ seeds: r.seeds as number, until: r.until as number }),
 };
 
+// The static map walker. Not in the gate since measurement v2 P3 (scorersFor in scripts/hal/candidate.ts judges
+// Gearhold by gearhold-play, which carries the walker's structural problems as hard failures); kept for `score --game
+// gearhold` and as the game's entry in this registry.
 const gearhold: Scorer = {
   game: 'gearhold',
   defaults: {},

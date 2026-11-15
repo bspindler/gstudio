@@ -233,3 +233,75 @@ describe('compareScores: noise-aware tolerance (D2)', () => {
     expect(compareScores(report(70, { inBand: 50 }), report(70.4, { inBand: 50.4 }), { mode: 'score', target: 'inBand' }).keep).toBe(false);
   });
 });
+
+describe('compareScores: the new-level path (per-level scores, measurement v2 P3)', () => {
+  type Lv = { level: number; scores: Measures; noise?: Measures };
+  const lv = (level: number, win: number, feel = 100, noise?: Measures): Lv => ({ level, scores: { win, feel }, ...(noise ? { noise } : {}) });
+  /** A report whose balance measures are the means of its levels' scores, and fitness their mean. */
+  function scored(levels: Lv[], extra: Measures = {}): ScoreReport<unknown> {
+    const m = (k: string) => Math.round((levels.reduce((s, l) => s + l.scores[k]!, 0) / levels.length) * 100) / 100;
+    const measures = { win: m('win'), feel: m('feel'), ...extra };
+    return { game: 'gearhold-play', levels, measures, fitness: Math.round(((measures.win + measures.feel) / 2) * 100) / 100, hardFailures: [] };
+  }
+  const before = scored([lv(0, 100), lv(1, 90), lv(2, 80)]);
+
+  it('a new level in band, old levels holding: kept, though it moves the averages', () => {
+    const after = scored([lv(0, 100), lv(1, 90), lv(2, 80), lv(3, 100, 100)]);
+    expect(after.measures.win).toBeGreaterThan(before.measures.win! + 1); // the plain gate would see a gain
+    const r = compareScores(before, after, { mode: 'polish' });
+    expect(r.keep).toBe(true);
+    expect(r.gain).toBe(0); // judged over the old levels only
+  });
+
+  it('a new level below its band does not drag the old averages into a regression; it is judged on its own band', () => {
+    const r = compareScores(before, scored([lv(0, 100), lv(1, 90), lv(2, 80), lv(3, 99.5, 100)]), { mode: 'polish' });
+    expect(r.keep).toBe(true); // 0.5 short of 100 is inside the 1-point tolerance
+    const bad = compareScores(before, scored([lv(0, 100), lv(1, 90), lv(2, 80), lv(3, 60, 100)]), { mode: 'polish' });
+    expect(bad.keep).toBe(false);
+    expect(bad.reasons).toEqual(['new levels[3] win 60.00 is out of its band (needs >= 99)']);
+  });
+
+  it("the new level's own noise widens its tolerance", () => {
+    const r = compareScores(before, scored([lv(0, 100), lv(1, 90), lv(2, 80), lv(3, 90, 100, { win: 6, feel: 0 })]), { mode: 'polish' });
+    expect(r.keep).toBe(true); // needs >= 100 - 2 * 6 = 88
+  });
+
+  it('an old level that regresses is caught even when the average hides it', () => {
+    // level 1 drops 6 while level 2 rises 6: the mean holds, the level does not.
+    const r = compareScores(before, scored([lv(0, 100), lv(1, 84), lv(2, 86), lv(3, 100)]), { mode: 'polish' });
+    expect(r.keep).toBe(false);
+    expect(r.reasons).toEqual(['levels[1] win regressed 6.00 (> 1)']);
+  });
+
+  it("old levels' noise widens their band", () => {
+    const b = scored([lv(0, 100), lv(1, 90, 100, { win: 3, feel: 0 }), lv(2, 80)]);
+    const r = compareScores(b, scored([lv(0, 100), lv(1, 84, 100, { win: 3, feel: 0 }), lv(2, 86), lv(3, 100)]), { mode: 'polish' });
+    expect(r.keep).toBe(true); // 6 <= 2 * sqrt(9 + 9) = 8.49
+  });
+
+  it('score mode gains are measured over the old levels', () => {
+    const after = scored([lv(0, 100), lv(1, 92), lv(2, 80), lv(3, 100)]);
+    const r = compareScores(before, after, { mode: 'score', target: 'win' });
+    expect(r.gain).toBeCloseTo(0.67, 2);
+    expect(r.keep).toBe(true);
+  });
+
+  it('measures that are not per-level scores (tension) are still compared on the whole report', () => {
+    const b = scored([lv(0, 100), lv(1, 90), lv(2, 80)], { tension: 40 });
+    const r = compareScores(b, scored([lv(0, 100), lv(1, 90), lv(2, 80), lv(3, 100)], { tension: 30 }), { mode: 'polish' });
+    expect(r.keep).toBe(true);
+    expect(r.notes).toEqual(['tension regressed 10.00 (> 1)']);
+  });
+
+  it('only when levels were added: same levels go through the plain gate', () => {
+    const r = compareScores(before, scored([lv(0, 100), lv(1, 84), lv(2, 86)]), { mode: 'polish' });
+    expect(r.keep).toBe(true); // averages hold; per-level holds are for the new-level path
+  });
+
+  it('hard failures still discard on the new-level path', () => {
+    const after = { ...scored([lv(0, 100), lv(1, 90), lv(2, 80), lv(3, 100)]), hardFailures: ['level 4: no exit'] };
+    const r = compareScores(before, after, { mode: 'polish' });
+    expect(r.keep).toBe(false);
+    expect(r.reasons).toEqual(['hard failure: level 4: no exit']);
+  });
+});
