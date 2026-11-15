@@ -7,7 +7,7 @@ import { GEARHOLD_PLAY_BANDS, scoreGearholdPlay as scoreWith, type PlayRecord } 
 const hall = (k: number): string[] => [
   '#'.repeat(k + 3), `#S${'.'.repeat(k)}X`, `#${'.'.repeat(k + 1)}#`, `#${'.'.repeat(k + 1)}#`, '#'.repeat(k + 3),
 ];
-/** 72 tiles at 3.6 tiles/s: a 20 s walk, so the default 60 s win is a pace ratio of 3 (in band). */
+/** 72 tiles at 3.6 tiles/s: a 20 s walk, so the default 60 s win is a pace ratio of 3 (reported, not scored). */
 const MAPS = [hall(72), hall(72), hall(72)];
 const scoreGearholdPlay = (records: PlayRecord[], maps: string[][] = MAPS) => scoreWith(records, { maps });
 
@@ -26,8 +26,9 @@ describe('scoreGearholdPlay', () => {
   it('pins the bands', () => {
     expect(GEARHOLD_PLAY_BANDS).toMatchObject({
       firstWin: [0.8, 1], laterWin: [0.5, 0.9], hitRatio: [0.35, 0.8],
-      paceRatio: [1.5, 4], paceRatioZero: 8, maxWinSeconds: 180,
+      winSeconds: [30, 180], winSecondsZero: 360,
     });
+    expect(GEARHOLD_PLAY_BANDS).not.toHaveProperty('paceRatio'); // a proposal for the operator, not a band (yet)
   });
 
   it('scores a healthy run at 100', () => {
@@ -76,21 +77,29 @@ describe('scoreGearholdPlay', () => {
     expect(two.measures.fairDamage).toBe(75); // (50 + 100) / 2
   });
 
-  it('pace is win time over the walker route time, two-sided; no wins fails', () => {
+  it('pace is the operator band, 30-180 s median win time, scored per level with bandScore; no wins fails', () => {
     const p = (time: number, wins = 9) => scoreGearholdPlay(block(0, 10, wins, { time })).measures.pace;
-    expect(p(30)).toBe(100); // ratio 1.5
-    expect(p(80)).toBe(100); // ratio 4
-    expect(p(20)).toBe(66.67); // ratio 1: a straight walk, nothing in the way
-    expect(p(120)).toBe(50); // ratio 6: bogged down
-    expect(p(160)).toBe(0); // ratio 8
+    expect(p(30)).toBe(100);
+    expect(p(180)).toBe(100);
+    expect(p(15)).toBe(50); // a short level loses points in proportion, not a hard 0
+    expect(p(16)).toBe(53.33);
+    expect(p(270)).toBe(50); // past 180 s it falls to 0 at twice the cap
+    expect(p(360)).toBe(0);
     expect(p(60, 0)).toBe(0);
     expect(scoreGearholdPlay(block(0, 10, 0)).levels[0]!.medianWinTime).toBeNull();
   });
 
-  it('pace caps a long level: a win over 180 s loses points even with a healthy ratio', () => {
-    const big = [hall(360)]; // a 100 s walk
-    expect(scoreGearholdPlay(block(0, 10, 9, { time: 170 }), big).measures.pace).toBe(100);
-    expect(scoreGearholdPlay(block(0, 10, 9, { time: 270 }), big).measures.pace).toBe(50);
+  it('pace is per level and averaged, so one short level costs a share, not a whole level', () => {
+    const r = scoreGearholdPlay([...block(0, 10, 9, { time: 15 }), ...block(1, 10, 7), ...block(2, 10, 6)]);
+    expect(r.levels.map((l) => l.scores.pace)).toEqual([50, 100, 100]);
+    expect(r.measures.pace).toBe(83.33);
+  });
+
+  it('pace does not read the route: the pace ratio is reported beside it as data only', () => {
+    const r = scoreGearholdPlay(block(0, 10, 9, { time: 20 })); // ratio 1: a straight walk
+    expect(r.levels[0]!.paceRatio).toBe(1);
+    expect(r.levels[0]!.scores.pace).toBe(66.67); // 20 s against [30, 180]
+    expect(scoreGearholdPlay(block(0, 10, 9, { time: 120 }), [hall(8)]).levels[0]!.scores.pace).toBe(100); // ratio 54
   });
 
   it('median win time ignores losses', () => {
@@ -143,7 +152,7 @@ describe('scoreGearholdPlay', () => {
     const noExit = hall(72).map((row) => row.replace('X', '#'));
     const r = scoreGearholdPlay(good(), [hall(72), noExit, hall(72)]);
     expect(r.hardFailures).toEqual(['level 2: no exit']);
-    expect(r.levels[1]!.scores.pace).toBe(0); // no route to time against
+    expect(r.levels[1]!.routeTiles).toBeNull(); // the walker has no route; pace is still scored on win time
   });
 
   it('a level with no map is a hard failure', () => {

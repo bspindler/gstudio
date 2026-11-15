@@ -17,7 +17,7 @@ export const GEARHOLD_CLOSE_HP = 35;
 /** Seeds per level. The level count is not fixed here: the scorer plays every level the game has (scorers.ts). */
 export const GEARHOLD_PLAY_DEFAULTS = { seeds: 150, seedBase: 0 } as const; // 50 until measurement v2 P1.3 (2026-11-15)
 
-/** The player's top walking speed, tiles/s (index.html maxSp): turns the walker's route into a walk time. */
+/** The player's top walking speed, tiles/s (index.html maxSp): turns the walker's route into a walk time (paceRatio, reported only). */
 export const GEARHOLD_RUN_SPEED = 3.6;
 
 export type PlayRecord = {
@@ -35,7 +35,7 @@ export type LevelPlayStats = {
   unseenShare: number;          // damageUnseen / max(1, damageTaken)
   wins: number; closeWins: number; // wins, and wins at GEARHOLD_CLOSE_HP or less (tension.ts)
   routeTiles: number | null;    // the map walker's route, start to exit, in tiles; null when it has none
-  paceRatio: number | null;     // medianWinTime / (routeTiles / GEARHOLD_RUN_SPEED); null without a win or a route
+  paceRatio: number | null;     // medianWinTime / (routeTiles / GEARHOLD_RUN_SPEED); data only, not scored; null without a win or a route
   scores: LevelScores;
   /** Seed noise (standard error, score points) of each of this level's scores; the gate's new-level path reads it. */
   noise?: Measures;
@@ -43,19 +43,16 @@ export type LevelPlayStats = {
 
 /**
  * Brian-reviewed bands; changing them changes what "good" means. Win rate: first level (index 0) vs later levels.
- * Pace (measurement v2 P3): the bot routes perfectly at full speed, so the old 30-180 s band measured map size, not
- * pace (Terrace of Dials, a 15 s bot win, failed it outright). Pace is now the median win time over the time to walk
- * the walker's route: 1 is a straight walk with nothing in the way, and [1.5, 4] means the level holds the player up
- * (fights, keys, detours, presses) for between a third and three quarters of the run; at 8 it is a slog and scores 0.
- * Today's four levels sit at 2.0-3.1. `maxWinSeconds` keeps an absolute cap: a bot win past 180 s (a person takes
- * longer still) loses points down to 0 at twice that, however healthy the ratio.
+ * Pace: the median win time in seconds against [30, 180], per level with bandScore (measurement v2 P3): under 30 s it
+ * loses points in proportion (15 s scores 50), past 180 s it falls to 0 at `winSecondsZero`, twice the cap, as
+ * bandScore does for a rate at 1. The walker's route and the pace ratio (win time over the route's walk time) are
+ * reported per level as data for a proposed ratio band; they are not scored until the operator signs one off.
  */
 export const GEARHOLD_PLAY_BANDS = {
   firstWin: [0.8, 1.0] as [number, number],
   laterWin: [0.5, 0.9] as [number, number],
-  paceRatio: [1.5, 4] as [number, number],
-  paceRatioZero: 8,
-  maxWinSeconds: 180,
+  winSeconds: [30, 180] as [number, number],
+  winSecondsZero: 360,
   hitRatio: [0.35, 0.8] as [number, number],
 };
 
@@ -74,13 +71,11 @@ function median(xs: number[]): number {
 // Defensive clamp: the hook counts one hit per trigger pull, so hits should not exceed shotsFired.
 const ratio = (r: PlayRecord): number => (r.shotsFired > 0 ? Math.max(0, Math.min(1, r.hits / r.shotsFired)) : 0);
 
-/** A level's pace score: the ratio band, capped by the absolute win-time limit. */
-function paceScore(winTime: number | null, paceRatio: number | null): number {
-  if (winTime === null || paceRatio === null) return 0;
-  const B = GEARHOLD_PLAY_BANDS, z = B.paceRatioZero;
-  const byRatio = bandScore(paceRatio / z, [B.paceRatio[0] / z, B.paceRatio[1] / z]);
-  const cap = winTime <= B.maxWinSeconds ? 100 : Math.max(0, 100 * (1 - (winTime - B.maxWinSeconds) / B.maxWinSeconds));
-  return Math.min(byRatio, cap);
+/** A level's pace score: its median win time against the seconds band, scaled so bandScore reaches 0 at winSecondsZero. */
+function paceScore(winTime: number | null): number {
+  if (winTime === null) return 0;
+  const B = GEARHOLD_PLAY_BANDS, z = B.winSecondsZero;
+  return bandScore(winTime / z, [B.winSeconds[0] / z, B.winSeconds[1] / z]);
 }
 
 type MapInfo = Map<number, { routeTiles: number | null; problems: string[] }>;
@@ -88,7 +83,7 @@ type MapInfo = Map<number, { routeTiles: number | null; problems: string[] }>;
 export function scoreGearholdPlay(records: PlayRecord[], opts: GearholdPlayOptions = {}): ScoreReport<LevelPlayStats> {
   if (records.length === 0) throw new Error('scoreGearholdPlay: no play records');
   const maps = opts.maps ?? LEVELS.map((l) => l.map);
-  // Walk each played level's map once: its route times pace, its problems are hard failures.
+  // Walk each played level's map once: its route gives the reported pace ratio, its problems are hard failures.
   const info: MapInfo = new Map();
   for (const level of new Set(records.map((r) => r.level).filter((l) => Number.isInteger(l)))) {
     const map = maps[level];
@@ -151,7 +146,7 @@ function scoreRecords(records: PlayRecord[], info: MapInfo): ScoreReport<LevelPl
       winnable: round2(bandScore(winRate, level === 0 ? B.firstWin : B.laterWin)),
       // fairDamage is one-sided by definition (less unseen damage always raises it); the other measures offset that.
       fairDamage: round2(Math.max(0, Math.min(100, 100 * (1 - unseen / Math.max(1, taken))))),
-      pace: round2(paceScore(medianWinTime, paceRatio)),
+      pace: round2(paceScore(medianWinTime)),
       feel: round2(bandScore(hitRatio, B.hitRatio)),
     };
     return {

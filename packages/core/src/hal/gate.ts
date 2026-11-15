@@ -73,7 +73,7 @@ function newLevelPath(before: ScoreReport<unknown>, after: ScoreReport<unknown>)
 }
 
 /**
- * `atCeiling`: score mode,but the target was already within minGain of the ceiling, so it was judged holding the line.
+ * `atCeiling`: score mode, but the target was already within minGain of the ceiling, so it was judged holding the line.
  * `notes`: soft-measure drops that did not discard, for the change's card and the report.
  */
 export type GateResult = { keep: boolean; gain: number; reasons: string[]; atCeiling?: true; notes?: string[] };
