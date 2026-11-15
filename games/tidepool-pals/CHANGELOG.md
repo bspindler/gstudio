@@ -2,6 +2,10 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.9.0 (2026-11-15)
+- New level 23: a five-point starfish pool with a pal trapped in a bubble right in the middle.
+- Level 9 now always has a trapped pal in a bubble to rescue, so the level can always be won.
+
 ## 0.8.0 (2026-11-15)
 - Every level opens straight onto its board, with a mission card on top: the goal in big words ("Collect 12 Coral"), the pals to get, the moves you have, and on the first levels a little picture of how to play. Tap "Let's go!" and you're in.
 - The goal chips on the board now say what they want ("Coral to collect", "to rescue"), not just a number.
@@ -10,14 +14,12 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.7.1 (2026-11-14)
 - Sea Candy now pops with a soft pastel sugar-sparkle burst.
-- Level 9 now always has a trapped pal in a bubble to rescue, so the level can always be won.
 
 ## 0.7.0 (2026-11-13)
 - Level 9 now has a pal trapped in a bubble on the board. Clear matches next to it twice to crack it open and free it, and freeing it counts toward the goal.
 - Each reef pool now has its own board look: a tint from the pool's colours, a little floor pattern (ripples, kelp, pebbles or sparkle) and a driftwood or coral frame.
 - Tidepool Pals: level 3 now has a pal trapped in a bubble, freed by clearing next to it twice, so you learn the rescue early.
 - The pool strip under the board now shows the full favourite-pal line on its own line, so you can see which pal the pool is for.
-- New level 23: a five-point starfish pool with a pal trapped in a bubble right in the middle.
 
 ## 0.6.1 (2026-11-13)
 - On shorter phone screens the pool strip no longer overlaps the Play, Pool, Album and Shop tabs; the board shrinks a little to make room.
