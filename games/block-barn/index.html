@@ -63,6 +63,15 @@
     box-shadow: inset 0 0 0 3px #6b3a26; transition: transform .8s ease-in-out; }
   #door .l { transform-origin: 0 50%; } #door .r { transform-origin: 100% 50%; }
   #door.open .leaf { transform: scaleX(.16); }
+  /* tap the sky (the window): it fades slowly to a soft dusk with a code-drawn moon, the named animals curl up with
+     closed eyes; tap again for morning. No flashing, text or sound. */
+  #dusk-sky { position: absolute; inset: 0; border-radius: 999px 999px 0 0; pointer-events: none; opacity: 0; transition: opacity 3s ease-in-out;
+    background: linear-gradient(180deg, #3b3f7a, #8a79b8 75%, #4d6a63 75%); }
+  #moon { position: absolute; left: 62%; top: 18%; width: 22%; aspect-ratio: 1 / 1; border-radius: 50%; background: transparent; box-shadow: inset -7px -1px 0 0 #fff3c4; }
+  #dusk { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity 3s ease-in-out; background: rgba(50, 40, 100, .26); }
+  .dusk-on #dusk-sky { opacity: 1; } .dusk-on #dusk { opacity: 1; }
+  .animal.nap .eye { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(.12); transition: transform 1.6s ease-in-out; }
+  .animal.nap .art { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(1, .94); transition: transform 1.6s ease-in-out; }
   #peeks { position: absolute; inset: 0; overflow: hidden; border-radius: 999px 999px 0 0; pointer-events: none; display: flex; justify-content: center; align-items: flex-end; gap: 2%; }
   #peeks .peek { position: relative; flex: 0 0 44%; height: 66%; animation: peek-in .6s ease-out both, peek-bob 3.4s ease-in-out .6s infinite; }
   #peeks .peek svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
@@ -283,6 +292,8 @@
     .animal.oh .art { animation: none; }
     .animal.oh .eye { animation: none; }
     #door .leaf { transition: none; }
+    #dusk, #dusk-sky { transition: none; }
+    .animal.nap .eye, .animal.nap .art { transition: none; }
     #peeks .peek { animation: none; }
     .animal.trot-in { animation: none; opacity: 0; }
     .animal.trot-out { animation: none; }
@@ -313,7 +324,7 @@
 </head>
 <body>
 <main id="barn" aria-label="Block Barn">
-  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="peeks"></div></div></div>
+  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div></div></div>
   <div id="play">
     <div id="floor"></div>
     <div id="stage">
@@ -323,6 +334,7 @@
     </div>
   </div>
   <div id="fx"></div>
+  <div id="dusk" aria-hidden="true"></div>
 </main>
 <button id="corner" type="button" aria-label="For grown-ups: press and hold for 3 seconds">
   <svg viewBox="0 0 56 56" aria-hidden="true" focusable="false">
@@ -567,6 +579,7 @@ function reseed(n) {
   gen = createRotation(seedNow, 1);
   rng = seeded(seedNow ^ 0x9e3779b9);
   if (typeof resetDoor === 'function' && doorEl) resetDoor();
+  if (typeof resetSky === 'function') resetSky();
   floor = [];
   picks = 0;
   named.clear();
@@ -664,6 +677,7 @@ function renderSlot(k, anim) {
   if (animal.dataset.letter !== l) { animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
   animal.hidden = false;
   animal.classList.toggle('ghost', !isNamed); // unnamed: its silhouette peeks over the block
+  animal.classList.toggle('nap', dusk && isNamed); // at dusk the named animals nap
   if (anim) restart(body, anim);
 }
 function renderTower(popTop) {
@@ -776,7 +790,7 @@ function blinkLater(k) {
   setTimeout(() => {
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const a = slotsEl.children[k]?.querySelector('.animal');
-    if (!reduced && a && named.has(floor[k]) && !document.hidden) {
+    if (!reduced && a && named.has(floor[k]) && !dusk && !document.hidden) {
       restart(a, 'blink');
       setTimeout(() => a.classList.remove('blink'), 1200);
     }
@@ -1013,6 +1027,30 @@ function tapDoor() {
   }
 }
 
+// ---------- the sky ----------
+// Tap the window: the barn fades slowly to a soft dusk with a moon and the named animals curl up with closed eyes; tap
+// again for morning. CSS only; instant under reduced motion. Nothing is said, shown or counted, and nothing flashes.
+let dusk = false;
+function skyBox() {
+  const r = $('window').getBoundingClientRect(), w = $('wall').getBoundingClientRect();
+  if (!r.width || !r.height) return null; // the window is hidden on a very short wall
+  const bw = Math.max(r.width, 88), cx = r.left + r.width / 2;
+  return { x: cx - bw / 2, y: w.top, w: bw, h: w.height };
+}
+function napAll() {
+  floor.forEach((l, k) => slotsEl.children[k]?.querySelector('.animal')?.classList.toggle('nap', dusk && named.has(l)));
+}
+function tapSky() {
+  dusk = !dusk;
+  barnEl.classList.toggle('dusk-on', dusk);
+  napAll();
+}
+function resetSky() {
+  dusk = false;
+  barnEl.classList.remove('dusk-on');
+  slotsEl.querySelectorAll('.nap').forEach((a) => a.classList.remove('nap'));
+}
+
 /** The tappable things (CSS px boxes), for routing and for the hook. */
 function hitBoxes() {
   const out = [];
@@ -1037,6 +1075,8 @@ function tapAt(x, y) {
   clearInvite();
   const dr = doorBox();
   if (x >= dr.x && x <= dr.x + dr.w && y >= dr.y && y <= dr.y + dr.h) { tapDoor(); return; }
+  const sk = skyBox();
+  if (sk && x >= sk.x && x <= sk.x + sk.w && y >= sk.y && y <= sk.y + sk.h) { tapSky(); return; }
   let best = null, bestD = Infinity, bestC = Infinity;
   for (const b of hitBoxes()) {
     const d = distTo(b, x, y), c = Math.hypot(b.x + b.w / 2 - x, b.y + b.h / 2 - y);

@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.2.0 (2026-11-14)
 - Block Barn: neighbouring animals now and then turn to each other with a slow, gentle peek.
 - Tap the big barn doors and they swing open: your animals trot inside one by one and peek out of the window; tap again and they trot back out.
+- Tap the sky in the barn window and it fades slowly to a soft dusk with a moon, and the animals curl up for a nap. Tap again for morning.
 
 ## 0.1.1 (2026-11-13)
 - Block Barn: when you name a block, the animals nearby slowly turn to look at it (and stay still if reduced motion is on).
