@@ -762,6 +762,11 @@ function stateChange(a: State, b: State): string {
   if (b.named.length > a.named.length && same(a.floor, b.floor)) return 'name';
   return '';
 }
+// A feature is the state change the hook reports (doors and sky fold their two directions into one feature here) or,
+// for an answer that changes none of the hook's state, where in the barn it showed: `touch:<region>`, the id of the
+// nearest element with one around what changed. So a new feature needs no entry here and no registration: a
+// weathervane that spins reads `touch:vane` (or whatever its element's id is) and counts toward variety like any other.
+// Unknown target kinds are measured (bigTargets) and tapped (script, below) the same way, from the game's zone list.
 const FEATURE: Record<string, string> = { 'door-open': 'door', 'door-close': 'door', dusk: 'sky', dawn: 'sky' };
 const flags = (s: State) => [s.door ? 'door' : '', s.dusk ? 'dusk' : ''].filter(Boolean).join('+');
 

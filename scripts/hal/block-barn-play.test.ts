@@ -33,8 +33,11 @@ describe('runBlockBarnPlay', () => {
     const a = await runBlockBarnPlay();
     expect(a.errors).toEqual([]);
     for (const v of BLOCK_BARN_VIEWPORTS) {
+      // Every kind the game lists (tapZones) is tapped, however many there are: a new zone is tapped like the rest.
       const kinds = new Set(a.records.filter((r) => r.viewport === v).map((r) => r.kind));
-      expect([...kinds].sort(), v).toEqual(['animal', 'block', 'corner', 'door', 'floor', 'sky', 'tower']);
+      const listed = new Set(a.page.targets.filter((t) => t.viewport === v).map((t) => t.kind));
+      expect([...kinds].sort(), v).toEqual([...listed].sort());
+      expect([...kinds], v).toEqual(expect.arrayContaining(['animal', 'block', 'corner', 'door', 'floor', 'sky', 'tower']));
       expect(a.page.targets.filter((t) => t.viewport === v).length, `${v}: every target measured before every tap`).toBeGreaterThan(5 * a.records.filter((r) => r.viewport === v).length);
     }
     expect([...a.page.letters].sort()).toEqual(AZ);
