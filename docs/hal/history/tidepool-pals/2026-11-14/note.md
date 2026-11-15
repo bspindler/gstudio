@@ -12,3 +12,11 @@
 Changes:
 - HAL-106 fix(tidepool-pals): Tidepool: level 9 rescue pal always spawns and can be freed: **discarded** (tripwire payment: games/tidepool-pals/index.html: payment-shaped line: ${reachable && offered(CATALOG.moves) ? `<button class="btn buy" data-act="buy-moves">${CATALOG.moves.title} · ${price(C)
 - HAL-109 feature(tidepool-pals): Tidepool: swipe to swap neighbours, match 3+ to clear: **discarded** (0.8.0) (implementer blocked: Protected test packages/core/test/hal-tidepool-swap.test.ts:63 expects moveKind(board) to be 'tap', but the ticket requires MOVE='swap'. It fails for that reason and I can't edit hal-*.test.ts; Brian needs to update that assertion to 'swap'.)
+
+## Run run-2026-11-15T04-52-09-917Z
+
+### Tidepool Pals
+Identity: rescuing trapped pals on a living reef with tides. The level 9 fix protects exactly that, because a rescue goal with no pal to rescue breaks the core promise. The fix (HAL-112) is built and tested, but the gate discarded it for no score gain, so **level 9 can still be unwinnable**. Next run, given your yes on in-band fixes: ship HAL-112 alone, then hide the +5 offer on unwinnable levels once you confirm by name, then the swipe build with retuned move budgets (L-053) once the protected test can flip with it.
+
+Changes:
+- HAL-112 fix(tidepool-pals): Tidepool: level 9 always spawns a freeable bubbled pal: **discarded** (0.7.1) (tidepool-pals: no real gain: 0.00 < 0.5)

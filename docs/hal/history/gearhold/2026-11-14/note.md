@@ -12,3 +12,12 @@ Changes:
 - HAL-107 polish(gearhold): Gearhold: Terrace of Dials gets ticking wall-dial hazards: **discarded** (0.4.1) (gearhold-play: no real gain: 0.00 < 0.5)
 - HAL-110 feature(gearhold): Gearhold: three.js renderer, current WebGL2 as fallback: **held** (0.5.0)
 - HAL-111 feature(gearhold): Gearhold: level 5, Cog Bridge with turning gear platforms: **held** (0.5.0)
+
+## Run run-2026-11-15T04-52-09-917Z
+
+### Gearhold
+Identity: a brass clockwork dungeon of presses, crystals and arches. Tonight aimed to keep that look while making it readable. Glow now comes only from real light sources (HAL-113), and the stretched oval vignette is gone (HAL-114). Scores were flat, and there is no tall-phone check yet, so your eyes are the test. Note that main has no three.js renderer, so the held makeover (HAL-110) and level 5 (HAL-111) still await your release, and their bloom must stay this restrained.
+
+Changes:
+- HAL-113 fix(gearhold): Gearhold: cut bloom strength and raise its threshold: **merged** (0.4.1)
+- HAL-114 fix(gearhold): Gearhold: remove the sideways oval screen glow: **merged** (0.4.1)
