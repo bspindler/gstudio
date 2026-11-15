@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.3.2 (2026-11-15)
+- Lanternkeep: between waves, a few fireflies drift in to the lantern for a calm breather.
+
 ## 0.3.1 (2026-11-14)
 - The creature path now glows faintly at night, with a slow moonlit breathing, so the route reads more clearly.
 - The creature path now glows faintly with a slow moonlit breath in the 3D garden view too, not only the simple view.

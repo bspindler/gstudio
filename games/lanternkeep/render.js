@@ -564,6 +564,17 @@ export function createRenderer(canvas, opts = {}) {
       else if (e.type === 'wisp') glow(p.x * s, p.y * s, s * 0.4, '#b6f3ff', 0.35);
       else if (e.type === 'toad') glow(p.x * s, p.y * s - s * 0.25, s * 0.25, '#ffe066', 0.3);
     }
+    // between waves, a few fireflies drift in to the lantern, then fade as the next wave nears
+    if (!reduced && g.countdown !== null && g.countdown !== undefined) {
+      const calmK = Math.max(0, Math.min(1, (12 - g.countdown) / 1.5, g.countdown / 1.5));
+      for (let i = 0; i < 7 && calmK > 0; i++) {
+        const q = (t / 5 + i / 7) % 1, ang = i * 2.4 + 0.7, rad = (2.2 + hash(i, 5) * 1.6) * s;
+        const e = q * q * (3 - 2 * q), sx = lx + Math.cos(ang) * rad, sy = ly - s * 0.2 + Math.sin(ang) * rad;
+        const px = sx + (lx - sx) * e + Math.sin(t * 1.3 + i) * s * 0.25 * (1 - e);
+        const py = sy + (ly - s * 0.2 - sy) * e + Math.cos(t * 1.1 + i) * s * 0.25 * (1 - e);
+        glow(px, py, s * 0.22, '#eaff7a', 0.7 * Math.sin(q * Math.PI) * calmK);
+      }
+    }
     for (const f of fx) {
       const k = 1 - Math.max(0, f.t) / f.life;
       if (f.k === 'bolt') {

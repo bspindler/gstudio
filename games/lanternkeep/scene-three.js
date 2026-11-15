@@ -804,6 +804,18 @@ export function createRendererThree(canvas, overlay, opts = {}) {
       const tw = 0.5 + 0.5 * Math.sin(t * 3 + m.s * 30);
       glowP.add(x, y, z, 0.09 + 0.06 * tw, mc.r * (0.8 + tw * 1.4), mc.g * (0.8 + tw * 1.4), mc.b * (0.8 + tw * 1.4), 1);
     }
+    // between waves, a few fireflies drift in to the lantern, then fade as the next wave nears
+    if (!reduced && g.countdown !== null && g.countdown !== undefined) {
+      const calmK = Math.max(0, Math.min(1, (12 - g.countdown) / 1.5, g.countdown / 1.5));
+      for (let i = 0; i < 7 && calmK > 0; i++) {
+        const q = (t / 5 + i / 7) % 1, ang = i * 2.4 + 0.7, rad = 2.2 + hash(i, 5) * 1.6;
+        const e = q * q * (3 - 2 * q), sx = lanternWorld.x + Math.cos(ang) * rad, sz = lanternWorld.z + Math.sin(ang) * rad;
+        const px = sx + (lanternWorld.x - sx) * e + Math.sin(t * 1.3 + i) * 0.25 * (1 - e);
+        const pz = sz + (lanternWorld.z - sz) * e + Math.cos(t * 1.1 + i) * 0.25 * (1 - e);
+        const py = 0.5 + (lanternWorld.y - 0.5) * e + Math.sin(t * 2 + i * 3) * 0.08;
+        glowP.add(px, py, pz, 0.1, 1.3, 1.5, 0.35, Math.sin(q * Math.PI) * calmK);
+      }
+    }
     const fc = col(R.fog).lerp(new THREE.Color(0xb0a8d8), 0.35);
     for (const m of mist) {
       const x = ((m.x + t * m.v + 2) % (COLS + 4)) - 2, z = m.z + Math.sin(t * 0.1 + m.ph) * 0.6;
