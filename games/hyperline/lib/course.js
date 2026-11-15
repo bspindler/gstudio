@@ -109,8 +109,8 @@ export const PATTERNS = [
 
   // Sector 3: double spikes. The second cluster sits where a held jump re-launches on landing.
   { id: 'twin', sector: 3, weight: (s) => (s === 3 ? 2.8 : 1.4),
-    build(x, d, r) {
-      const v = speedAt(x + 4), nA = 2, nB = 1 + Math.floor(r() * 2);
+    build(x, d, r, intro) {
+      const v = speedAt(x + 4), nA = intro ? 8 : 2, nB = (intro ? 4 : 1) + Math.floor(r() * 2);
       const o = [], ax = x + 1;
       spikes(o, ax, nA);
       const [lo, hi] = spikeWindow(ax, nA, v);
@@ -137,13 +137,13 @@ export const PATTERNS = [
 
   // Sector 5: gravity flips. Ride the ceiling; spikes hang from it; jumping drops you down.
   { id: 'flip', sector: 5, weight: (s) => (s === 5 ? 2.4 : 1.1),
-    build(x, d, r) {
+    build(x, d, r, intro) {
       const v = speedAt(x), zx = x + 0.5, L = 13 + r() * 5 + d * 2;
       const o = [{ t: 'flip', x: zx, w: L }, { t: 'pit', x: zx + 3, w: L - 6 }];
-      const gap = Math.max(range(x) * 0.95, 4.6);
+      const gap = Math.max(range(x) * (intro ? 0.6 : 0.95), 4.6);
       let sx = zx + 8;
       while (sx <= zx + L - 4) {
-        const n = 1 + Math.floor(r() * 2);
+        const n = (intro ? 4 : 1) + Math.floor(r() * 2);
         spikes(o, sx, n, CEIL_Y, true);
         sx += n * SW + gap + r() * 1.5;
       }
@@ -191,8 +191,8 @@ export const PATTERNS = [
   // To the sim each is a plain pit (c: 1); `glow` and `drop` are how far ahead the panel starts to glow
   // and when it falls away, so the renderer can warn the player. Solid track between holes fits any landing.
   { id: 'crumble', sector: 9, weight: (s) => (s === 9 ? 2.6 : 1.2),
-    build(x, d, r) {
-      const v = speedAt(x + 4), rg = range(x + 4), hw = rg * (0.36 + r() * 0.06), gp = rg * 0.7;
+    build(x, d, r, intro) {
+      const v = speedAt(x + 4), rg = range(x + 4), hw = rg * ((intro ? 0.74 : 0.36) + r() * 0.06), gp = rg * 0.7;
       const n = 2 + (d > 0.5 && r() < 0.4 ? 1 : 0), o = [];
       let hx = x + 1;
       for (let i = 0; i < n; i++) {
@@ -218,9 +218,9 @@ export function extendCourse(c, untilX) {
   const r = c.rng;
   while (c.nextX < untilX) {
     const x = c.nextX, s = sectorAt(x), d = Math.min(1, x / 900);
-    let p;
+    let p, isIntro = false;
     const intro = INTRO[s];
-    if (intro && !c.introduced.includes(s)) { c.introduced.push(s); p = BY_ID[intro]; }
+    if (intro && !c.introduced.includes(s)) { c.introduced.push(s); p = BY_ID[intro]; isIntro = true; }
     else {
       const avail = PATTERNS.filter((q) => q.sector <= s);
       const ws = avail.map((q) => q.weight(s) * (q.id === c.last ? 0.4 : 1));
@@ -228,7 +228,7 @@ export function extendCourse(c, untilX) {
       while (i < ws.length - 1 && (k -= ws[i]) >= 0) i++;
       p = avail[i];
     }
-    const { o, len } = p.build(x, d, r);
+    const { o, len } = p.build(x, d, r, isIntro);
     o.sort((a, b) => a.x - b.x);
     const g = c.count++;
     for (const ob of o) { ob.p = p.id; ob.g = g; c.objs.push(ob); }

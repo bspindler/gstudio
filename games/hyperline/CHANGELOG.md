@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.6.2 (2026-11-15)
+- Sector intros are sharper: the Crumble Track and Twin Fangs openers now ask for tighter jump timing.
+
 ## 0.6.1 (2026-11-14)
 - A cyan neon ripple spreads across the track each time you land, making jump timing easier to feel.
 
