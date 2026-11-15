@@ -378,7 +378,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.2.1', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.2.2', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1130,6 +1130,11 @@ let holdTimer = 0;
 cornerBtn.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   if (holdTimer) return;
+  // Fingers that land together are one tap, the corner too: a finger landing on it with others (a palm) joins their
+  // tap; a finger landing on it first makes the corner that tap, and the barn ignores the fingers that join it.
+  const now = performance.now();
+  if (gesture && now - gesture.start < REST) { gesture.fingers.add(e.pointerId); return; }
+  gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, start: now, fired: true, fingers: new Set([e.pointerId]) };
   cornerBtn.classList.add('holding');
   holdTimer = setTimeout(() => { holdTimer = 0; cornerBtn.classList.remove('holding'); openCorner(); }, HOLD);
 });

@@ -408,6 +408,27 @@ describe('block barn page', () => {
     expect(s.tower).toEqual([]);
   });
 
+  it('a finger on the grown-up corner that lands with others is part of their one tap (a palm answers once)', async () => {
+    const { page } = await open();
+    const sky = center(await find(page, 'sky')), corner = center(await find(page, 'corner'));
+    const puffs = () => page.evaluate(() => document.querySelectorAll('#fx .puff').length);
+    const holding = () => page.evaluate(() => document.getElementById('corner')!.classList.contains('holding'));
+    const cdp = await page.context().newCDPSession(page);
+    // The sky first, a finger on the corner with it: the sky answers; the corner neither rings nor puffs.
+    await touch(page, cdp, 'touchStart', [sky, corner]);
+    expect(await holding()).toBe(false);
+    await touch(page, cdp, 'touchEnd', []);
+    expect((await state(page)).dusk).toBe(true);
+    expect(await puffs()).toBe(0);
+    await page.waitForTimeout(400);
+    // The corner first, a finger on the sky with it: the corner's short tap answers (one puff); the sky stays.
+    await touch(page, cdp, 'touchStart', [corner, sky]);
+    await touch(page, cdp, 'touchEnd', []);
+    expect((await state(page)).dusk).toBe(true);
+    expect(await puffs()).toBe(1);
+    expect((await state(page)).corner).toBe(false);
+  });
+
   it('a tap on empty floor changes something visible', async () => {
     const { page } = await open();
     const f = await find(page, 'floor');
