@@ -8,6 +8,7 @@ import {
 } from '../../../games/lanternkeep/lib/sim.js';
 import { endlessLevel } from '../../../games/lanternkeep/lib/endless.js';
 import { playLanternkeep as play } from '../src/hal/lanternkeep-bot.js';
+import { nightPerks } from '../src/hal/lanternkeep-score.js';
 
 // A straight test lane down column 4, lantern at the bottom.
 function lane(waves: Group[][], extra: Partial<Level> = {}): Level {
@@ -203,7 +204,9 @@ describe('lanternkeep: levels', () => {
 
   it.each(LEVELS.map((l, i) => [i + 1, l] as const))('level %i: a sensible player wins, doing nothing loses', (_n, level) => {
     // Players adapt, so "sensible" is the best of a few styles: spread wide, or a few towers upgraded.
-    const styles = [{}, { maxTowers: 4 }, { maxTowers: 6 }, { maxTowers: 8 }].map((o) => play(level, o));
+    // Late nights are tuned for the perks a typical player owns by then (two stars per earlier night).
+    const mods = nightPerks(_n);
+    const styles = [{}, { maxTowers: 4 }, { maxTowers: 6 }, { maxTowers: 8 }].map((o) => play(level, { ...o, mods }));
     expect(styles.some((r) => r.won)).toBe(true);
     expect(play(level, { maxTowers: 0 }).won).toBe(false);
   });

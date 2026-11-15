@@ -70,7 +70,7 @@ export const LEVELS = [
 
   // ---------- Frostmere ----------
   L('The Fork', 'Two paths, one lantern. Wisps ignore frost; build where the paths meet.', {
-    region: 'frost', towers: ALL, gold: 280, hpMul: 1.2,
+    region: 'frost', towers: ALL, gold: 280, hpMul: 1.7,
     paths: [
       [[1, -1], [1, 5], [4, 5], [4, 11]],
       [[7, -1], [7, 5], [4, 5], [4, 11]],
@@ -85,7 +85,7 @@ export const LEVELS = [
     ],
   }),
   L('Mossy Ford', 'Mossbacks heal the creatures around them. Hit them first, and hit them hard.', {
-    region: 'frost', towers: ALL, gold: 340, hpMul: 1.0,
+    region: 'frost', towers: ALL, gold: 340, hpMul: 1.4,
     paths: [[[-1, 3], [3, 3], [3, 9], [7, 9], [7, 4], [5, 4]]],
     waves: [
       [['moth', 10, 0.5], ['mossback', 1, 1, 2]],
@@ -97,7 +97,7 @@ export const LEVELS = [
     ],
   }),
   L('Crosswind', 'They come from both sides now.', {
-    region: 'frost', towers: ALL, gold: 320, hpMul: 1.05,
+    region: 'frost', towers: ALL, gold: 320, hpMul: 1.28,
     paths: [
       [[-1, 2], [3, 2], [3, 8], [4, 8], [4, 11]],
       [[9, 4], [6, 4], [6, 8], [4, 8], [4, 11]],
@@ -113,7 +113,7 @@ export const LEVELS = [
     ],
   }),
   L('The Spiral', 'A long road in. Use every turn.', {
-    region: 'frost', towers: ALL, gold: 280, hpMul: 1.7,
+    region: 'frost', towers: ALL, gold: 280, hpMul: 1.9,
     paths: [[[-1, 0], [8, 0], [8, 12], [0, 12], [0, 2], [6, 2], [6, 10], [2, 10], [2, 4], [4, 4], [4, 7]]],
     waves: [
       [['moth', 24, 0.4]],
@@ -127,7 +127,7 @@ export const LEVELS = [
     ],
   }),
   L("Mothmother's Nest", 'The Mothmother is coming. When she falls, her brood scatters. Save your Flare for it.', {
-    region: 'frost', towers: ALL, gold: 360, hpMul: 1.45,
+    region: 'frost', towers: ALL, gold: 360, hpMul: 1.55,
     paths: [[[4, -1], [4, 2], [1, 2], [1, 6], [7, 6], [7, 10], [1, 10], [1, 11]]],
     waves: [
       [['moth', 20, 0.35]],
@@ -142,7 +142,7 @@ export const LEVELS = [
 
   // ---------- Ember Marsh ----------
   L('Two Gates', 'A short path and a shorter one. Watch the east gate.', {
-    region: 'ember', towers: ALL, gold: 400, hpMul: 1.15,
+    region: 'ember', towers: ALL, gold: 400, hpMul: 1.5,
     paths: [
       [[2, -1], [2, 6], [4, 6], [4, 11]],
       [[9, 8], [4, 8], [4, 11]],
@@ -173,7 +173,7 @@ export const LEVELS = [
     ],
   }),
   L('Three Fires', 'Three roads, one short walk to the lantern. Every plant has to count.', {
-    region: 'ember', towers: ALL, gold: 460, hpMul: 1.05,
+    region: 'ember', towers: ALL, gold: 460, hpMul: 1.5,
     paths: [
       [[4, -1], [4, 11]],
       [[-1, 6], [4, 6], [4, 11]],
@@ -191,7 +191,7 @@ export const LEVELS = [
     ],
   }),
   L('Ashen Loop', 'The path circles the whole garden before it turns home.', {
-    region: 'ember', towers: ALL, gold: 360, hpMul: 1.2,
+    region: 'ember', towers: ALL, gold: 360, hpMul: 1.3,
     paths: [[[-1, 11], [1, 11], [1, 1], [7, 1], [7, 11], [3, 11]]],
     waves: [
       [['moth', 30, 0.3]],
@@ -206,7 +206,7 @@ export const LEVELS = [
     ],
   }),
   L('Lanternfall', 'Three roads. Every creature in the garden. Hold the light.', {
-    region: 'ember', towers: ALL, gold: 480, hpMul: 1.4,
+    region: 'ember', towers: ALL, gold: 480, hpMul: 1.6,
     paths: [
       [[0, -1], [0, 4], [4, 4], [4, 11]],
       [[8, -1], [8, 4], [4, 4], [4, 11]],
