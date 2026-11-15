@@ -90,6 +90,7 @@ export function scoreHyperline(range: { seeds: number; until: number }): ScoreRe
 
   const hardFailures: string[] = [];
   for (let seed = 1; seed <= seeds; seed++) {
+    if (runs[seed - 1]!.cause === '') continue; // the casual run reached `until` on this very course: it is clearable
     const ok = clearable(createCourse(seed), until);
     if (ok === false) hardFailures.push(`seed ${seed}: not clearable to ${until}m`);
     else if (ok === 'unknown') hardFailures.push(`seed ${seed}: clearability unknown`);

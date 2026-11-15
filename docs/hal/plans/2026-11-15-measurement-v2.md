@@ -67,7 +67,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
   `hyperline-score.ts`, `lanternkeep-score.ts`. Block Barn and static Gearhold are deterministic: noise 0.
 - [x] **P1.3 More seeds.** `scorers.ts` defaults: Tidepool 20 → 100, Gearhold-play → 150 (check the run fits Hal's
   check timeout), Lanternkeep 4 → 12, Hyperline stays 100 until P2 makes it per-sector. Re-baseline each.
-- [ ] **P1.4 Hyperline score-time test is deterministic.** `hal-hyperline-score.test.ts`: assert on explored-state
+- [x] **P1.4 Hyperline score-time test is deterministic.** `hal-hyperline-score.test.ts`: assert on explored-state
   count, not wall time; skip `clearable` for seeds the casual run finished.
 
 ## P2: bots that play like people (Workflow, one agent per game)

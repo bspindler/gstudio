@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { work } from '../src/hal/hyperline-bot.js';
 import { HYPERLINE_BANDS, reachScore, scoreHyperline, sectorMeasures, type SectorStats } from '../src/hal/hyperline-score.js';
+import { HYPERLINE_UNTIL } from '../src/hal/scorers.js';
 
 // Injection targets only the clearability check: casual runs always see the real course.
 const inject = vi.hoisted(() => ({ pitSeed: 0, unknownSeed: 0, inCasual: false, empty: false }));
+const clearableCalls = vi.hoisted(() => ({ n: 0 }));
 vi.mock('../../../games/hyperline/lib/course.js', async (orig) => {
   const real = await orig<typeof import('../../../games/hyperline/lib/course.js')>();
   return {
@@ -26,8 +29,10 @@ vi.mock('../src/hal/hyperline-bot.js', async (orig) => {
       inject.inCasual = true;
       try { return real.casualRun(seed, until); } finally { inject.inCasual = false; }
     },
-    clearable: (c: Parameters<typeof real.clearable>[0], until: number, budget?: number) =>
-      c.seed === inject.unknownSeed ? 'unknown' : real.clearable(c, until, budget),
+    clearable: (c: Parameters<typeof real.clearable>[0], until: number, budget?: number) => {
+      clearableCalls.n++;
+      return c.seed === inject.unknownSeed ? 'unknown' : real.clearable(c, until, budget);
+    },
   };
 });
 
@@ -142,11 +147,11 @@ describe('scoreHyperline', () => {
     } finally { reset(); }
   }, 60_000);
 
-  it('a budget-exhausted seed is reported as unknown', () => {
+  it('a budget-exhausted seed is reported as unknown (its casual run dies, so the search runs)', () => {
     reset();
     inject.unknownSeed = 2;
     try {
-      expect(scoreHyperline({ seeds: 3, until: 400 }).hardFailures).toEqual(['seed 2: clearability unknown']);
+      expect(scoreHyperline({ seeds: 3, until: 1900 }).hardFailures).toEqual(['seed 2: clearability unknown']);
     } finally { reset(); }
   }, 60_000);
 
@@ -157,13 +162,25 @@ describe('scoreHyperline', () => {
     }
   });
 
-  // The budget protects Hal's nightly run on Brian's Mac (30 s). Shared CI runners are slower and noisy (30.4 s and
-  // 32.0 s on 2026-11-15 for the same code), so CI gets twice the room: it still catches a real slowdown.
-  const budgetMs = process.env.CI ? 60_000 : 30_000;
-  it(`a full default (100-seed) run finishes in under ${budgetMs / 1000} s`, () => {
+  // Scoring cost is budgeted in simulation steps, not wall-clock time: the same code took 30.4 s and 32.0 s on CI
+  // (measurement v2, P1.4). The default run took 24.9M steps (about 10 s on Brian's Mac) on 2026-11-15; the budget
+  // leaves room for a few more sectors and still catches a planner that searches much more than it should.
+  const STEP_BUDGET = 40_000_000;
+  it(`a full default run (100 seeds to HYPERLINE_UNTIL) takes under ${STEP_BUDGET / 1e6}M simulation steps`, () => {
     reset();
-    const t = performance.now();
-    scoreHyperline({ seeds: 100, until: 1900 });
-    expect(performance.now() - t).toBeLessThan(budgetMs);
-  }, budgetMs * 2);
+    work.steps = 0;
+    scoreHyperline({ seeds: 100, until: HYPERLINE_UNTIL });
+    expect(work.steps).toBeGreaterThan(0);
+    expect(work.steps).toBeLessThan(STEP_BUDGET);
+  }, 120_000);
+
+  it('a seed whose casual run finished skips the clearability search (it already cleared that course)', () => {
+    reset();
+    inject.empty = true; // every casual run finishes
+    clearableCalls.n = 0;
+    try {
+      expect(scoreHyperline({ seeds: 4, until: 400 }).hardFailures).toEqual([]);
+      expect(clearableCalls.n).toBe(0);
+    } finally { reset(); }
+  });
 });

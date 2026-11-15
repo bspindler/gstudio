@@ -5,6 +5,13 @@ import { mulberry32 } from '../../../../games/hyperline/lib/rng.js';
 import { createRunner, step, type Runner } from '../../../../games/hyperline/lib/sim.js';
 import { sectorAt, speedAt } from '../../../../games/hyperline/lib/world.js';
 
+/**
+ * Simulation steps the robots have taken (every call into the game's step()). Tests budget scoring by this count, not
+ * by wall-clock time, which varied 30-32 s on CI for the same code (measurement v2, P1.4).
+ */
+export const work = { steps: 0 };
+const stepSim: typeof step = (r, c, jump) => { work.steps++; return step(r, c, jump); };
+
 /** Max states explored per clearable() call. */
 export const SEARCH_BUDGET = 2_000_000;
 
@@ -12,8 +19,8 @@ type Found = { ok: boolean | 'unknown'; far: number };
 
 /** One step through the air: from a jump (or a wait that left the ground) to the landing frame. */
 function advance(r: Runner, c: Course, until: number, jump: boolean): Runner | null {
-  step(r, c, jump);
-  while (!r.dead && !r.grounded && r.x < until) step(r, c, false);
+  stepSim(r, c, jump);
+  while (!r.dead && !r.grounded && r.x < until) stepSim(r, c, false);
   if (r.dead) return null;
   r.landed = true;
   return r;
@@ -24,7 +31,7 @@ function children(r: Runner, c: Course, until: number): { jump: Runner | null; w
   let jump: Runner | null = null;
   if (r.landed || r.steps % 8 === 0) jump = advance({ ...r, landed: false }, c, until, true);
   let wait: Runner | null = { ...r, landed: false };
-  step(wait, c, false);
+  stepSim(wait, c, false);
   if (wait.dead) wait = null;
   else if (!wait.grounded) wait = advance(wait, c, until, false);
   return { jump, wait };
@@ -86,7 +93,7 @@ function waitOutNextDecision(r: Runner, c: Course, goal: number): Runner | null 
   const w: Runner = { ...r, landed: false };
   for (let skipped = false; ;) {
     const air = !w.grounded;
-    step(w, c, false);
+    stepSim(w, c, false);
     if (w.dead) return null;
     if (skipped || w.x >= goal) break;
     skipped = w.grounded && (air || w.steps % 8 === 0);
@@ -127,7 +134,7 @@ export function casualRun(seed: number, until: number, casual: { slip: number; h
     if (r.grounded && (r.landed || r.steps % 8 === 0) && rng() >= casual.slip) jump = decide(r, c, casual.horizon);
     r.landed = false;
     const wasGrounded = r.grounded;
-    if (step(r, c, jump).some((e) => e.t === 'jump')) jumps++;
+    if (stepSim(r, c, jump).some((e) => e.t === 'jump')) jumps++;
     if (r.grounded && !wasGrounded) r.landed = true;
   }
   // Crossing `until` counts as finishing, even if that same step also hit something.
