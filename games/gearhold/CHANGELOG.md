@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.4.1 (2026-11-14)
 - Gearhold: toned down the amber glow so walls, floors and brass are easier to see; only real light sources still shine.
+- Gearhold: removed the sideways oval screen glow; the screen-edge shading is now round and fainter.
 
 ## 0.4.0 (2026-11-13)
 - A brass tick now flashes at the screen edge to show which direction damage came from.
