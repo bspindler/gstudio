@@ -515,6 +515,17 @@ describe('runCandidate (temp git repo)', () => {
     expectDiscarded(await runCandidate(ticket({ target: 'nosuch' }), ctx()), old, /target measure "nosuch"/);
   });
 
+  it('a fix ticket is gated in polish mode: its target need not gain, but nothing may regress (measurement v2, P0.3)', async () => {
+    const old = halHead();
+    // Three level 9 fixes were thrown out for "no real gain" on their target; a fix is judged on not making things worse.
+    const kept = await runCandidate(ticket({ kind: 'fix', target: 'flow' }), ctx({ cmds: { score: () => result(report('hyperline', 60, { flow: 60.2, fair: 70 })) } }));
+    expect(kept.verdict).toBe('merged');
+    gitSubs.length = 0;
+    const now = halHead();
+    expectDiscarded(await runCandidate(ticket({ kind: 'fix', target: 'flow' }), ctx({ pass: 'HAL-9', cmds: { score: () => result(report('hyperline', 58, { flow: 58, fair: 70 })) } }, (cwd) => put(cwd, 'games/hyperline/game.js', 'export const speed = 1.4;\n'))), now, /hyperline: flow regressed/);
+    expect(old).not.toBe(now);
+  });
+
   it('gearhold is scored with both gearhold and gearhold-play, and the target applies where it is a measure', async () => {
     expect(scorersFor('gearhold')).toEqual(['gearhold', 'gearhold-play']);
     expect(scorersFor('hyperline')).toEqual(['hyperline']);

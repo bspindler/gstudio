@@ -49,7 +49,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
   `candidate.ts` (notes go to `scoreNotes`), `tension.ts` (`tensionMeasure` takes an `exclude` / early cut),
   `lanternkeep-score.ts` (exclude nights ≤ `early.upTo`), `tidepool-score.ts` (exclude its early band, if any).
   Tests in `packages/core/test/hal-*.test.ts`.
-- [ ] **P0.3 Fix tickets use polish mode.** `candidate.ts`: a `kind: 'fix'` ticket with a target is gated in polish
+- [x] **P0.3 Fix tickets use polish mode.** `candidate.ts`: a `kind: 'fix'` ticket with a target is gated in polish
   mode (no gain needed; target gain still reported). Test with a fix ticket whose target doesn't move.
 - [ ] **P0.4 Block Barn hook lists every tap zone.** `games/block-barn/index.html` `__hal.targets()` includes `door`
   and `sky` (from `doorBox()` / `skyBox()`); a test checks every `tapAt` branch kind appears in the hook's targets.
