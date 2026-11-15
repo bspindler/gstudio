@@ -149,9 +149,9 @@ describe('scoreHyperline', () => {
 
   it('a budget-exhausted seed is reported as unknown (its casual run dies, so the search runs)', () => {
     reset();
-    inject.unknownSeed = 2;
+    inject.unknownSeed = 3;
     try {
-      expect(scoreHyperline({ seeds: 3, until: 1900 }).hardFailures).toEqual(['seed 2: clearability unknown']);
+      expect(scoreHyperline({ seeds: 3, until: 1900 }).hardFailures).toEqual(['seed 3: clearability unknown']);
     } finally { reset(); }
   }, 60_000);
 
@@ -165,7 +165,10 @@ describe('scoreHyperline', () => {
   // Scoring cost is budgeted in simulation steps, not wall-clock time: the same code took 30.4 s and 32.0 s on CI
   // (measurement v2, P1.4). The default run took 24.9M steps (about 10 s on Brian's Mac) on 2026-11-15; the budget
   // leaves room for a few more sectors and still catches a planner that searches much more than it should.
-  const STEP_BUDGET = 40_000_000;
+  // Raised to 60M with the human-timing player (measurement v2, P2): it scans each hazard's tap window (some 40 short
+  // tap simulations per hazard, to aim at the middle) instead of two searches per 15 Hz decision, and it survives
+  // further. The default run took 49.8M steps (about 17 s on Brian's Mac) on 2026-11-15.
+  const STEP_BUDGET = 60_000_000;
   it(`a full default run (100 seeds to HYPERLINE_UNTIL) takes under ${STEP_BUDGET / 1e6}M simulation steps`, () => {
     reset();
     work.steps = 0;
