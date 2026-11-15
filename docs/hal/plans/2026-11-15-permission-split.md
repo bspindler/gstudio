@@ -20,15 +20,24 @@ becomes a request to Brian instead of a dead end.
 
 ## A. Content lives in the game; the judge reads it
 
-- [ ] Block Barn: the tap-zone list moves out of the hook into game-owned code (e.g. `tapZones()` next to `tapAt`),
+- [x] Block Barn: the tap-zone list moves out of the hook into game-owned code (e.g. `tapZones()` next to `tapAt`),
   and `__hal.targets()` only reads it. The protected static test still proves every kind `tapAt` routes appears in the
   zone list (so a zone can't be hidden from `bigTargets`). Same treatment for any other game-owned content inside the
   Gearhold and Lanternkeep hooks.
-- [ ] Audit every protected file (`packages/core/src/hal/**`, `scripts/hal/**`, `packages/core/test/hal-*.test.ts`,
+- [x] Audit every protected file (`packages/core/src/hal/**`, `scripts/hal/**`, `packages/core/test/hal-*.test.ts`,
   hook blocks) for pinned content facts: level/sector/night counts, level names, move kinds, until distances,
   catalog sizes. Each is derived from the game's own data or the test is made independent of it.
-- [ ] A protected test per game that grows the content in memory (one more level/sector/night, one more Block Barn
+- [x] A protected test per game that grows the content in memory (one more level/sector/night, one more Block Barn
   zone) and runs the scorer and the tests' content assumptions against it, so a future pin fails at once.
+
+Done 2026-11-15 (branch `perm-a`). Block Barn's zones are `tapZones()` next to `tapAt`; `__hal.targets()` returns it, and
+`scripts/hal/block-barn-hook.unit.test.ts` checks the list against tapAt's own branches. Gearhold's overhead overlay list
+is `OVERLAY_IDS` in game code; `scripts/hal/hook-content.unit.test.ts` keeps lists and counts out of all three hooks. A
+new Block Barn feature registers nowhere: the runner taps every listed kind, the scorer measures it, and an answer that
+changes no hook state is the feature `touch:<element id>`. Robot and scorer tests that need a level of a given character
+play frozen copies (`packages/core/src/hal/fixtures/tidepool-levels.ts`, Lanternkeep night 14 in its test). Content grows in `packages/core/test/hal-content-grows.test.ts`.
+Left as judgment, not content: Gearhold's static walker weighs only today's three enemies (a new one counts 0 threat
+there; gearhold-play measures real play), Tidepool's variety tags name today's tile kinds, Block Barn's floor of 5 blocks.
 
 ## B. "Hal asks": a blocked build becomes a request to Brian
 
