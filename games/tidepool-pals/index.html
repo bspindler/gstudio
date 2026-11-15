@@ -91,9 +91,10 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .bframe .bc.tl{left:-4px;top:-8%}
 .bframe .bc.br{right:-4px;bottom:-5%}
 .tiles,.fx{position:absolute;inset:0}
+.tiles{touch-action:none}
 .tiles{overflow:hidden;border-radius:16px} /* refills drop in from the rim, not over the HUD */
 .fx{pointer-events:none}
-.tile{position:absolute;left:0;top:0;width:calc(100% / 7);height:calc(100% / 8);padding:.7%;border:0;background:none;cursor:pointer;transition:transform .32s cubic-bezier(.3,1.32,.55,1);touch-action:manipulation}
+.tile{position:absolute;left:0;top:0;width:calc(100% / 7);height:calc(100% / 8);padding:.7%;border:0;background:none;cursor:pointer;transition:transform .32s cubic-bezier(.3,1.32,.55,1);touch-action:none;user-select:none;-webkit-user-select:none}
 .tile.now{transition:none}
 .tl{display:block;width:100%;height:100%;transition:transform .12s}
 .tl svg,.ice svg{width:100%;height:100%;display:block;overflow:visible;pointer-events:none}
@@ -178,8 +179,8 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .how .demo .dt{width:30px;height:30px;margin-left:-6px}
 .how .demo .dt:first-child{margin-left:0}
 .how .demo .dt svg{width:100%;height:100%;overflow:visible}
-.how .demo .finger{position:absolute;right:-8px;bottom:-10px;width:26px;height:26px;animation:press 1.2s ease-in-out infinite}
-@keyframes press{50%{transform:translate(-3px,-3px) scale(.88)}}
+.how .demo .finger{position:absolute;right:-8px;bottom:-10px;width:26px;height:26px;animation:swipe 1.6s ease-in-out infinite}
+@keyframes swipe{0%,15%{transform:translate(0,0)}65%,100%{transform:translate(-30px,0)}}
 @media (prefers-reduced-motion:reduce){.how .demo .finger{animation:none}}
 .mission .mech{text-align:left}
 .mission .btn.buy{font-size:20px;min-height:56px}
@@ -562,8 +563,8 @@ button.card:active{transform:scale(.97)}
 
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
-import { ABILITIES, GRAVITY, activeMask, applyAbility, buildBoard, collapse, counter, doubleCounts, ensureBubbles, goalStatus, goalsMet,
-  group, hasMoves, helperCharge, largestGroup, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveTap, rockOf,
+import { ABILITIES, GRAVITY, activeMask, applyAbility, bestSwap, buildBoard, collapse, counter, doubleCounts, ensureBubbles, goalStatus, goalsMet,
+  hasMoves, helperCharge, isFixed, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveMatches, resolveSwap, rockOf,
   shuffle, starsFor, tidePhase, tideTurns, turnTide, COLS, ROWS } from './board.js';
 import { HELPER_LEVEL, levelDef, withoutTides } from './levels.js';
 import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, buyPalWithSandDollars, loadSave, palEarned, pickHelper,
@@ -571,7 +572,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, 
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.9.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.10.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1143,15 +1144,39 @@ function glancePal(c) {
 /* ---------- a move ---------- */
 let aiming = false; // a targeted helper ability is waiting for the player to tap a cell
 const active = () => activeMask(mask, lvl.rock, lvl.phase);
+/** A tap on a tile: aims a helper's ability; otherwise it only nudges the player toward swiping. */
 function onTileTap(el) {
   sfx.unlock();
   if (busy || !lvl || lvl.over) return;
-  const r = el._r, c = el._c;
-  if (aiming) { useHelper(r, c); return; }
-  const res = resolveTap(grid, r, c, newId);
+  if (aiming) { useHelper(el._r, el._c); return; }
+  el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+  if (!swipeTold) { swipeTold = true; toast('Swipe a pal onto its neighbour to swap them'); }
+}
+let swipeTold = false;
+/** A swipe from tile `el` one step in (dr, dc): swaps the two pieces; a swap that matches nothing slides back. */
+function onSwipe(el, dr, dc) {
+  sfx.unlock();
+  if (busy || !lvl || lvl.over || aiming) return;
+  const r = el._r, c = el._c, r2 = r + dr, c2 = c + dc;
   clearHint();
-  if (!res.ok) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); sfx.bad(); armIdle(); return; }
+  const res = resolveSwap(grid, r, c, r2, c2, newId);
+  const other = grid[r2]?.[c2] ? els.get(grid[r2][c2].id) : null;
+  if (!res.ok) {
+    el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); sfx.bad();
+    if (other && !other._dying && grid[r][c] && grid[r2][c2] && !isFixed(grid[r][c]) && !isFixed(grid[r2][c2]) && motion()) {
+      // slide across and back, so it is clear the swap was tried and made no match
+      busy = true;
+      place(el, r2, c2); place(other, r, c);
+      setTimeout(() => { place(el, r, c); place(other, r2, c2); setTimeout(() => { busy = false; armIdle(); }, 330); }, 260);
+    } else armIdle();
+    return;
+  }
   busy = true; lvl.moves--; lvl.made++;
+  // the two pieces trade places first, then the match pops
+  if (other) { place(el, r2, c2); place(other, r, c); el._r = r2; el._c = c2; other._r = r; other._c = c; }
+  setTimeout(() => finishMove(res, r2, c2), other && motion() ? 230 : 0);
+}
+function finishMove(res, r, c) {
   grid = res.grid;
   // Lumen's lit move counts double toward colour goals.
   const doubled = lvl.double && res.kind === 'group';
@@ -1216,6 +1241,22 @@ function animateResult(res) {
   }, 120 + i * 90));
 }
 
+/** A chain after a collapse: the match pops, counts toward the goals and charges the helper. */
+function cascade(res) {
+  grid = res.grid;
+  const before = goalStatus(lvl.def, lvl.prog).map((g) => g.got);
+  addProgress(lvl.prog, res.counts);
+  chargeHelper(res.counts);
+  lvl.chains = (lvl.chains || 0) + 1;
+  sfx.pop(res.cleared.length); buzz(10);
+  animateResult(res);
+  if (res.spawned) lvl.specials++;
+  const first = res.cleared[0];
+  const gained = goalStatus(lvl.def, lvl.prog).reduce((a, g, i) => a + (g.got - before[i]), 0);
+  if (first) floatAt(first.r, first.c, gained ? `Chain! +${gained}` : 'Chain!');
+  hud();
+}
+
 /** Gravity in the current tide's direction, then any stranded pal at the exit swims off, until nothing moves. */
 function settle(done) {
   const { spawned } = collapse(grid, active(), rng, lvl.def.colors, newId, lvl.dir);
@@ -1223,12 +1264,17 @@ function settle(done) {
   render(fromOf(spawned));
   setTimeout(() => {
     const saved = rescueLost(grid, active(), lvl.exit);
-    if (!saved.length) { done(); return; }
-    for (const s of saved) swimOff(s);
-    addProgress(lvl.prog, { rescue: saved.length });
-    hud();
-    ev('pal_rescued', { level: lvl.n, rescued: lvl.prog.rescue, moves_left: lvl.moves, tide: lvl.phase });
-    setTimeout(() => settle(done), motion() ? 520 : 60);
+    if (saved.length) {
+      for (const s of saved) swimOff(s);
+      addProgress(lvl.prog, { rescue: saved.length });
+      hud();
+      ev('pal_rescued', { level: lvl.n, rescued: lvl.prog.rescue, moves_left: lvl.moves, tide: lvl.phase });
+    }
+    // chains: new pals that fell into line pop on their own, and count toward the goals
+    const chain = resolveMatches(grid, newId);
+    if (chain.ok) cascade(chain);
+    if (!saved.length && !chain.ok) { done(); return; }
+    setTimeout(() => settle(done), chain.ok ? 420 : motion() ? 520 : 60);
   }, 340);
 }
 
@@ -1357,7 +1403,7 @@ function useHelper(r, c) {
   }
   if (res.cleared.length || res.broke.length) shake('s');
   hud();
-  const moved = res.cleared.length || res.broke.length;
+  const moved = res.cleared.length || res.broke.length || res.recolored.length || res.freed.length || res.cracked.length || res.released.length;
   setTimeout(() => (moved ? settle(() => { busy = false; check(); }) : (busy = false, check())), moved ? 300 : 120);
 }
 
@@ -1402,36 +1448,23 @@ function fxFor(e) {
 function floatAt(r, c, text) { const s = document.createElement('span'); s.className = 'float'; s.textContent = text; s.style.left = cx(c); s.style.top = cy(r); fxEl.appendChild(s); setTimeout(() => s.remove(), 900); }
 function shake(size) { if (!motion()) return; const v = $('view-play'); v.classList.remove('shk-s', 'shk-l'); void v.offsetWidth; v.classList.add('shk-' + size); }
 
-/* ---------- idle hint: after ~6s without a move, the biggest group wiggles ---------- */
+/* ---------- idle hint: after ~6s without a move, the two pals of the best swap wiggle ---------- */
 function clearHint() { clearTimeout(idleT); document.querySelectorAll('.tile.hintme').forEach((t) => t.classList.remove('hintme')); fxEl.querySelectorAll('.coach').forEach((x) => x.remove()); }
-/** The biggest group of a colour a collect goal still needs, so the hint also teaches the goal. */
-function goalGroup() {
+/** The best swap, preferring a match of a colour a collect goal still needs, so the hint also teaches the goal. */
+function hintSwap() {
   const want = new Set(goalStatus(lvl.def, lvl.prog).filter((g) => g.t === 'collect' && !g.done).map((g) => g.c));
-  let best = [];
-  const seen = new Set();
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-    const x = grid[r][c];
-    if (!x || x.k !== 'pal' || x.ice || !want.has(x.c) || seen.has(r * COLS + c)) continue;
-    const g = group(grid, r, c);
-    for (const [gr, gc] of g) seen.add(gr * COLS + gc);
-    if (g.length >= 2 && g.length > best.length) best = g;
-  }
-  return best;
+  return bestSwap(grid, want);
 }
-/** Before the first move of the first levels the coach shows up fast, with a "Tap!" bubble; later only after 6s idle. */
+/** Before the first move of the first levels the coach shows up fast, with a "Swipe →" bubble; later only after 6s idle. */
 function armIdle() {
   clearHint();
   const teach = !!lvl && lvl.n <= 3 && lvl.made === 0;
   idleT = setTimeout(() => {
     if (!lvl || lvl.over || busy || view !== 'play' || !modal.hidden) return;
-    let cells = goalGroup();
-    if (!cells.length) cells = largestGroup(grid);
-    if (teach && cells.length) {
-      const [r, c] = cells.reduce((a, b) => (b[0] < a[0] ? b : a));
-      fxNode('coach', `left:${cx(c)};top:${cy(r)}`, 60_000).textContent = 'Tap!';
-    }
-    if (!cells.length) for (let r = 0; r < ROWS && !cells.length; r++) for (let c = 0; c < COLS; c++) if (grid[r][c]?.k === 'sp') { cells = [[r, c]]; break; }
-    for (const [r, c] of cells) els.get(grid[r][c].id)?.classList.add('hintme');
+    const s = hintSwap();
+    if (!s) return;
+    if (teach) fxNode('coach', `left:${cx(s.c)};top:${cy(s.r)}`, 60_000).textContent = s.r2 > s.r ? 'Swipe ↓' : 'Swipe →';
+    for (const [r, c] of [[s.r, s.c], [s.r2, s.c2]]) els.get(grid[r][c].id)?.classList.add('hintme');
   }, teach ? 900 : 6000);
 }
 
@@ -1574,7 +1607,7 @@ function renderMission() {
   const title = gs.length === 1 ? goalText(gs[0]) : 'Your mission';
   const c = gs.find((g) => g.t === 'collect')?.c ?? 0;
   // How to play, until the player has the hang of it (and again on any level that brings something new).
-  const how = n <= 3 ? `<div class="how"><span class="demo" aria-hidden="true"><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="finger">${FINGER}</span></span><span>Tap 2 or more matching pals that touch. They pop and count toward your goal.</span></div>` : '';
+  const how = n <= 3 ? `<div class="how"><span class="demo" aria-hidden="true"><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="dt">${TILES[(c + 1) % 4]}</span><span class="dt">${TILES[c]}</span><span class="finger">${FINGER}</span></span><span>Swipe a pal onto its neighbour to swap them. Line up 3 or more matching pals and they pop and count toward your goal.</span></div>` : '';
   showModal(`<div class="label">Level ${n} · ${chapter(n)}</div>
     <h2 class="mtitle">${title}</h2>
     <div class="mgoals">${gs.map((g) => `<div class="mg"><span class="gi">${goalIcon(g)}</span><b>${g.need}</b>${gs.length > 1 ? `<span>${goalWord(g)}</span>` : ''}</div>`).join('')}</div>
@@ -1961,7 +1994,38 @@ function showTab(name) {
 function goNext() { closeModal(); const n = lvl ? lvl.n + 1 : S.level; if (!celebrateReef(() => openLevel(n))) openLevel(n); afterLevelScreen(); }
 
 /* ---------- input ---------- */
-tilesEl.addEventListener('click', (e) => { const t = e.target.closest('.tile'); if (t && !t.disabled) onTileTap(t); });
+/* Swipe input: press a tile, drag about a third of a tile toward a neighbour and it swaps that way. A press that never
+   travels is a tap (it aims a helper). Arrow keys on a focused tile swap it too. */
+{
+  let drag = null;
+  const lean = () => tilesEl.clientWidth / COLS * 0.3;
+  tilesEl.addEventListener('pointerdown', (e) => {
+    const t = e.target.closest('.tile');
+    if (!t || t.disabled || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    drag = { el: t, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
+    try { tilesEl.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+  });
+  tilesEl.addEventListener('pointermove', (e) => {
+    if (!drag || drag.moved || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < lean()) return;
+    drag.moved = true;
+    if (Math.abs(dx) >= Math.abs(dy)) onSwipe(drag.el, 0, dx > 0 ? 1 : -1); else onSwipe(drag.el, dy > 0 ? 1 : -1, 0);
+  });
+  const end = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null;
+    if (!d.moved && e.type === 'pointerup') onTileTap(d.el);
+  };
+  tilesEl.addEventListener('pointerup', end);
+  tilesEl.addEventListener('pointercancel', end);
+  const ARROWS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] };
+  tilesEl.addEventListener('keydown', (e) => {
+    const t = e.target.closest('.tile'), d = ARROWS[e.key];
+    if (t && d && !t.disabled) { e.preventDefault(); onSwipe(t, d[0], d[1]); }
+    else if (t && (e.key === 'Enter' || e.key === ' ') && !t.disabled) { e.preventDefault(); onTileTap(t); }
+  });
+}
 modal.addEventListener('click', (e) => { if (e.target === modal && modal.classList.contains('sheet')) closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden && modal.classList.contains('sheet')) closeModal(); });
 

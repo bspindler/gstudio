@@ -170,10 +170,11 @@ describe('tidepool board: gravity, refills and moves', () => {
     for (const row of g) for (const cell of row) if (cell?.k === 'pal') expect(cell.c).toBeLessThan(5);
   });
 
-  it('hasMoves sees pairs and specials; shuffle always leaves a move', () => {
-    expect(hasMoves(grid(CHECKER))).toBe(false);
-    expect(hasMoves(grid(put(CHECKER, 0, 0, 'B')))).toBe(true);
-    expect(hasMoves(grid(put(CHECKER, 0, 0, '2')))).toBe(true);
+  it('hasMoves is true when some swap makes a match (or a special can be swapped); shuffle always leaves one', () => {
+    expect(hasMoves(grid(['01', '10']))).toBe(false); // no line of 3 can form
+    expect(hasMoves(grid(['0B', '10']))).toBe(true);
+    expect(hasMoves(grid(['1121']))).toBe(true); // swap the last two: 1 1 1 2
+    expect(hasMoves(grid(['1111']))).toBe(false); // swapping equal pals changes nothing
     for (let seed = 1; seed < 30; seed++) {
       const g = grid(CHECKER);
       shuffle(g, mulberry32(seed), 5, counter(500));

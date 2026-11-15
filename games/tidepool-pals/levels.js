@@ -25,8 +25,8 @@ export const poolOf = (n) => Math.floor((n - 1) / 10);
 /* Hand-authored 1-20: one new idea at a time, and the tide arrives early. Colours: 0 Coral, 1 Sunstar,
    2 Droplet, 3 Gem, 4 Kelp. */
 const RAW = [
-  L(1, 18, 4, [C(0, 12)], FULL, { intro: 'Tap two or more matching pals that touch.' }),
-  L(2, 20, 4, [C(1, 18)], FULL, { intro: 'Clear 5 or more at once to make an urchin bomb. Tap it to blast the pals around it.' }),
+  L(1, 18, 4, [C(0, 12)], FULL, { intro: 'Swipe a pal onto its neighbour to swap them. Line up 3 or more matching pals to pop them.' }),
+  L(2, 20, 4, [C(1, 18)], FULL, { intro: 'Match 5 or more at once to make an urchin bomb. Swipe it onto a neighbour to blast the pals around it.' }),
   L(3, 22, 4, [RESCUE(1), C(2, 16)],
     ['.......', '.......', '.......', '...B...', '.......', '.......', '.......', '.......'],
     { tide: T(6, 2, 'up'),
@@ -36,52 +36,52 @@ const RAW = [
   L(5, 20, 4, [RESCUE(1), C(1, 16)],
     ['...P...', '.......', '.......', '.......', '.......', '.......', '.......', '.......'],
     { exit: 'down', intro: 'A pal is stranded! Clear the pals under it so it sinks to the open water at the bottom. Stranded pals can\'t be matched, and blasts never hurt them.' }),
-  L(6, 22, 4, [C(3, 16)],
+  L(6, 7, 4, [C(3, 16)],
     ['.......', '.......', '.......', '.......', '.......', '.......', 'oo...oo', 'oo...oo'],
     { tide: T(4, 3, 'up'), intro: 'Rock pools! The dark pools only hold pals at low tide. When the tide comes back in, those pals wash out to sea, and they count toward your goals.' }),
-  L(7, 22, 4, [LITTER],
+  L(7, 7, 4, [LITTER],
     ['.......', '.......', '.......', '.......', '.......', '.......', '..lll..', '.lllll.'],
     { tide: T(6, 2, 'up'), intro: 'Litter! Clear pals right next to cans, rings and bottles to pick them up. Clean up all of it to win.' }),
-  L(8, 24, 5, [C(4, 20)], FULL, { tide: T(4, 3, 'right'),
+  L(8, 16, 5, [C(4, 20)], FULL, { tide: T(4, 3, 'right'),
     intro: 'A sideways tide! At low tide this pool drains to the right: pals slide right and new ones wash in from the left. The arrow on the tide meter shows where the next tide pulls.' }),
-  L(9, 24, 5, [RESCUE(1), C(2, 14)],
+  L(9, 13, 5, [RESCUE(1), C(2, 14)],
     ['x.....x', '.......', '.......', '.......', '...B...', '.......', '.......', 'x.....x'],
     { tide: T(5, 3, 'left'),
-      intro: 'A pal is trapped in a bubble! Clear pals right next to it twice to crack it open and set it free. Clear 7 or more for a wave: it sweeps a whole row or column.' }),
-  L(10, 24, 5, [ICE(4)],
+      intro: 'A pal is trapped in a bubble! Clear pals right next to it twice to crack it open and set it free. Match 7 or more for a wave: it sweeps a whole row or column.' }),
+  L(10, 6, 5, [ICE(4)],
     ['.......', '.......', '.......', '.i...i.', '.......', '.i...i.', '.......', '.......'],
     { tide: T(5, 3, 'up'), intro: 'Pals tangled in nets! Clear pals next to a net to untangle them. Tangled pals stay put, whatever the tide does, until they are free.' }),
-  L(11, 40, 5, [RESCUE(1), C(0, 12)],
+  L(11, 45, 5, [RESCUE(1), C(0, 12)],
     ['.......', '.P.....', '.......', '.......', '.......', '.......', '.......', '.......'],
     { tide: T(3, 3, 'right'), exit: 'right', intro: 'This pal needs the low tide: it drifts right as the water drains. Clear its row to let it reach the open water on the right.' }),
-  L(12, 26, 5, [C(1, 24)],
+  L(12, 17, 5, [C(1, 24)],
     ['o.....o', 'o.....o', '.......', '.......', '.......', '.......', '.......', '.......'],
-    { tide: T(4, 3, 'left'), intro: 'Clear 9 or more for a whirlpool: it swirls away every pal of its colour.' }),
-  L(13, 26, 5, [C(0, 16), C(3, 16)],
+    { tide: T(4, 3, 'left'), intro: 'Match 9 or more for a whirlpool: it swirls away every pal of its colour.' }),
+  L(13, 18, 5, [C(0, 16), C(3, 16)],
     ['.......', 'x.....x', 'xx...xx', 'xx...xx', 'x.....x', '.......', '.......', '.......'],
-    { tide: T(5, 2, 'up'), intro: 'Tap a special that touches another special to combine them into a bigger blast.' }),
+    { tide: T(5, 2, 'up'), intro: 'Swipe a special that touches another special to combine them into a bigger blast.' }),
   L(14, 42, 5, [LITTER, ICE(3)],
     ['.......', '.......', '.i...i.', '.......', '.i...i.', '.......', 'l.....l', 'll...ll'],
     { tide: T(4, 3, 'right') }),
   L(15, 34, 5, [RESCUE(1)],
     ['.P...P.', '.......', '.......', '.l...l.', '.......', '.......', '.......', '.......'],
     { tide: T(5, 2, 'up'), exit: 'down', intro: 'Two pals are stranded this time, with litter in the way: rescue either one. Careful: at low tide they float back up.' }),
-  L(16, 26, 5, [C(2, 22)],
+  L(16, 13, 5, [C(2, 22)],
     ['.......', '.......', 'o.....o', 'o.....o', 'o.....o', 'o.....o', '.......', '.......'],
     { tide: T(4, 3, 'left') }),
-  L(17, 28, 5, [ICE(10)],
+  L(17, 12, 5, [ICE(10)],
     ['.......', 'i.....i', '.i...i.', '...i...', '...i...', '.i...i.', 'i.....i', '.......'],
     { tide: T(4, 3, 'up') }),
-  L(18, 28, 5, [LITTER, C(2, 18)],
+  L(18, 17, 5, [LITTER, C(2, 18)],
     ['x.....x', '.......', '.......', 'l.....l', 'll...ll', '.......', '.......', 'x.....x'],
     { tide: T(4, 3, 'right') }),
-  L(19, 34, 5, [RESCUE(1), LITTER],
+  L(19, 38, 5, [RESCUE(1), LITTER],
     ['.......', '....P..', '.......', '.......', '.......', '.......', 'll...ll', 'lll.lll'],
     { tide: T(3, 4, 'left'), exit: 'left' }),
-  L(20, 32, 5, [LITTER, ICE(4), C(4, 16)],
+  L(20, 23, 5, [LITTER, ICE(4), C(4, 16)],
     ['x.....x', '.......', '.i...i.', '.......', '.i...i.', 'o.....o', 'll...ll', 'lll.lll'],
     { tide: T(4, 3, 'right'), intro: 'A big one to finish the first stretch: litter, nets, a colour goal and a sideways tide.' }),
-  L(21, 30, 5, [LITTER, C(3, 16)],
+  L(21, 19, 5, [LITTER, C(3, 16)],
     ['.......', '.......', '.......', '.......', '.......', '.......', 'l.....l', 'll.l.ll'],
     { tide: T(5, 3, 'up') }),
 ];
@@ -131,7 +131,7 @@ const ROCKS = [
 ];
 const TIDE_DIRS = ['up', 'left', 'right'];
 /** Extra moves for generated levels that hard-stopped players (measured by the play scorer). */
-export const MOVE_BONUS = { 25: 14, 26: 16, 28: 16 };
+export const MOVE_BONUS = { 25: 8, 26: 9, 28: 17 };
 /** Lighter boards for generated levels that walled players: [row, replacement row] pairs, moves untouched. */
 export const BOARD_EASE = { 21: [[6, '.......']], 28: [[1, '.......'], [4, '...P...']] };
 
@@ -230,7 +230,8 @@ export function generateLevel(n) {
   // 8. Moves: the goals' workload times a slack that tightens tier by tier.
   const slack = Math.max(1.12, 1.55 - 0.045 * tier);
   const holesFactor = 1 + (features(def).holes / (ROWS * COLS)) * 0.6;
-  def.moves = Math.max(16, Math.min(40, Math.round(workload(def) * holesFactor * slack) + 5));
+  // Swiping matches clears about three a move plus chains, so budgets run about 40% under the tap-era ones.
+  def.moves = Math.max(12, Math.min(40, Math.round(workload(def) * holesFactor * slack * 0.62) + 4));
   // 9. A few generated levels proved to wall players: they get extra moves, nothing else changes.
   if (MOVE_BONUS[n]) def.moves = Math.min(45, def.moves + MOVE_BONUS[n]);
   // 10. Others get a lighter board instead (fewer obstacles), with the moves they already had.
@@ -240,7 +241,7 @@ export function generateLevel(n) {
 
 /* Hand-authored levels past the generated stretch: level 23 is a five-point starfish with a pal bubbled in the middle. */
 const SPECIAL = {
-  23: { ...L(23, 26, 5, [RESCUE(1), C(1, 16)],
+  23: { ...L(23, 15, 5, [RESCUE(1), C(1, 16)],
     ['xxx.xxx', 'xx...xx', '.......', '...B...', '.......', 'x.....x', 'x..x..x', 'x..x..x'],
     { tide: T(5, 3, 'up'),
       intro: 'A starfish pool! The bubbled pal sits in the middle: clear pals right next to it twice to set it free.' }),
@@ -286,7 +287,7 @@ export function validateLevel(def) {
   }
   if (seen.size !== playable) e.push('playable cells are not all connected');
   if (def.colors !== 4 && def.colors !== 5) e.push('colors must be 4 or 5');
-  if (!(def.moves >= 14 && def.moves <= 45)) e.push('moves out of range');
+  if (!(def.moves >= 6 && def.moves <= 45)) e.push('moves out of range');
   if (!def.goals.length || def.goals.length > 3) e.push('1 to 3 goals');
   const cs = def.goals.filter((g) => g.t === 'collect').map((g) => g.c);
   if (new Set(cs).size !== cs.length) e.push('collect goals must use different colours');

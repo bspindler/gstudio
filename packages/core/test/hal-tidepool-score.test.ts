@@ -80,13 +80,13 @@ describe('scoreTidepool', () => {
   });
 
   it('the robot-stuck levels get no +5 verdict and are listed', () => {
-    inject.frozen = true; // level 11 as it was on 2026-11-15: the robot fails it whatever its move budget
+    inject.frozen = true; // frozen level 14: the swap robot (0.9.0) wins 65% and only 80% with doubled moves, whatever its budget
     let r: ReturnType<typeof scoreTidepool>;
-    try { r = scoreTidepool({ from: 11, to: 11, seeds: 20 }); } finally { inject.frozen = false; }
-    const l11 = r.levels[0]!;
-    expect(l11.winRateDoubled).toBeGreaterThanOrEqual(l11.winRatePlusFive);
-    expect(l11.botStuck).toBe(true);
-    expect(l11.plusFiveHelps).toBeNull();
+    try { r = scoreTidepool({ from: 14, to: 14, seeds: 20 }); } finally { inject.frozen = false; }
+    const l14 = r.levels[0]!;
+    expect(l14.winRateDoubled).toBeGreaterThanOrEqual(l14.winRatePlusFive);
+    expect(l14.botStuck).toBe(true);
+    expect(l14.plusFiveHelps).toBeNull();
   });
 
   it('variety: back-to-back repeats score lower; the opening is left out', () => {

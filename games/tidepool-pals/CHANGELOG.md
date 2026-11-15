@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.10.0 (2026-11-15)
+- Tidepool Pals: swipe to swap neighbouring pals and match 3 or more to clear them, with cascades; the how-to and hint now teach swiping.
+
 ## 0.9.0 (2026-11-15)
 - New level 23: a five-point starfish pool with a pal trapped in a bubble right in the middle.
 - Level 9 now always has a trapped pal in a bubble to rescue, so the level can always be won.

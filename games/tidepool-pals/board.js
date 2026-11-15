@@ -6,6 +6,7 @@
 //        { id, k:'lost' }            a stranded pal to rescue: not matchable, never destroyed, moves with gravity
 //        { id, k:'bubble', hp }      a pal trapped in a bubble ('B'): fixed; each clear next to it cracks it, the last
 //                                    crack frees the pal (counts as a rescue)
+// A move is a swipe: swap a piece with an orthogonal neighbour (MOVE = 'swap'); runs of 3+ pals of one colour clear.
 // A null cell is either empty (waiting for a refill), a hole in the level's mask, or a rock pool at high tide.
 
 export const COLS = 7, ROWS = 8;
@@ -64,7 +65,7 @@ export function buildBoard(def, rng, newId, phase = 'high') {
     if (ch === 'i') return { id: newId(), k: 'pal', c: pick(), ice: true };
     return { id: newId(), k: 'pal', c: pick() };
   }));
-  if (!hasMoves(g)) shuffle(g, rng, colors, newId);
+  if (hasMatch(g) || !hasMoves(g)) shuffle(g, rng, colors, newId); // a fresh board has no ready-made match and a swap to make
   return g;
 }
 
@@ -271,6 +272,150 @@ export function resolveTap(src, r, c, newId) {
   return res;
 }
 
+/* ---------- a swipe: swap two neighbours, match 3 or more ---------- */
+/** How a move is made: the player swipes a piece onto a neighbour (the Hal robot and the page read this). */
+export const MOVE = 'swap';
+/** A match is a straight run of at least this many free pals of one colour. */
+export const MIN_RUN = 3;
+const swappable = (cell) => !!cell && (cell.k === 'sp' || isFreePal(cell));
+
+/** Keys (y*100+x) of every free pal that sits in a straight run of MIN_RUN or more of one colour. */
+function matchedKeys(g) {
+  const out = new Set();
+  const run = (cells) => { for (const [y, x] of cells) out.add(K(y, x)); };
+  for (let r = 0; r < g.length; r++) {
+    let from = 0;
+    for (let c = 1; c <= g[r].length; c++) {
+      const a = g[r][from], b = g[r][c];
+      if (c < g[r].length && isFreePal(a) && isFreePal(b) && a.c === b.c) continue;
+      if (isFreePal(a) && c - from >= MIN_RUN) run(Array.from({ length: c - from }, (_, i) => [r, from + i]));
+      from = c;
+    }
+  }
+  for (let c = 0; c < (g[0]?.length ?? 0); c++) {
+    let from = 0;
+    for (let r = 1; r <= g.length; r++) {
+      const a = g[from][c], b = g[r]?.[c];
+      if (r < g.length && isFreePal(a) && isFreePal(b) && a.c === b.c) continue;
+      if (isFreePal(a) && r - from >= MIN_RUN) run(Array.from({ length: r - from }, (_, i) => [from + i, c]));
+      from = r;
+    }
+  }
+  return out;
+}
+const hasMatch = (g) => matchedKeys(g).size > 0;
+
+/** Clears every matched pal, breaks what touches them, and spawns a special for a big match (mutates res.grid). */
+function clearMatched(res, matched, prefer) {
+  const g = res.grid;
+  const cells = [...matched].map((k) => [Math.floor(k / 100), k % 100]);
+  // connected matched cells of one colour form one match (an L or T counts as a single, bigger match)
+  const seen = new Set(), comps = [];
+  for (const [y, x] of cells) {
+    if (seen.has(K(y, x))) continue;
+    const comp = [], st = [[y, x]];
+    while (st.length) {
+      const [a, b] = st.pop();
+      if (seen.has(K(a, b)) || !matched.has(K(a, b)) || g[a][b].c !== g[y][x].c) continue;
+      seen.add(K(a, b)); comp.push([a, b]);
+      for (const [dy, dx] of DIRS) if (inb(g, a + dy, b + dx)) st.push([a + dy, b + dx]);
+    }
+    comps.push(comp);
+  }
+  let big = null;
+  for (const comp of comps) if (specialForGroup(comp) && (!big || comp.length > big.length)) big = comp;
+  const colour = big ? g[big[0][0]][big[0][1]].c : 0;
+  const done = new Set(cells.map(([y, x]) => K(y, x)));
+  for (const [y, x] of cells) clearAt(res, y, x);
+  for (const [y, x] of cells) for (const [dy, dx] of DIRS) {
+    const yy = y + dy, xx = x + dx;
+    if (!inb(g, yy, xx) || done.has(K(yy, xx))) continue;
+    if (hitObstacle(res, yy, xx)) done.add(K(yy, xx));
+  }
+  if (big) {
+    const [r, c] = prefer.find(([y, x]) => big.some(([a, b]) => a === y && b === x)) || big[0];
+    const nc = { id: Math.max(0, ...g.flat().map((x) => x?.id ?? 0), ...res.cleared.map((x) => x.cell.id)) + 1, k: 'sp', s: specialForGroup(big), c: colour };
+    g[r][c] = nc;
+    res.spawned = { r, c, cell: nc };
+  }
+}
+
+/**
+ * Clears every match on the board (used for the cascades after a collapse, so the page and the robot share it).
+ * { ok:false } when there is no match, otherwise the same shape as resolveTap, with kind 'cascade'.
+ */
+export function resolveMatches(src, newId) {
+  const matched = matchedKeys(src);
+  if (!matched.size) return { ok: false };
+  const g = clone(src);
+  const res = newResult(g, 'cascade');
+  clearMatched(res, matched, []);
+  if (res.spawned) res.spawned.cell.id = newId();
+  return res;
+}
+
+/**
+ * Swaps two orthogonal neighbours. { ok:false } (and no move is spent) when either piece cannot move, or the swap makes
+ * no match. A swap that makes a match clears every match it makes (kind 'group'). Swapping a special with a neighbour
+ * sets the special off where it lands (kind 'special', or 'combo' next to other specials), match or not.
+ */
+export function resolveSwap(src, r1, c1, r2, c2, newId) {
+  if (!inb(src, r1, c1) || !inb(src, r2, c2) || Math.abs(r1 - r2) + Math.abs(c1 - c2) !== 1) return { ok: false };
+  const a = src[r1][c1], b = src[r2][c2];
+  if (!swappable(a) || !swappable(b)) return { ok: false };
+  if (a.k === 'pal' && b.k === 'pal' && a.c === b.c) return { ok: false };
+  const g = clone(src);
+  [g[r1][c1], g[r2][c2]] = [g[r2][c2], g[r1][c1]];
+  if (a.k === 'sp' || b.k === 'sp') {
+    const [r, c] = a.k === 'sp' ? [r2, c2] : [r1, c1];
+    const res = resolveTap(g, r, c, newId);
+    if (res.ok) res.swapped = [[r1, c1], [r2, c2]];
+    return res;
+  }
+  const matched = matchedKeys(g);
+  if (!matched.size) return { ok: false };
+  const res = newResult(g, 'group');
+  res.swapped = [[r1, c1], [r2, c2]];
+  clearMatched(res, matched, [[r1, c1], [r2, c2]]);
+  if (res.spawned) res.spawned.cell.id = newId();
+  return res;
+}
+
+/** Every swap that does something, as [r1, c1, r2, c2] (right and down neighbours). */
+function swapsOf(g) {
+  const out = [];
+  for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) {
+    for (const [r2, c2] of [[r, c + 1], [r + 1, c]]) {
+      if (!inb(g, r2, c2)) continue;
+      const a = g[r][c], b = g[r2][c2];
+      if (!swappable(a) || !swappable(b)) continue;
+      if (a.k === 'sp' || b.k === 'sp') { out.push([r, c, r2, c2]); continue; }
+      if (a.c === b.c) continue;
+      g[r][c] = b; g[r2][c2] = a;
+      const m = hasMatch(g);
+      g[r][c] = a; g[r2][c2] = b;
+      if (m) out.push([r, c, r2, c2]);
+    }
+  }
+  return out;
+}
+
+/**
+ * The swap that clears the most (for Lumen and the idle hint), preferring pals of the colours in `want` (a Set).
+ * Returns { r, c, r2, c2, n } or null.
+ */
+export function bestSwap(g, want = null) {
+  let best = null, bestScore = -1;
+  for (const [r, c, r2, c2] of swapsOf(g)) {
+    const res = resolveSwap(g, r, c, r2, c2, () => 0);
+    if (!res.ok) continue;
+    const n = res.cleared.length, wanted = want ? res.cleared.filter((x) => x.cell.k === 'pal' && want.has(x.cell.c)).length : 0;
+    const score = wanted * 100 + n;
+    if (score > bestScore) { bestScore = score; best = { r, c, r2, c2, n }; }
+  }
+  return best;
+}
+
 /* ---------- gravity ---------- */
 /**
  * Moves pals, specials and stranded pals toward `dir` along each line (columns for up and down, rows for left
@@ -402,32 +547,27 @@ export function ensureBubbles(g, def, mask, p) {
 }
 
 /* ---------- moves and shuffles ---------- */
-export function hasMoves(g) {
-  for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) {
-    const cell = g[r][c];
-    if (!cell) continue;
-    if (cell.k === 'sp') return true;
-    if (!isFreePal(cell)) continue;
-    const right = g[r][c + 1], down = g[r + 1]?.[c];
-    if (isFreePal(right) && right.c === cell.c) return true;
-    if (isFreePal(down) && down.c === cell.c) return true;
-  }
-  return false;
-}
+/** True when some swap makes a match (or a special can be swapped and set off). */
+export function hasMoves(g) { return swapsOf(g).length > 0; }
 
-/** Recolours free pals until there is a move. If that cannot work (almost no free pals), a pal becomes a bomb. */
+/**
+ * Recolours free pals (never into a ready-made match) until some swap makes a match. If that cannot work (almost no
+ * free pals), a pal becomes a bomb.
+ */
 export function shuffle(g, rng, colors, newId) {
   const free = [];
   for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r].length; c++) if (isFreePal(g[r][c])) free.push([r, c]);
   for (let tries = 0; tries < 60; tries++) {
-    for (const [r, c] of free) g[r][c].c = Math.floor(rng() * colors);
-    if (hasMoves(g)) return;
-  }
-  for (const [r, c] of free) {
-    for (const [dy, dx] of [[0, 1], [1, 0]]) {
-      const o = g[r + dy]?.[c + dx];
-      if (isFreePal(o)) { o.c = g[r][c].c; return; }
+    for (const [r, c] of free) {
+      // skip colours that would complete a run of 3 with the two pals before it (left or above)
+      const bad = new Set();
+      const l1 = g[r][c - 1], l2 = g[r][c - 2], u1 = g[r - 1]?.[c], u2 = g[r - 2]?.[c];
+      if (isFreePal(l1) && isFreePal(l2) && l1.c === l2.c) bad.add(l1.c);
+      if (isFreePal(u1) && isFreePal(u2) && u1.c === u2.c) bad.add(u1.c);
+      const ok = Array.from({ length: colors }, (_, i) => i).filter((i) => !bad.has(i));
+      g[r][c].c = ok.length ? ok[Math.floor(rng() * ok.length)] : Math.floor(rng() * colors);
     }
+    if (!hasMatch(g) && hasMoves(g)) return;
   }
   if (free.length) { const [r, c] = free[0]; g[r][c] = { id: newId(), k: 'sp', s: 'bomb', c: g[r][c].c }; }
 }
@@ -445,7 +585,7 @@ export const ABILITIES = {
   wisp: { name: 'Glow Up', tc: 2, charge: 10, target: true, desc: 'Turns the tapped pal into an urchin bomb.' },
   snapjaw: { name: 'Snap', tc: 0, charge: 14, target: true, desc: 'Clears the column you tap.' },
   spindle: { name: 'Spike Burst', tc: 4, charge: 14, target: true, desc: 'Blasts a 3x3 square where you tap.' },
-  lumen: { name: 'Bright Idea', tc: 2, charge: 14, target: false, desc: 'Lights up the best move. That move counts double.' },
+  lumen: { name: 'Bright Idea', tc: 2, charge: 14, target: false, desc: 'Lights up the best swap. That move counts double.' },
   marlo: { name: 'Urchin Party', tc: 1, charge: 18, target: false, desc: 'Turns 3 pals into urchin bombs.' },
   coralie: { name: 'Royal Cross', tc: 0, charge: 18, target: true, desc: 'Clears the row and column you tap.' },
   abyssa: { name: 'Deep Whirl', tc: 3, charge: 18, target: true, desc: 'Turns the tapped pal into a whirlpool.' },
@@ -531,9 +671,9 @@ export function applyAbility(src, id, r, c, rng, newId) {
     case 'spindle': ok = blast({ box: 1 }); break;
     case 'coralie': ok = blast({ rows: [0], cols: [0] }); break;
     case 'lumen': {
-      const best = largestGroup(g);
-      if (!best.length) break;
-      res.highlight = best; res.double = true; ok = true;
+      const best = bestSwap(g);
+      if (!best) break;
+      res.highlight = [[best.r, best.c], [best.r2, best.c2]]; res.double = true; ok = true;
       break;
     }
     case 'marlo': {

@@ -52,7 +52,7 @@ describe('tidepool-pals play layout', () => {
     expect(html.match(/\.pp \.ppal svg\.peek\{([^}]*)\}/)![1]).toContain('palpeek');
     expect(html).toContain('@keyframes palpeek');
     expect(html).toContain('function peekPal(c)');
-    expect(html.match(/function onTileTap\(el\)\s*\{([\s\S]*?)\n\}/)![1]).toMatch(/if \(gained\) peekPal\(c\)/);
+    expect(html.match(/function finishMove\(res, r, c\)\s*\{([\s\S]*?)\n\}/)![1]).toMatch(/if \(gained\) peekPal\(c\)/);
     expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
   });
 
@@ -60,7 +60,7 @@ describe('tidepool-pals play layout', () => {
     expect(html.match(/\.pp \.ppal svg\.glance\{([^}]*)\}/)![1]).toContain('palglance');
     expect(html).toContain('@keyframes palglance');
     expect(html).toContain('function glanceDeg(c)');
-    expect(html.match(/function onTileTap\(el\)\s*\{([\s\S]*?)\n\}/)![1]).toMatch(/else glancePal\(c\)/);
+    expect(html.match(/function finishMove\(res, r, c\)\s*\{([\s\S]*?)\n\}/)![1]).toMatch(/else glancePal\(c\)/);
     expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
   });
 

@@ -9,7 +9,7 @@ describe('tidepool pals: lighter boards on walled generated levels', () => {
     expect(def.layout[6]).toBe('.......');
     expect(features(def).litter).toBe(7);
     expect(features(def).ice).toBe(3);
-    expect(def.moves).toBe(22);
+    expect(def.moves).toBe(15);
     expect(def.goals).toEqual([{ t: 'litter' }, { t: 'ice', n: 3 }]);
   });
 

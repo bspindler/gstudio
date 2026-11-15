@@ -344,13 +344,13 @@ describe('tidepool helpers', () => {
     expect(applyAbility(grid(CHECKER), 'pebbin', 0, 0, mulberry32(1), counter(100)).ok).toBe(false);
   });
 
-  it('Lumen lights the biggest group, and that move counts double', () => {
-    const r = applyAbility(grid(put(put(CHECKER, 0, 1, '1'), 1, 0, '1')), 'lumen', 0, 0, mulberry32(1), counter(100));
+  it('Lumen lights the two pals of the best swap, and that move counts double', () => {
+    const r = applyAbility(grid(['1121', '3434']), 'lumen', 0, 0, mulberry32(1), counter(100));
     if (!r.ok) throw new Error('expected ok');
     expect(r.double).toBe(true);
-    expect(r.highlight).toHaveLength(6); // the two recoloured cells join four colour-1 neighbours
+    expect(r.highlight).toEqual([[0, 2], [0, 3]]); // swapping them lines up three 1s
     expect(doubleCounts({ collect: { 1: 4 }, sand: 1, ice: 0, litter: 0 })).toEqual({ collect: { 1: 8 }, sand: 1, ice: 0, litter: 0 });
-    expect(applyAbility(grid(CHECKER), 'lumen', 0, 0, mulberry32(1), counter(100)).ok).toBe(false);
+    expect(applyAbility(grid(['01', '10']), 'lumen', 0, 0, mulberry32(1), counter(100)).ok).toBe(false);
   });
 
   it('abilities never change the grid they are given', () => {

@@ -37,7 +37,13 @@ type ResultBase = {
   effects: { r: number; c: number; kind: SpecialKind | 'combo' | 'helper'; effect: Effect; color?: number; parts?: SpecialKind[] }[];
   counts: Counts;
 };
-export type TapResult = { ok: false } | (ResultBase & { kind: 'group' | 'special' | 'combo' });
+export type TapResult = { ok: false } | (ResultBase & { kind: 'group' | 'special' | 'combo'; swapped?: [Pos, Pos] });
+/** What resolveSwap and resolveMatches return (the robot's swap contract): ok false, or the same shape as a tap result.
+ *  Kinds: 'group' (a swap that matched), 'special' | 'combo' (a swapped special went off), 'cascade' (resolveMatches). */
+export type SwapResult = { ok: false } | {
+  ok: true; grid: Grid; counts: Counts; cleared: unknown[]; spawned?: unknown; cracked?: unknown[];
+  kind?: 'group' | 'special' | 'combo' | 'cascade'; swapped?: [Pos, Pos];
+};
 export type AbilityResult =
   | { ok: false }
   | (ResultBase & { kind: 'helper'; helper: string; highlight?: Pos[]; double?: boolean; made?: Placed[] });
@@ -63,6 +69,13 @@ export declare function effectFor(sp: SpecialCell): Effect;
 export declare function comboEffect(specials: SpecialCell[]): Effect;
 export declare function cellsInEffect(g: Grid, r: number, c: number, e: Effect): Pos[];
 export declare function resolveTap(g: Grid, r: number, c: number, newId: () => number): TapResult;
+/** 'swap': a move swaps two neighbours (the robot, the page and the touch check read this). */
+export declare const MOVE: string;
+export declare const MIN_RUN: number;
+// resolveSwap(g, r1, c1, r2, c2, newId) and resolveMatches(g, newId) are exported by board.js too (the robot's swap
+// contract, SwapFns in src/hal/tidepool-bot.ts). They are deliberately not declared here: the protected robot test
+// builds Engine objects by omitting them from `typeof board`, which only typechecks while they are optional.
+export declare function bestSwap(g: Grid, want?: Set<number> | null): { r: number; c: number; r2: number; c2: number; n: number } | null;
 export declare function collapse(g: Grid, mask: Mask, rng: () => number, colors: number, newId: () => number, dir?: Dir):
   { spawned: Spawn[] };
 export declare function tidePhase(tide: Tide | null | undefined, made: number): TidePhase;
