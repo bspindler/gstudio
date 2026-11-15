@@ -5,11 +5,13 @@
 //   - A fixed tap script from a fixed seed visits every state the barn reaches (fresh, all named, a tower, a tower
 //     knocked down, a tower that tumbled by itself, an invitation, the grown-up corner opened and closed) and taps
 //     every kind of target in it; before every tap, every target the hook lists is measured.
-//   - Then a seeded toddler phase on the same page (toddlerPlan): random taps anywhere (gaps included), runs of 3-6 taps
-//     on one target, two-finger and palm touches, a 1 s press (on the corner, and anywhere), cancelled touches; then
-//     state combinations (taps on blocks, the tower and the hay with the doors open; naming, stacking and the
-//     invitation at dusk). Each gesture is judged like a tap: how many times the page answered it (exactly once; a
-//     cancel never), what it changed (its signature and the feature it reached), and what it left stuck.
+//   - Then, on the same page, state combinations (taps on blocks, the tower and the hay with the doors open; naming,
+//     stacking and the invitation at dusk). Then the toddler phase: for each of TODDLER_SEEDS, a fresh barn and that
+//     seed's random gestures (toddlerPlan): random taps anywhere (gaps included), runs of 3-6 taps on one target,
+//     two-finger and palm touches, a 1 s press (on the corner, and anywhere), cancelled touches. Each gesture is judged
+//     like a tap: how many times the page answered it (exactly once; a cancel never; pressed state, such as the
+//     corner's ring that starts on the press and stops on the lift, is no answer), what it changed (its signature and
+//     the feature it reached), and what it left stuck. The scorer counts variety per seed and reports its seed noise.
 //   - A tap answers only by a DOM change the page makes synchronously while handling that tap's own (trusted)
 //     pointerdown or pointerup. Changes made later (a timer of this tap or of an earlier one) never count, so the
 //     result does not depend on timing. `ms` is from the pointerdown to that change.
@@ -24,7 +26,7 @@
 // Run it with `npm run hal -- score --game block-barn`.
 import type { Browser, BrowserContextOptions, CDPSession, Page } from 'playwright';
 import {
-  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, BLOCK_BARN_TODDLER_TAPS, BLOCK_BARN_VIEWPORTS,
+  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, BLOCK_BARN_TODDLER_SEEDS, BLOCK_BARN_TODDLER_TAPS, BLOCK_BARN_VIEWPORTS,
   type BlockBarnGesture, type BlockBarnGestureKind, type BlockBarnKind, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize, type BlockBarnViewport,
 } from '../../packages/core/src/hal/block-barn-score.js';
 import { closeAll, launchBrowser, newHalContext, serveGames, type StaticServer } from './browser.js';
@@ -37,6 +39,10 @@ export type BlockBarnPlayOptions = {
   initScript?: string;
   /** Wall-clock bound for each viewport's tap script and for the alphabet walk (default VIEW_DEADLINE_MS). */
   deadlineMs?: number;
+  /** The toddler phase's seeds at each viewport, each on a fresh barn (default TODDLER_SEEDS). */
+  toddlerSeeds?: number[];
+  /** Test hook: these steps instead of each seed's toddlerPlan. */
+  toddlerSteps?: ToddlerStep[];
 };
 export type BlockBarnPlayResult = { records: BlockBarnRecord[]; page: BlockBarnPage; errors: string[] };
 
@@ -346,35 +352,49 @@ function instrument(flashMs: number, gapMs: number): void {
   let probe: { t0: number; ms?: number; up: boolean; end?: number } | null = null;
   // A toddler gesture (one finger or several, held or cancelled), from `startGesture()` on. Each trusted pointerdown,
   // pointerup and pointercancel dispatch is judged the same way as a tap's: did the page change while handling it.
-  // `regions`: for each change, the id of the nearest element with one (where in the barn it answered); `sounds`: the
-  // Web Audio sources started while handling it.
-  type Gest = { downs: number; firstDown: boolean; extraDowns: number; releases: number; changedReleases: number; regions: Set<string>; sounds: number };
-  let gest: Gest | null = null;
-  let current: Event | null = null, since = 0, changedNow = false, soundsAt = 0;
+  // Pressed state never answers: an attribute that a press of this gesture changed and a later release of the same
+  // gesture set back as it was (a hold ring that starts on the press and stops on the lift or the cancel) counts
+  // neither at the press nor at the release. A change and its undo inside one dispatch (restarting an animation) still
+  // answers. `regions`: for each answering change, the id of the nearest element with one (where in the barn it
+  // answered); `sounds`: the Web Audio sources started while handling it.
+  type Change = { region: string; key?: string; old?: string | null; now?: string | null };
+  type Dispatch = { kind: 'down' | 'release'; changes: Change[]; sounds: number };
+  let gest: { dispatches: Dispatch[] } | null = null;
+  let current: Event | null = null, since = 0, soundsAt = 0, pending: MutationRecord[] = [];
   const hit = () => { if (probe && probe.ms === undefined) probe.ms = performance.now() - since; };
   const regionOf = (n: Node | null): string => {
     let el: Element | null = n && n.nodeType === 1 ? (n as Element) : n?.parentElement ?? null;
     while (el && !el.id) el = el.parentElement;
     return el ? el.id : 'document';
   };
+  const nodeIds = new WeakMap<Node, number>();
+  let nodeCount = 0;
+  const nodeId = (n: Node) => { let i = nodeIds.get(n); if (i === undefined) nodeIds.set(n, (i = ++nodeCount)); return i; };
+  /**
+   * An attribute's value; a class list is read as a set, and no class attribute as the empty set (adding a class to an
+   * element that had none, then removing it, leaves class="": the same classes as before).
+   */
+  const attrValue = (name: string, v: string | null) => (name !== 'class' ? v : [...new Set((v ?? '').split(/\s+/).filter(Boolean))].sort().join(' '));
   const note = (recs: MutationRecord[]) => {
     if (!recs.length) return;
-    changedNow = true;
     hit();
-    // A change outside every element with an id (the root's layout variables, rewritten whenever the barn re-measures
-    // itself) still answers, but is bookkeeping, not a place in the barn: it names no region.
-    if (gest) for (const r of recs) { const where = regionOf(r.target); if (where !== 'document') gest.regions.add(where); }
+    if (gest) pending.push(...recs);
   };
   const mo = new MutationObserver((recs) => { if (current && current.eventPhase !== Event.NONE) note(recs); });
-  mo.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
-  const begin = (e: Event) => { mo.takeRecords(); current = e; since = performance.now(); changedNow = false; soundsAt = sources.length; }; // records taken here are someone else's
+  mo.observe(document, { subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true });
+  const begin = (e: Event) => { mo.takeRecords(); current = e; since = performance.now(); soundsAt = sources.length; pending = []; }; // records taken here are someone else's
   const finish = (e: Event) => {
     note(mo.takeRecords());
     current = null;
     if (!gest) return;
-    gest.sounds += sources.length - soundsAt;
-    if (e.type === 'pointerdown') { if (++gest.downs === 1) gest.firstDown = changedNow; else if (changedNow) gest.extraDowns++; }
-    else { gest.releases++; if (changedNow) gest.changedReleases++; }
+    const changes = pending.map((r): Change => {
+      const region = regionOf(r.target);
+      if (r.type !== 'attributes' || !r.attributeName) return { region };
+      const name = r.attributeName;
+      return { region, key: `${nodeId(r.target)}:${name}`, old: attrValue(name, r.oldValue), now: attrValue(name, (r.target as Element).getAttribute(name)) };
+    });
+    pending = [];
+    gest.dispatches.push({ kind: e.type === 'pointerdown' ? 'down' : 'release', changes, sounds: sources.length - soundsAt });
   };
   addEventListener('pointerdown', (e) => { if (!e.isTrusted) return; if (down.size <= 1) probe = { t0: performance.now(), up: false }; begin(e); }, true);
   addEventListener('pointerdown', (e) => { if (e.isTrusted && current === e) finish(e); });
@@ -388,16 +408,35 @@ function instrument(flashMs: number, gapMs: number): void {
   }
   /**
    * The gesture's answers: every release (pointerup or pointercancel) that changed the page, and every extra finger's
-   * press that did; a gesture answered only as its first finger landed (and not on release) answered once.
+   * press that did; a gesture answered only as its first finger landed (and not on release) answered once. Pressed
+   * state is left out first. A change outside every element with an id (the root's layout variables, rewritten
+   * whenever the barn re-measures itself) still answers, but is bookkeeping, not a place in the barn: it names no region.
    */
   const gesture = () => {
     if (!gest) return null;
-    const n = gest.changedReleases + gest.extraDowns;
-    return { downs: gest.downs, releases: gest.releases, responses: n || (gest.firstDown ? 1 : 0), regions: [...gest.regions].sort(), sounds: gest.sounds };
+    const ds = gest.dispatches;
+    // Pressed state: an attribute first changed in this gesture at a press, that a later release set back to its value
+    // from before the press.
+    const pressed = new Set<string>(), first = new Map<string, { at: number; old: string | null | undefined }>();
+    ds.forEach((d, i) => {
+      for (const c of d.changes) {
+        if (!c.key) continue;
+        if (!first.has(c.key)) first.set(c.key, { at: i, old: c.old });
+        const f = first.get(c.key)!;
+        if (d.kind === 'release' && ds[f.at]!.kind === 'down' && f.at < i && c.now === f.old) pressed.add(c.key);
+      }
+    });
+    const live = (d: Dispatch) => d.changes.filter((c) => !c.key || !pressed.has(c.key));
+    const downs = ds.filter((d) => d.kind === 'down'), releases = ds.filter((d) => d.kind === 'release');
+    const firstDown = !!downs[0] && live(downs[0]).length > 0;
+    const n = releases.filter((d) => live(d).length).length + downs.slice(1).filter((d) => live(d).length).length;
+    const regions = new Set<string>();
+    for (const d of ds) for (const c of live(d)) if (c.region !== 'document') regions.add(c.region);
+    return { downs: downs.length, releases: releases.length, responses: n || (firstDown ? 1 : 0), regions: [...regions].sort(), sounds: ds.reduce((a, d) => a + d.sounds, 0) };
   };
 
   // `hold(ms)`: the runner is holding a finger down for ms; the virtual clock moves on by that much.
-  w.__bbPlay = { spoken, offDevice, played, flashes, audio, reset() { probe = null; }, probe: () => probe, startGesture() { gest = { downs: 0, firstDown: false, extraDowns: 0, releases: 0, changedReleases: 0, regions: new Set(), sounds: 0 }; }, gesture, hold(ms: number) { held += Number(ms) || 0; tapAt += (Number(ms) || 0) / 1000; vnow = tapAt; } };
+  w.__bbPlay = { spoken, offDevice, played, flashes, audio, reset() { probe = null; }, probe: () => probe, startGesture() { gest = { dispatches: [] }; }, gesture, hold(ms: number) { held += Number(ms) || 0; tapAt += (Number(ms) || 0) / 1000; vnow = tapAt; } };
 }
 
 /** The runner's in-page instrumentation as an init script (exported for tests). */
@@ -417,6 +456,8 @@ class Barn {
   seen = new Set<string>();
   tapped = new Set<string>();
   last = 0;
+  /** The toddler seed whose random phase is playing (unset for the combinations). */
+  seed?: number;
   /** `measure`: record every target's size before each tap (the tap script does; the alphabet walk does not). */
   constructor(readonly page: Page, readonly viewport: BlockBarnViewport, readonly measure: boolean) {}
   state(): Promise<State> { return this.page.evaluate(() => (window as any).__hal.state()); }
@@ -504,10 +545,13 @@ class Barn {
     const stuck = await this.stuck(after);
     if (g.downs < n || g.releases < n) stuck.push(`${n} finger${n === 1 ? '' : 's'} landed, the page heard ${g.downs} down and ${g.releases} up`);
     const c = stateChange(before, after), where = g.regions.join('+');
-    const answered = g.responses > 0;
+    const answered = g.responses > 0, sound = g.sounds ? 'sound' : 'quiet';
+    // A state change is named by the change (where else it showed depends on what the animals' own timers were doing,
+    // which varies from run to run); an answer that changes no state, by where it showed.
+    const signature = !answered ? '' : c ? `${c}|${sound}` : `same|${where}|${sound}`;
     const rec: BlockBarnGesture = {
-      viewport: this.viewport, phase, gesture, on, state: flags(before), responses: g.responses,
-      signature: answered ? `${c || 'same'}|${where}|${g.sounds}` : '', feature: answered ? FEATURE[c] ?? (c || `touch:${where}`) : '', stuck,
+      viewport: this.viewport, phase, ...(phase === 'random' && this.seed !== undefined ? { seed: this.seed } : {}), gesture, on, state: flags(before), responses: g.responses,
+      signature, feature: answered ? FEATURE[c] ?? (c || `touch:${where}`) : '', stuck,
     };
     this.gestures.push(rec);
     return rec;
@@ -542,8 +586,10 @@ async function touch(cdp: CDPSession, type: 'touchStart' | 'touchEnd' | 'touchCa
 }
 
 // ---- The toddler phase: how she really plays ----
-/** The toddler phase's own random stream (the barn keeps BLOCK_BARN_SEED). */
-export const TODDLER_SEED = 2;
+/** The toddler phase's own random streams, one fresh barn each (the barn keeps BLOCK_BARN_SEED). */
+export const TODDLER_SEEDS: readonly number[] = Array.from({ length: BLOCK_BARN_TODDLER_SEEDS }, (_, i) => i + 1);
+/** Fresh barns playing their toddler seeds at once. */
+const SEED_PAGES = 6;
 /** The 1 s press: a toddler's long touch, well short of the grown-up corner's 3 s hold. */
 export const PRESS_MS = 1000;
 /** A palm: five contacts around where it lands (CSS px). */
@@ -561,6 +607,7 @@ export function toddlerRng(seed: number): () => number {
   };
 }
 
+/** One step of a toddler plan: `n` taps for a run; `corner`: the first finger lands on the grown-up corner. */
 export type ToddlerStep = { gesture: BlockBarnGestureKind; n?: number; corner?: boolean };
 /**
  * The random phase's gestures in a seeded order: 4 runs of 3-6 taps on one target, 3 two-finger taps, 3 palms, two
@@ -658,33 +705,40 @@ async function script(b: Barn): Promise<void> {
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /**
- * The toddler phase, after the scripted walk: the seeded random gestures (toddlerPlan) anywhere on the screen, then
- * the state combinations (taps on blocks, the tower and the hay while the doors are open; naming, stacking and the
- * invitation at dusk; the doors at dusk), then a plain tap that must still answer. The doors and the sky are put back
- * as they were found before the combinations.
+ * One seed's random phase, on a fresh barn of its own: the seeded random gestures (toddlerPlan, or `steps` from a test)
+ * anywhere on the screen. A step marked `corner` puts its first finger on the grown-up corner.
  */
-async function toddler(b: Barn): Promise<void> {
-  const rng = toddlerRng(TODDLER_SEED);
+async function randomPhase(b: Barn, seed: number, steps?: ToddlerStep[]): Promise<void> {
+  const rng = toddlerRng(seed);
+  b.seed = seed;
   const vp = b.page.viewportSize() ?? { width: 390, height: 844 };
   const inside = (p: Point): Point => ({ x: clamp(p.x, 4, vp.width - 4), y: clamp(p.y, 4, vp.height - 4) });
   const anywhere = (): Point => inside({ x: rng() * vp.width, y: rng() * vp.height });
-  for (const step of toddlerPlan(rng)) {
+  const corner = async () => center((await b.targets()).find((t) => t.kind === 'corner')!);
+  for (const step of steps ?? toddlerPlan(rng)) {
     if (step.gesture === 'run') {
       const ts = (await b.targets()).filter((t) => t.kind !== 'corner');
-      const p = center(ts[Math.floor(rng() * ts.length)]!);
-      for (let i = 0; i < step.n!; i++) await b.gesture('run', 'random', [p]);
+      const p = step.corner ? await corner() : center(ts[Math.floor(rng() * ts.length)]!);
+      for (let i = 0; i < (step.n ?? 3); i++) await b.gesture('run', 'random', [p]);
     } else if (step.gesture === 'two') {
-      const p = anywhere();
+      const p = step.corner ? await corner() : anywhere();
       await b.gesture('two', 'random', [p, inside({ x: p.x + 30 + rng() * 20, y: p.y - 20 + rng() * 40 })]);
     } else if (step.gesture === 'palm') {
-      const p = anywhere();
+      const p = step.corner ? await corner() : anywhere();
       await b.gesture('palm', 'random', PALM.map(([dx, dy]) => inside({ x: p.x + dx, y: p.y + dy })));
-    } else if (step.gesture === 'press' && step.corner) {
-      await b.gesture('press', 'random', [center((await b.targets()).find((t) => t.kind === 'corner')!)]);
     } else {
-      await b.gesture(step.gesture, 'random', [anywhere()]);
+      await b.gesture(step.gesture, 'random', [step.corner ? await corner() : anywhere()]);
     }
   }
+  b.seed = undefined;
+}
+
+/**
+ * The state combinations, after the scripted walk: taps on blocks, the tower and the hay while the doors are open;
+ * naming, stacking and the invitation at dusk; the doors at dusk; then a plain tap that must still answer. The doors
+ * and the sky are put back as they were found first.
+ */
+async function combos(b: Barn): Promise<void> {
   // Put the doors and the sky back, so the combinations start from a plain day with the doors shut.
   for (const [flag, kind] of [['door', 'door'], ['dusk', 'sky']] as const) if ((await b.state())[flag]) await b.comboTap(kind);
   const unnamed = async () => { const s = await b.state(); return s.floor.find((l) => !s.named.includes(l)); };
@@ -833,7 +887,7 @@ const why = (e: unknown, ms: number, what: string) => ((e as Error)?.message ===
   ? `hang: ${what} took over ${Math.round(ms / 1000)} s wall` : String((e as Error)?.message ?? e).split('\n')[0]);
 
 /** Plays the tap script at each viewport and the alphabet walk on the phone; one browser and one static server. */
-export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], alphabetSteps = BLOCK_BARN_ALPHABET_STEPS, initScript, deadlineMs = VIEW_DEADLINE_MS }: BlockBarnPlayOptions = {}): Promise<BlockBarnPlayResult> {
+export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], alphabetSteps = BLOCK_BARN_ALPHABET_STEPS, initScript, deadlineMs = VIEW_DEADLINE_MS, toddlerSeeds = [...TODDLER_SEEDS], toddlerSteps }: BlockBarnPlayOptions = {}): Promise<BlockBarnPlayResult> {
   let server: StaticServer | undefined, browser: Browser | undefined;
   const records: BlockBarnRecord[] = [], errors: string[] = [];
   const page: BlockBarnPage = { letters: [], voiced: [], pictured: [], flashes: 0, masterGain: 0, peakGain: 0, leftBarn: false, targets: [], gestures: [] };
@@ -854,7 +908,7 @@ export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], 
         const b = new Barn(o.page, v, true);
         let hung = false;
         try { await bounded(script(b), deadlineMs); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v}: ${why(e, deadlineMs, 'the tap script')}`); }
-        if (!hung) try { await bounded(toddler(b), deadlineMs); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v}: ${why(e, deadlineMs, 'the toddler phase')}`); }
+        if (!hung) try { await bounded(combos(b), deadlineMs); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v}: ${why(e, deadlineMs, 'the state combinations')}`); }
         records.push(...b.records);
         page.targets.push(...b.sizes);
         page.gestures.push(...b.gestures);
@@ -864,6 +918,28 @@ export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], 
         }
         if (o.failed()) errors.push(o.failed());
       } finally { await o.close(); }
+      // Each toddler seed on a fresh barn of its own, SEED_PAGES at a time (a page's results never depend on timing).
+      const seeded: BlockBarnGesture[][] = [];
+      const queue = toddlerSeeds.map((seed, i) => ({ seed, i }));
+      const worker = async () => {
+        for (let job = queue.shift(); job; job = queue.shift()) {
+          const { seed, i } = job;
+          const s = await openBarn(browser!, server!.origin, v, initScript);
+          try {
+            const b = new Barn(s.page, v, false);
+            let hung = false;
+            try { await bounded(randomPhase(b, seed, toddlerSteps), deadlineMs); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v} toddler seed ${seed}: ${why(e, deadlineMs, 'the toddler phase')}`); }
+            seeded[i] = b.gestures;
+            if (!hung) {
+              await s.page.waitForTimeout(200);
+              await facts(s).catch((e) => errors.push(`${v} toddler seed ${seed}: ${why(e, 30_000, 'reading the page')}`));
+            }
+            if (s.failed()) errors.push(s.failed()); // the same words as the main page's, so one fault is reported once
+          } finally { await s.close(); }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(SEED_PAGES, toddlerSeeds.length) }, worker));
+      for (const gs of seeded) page.gestures.push(...(gs ?? []));
     }
     {
       const v = viewports[0] ?? '390x844';

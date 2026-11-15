@@ -2,8 +2,10 @@
 // each 100 when the barn is healthy: every tap answers at once, nothing is a dead end, every target is palm-sized,
 // every letter turns up with its picture and a voice, nothing flashes or jumps in volume, and a toddler's random taps
 // find enough different answers (capped: more stimulation never scores higher). Fitness is their mean. Calm below
-// 100 is also a hard failure, so it can never be traded for anything else.
-import type { ScoreReport } from './types.js';
+// 100 is also a hard failure, so it can never be traded for anything else. Variety is the only measure that depends on
+// the toddler phase's seeds, so it carries the report's seed noise (bootstrapNoise over the seeds); the rest have none.
+import { bootstrapNoise } from './noise.js';
+import type { Measures, ScoreReport } from './types.js';
 
 /** The hook's target kinds today. A kind the scorer has not heard of (new in the game) is measured like any other. */
 export type BlockBarnKind = 'block' | 'animal' | 'tower' | 'floor' | 'corner' | (string & {});
@@ -26,12 +28,12 @@ export type BlockBarnGestureKind = 'tap' | 'run' | 'two' | 'palm' | 'press' | 'c
  * combination (doors open, dusk). `on`: the hook target kind under the first finger ('gap' when none); `state`: the
  * barn's flags as it landed ('door', 'dusk', 'door+dusk' or ''). `responses`: how many times the page answered it
  * (each release, and each extra finger's press, that changed the page; or once, on the first press, when nothing else
- * did). `signature`: what the answer was (the state change, where in the barn it showed, how many sounds started);
+ * did). `signature`: what the answer was (the state change, or where in the barn it showed; whether a sound started);
  * `feature`: the thing it reached (a state change such as 'name' or 'door', else where it showed). `stuck`: what the
  * gesture left stuck (read from the hook's state and the page).
  */
 export type BlockBarnGesture = {
-  viewport: BlockBarnViewport; phase: 'random' | 'combo'; gesture: BlockBarnGestureKind; on: string; state: string;
+  viewport: BlockBarnViewport; phase: 'random' | 'combo'; seed?: number; gesture: BlockBarnGestureKind; on: string; state: string;
   responses: number; signature: string; feature: string; stuck: string[];
 };
 /** A cancelled touch is not a tap: it must answer nothing. Every other gesture answers exactly once. */
@@ -72,19 +74,34 @@ export const BLOCK_BARN_RULES = { responsiveMs: 100, minTarget: 88, flashMs: 333
 export const BLOCK_BARN_ALPHABET_STEPS = 52;
 /** The toddler phase's random taps per viewport (scripts/hal/block-barn-play.ts toddlerPlan): answering ones, cancels on top. */
 export const BLOCK_BARN_TODDLER_TAPS = 60;
+/** The toddler phase's seeds per viewport, each a fresh barn and its own BLOCK_BARN_TODDLER_TAPS random taps. */
+export const BLOCK_BARN_TODDLER_SEEDS = 12;
 
 /**
- * Reviewed variety targets (measurement v2, P3), per viewport, over the toddler phase's BLOCK_BARN_TODDLER_TAPS random
- * answering taps: distinct response signatures and distinct features reached. Set below what today's barn finds
- * (13-14 signatures, 9-10 of its 10 features), so the order luck of one seed can't cost points while removing a
- * response or hiding a feature does; reaching more than the target scores no higher.
+ * Reviewed variety targets (measurement v2, P3), per viewport, over the toddler phase's BLOCK_BARN_TODDLER_SEEDS seeds
+ * (each a fresh barn and its own BLOCK_BARN_TODDLER_TAPS random answering taps). A feature is the thing an answer
+ * reached: a state change (name, stack, knock, tumble, door, sky) or, for an answer that changes no state, where in
+ * the barn it showed (a puff, the animals, the bale).
+ * - `reached`: distinct features some seed reached (half the measure). Today's barn (0.2.2) reaches all 9 of its
+ *   features at both viewports; losing one (the animals' own answer, say) costs 50 / 9 = 5.6 points at each viewport.
+ *   Taken over all the seeds, it hangs on no single tap, so a different draw of luck rarely moves it.
+ * - `perSeed`: the mean, over the seeds, of distinct features one seed's taps find: how easy they are to find (half
+ *   the measure). Today's barn averages 7.5 at both viewports (standard error 0.2-0.3 over the 12 seeds; other draws
+ *   of 12 seeds gave 6.8-7.8); 7 is about 2 standard errors below, so luck rarely costs points (and the seed noise is
+ *   reported for the gate), while a feature made hard to find, or lost, takes it below target.
+ * Reaching more than a target scores no higher. Response signatures (the change, or where it showed; whether a sound
+ * started) are reported but not scored: they split one answer by incidental detail (where a no-change answer showed), so a
+ * change that writes one more attribute somewhere could add signatures and hide a real loss below the cap.
  */
-export const BLOCK_BARN_VARIETY = { signatures: 10, features: 8 } as const;
+export const BLOCK_BARN_VARIETY = { reached: 9, perSeed: 7 } as const;
 
 export type BlockBarnViewStats = {
   viewport: BlockBarnViewport; taps: number; responsive: number; changed: number; bigTargets: number; kinds: BlockBarnKind[];
-  /** Distinct signatures and features among the toddler phase's random answers. */
-  signatures: number; features: number;
+  /**
+   * Toddler seeds; distinct features reached over all of them; and the mean over them of distinct features and of
+   * distinct signatures (reported, not scored) among each seed's random answers.
+   */
+  seeds: number; reached: number; features: number; signatures: number;
 };
 
 const AZ = 'abcdefghijklmnopqrstuvwxyz'.split('');
@@ -122,14 +139,27 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
 
   hardFailures.push(...gestureFailures(page.gestures ?? []));
 
-  const found = (viewport: BlockBarnViewport) => {
-    const gs = (page.gestures ?? []).filter((g) => g.viewport === viewport && g.phase === 'random' && expectedResponses(g) === 1 && g.responses > 0);
-    return { signatures: new Set(gs.map((g) => g.signature)).size, features: new Set(gs.map((g) => g.feature)).size };
+  // Variety, per toddler seed: each seed's distinct signatures and features at each viewport (a seed that never answered
+  // at a viewport found nothing there). Measures are recomputed from a list of seed indices, for the seed noise.
+  const randoms = (page.gestures ?? []).filter((g) => g.phase === 'random');
+  const seedList = [...new Set(randoms.map((g) => g.seed ?? 0))].sort((a, b) => a - b);
+  const found = new Map(BLOCK_BARN_VIEWPORTS.map((v) => [v, seedList.map((s) => {
+    const gs = randoms.filter((g) => g.viewport === v && (g.seed ?? 0) === s && expectedResponses(g) === 1 && g.responses > 0);
+    return { signatures: new Set(gs.map((g) => g.signature)).size, features: new Set(gs.map((g) => g.feature)) };
+  })]));
+  const foundAt = (v: BlockBarnViewport, idx: number[]) => {
+    const per = idx.map((i) => found.get(v)![i]!);
+    const mean = (f: (p: (typeof per)[number]) => number) => (per.length ? per.reduce((a, p) => a + f(p), 0) / per.length : 0);
+    return { reached: new Set(per.flatMap((p) => [...p.features])).size, features: mean((p) => p.features.size), signatures: mean((p) => p.signatures) };
   };
+  const varietyAt = (idx: number[]) => BLOCK_BARN_VIEWPORTS.reduce((a, v) => a + varietyOf(foundAt(v, idx)), 0) / BLOCK_BARN_VIEWPORTS.length;
+  const every = seedList.map((_, i) => i);
+
   const levels: BlockBarnViewStats[] = BLOCK_BARN_VIEWPORTS.map((viewport) => {
     const rs = records.filter((r) => r.viewport === viewport), hers = targets.filter((t) => t.viewport === viewport && forHer(t));
+    const f = foundAt(viewport, every);
     return {
-      ...found(viewport),
+      seeds: seedList.length, reached: f.reached, features: round2(f.features), signatures: round2(f.signatures),
       viewport, taps: rs.length, responsive: pct(rs.filter(quick).length, rs.length), changed: pct(rs.filter((r) => r.changed).length, rs.length),
       bigTargets: pct(hers.filter(big).length, hers.length), kinds: [...new Set([...rs, ...targets.filter((t) => t.viewport === viewport)].map((r) => r.kind))].sort(),
     };
@@ -144,7 +174,7 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
     bigTargets: pct(hers.filter(big).length, hers.length),
     alphabet: pct(AZ.filter((l) => reached.has(l) && voiced.has(l) && pictured.has(l)).length, AZ.length),
     calm: (page.flashes > 0 ? 0 : 50) + (page.masterGain <= R.masterCap && page.peakGain <= R.peakCap ? 50 : 0),
-    variety: round2(levels.reduce((a, l) => a + varietyOf(l), 0) / levels.length),
+    variety: round2(varietyAt(every)),
   };
   if (measures.calm < 100) {
     const why: string[] = [];
@@ -153,8 +183,13 @@ export function scoreBlockBarn(records: BlockBarnRecord[], page: BlockBarnPage):
     if (page.peakGain > R.peakCap) why.push(`loudest moment ${page.peakGain} over ${R.peakCap}`);
     hardFailures.push(`calm ${measures.calm} (must be 100): ${why.join('; ')}`);
   }
-  const vals = Object.values(measures);
-  return { game: 'block-barn', levels, measures, fitness: round2(vals.reduce((a, b) => a + b, 0) / vals.length), hardFailures };
+  const fitnessOf = (m: Measures) => { const vals = Object.values(m); return round2(vals.reduce((a, b) => a + b, 0) / vals.length); };
+  // Only variety depends on the seeds; the other measures come from the fixed tap script and walk (no noise).
+  const noise = bootstrapNoise(Math.max(1, seedList.length), (idx) => {
+    const m = { ...measures, variety: seedList.length ? round2(varietyAt(idx)) : measures.variety };
+    return { measures: m, fitness: fitnessOf(m) };
+  });
+  return { game: 'block-barn', levels, measures, fitness: fitnessOf(measures), hardFailures, noise };
 }
 
 const MAX_GESTURE_FAILURES = 10;
@@ -176,8 +211,8 @@ function gestureFailures(gestures: BlockBarnGesture[]): string[] {
   return [...shown, ...missing];
 }
 
-/** Half for distinct signatures, half for distinct features, each capped at its target. */
-function varietyOf(l: { signatures: number; features: number }): number {
+/** Half for the features reached over all the seeds, half for the mean per seed (capped after the mean); each capped at its target. */
+function varietyOf(l: { reached: number; features: number }): number {
   const V = BLOCK_BARN_VARIETY;
-  return 50 * Math.min(1, l.signatures / V.signatures) + 50 * Math.min(1, l.features / V.features);
+  return 50 * Math.min(1, l.reached / V.reached) + 50 * Math.min(1, l.features / V.perSeed);
 }

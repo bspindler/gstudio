@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, BLOCK_BARN_VARIETY, scoreBlockBarn, type BlockBarnGesture, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize,
+  BLOCK_BARN_ALPHABET_STEPS, BLOCK_BARN_RULES, BLOCK_BARN_TODDLER_SEEDS, BLOCK_BARN_VARIETY, scoreBlockBarn, type BlockBarnGesture, type BlockBarnPage, type BlockBarnRecord, type BlockBarnTargetSize,
 } from '../src/hal/block-barn-score.js';
+import { GATE, noiseBand } from '../src/hal/gate.js';
 import { blockBarnScorer, SCORERS } from '../src/hal/scorers.js';
 
 const AZ = 'abcdefghijklmnopqrstuvwxyz'.split('');
+const round2 = (x: number): number => Math.round(x * 100) / 100;
 const rec = (over: Partial<BlockBarnRecord> = {}): BlockBarnRecord => ({ kind: 'block', letter: 'a', ms: 4, changed: true, w: 160, h: 160, viewport: '390x844', ...over });
 /** 20 good taps: 10 per viewport, every kind. */
 const good = (): BlockBarnRecord[] => (['390x844', '1024x768'] as const).flatMap((viewport) =>
@@ -172,33 +174,77 @@ describe('scoreBlockBarn: the toddler phase (measurement v2, P2)', () => {
 });
 
 describe('scoreBlockBarn: variety (measurement v2, P3)', () => {
-  const random = (viewport: '390x844' | '1024x768', sigs: number, feats: number, n = 60): BlockBarnGesture[] =>
-    Array.from({ length: n }, (_, i) => gest({ viewport, signature: `s${i % sigs}`, feature: `f${i % feats}` }));
+  type V = '390x844' | '1024x768';
+  /** One seed's random phase: `n` answering taps cycling through `sigs` signatures and `feats` features (f0, f1, ...). */
+  const random = (viewport: V, sigs: number, feats: number, seed?: number, n = 60): BlockBarnGesture[] =>
+    Array.from({ length: n }, (_, i) => gest({ viewport, ...(seed === undefined ? {} : { seed }), signature: `s${i % sigs}`, feature: `f${i % feats}` }));
+  /** One seed's random phase reaching exactly these features, one answer each. */
+  const reaching = (viewport: V, seed: number, features: string[]): BlockBarnGesture[] =>
+    features.map((feature, i) => gest({ viewport, seed, signature: `s${i}`, feature }));
   const both = (a: BlockBarnGesture[], b: BlockBarnGesture[]) => page({ gestures: [...a, ...b] });
+  const T = BLOCK_BARN_VARIETY;
+  /** Like today's barn: 12 seeds, every seed finds the 6 common features, odd seeds the doors and the sky too, even seeds the tumble (means 7.5, 9 reached). */
+  const todays = (v: V, without = '') => Array.from({ length: 12 }, (_, i) => reaching(v, i + 1,
+    ['name', 'stack', 'knock', 'puff', 'animal', 'bump', ...(i % 2 ? ['door', 'sky'] : ['tumble'])].filter((f) => f !== without))).flat();
 
-  it('pins the reviewed targets', () => {
-    expect(BLOCK_BARN_VARIETY).toEqual({ signatures: 10, features: 8 });
+  it('pins the reviewed targets and the seeds', () => {
+    expect(BLOCK_BARN_VARIETY).toEqual({ reached: 9, perSeed: 7 });
+    expect(BLOCK_BARN_TODDLER_SEEDS).toBe(12);
   });
   it('is capped: finding more than the targets never scores over 100', () => {
-    expect(scoreBlockBarn(good(), both(random('390x844', 40, 20), random('1024x768', 10, 8))).measures.variety).toBe(100);
+    expect(scoreBlockBarn(good(), both(random('390x844', 40, 20), random('1024x768', 9, T.reached))).measures.variety).toBe(100);
   });
-  it('half for distinct signatures, half for distinct features, per viewport, then the mean', () => {
-    // phone: 5 of 10 signatures (25) + 4 of 8 features (25) = 50; tablet: 100
-    const r = scoreBlockBarn(good(), both(random('390x844', 5, 4), random('1024x768', 10, 8)));
-    expect(r.measures.variety).toBe(75);
-    expect(r.levels.map((l) => [l.viewport, l.signatures, l.features])).toEqual([['390x844', 5, 4], ['1024x768', 10, 8]]);
-    expect(scoreBlockBarn(good(), both(random('390x844', 1, 1), random('1024x768', 1, 1))).measures.variety).toBe(11.25); // 5 + 6.25
+  it('half for the features reached, half for the features one seed finds, per viewport, then the mean', () => {
+    // phone, one seed: 3 of 9 reached (16.67) + 3 of 7 per seed (21.43) = 38.1; tablet: 100
+    const r = scoreBlockBarn(good(), both(random('390x844', 4, 3), random('1024x768', 9, 9)));
+    expect(r.measures.variety).toBe(69.05);
+    expect(r.levels.map((l) => [l.viewport, l.reached, l.features, l.signatures])).toEqual([['390x844', 3, 3, 4], ['1024x768', 9, 9, 9]]);
+  });
+  it('reached counts over all the seeds; per seed is the mean over the seeds before the cap (a lucky seed makes up for an unlucky one)', () => {
+    // phone: seeds find 9 and 5 features (9 reached, mean 7): on target. tablet: 6 and 6 (6 reached, mean 6): 33.33 + 42.86
+    const r = scoreBlockBarn(good(), both([...random('390x844', 9, 9, 1), ...random('390x844', 5, 5, 2)], [...random('1024x768', 6, 6, 1), ...random('1024x768', 6, 6, 2)]));
+    expect(r.levels.map((l) => [l.viewport, l.seeds, l.reached, l.features])).toEqual([['390x844', 2, 9, 7], ['1024x768', 2, 6, 6]]);
+    expect(r.measures.variety).toBe(round2((100 + 50 * 6 / 9 + 50 * 6 / 7) / 2));
+  });
+  it("today's barn scores 100; losing one answer every seed reaches costs more than the gate's noise band", () => {
+    const before = scoreBlockBarn(good(), both(todays('390x844'), todays('1024x768')));
+    expect(before.levels.map((l) => [l.reached, l.features])).toEqual([[9, 7.5], [9, 7.5]]);
+    expect(before.measures.variety).toBe(100);
+    const after = scoreBlockBarn(good(), both(todays('390x844', 'animal'), todays('1024x768', 'animal')));
+    expect(after.levels.map((l) => [l.reached, l.features])).toEqual([[8, 6.5], [8, 6.5]]);
+    expect(after.measures.variety).toBe(round2(50 * 8 / 9 + 50 * 6.5 / 7)); // 90.87
+    expect(before.measures.variety! - after.measures.variety!).toBeGreaterThan(noiseBand(GATE.tolerance, before.noise!.variety, after.noise!.variety));
+    expect(before.fitness - after.fitness).toBeGreaterThan(noiseBand(GATE.tolerance, before.noise!.fitness, after.noise!.fitness));
+  });
+  it('a feature only one seed ever reaches is lost on some other draws of seeds: the noise says so', () => {
+    const rare = [...todays('390x844', 'tumble'), ...reaching('390x844', 13, ['tumble'])];
+    const r = scoreBlockBarn(good(), both(rare, todays('1024x768')));
+    expect(r.levels[0]!.reached).toBe(9);
+    expect(r.noise!.variety).toBeGreaterThan(0);
+  });
+  it('reports seed noise for variety (and fitness); the deterministic measures have none', () => {
+    const r = scoreBlockBarn(good(), both([...random('390x844', 9, 9, 1), ...random('390x844', 5, 5, 2), ...random('390x844', 6, 6, 3), ...random('390x844', 7, 7, 4)], random('1024x768', 9, 9, 1)));
+    expect(r.noise).toBeDefined();
+    expect(r.noise!.variety).toBeGreaterThan(0);
+    expect(r.noise!.fitness).toBeGreaterThan(0);
+    for (const k of ['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm']) expect(r.noise![k], k).toBe(0);
+    // A barn whose every seed finds the same is not noisy.
+    expect(scoreBlockBarn(good(), both([...random('390x844', 9, 9, 1), ...random('390x844', 9, 9, 2)], [...random('1024x768', 9, 9, 1), ...random('1024x768', 9, 9, 2)])).noise!.variety).toBe(0);
+  });
+  it('a seed with no answers at a viewport counts as finding nothing there', () => {
+    const r = scoreBlockBarn(good(), both([...random('390x844', 9, 9, 1), ...random('390x844', 9, 9, 2)], random('1024x768', 9, 9, 1)));
+    expect(r.levels.map((l) => [l.viewport, l.seeds, l.reached, l.features])).toEqual([['390x844', 2, 9, 9], ['1024x768', 2, 9, 4.5]]);
   });
   it('reads only the random phase\'s answers: combinations, cancels and unanswered gestures add nothing', () => {
     const extra = [
       gest({ phase: 'combo', signature: 'c1', feature: 'g1' }), gest({ phase: 'combo', signature: 'c2', feature: 'g2' }),
       gest({ gesture: 'cancel', responses: 0, signature: 'x', feature: 'y' }), gest({ responses: 0, signature: 'z', feature: 'w' }),
     ];
-    const r = scoreBlockBarn(good(), both([...random('390x844', 5, 4), ...extra], random('1024x768', 10, 8)));
-    expect(r.measures.variety).toBe(75);
+    const r = scoreBlockBarn(good(), both([...random('390x844', 4, 3), ...extra], random('1024x768', 9, 9)));
+    expect(r.measures.variety).toBe(69.05);
   });
   it('a viewport without random answers scores 0 there', () => {
-    const r = scoreBlockBarn(good(), both([gest({ phase: 'combo' })], random('1024x768', 10, 8)));
+    const r = scoreBlockBarn(good(), both([gest({ phase: 'combo' })], random('1024x768', 9, 9)));
     expect(r.measures.variety).toBe(50);
   });
 });
