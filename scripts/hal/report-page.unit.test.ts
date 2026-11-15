@@ -471,6 +471,49 @@ describe('renderReport', () => {
     expect(html).toMatch(/>3 need you</);
   });
 
+  it('"Hal asks to change its judge": the why, the full protected diff (escaped, monospace), the game change and the checks; Ship and Drop as a feature', () => {
+    const diff = 'diff --git a/packages/core/test/hal-block-barn-score.test.ts b/packages/core/test/hal-block-barn-score.test.ts\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-expect(zones).toEqual(["cow"]);\n+expect(zones).toEqual(["cow", "<vane>"]);\n';
+    const asks = change('HAL-131', ticket('T1', 'block-barn', 'feature', 'A weathervane on the barn'), 'held', {
+      version: '0.4.0', changelog: 'A weathervane spins when tapped.', summary: 'Added the vane.',
+      asks: { why: 'The hook lists the tap zones & the vane needs one', diff, paths: ['packages/core/test/hal-block-barn-score.test.ts'], gameFiles: ['games/block-barn/game.js', 'games/block-barn/vane.js'] },
+      scoreNotes: ['block-barn: variety regressed 2'],
+    });
+    const plain = change('HAL-132', ticket('T2', 'gearhold', 'feature', 'A checkpoint'), 'held', { version: '0.3.0' });
+    const html = renderReport(view({ waiting: [{ run: RUN, change: asks }, { run: RUN, change: plain }] }));
+    const needs = section(html, 'Needs you');
+    const split = needs.indexOf('<article', needs.indexOf('A weathervane on the barn'));
+    const card = needs.slice(0, split);
+    expect(card).toContain('Hal asks to change its judge');
+    expect(card).toContain('class="card change held asks"');
+    expect(card).toContain(esc('The hook lists the tap zones & the vane needs one'));
+    expect(card).toMatch(/<pre class="asks-diff"><code>[\s\S]*\+expect\(zones\)\.toEqual\(\[&quot;cow&quot;, &quot;&lt;vane&gt;&quot;\]\);/);
+    expect(card).not.toContain('<vane>');
+    expect(card).toContain('games/block-barn/vane.js');
+    expect(card).toContain('packages/core/test/hal-block-barn-score.test.ts');
+    expect(card).toMatch(/passed every check/i);
+    expect(card).toContain('variety regressed 2');
+    expect(card).toContain('href="/preview/HAL-131/block-barn/index.html"');
+    expect(forms(card).map((f) => f.action).sort()).toEqual(['/undo', '/vote']);
+    expect(card).toContain('👍 Ship both');
+    // the plain held feature keeps its own card, without the asks parts
+    const plainCard = needs.slice(split);
+    expect(plainCard).not.toContain('Hal asks to change its judge');
+    expect(plainCard).toContain('👍 Ship it');
+    // a test-only judge change can't move a score: no scorer warning
+    expect(card).not.toContain('graded itself');
+  });
+
+  it('a "Hal asks" change to scoring or check code warns that the change was graded by the changed judge', () => {
+    const asks = (paths: string[]) => change('HAL-133', ticket('T3', 'block-barn', 'feature', 'A weathervane'), 'held', {
+      version: '0.4.0', asks: { why: 'needs a zone', diff: 'diff --git a/x b/x\n', paths, gameFiles: ['games/block-barn/index.html'] },
+    });
+    for (const p of ['packages/core/src/hal/block-barn-score.ts', 'scripts/hal/block-barn-play.ts', 'games/block-barn/index.html']) {
+      const card = section(renderReport(view({ waiting: [{ run: RUN, change: asks([p]) }] })), 'Needs you');
+      expect(card).toContain('graded itself');
+      expect(card).toMatch(/re-baseline/i);
+    }
+  });
+
   it('Needs you is left out when nothing needs Brian', () => {
     const r = fullReport();
     r.calls = [];

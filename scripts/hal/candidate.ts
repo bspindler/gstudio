@@ -8,6 +8,9 @@
 //   3. tree from disk (private index, no          8. commit-tree of the verified tree, squashMerge onto refs/hal/main
 //      filters) + checkTripwires on it            9. remove the worktree and branch (finally)
 //   4. applyRelease (Hal's version + changelog), added to that tree and verified as the only extra paths
+//  3b. "Hal asks" only (asks.ts): the implementer's hal-asks.patch (judge files only) checked, applied to T1 as a tree
+//      object, written to disk and tripwired again with the game change; every later step judges both together, and
+//      the result is held for Brian (refs/hal/held/<pass>), never merged
 //
 // What gets committed is a tree object built by Hal, never the worktree's index: T1 (Claude's edits, as hashed from
 // disk) is what the tripwires judge, T2 = T1 + the three release files, T3 = T2 + the two history images. Before EVERY
@@ -15,14 +18,14 @@
 // and verified ("tampered between checks" otherwise); the checks cannot write node_modules, and the tools that run them
 // (vitest, tsc, tsx) are resolved by Hal under <repo>/node_modules, never from the worktree.
 import { randomBytes } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  applyRelease, bumpedTonight, checkTripwires, testPrefixesFor, compareScores, formatTrailers, halReleasedTonight, nightOf, planVersion, TRIPWIRE_RULES,
+  applyRelease, ASKS_FILE, ASKS_MAX_BYTES, bumpedTonight, checkAsksChanges, checkAsksPatchText, checkTripwires, testPrefixesFor, compareScores, formatTrailers, halReleasedTonight, nightOf, planVersion, TRIPWIRE_RULES,
   type Billing, type Diff, type FileChange, type ScoreReport, type Ticket,
 } from '@studio/core/hal';
 import { secretReadPaths } from './env.js';
@@ -31,7 +34,7 @@ import { roleAllowedTools, type ClaudeCall, type ClaudeResult } from './claude.j
 import type { ControlCheck } from './controls.js';
 import {
   addFileToTree, blobBytes, blobText, changedPaths, collectTreeDiff, commitTree, extendTree, linkNodeModules, trustRootDigest, newCandidateWorktree, removeWorktree, runGit, snapshotTree,
-  holdCandidate, squashMerge, verifyNodeModules, vitestCounts, type CollectDeps, type GitRunner,
+  holdCandidate, squashMerge, verifyNodeModules, vitestCounts, applyPatchToTree, materializePaths, rawChanges, treePatch, type CollectDeps, type GitRunner,
 } from './git.js';
 import { loadPrompt, parseImplementerOutput, renderPrompt, type ImplementerOutput } from './prompts.js';
 import { runIsolated, sandboxAvailable, sandboxEnv, type IsolatedResult, type SandboxPolicy } from './sandbox.js';
@@ -187,6 +190,12 @@ export type CandidateResult = {
   warnings?: string[];
   /** A held feature's score drops: noted for Brian on its card instead of discarding it (he decides new content). */
   scoreNotes?: string[];
+  /**
+   * "Hal asks" (asks.ts): the build needed a judge file changed. The candidate is game change + the implementer's patch,
+   * checked together and held for Brian. `diff` is Hal's own diff of the patch's files (what ships), `paths` those files,
+   * `gameFiles` what the game change touched.
+   */
+  asks?: { why: string; diff: string; paths: string[]; gameFiles: string[] };
 };
 
 /**
@@ -274,6 +283,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     res.reasons = reasons.map(redact);
     if (res.changelog !== undefined) res.changelog = redact(res.changelog);
     if (res.summary !== undefined) res.summary = redact(res.summary);
+    if (res.asks) res.asks = { ...res.asks, why: redact(res.asks.why), diff: redact(res.asks.diff) };
     return res;
   };
 
@@ -405,6 +415,20 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       writeFileSync(join(wt.dir, '.git'), gitPtr);
       discard('tampered .git');
     };
+    // "Hal asks": the implementer's proposed protected change, read from <wt>/hal-asks.patch after each call and removed
+    // from the worktree at once (it is never part of the game tree). A fix round that still asks but wrote no new file
+    // keeps the previous round's patch.
+    let asksPatch: string | null = null;
+    const takeAsksPatch = async (): Promise<string | null> => {
+      const f = join(wt.dir, ASKS_FILE);
+      const st = await lstat(f).catch(() => null);
+      if (!st) return null;
+      try {
+        if (!st.isFile()) discard(`asks refused: ${ASKS_FILE} is not a regular file`);
+        if (st.size > ASKS_MAX_BYTES) discard(`asks refused: patch is ${st.size} bytes; the cap is ${ASKS_MAX_BYTES}`);
+        return await readFile(f, 'utf8');
+      } finally { await rm(f, { recursive: true, force: true }); } // a symlink itself, never its target
+    };
     /** One implementer call in the worktree (the first, or a fix round): its own budget slice and score broker. */
     const implement = async (text: string, slice: number): Promise<ImplementerOutput> => {
       const askDir = await mkdtemp(join(tmpdir(), 'hal-ask-'));
@@ -431,12 +455,20 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       book(call.billing, out.first.costUsd, slice); // settle every reservation first: a tampered-.git discard must not leave one open
       if (out.retry) book('api', out.retry.costUsd, slice);
       checkGitPtr();
+      const fresh = await takeAsksPatch();
       const final = out.retry ?? out.first;
       if (!final.ok) discard(final.timedOut ? 'implementer timed out' : final.limitHit ? 'implementer hit a usage limit' : `implementer failed (${final.subtype})`);
       const parsed = parseImplementerOutput(final.text);
       // Say how the reply ended: the reason is the only record (no session persistence), and a miss is otherwise opaque.
       if (!parsed) discard(`implementer output does not match the contract (its reply ended: ${JSON.stringify(redact(final.text.replace(/\s+/g, ' ').trim()).slice(-400) || '(empty)')})`);
       if (parsed!.blocked !== undefined) discard(`implementer blocked: ${parsed!.blocked}`);
+      if (parsed!.asks !== undefined) {
+        if (fresh !== null) asksPatch = fresh;
+        else if (asksPatch === null) discard(`asks refused: the reply asks for a protected change but there is no ${ASKS_FILE}`);
+      } else {
+        if (fresh !== null) discard(`${ASKS_FILE} was written, but the reply has no "asks"`);
+        asksPatch = null;
+      }
       return parsed!;
     };
 
@@ -464,11 +496,39 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       if (hits.length) discard(...hits.map((v) => `tripwire ${v.rule}${v.path ? `: ${v.path}` : ''}: ${v.detail}`));
       await guard(t1);
 
+      // 3b. "Hal asks" (asks.ts): the game change above passed every tripwire on its own; now the implementer's patch to
+      // judge files is checked as text, applied to T1 as a tree object (never the worktree), checked again on what git
+      // says it changed, written to disk, and the combined tree goes through every tripwire with the patch's files
+      // exempt from the path rules only. From here on the checks judge game change + patch together (`tc`).
+      let tc = t1;
+      let asksPaths: string[] = [];
+      delete res.asks;
+      if (parsed.asks !== undefined) {
+        const textRefusals = checkAsksPatchText(asksPatch ?? '', { game, secrets });
+        if (textRefusals.length) discard(...textRefusals.map((r) => `asks refused: ${r}`));
+        let tp: string;
+        try { tp = await applyPatchToTree(wt.dir, t1, asksPatch!, tree); } catch (e) { return discard(`asks refused: ${msg(e)}`); }
+        const changes = await rawChanges(wt.dir, t1, tp, tree);
+        const changeRefusals = checkAsksChanges(changes, game);
+        if (changeRefusals.length) discard(...changeRefusals.map((r) => `asks refused: ${r}`));
+        asksPaths = changes.map((c) => c.path);
+        try { await materializePaths(wt.dir, tp, asksPaths, tree); } catch (e) { return discard(`asks refused: ${msg(e)}`); }
+        if ((await extendTree(wt.dir, t1, asksPaths, tree)) !== tp) discard('asks: the patched files on disk do not hash to the patched tree');
+        await guard(tp);
+        let both: Diff;
+        try { both = await collectTreeDiff(wt.dir, wt.base, tp, { git, countTests }); } catch (e) { return discard(`diff collection failed (game change + asks patch): ${msg(e)}`); }
+        const hits2 = checkTripwires(both, secrets, { scope: { game, testPrefixes: testPrefixesFor(game) }, asks: { paths: asksPaths } });
+        if (hits2.length) discard(...hits2.map((v) => `tripwire ${v.rule}${v.path ? `: ${v.path}` : ''}: ${v.detail} (game change + asks patch)`));
+        await guard(tp);
+        tc = tp;
+        res.asks = { why: parsed.asks, diff: await treePatch(wt.dir, t1, tp, asksPaths, tree), paths: asksPaths, gameFiles: diff.files.map((f) => f.path) };
+      }
+
       // 4. Release: Hal's own version bump and changelog entry, read from T1 and added to it.
       const cur = { yaml: '', html: '', changelog: '' };
       let next: typeof cur;
       try {
-        for (const k of ['yaml', 'html', 'changelog'] as const) cur[k] = await blobText(wt.dir, t1, files[k], { git });
+        for (const k of ['yaml', 'html', 'changelog'] as const) cur[k] = await blobText(wt.dir, tc, files[k], { git });
         const current = /^version:[ \t]*(\S+)[ \t]*$/m.exec(cur.yaml)?.[1];
         if (!current) throw new Error('game.yaml has no version');
         // R20: share tonight's version only with Hal's own release of it tonight (trailers on refs/hal/main), never with
@@ -486,8 +546,8 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       };
       const leaks = TRIPWIRE_RULES.secret!(releaseDiff);
       if (leaks.length) discard(...leaks.map((v) => `tripwire ${v.rule}: ${v.path}: ${v.detail} (in Hal's release edit)`));
-      t2 = await extendTree(wt.dir, t1, releasePaths, tree);
-      const extra = await changedPaths(wt.dir, t1, t2, tree);
+      t2 = await extendTree(wt.dir, tc, releasePaths, tree);
+      const extra = await changedPaths(wt.dir, tc, t2, tree);
       if (!extra.every((p) => releasePaths.includes(p))) discard(`release changed unexpected paths: ${extra.join(', ')}`);
 
       // 5. Tests and typecheck, isolated, each step guarded.
@@ -516,8 +576,10 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       if (round >= rounds) discard(`${failure}${after}`);
       const fixSlice = ctx.budget.slice('implementer');
       if (!(fixSlice > 0)) discard(`${failure}${after}`, 'no budget left for a fix round');
-      // Back to the implementer's own tree: Hal's release edits come out (the next attempt gets a fresh release).
+      // Back to the implementer's own tree: Hal's release edits come out (the next attempt gets a fresh release), and so
+      // do the asks patch's files (the next attempt's patch is applied afresh).
       for (const k of ['yaml', 'html', 'changelog'] as const) await writeFile(join(wt.dir, files[k]), cur[k]);
+      if (asksPaths.length) await materializePaths(wt.dir, t1, asksPaths, tree);
       try { await guard(t1); } catch (e) { throw e instanceof Discard ? new Discard([...e.reasons, failure]) : e; } // keep what failed
       res.fixRounds = round + 1;
       parsed = await implement(`${prompt}\n${renderPrompt(loadPrompt('implementer-fix'), { round: String(round + 1), rounds: String(rounds), failure })}`, fixSlice);
@@ -609,13 +671,14 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
     try {
       trailers = formatTrailers({
         pass: ctx.pass, game, kind: ticket.kind, why: ticket.why, scoreBefore: pick(before[primary]), scoreAfter: pick(res.scoresAfter[primary]),
-        version: res.version!, run: ctx.run,
+        version: res.version!, run: ctx.run, ...(res.asks ? { asks: res.asks.why } : {}),
       });
     } catch (e) { return discard(`commit trailers: ${msg(e)}`); }
     const message = `${ticket.kind}(${game}): ${oneLine(ticket.title)}\n\n${oneLine(ticket.why)}\n\n${trailers}`;
     if (secrets.some((k) => message.includes(k))) discard('commit message contains a secret');
     const verifiedCommit = await commitTree(ctx.repo, t3, wt.base, message, { git });
-    if (ctx.hold) {
+    // A feature, or any "Hal asks" candidate (it changes a judge file): held for Brian, never merged by Hal.
+    if (ctx.hold || res.asks) {
       const held = await holdCandidate(ctx.repo, ctx.pass, message, { commit: verifiedCommit, tree: t3 }, { git });
       if (!held.ok) discard(`hold failed: ${held.error}`);
       res.commit = (held as { commit: string }).commit;

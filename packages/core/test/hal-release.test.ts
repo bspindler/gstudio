@@ -197,6 +197,12 @@ describe('trailers', () => {
     expect(out.split('\n')).toHaveLength(10);
     expect(parseTrailers(out)).toEqual({ ...u, reason: 'two lines here' });
   });
+  it('round-trips a Hal-Asks trailer (a held protected-change request), flattened to one line', () => {
+    const a = { ...t, asks: 'The hook lists the tap zones;\nthe vane needs one.' };
+    expect(formatTrailers(a)).toContain('Hal-Asks: The hook lists the tap zones; the vane needs one.');
+    expect(parseTrailers(formatTrailers(a))).toEqual({ ...a, asks: 'The hook lists the tap zones; the vane needs one.' });
+    expect(parseTrailers(formatTrailers(t))).not.toHaveProperty('asks');
+  });
   it('returns null for incomplete or invalid trailers', () => {
     expect(parseTrailers('just a message')).toBeNull();
     expect(parseTrailers(formatTrailers(t).replace('Hal-Run: 2026-11-11-a', ''))).toBeNull();

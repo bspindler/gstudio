@@ -379,7 +379,8 @@ describe('runClaude', () => {
     it('director has none', () => expect(roleAllowedTools('director')).toEqual([]));
     it('implementer has npm test, no vitest/npx', () => {
       const t = roleAllowedTools('implementer');
-      expect(t).toEqual(['Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)']);
+      // + read-only history and the "Hal asks" dry run (git-read.ts, plan 2026-11-15 part C/B); never bare git.
+      expect(t).toEqual(['Bash(npm test:*)', 'Bash(npm run typecheck)', 'Bash(npm run hal -- score:*)', 'Bash(npm run hal -- git:*)', 'Bash(npm run hal -- asks check:*)']);
       for (const bare of ['Read', 'Edit', 'Write', 'Glob', 'Grep']) expect(t).not.toContain(bare);
       expect(t.join(' ')).not.toMatch(/npx|vitest/);
     });

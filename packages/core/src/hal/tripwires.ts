@@ -30,6 +30,12 @@ export type Diff = {
   scope?: Scope;
   /** Tests collected per test file (repo-relative path), at the base and after the change. When given, a base test file with fewer tests after (or not collected at all) is flagged. */
   testCountsByFile?: { before: Record<string, number>; after: Record<string, number> };
+  /**
+   * "Hal asks" (asks.ts): the files a validated protected-change request touches. They are exempt from the path rules
+   * only (protected-path, the R18 scope check, and hal-hook's "block changed" for a hook file); every content rule
+   * (secret, payment, network, host-api, hal-hook outside the block, ...) still judges them.
+   */
+  asksPaths?: string[];
 };
 
 export type Violation = { rule: string; path?: string; detail: string };
@@ -40,6 +46,8 @@ export type Rule = (diff: Diff) => Violation[];
 /** Lower-cased (macOS is case-insensitive, so `POLICY.yaml` is `policy.yaml`), forward slashes, no leading `./`. */
 const norm = (p: string): string => p.replace(/\\/g, '/').replace(/^(\.\/)+/, '').toLowerCase();
 const touched = (f: FileChange): string[] => (f.oldPath ? [f.path, f.oldPath] : [f.path]);
+/** The path is one a validated asks patch touches (exempt from the path rules only). */
+const asked = (diff: Diff, p: string): boolean => (diff.asksPaths ?? []).some((x) => norm(x) === norm(p));
 
 // packages/sdk/vendor/ is the bundled third-party library every game may use (three.js, MIT): changing it is a dependency change, which is Brian's call.
 const PROTECTED_PREFIXES = ['packages/core/src/hal/', 'scripts/hal/', '.data/', 'infra/', '.github/', 'docs/superpowers/', 'packages/sdk/vendor/', 'scripts/vendor/', 'games/block-barn/audio/'];
@@ -90,7 +98,7 @@ const hit = (rule: string, path: string | undefined, detail: string): Violation 
 // ---- protected-path ------------------------------------------------------
 
 export const protectedPath: Rule = (diff) =>
-  diff.files.flatMap((f) => touched(f).filter(isProtectedPath).map((p) => hit('protected-path', p, `protected file touched (${f.status})`)));
+  diff.files.flatMap((f) => touched(f).filter((p) => isProtectedPath(p) && !asked(diff, p)).map((p) => hit('protected-path', p, `protected file touched (${f.status})`)));
 
 // ---- hal-hook ------------------------------------------------------------
 
@@ -100,6 +108,8 @@ const HOOKS = [
   { file: 'games/lanternkeep/index.html', dir: 'games/lanternkeep/' },
   { file: 'games/block-barn/index.html', dir: 'games/block-barn/' },
 ];
+/** The files that hold a `// ---- hal hook` block. */
+export const HOOK_FILES: readonly string[] = HOOKS.map((h) => h.file);
 const HOOK_START = '// ---- hal hook';
 const HOOK_END = '// ---- end hal hook ----';
 
@@ -118,6 +128,10 @@ const withoutHook = (src: string | null): string | null => {
   const b = halHookBlock(src);
   return src === null || b === null ? src : src.replace(b, '');
 };
+/** Both sides hold exactly one intact hook block, and everything outside it is byte for byte the same. */
+export function hookOnlyChange(before: string | null, after: string | null): boolean {
+  return hookIntact(before) && hookIntact(after) && withoutHook(before) === withoutHook(after);
+}
 
 // The hook's counters and flag. A new line (or a removed one) that writes the `hal` counters or touches the HAL flag could skew scores.
 const HAL_TAMPER = [
@@ -150,7 +164,7 @@ export const halHook: Rule = (diff) => {
       // Fail closed: the file is there, so both sides must be readable text with exactly one intact block each, byte for byte equal.
       if (moved) out.push(hit('hal-hook', HOOK_FILE, 'hal hook file deleted or moved'));
       else if (!hookIntact(f.before) || !hookIntact(f.after)) out.push(hit('hal-hook', HOOK_FILE, 'hal hook block missing, unreadable, or not exactly one start and one end marker'));
-      else if (before !== after) out.push(hit('hal-hook', HOOK_FILE, 'hal hook block changed'));
+      else if (before !== after && !asked(diff, HOOK_FILE)) out.push(hit('hal-hook', HOOK_FILE, 'hal hook block changed'));
     }
     // Outside the block, no statement touching the hook, its counters or the HAL flag may be added or removed. Statements are compared as a
     // multiset (split on ; { }, comments dropped, whitespace normalised), so re-indenting, wrapping in a block or editing the rest of a line is fine.
@@ -604,7 +618,7 @@ export const outsideScope: Rule = (diff) => {
   const out: Violation[] = [];
   for (const f of diff.files) {
     if (diff.scope) {
-      for (const p of touched(f)) if (!inScope(p, diff.scope)) out.push(hit('outside-scope', p, `outside the ticket's scope (games/${diff.scope.game}/** and its tests)`));
+      for (const p of touched(f)) if (!inScope(p, diff.scope) && !asked(diff, p)) out.push(hit('outside-scope', p, `outside the ticket's scope (games/${diff.scope.game}/** and its tests)`));
     }
     for (const p of touched(f)) {
       const bad = p === '' || p.startsWith('/') || p.startsWith('\\') || /^[a-z]:/i.test(p) || p.replace(/\\/g, '/').split('/').includes('..') || p.includes('\0') || p.replace(/\\/g, '/').split('/').includes('.git');
@@ -616,7 +630,7 @@ export const outsideScope: Rule = (diff) => {
   return out;
 };
 
-const SECRET_RE = /sk-ant-[A-Za-z0-9_-]{8,}/;
+export const SECRET_RE = /sk-ant-[A-Za-z0-9_-]{8,}/;
 /** Added lines (any file, prose included) carrying an API-key shape, or a literal secret value the caller supplied. Never echoes the secret. */
 export const secret: Rule = (diff) => {
   const values = (diff.secrets ?? []).filter((v) => v.length >= 6);
@@ -748,9 +762,13 @@ export const TRIPWIRE_RULES: Record<string, Rule> = {
   'host-api': hostApi,
 };
 
-/** Every rule's hits. `opts.scope` limits the candidate to its game and that game's tests (R18, rule outside-scope). */
-export function checkTripwires(diff: Diff, secrets?: string[], opts: { scope?: Scope } = {}): Violation[] {
+/**
+ * Every rule's hits. `opts.scope` limits the candidate to its game and that game's tests (R18, rule outside-scope).
+ * `opts.asks.paths`: the files of a validated "Hal asks" patch (asks.ts), exempt from the path rules only.
+ */
+export function checkTripwires(diff: Diff, secrets?: string[], opts: { scope?: Scope; asks?: { paths: string[] } } = {}): Violation[] {
   let d = secrets ? { ...diff, secrets: [...(diff.secrets ?? []), ...secrets] } : diff;
   if (opts.scope) d = { ...d, scope: opts.scope };
+  if (opts.asks) d = { ...d, asksPaths: [...opts.asks.paths] };
   return Object.values(TRIPWIRE_RULES).flatMap((r) => r(d));
 }

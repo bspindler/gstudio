@@ -1,7 +1,7 @@
 // Hal's git helpers. Everything goes through an injectable runner so tests (and later helpers) can share one seam.
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
@@ -523,12 +523,16 @@ export async function holdCandidate(repo: string, passId: string, message: strin
   }
 }
 
-export type Held = { pass: string; commit: string; subject: string };
-/** Every held feature, oldest pass first. */
+/** `asks`: a held "Hal asks" candidate's one-line why (its Hal-Asks trailer); absent for a plain held feature. */
+export type Held = { pass: string; commit: string; subject: string; asks?: string };
+/** Every held feature (and "Hal asks" candidate), oldest pass first. */
 export async function listHeld(repo: string, deps: GitDeps = {}): Promise<Held[]> {
   const git = safeGit(deps.git ?? runGit);
-  const out = await git(['for-each-ref', '--format=%(refname)%00%(objectname)%00%(contents:subject)', HELD_PREFIX], resolve(repo)).catch(() => '');
-  return out.split('\n').filter(Boolean).map((l) => { const [ref, commit, subject] = l.split('\0'); return { pass: ref!.slice(HELD_PREFIX.length), commit: commit!, subject: subject ?? '' }; })
+  const out = await git(['for-each-ref', '--format=%(refname)%00%(objectname)%00%(contents:subject)%00%(trailers:key=Hal-Asks,valueonly,separator=%x20)', HELD_PREFIX], resolve(repo)).catch(() => '');
+  return out.split('\n').filter(Boolean).map((l) => {
+    const [ref, commit, subject, asks] = l.split('\0');
+    return { pass: ref!.slice(HELD_PREFIX.length), commit: commit!, subject: subject ?? '', ...(asks?.trim() ? { asks: asks.trim() } : {}) };
+  })
     .filter((h) => /^HAL-\d+$/.test(h.pass)).sort((a, b) => Number(a.pass.slice(4)) - Number(b.pass.slice(4)));
 }
 
@@ -858,4 +862,88 @@ export async function collectTreeDiff(dir: string, base: string, tree: string, d
     levelCounts: { before: levelCounts((f) => beforeTexts.get(f) ?? null), after: levelCounts((f) => afterTexts.get(f) ?? null) },
     repoFiles: [...after.keys()],
   };
+}
+
+// ---- "Hal asks" (asks.ts) ---------------------------------------------------
+//
+// The implementer's protected-change patch is applied by Hal to a tree object in a private index (`git apply --cached`:
+// no worktree, no filters, git's own path checks, never --unsafe-paths), what it changed is read back from git
+// (authoritative, checked by checkAsksChanges), and only then are those files written to the worktree disk, never
+// through a symlink, so the checks run on game change + patch together.
+
+/** `tree` with `patch` applied (git apply --cached --recount in a private index). Throws "patch does not apply: ..." on failure. */
+export async function applyPatchToTree(dir: string, tree: string, patch: string, deps: TreeDeps = {}): Promise<string> {
+  const git = safeGit(deps.git ?? runGit);
+  const tmp = await privateTmp(deps.tmpRoot, 'hal-index-');
+  const env = { GIT_INDEX_FILE: join(tmp, 'index') };
+  try {
+    await git(['read-tree', tree], dir, { env });
+    try {
+      await git(['apply', '--cached', '--recount', '--whitespace=nowarn', '-p1', '-'], dir, { env, input: patch });
+    } catch (e) {
+      throw new Error(`patch does not apply: ${errText(e).replace(/^Command failed: git [^\n]*\n?/, '').trim().slice(0, 600)}`);
+    }
+    return (await git(['write-tree'], dir, { env })).trim();
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+}
+
+export type RawChange = { path: string; status: string; oldMode: string; newMode: string; before: string | null; after: string | null };
+/** What changed from tree-ish `a` to `b`: status, modes and both texts of every path (no renames), from the object store. */
+export async function rawChanges(dir: string, a: string, b: string, deps: TreeDeps = {}): Promise<RawChange[]> {
+  const git = safeGit(deps.git ?? runGit);
+  const out = await git(['diff-tree', '-r', '-z', '--raw', '--no-renames', '--no-ext-diff', '--no-textconv', a, b], dir);
+  const parts = out.split('\0');
+  const rows: RawChange[] = [];
+  for (let i = 0; i + 1 < parts.length; i += 2) {
+    const meta = parts[i]!, path = parts[i + 1]!;
+    const m = /^:(\d{6}) (\d{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z])\d*$/.exec(meta);
+    if (!m) throw new Error(`rawChanges: unexpected diff-tree output ${JSON.stringify(meta.slice(0, 80))}`);
+    const [, oldMode, newMode, oldSha, newSha, status] = m;
+    const text = async (mode: string, sha: string) => (/^0+$/.test(sha) || mode === '160000' ? null : (await safeBytes(['cat-file', 'blob', sha], dir)).toString('utf8'));
+    rows.push({ path, status: status!, oldMode: oldMode!, newMode: newMode!, before: await text(oldMode!, oldSha!), after: await text(newMode!, newSha!) });
+  }
+  return rows;
+}
+
+/** The unified diff from `a` to `b` limited to `paths` (no ext diff, no textconv, no color): what the report shows. */
+export async function treePatch(dir: string, a: string, b: string, paths: string[], deps: TreeDeps = {}): Promise<string> {
+  const git = safeGit(deps.git ?? runGit);
+  if (paths.length === 0) return '';
+  return git(['diff-tree', '-p', '-r', '--no-renames', '--no-ext-diff', '--no-textconv', '--no-color', a, b, '--', ...paths.map((p) => `:(literal)${p}`)], dir);
+}
+
+/**
+ * Makes each of `paths` on disk under `dir` what it is in `tree`: the blob's bytes (mode 644/755), or removed when the
+ * tree lacks it. Refuses (throws) a path with an empty, `.` or `..` segment, and any symlink on the way or at the path:
+ * nothing planted in the worktree can turn Hal's write into one outside it.
+ */
+export async function materializePaths(dir: string, tree: string, paths: string[], deps: TreeDeps = {}): Promise<void> {
+  const git = safeGit(deps.git ?? runGit);
+  const root = await realpath(dir);
+  const entries = await lsTree(git, tree, root);
+  for (const p of paths) {
+    const segs = p.split('/');
+    if (p === '' || p.startsWith('/') || p.includes('\\') || /[\0\n\r]/.test(p) || segs.some((s) => s === '' || s === '.' || s === '..' || s.toLowerCase() === '.git')) {
+      throw new Error(`materializePaths: bad path ${JSON.stringify(p)}`);
+    }
+    let cur = root;
+    for (const s of segs.slice(0, -1)) {
+      cur = join(cur, s);
+      const st = await lstat(cur).catch(() => null);
+      if (!st) { await mkdir(cur); continue; }
+      if (st.isSymbolicLink()) throw new Error(`materializePaths: ${relative(root, cur)} is a symlink`);
+      if (!st.isDirectory()) throw new Error(`materializePaths: ${relative(root, cur)} is not a directory`);
+    }
+    const target = join(root, p);
+    const st = await lstat(target).catch(() => null);
+    if (st?.isSymbolicLink()) throw new Error(`materializePaths: ${p} is a symlink`);
+    if (st && !st.isFile()) throw new Error(`materializePaths: ${p} is not a regular file`);
+    const e = entries.get(p);
+    if (!e) { if (st) await rm(target, { force: true }); continue; }
+    if (e.mode !== '100644' && e.mode !== '100755') throw new Error(`materializePaths: ${p} has mode ${e.mode}`);
+    if (st) await rm(target, { force: true }); // a fresh file: never reuse an inode something else may hold
+    await writeFile(target, await safeBytes(['cat-file', 'blob', e.sha], root), { flag: 'wx', mode: e.mode === '100755' ? 0o755 : 0o644 });
+  }
 }

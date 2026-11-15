@@ -187,12 +187,14 @@ export interface HalTrailers {
   /** Undo commits only: the pass being undone. */
   undo?: string;
   reason?: string;
+  /** A held "Hal asks" candidate (asks.ts): the implementer's one-line why for its protected change. */
+  asks?: string;
 }
 
 const KEYS: Array<[keyof HalTrailers, string]> = [
   ['pass', 'Hal-Pass'], ['game', 'Hal-Game'], ['kind', 'Hal-Kind'], ['why', 'Hal-Why'],
   ['scoreBefore', 'Hal-Score-Before'], ['scoreAfter', 'Hal-Score-After'], ['version', 'Hal-Version'], ['run', 'Hal-Run'],
-  ['undo', 'Hal-Undo'], ['reason', 'Hal-Reason'],
+  ['undo', 'Hal-Undo'], ['reason', 'Hal-Reason'], ['asks', 'Hal-Asks'],
 ];
 
 /** One `Key: value` line per field (optional fields omitted when undefined). Newlines in values become spaces. */
@@ -203,7 +205,7 @@ export function formatTrailers(t: HalTrailers): string {
     const v = t[f];
     if (v === undefined) continue;
     const val = oneLine(String(v));
-    if (!val && !['undo', 'reason'].includes(f)) throw new Error(`release: empty value for ${key}`);
+    if (!val && !['undo', 'reason', 'asks'].includes(f)) throw new Error(`release: empty value for ${key}`);
     lines.push(`${key}: ${val}`);
   }
   return lines.join('\n');
@@ -230,6 +232,7 @@ export function parseTrailers(message: string): HalTrailers | null {
   };
   if (map.has('Hal-Undo')) out.undo = get('Hal-Undo')!;
   if (map.has('Hal-Reason')) out.reason = get('Hal-Reason')!;
+  if (map.has('Hal-Asks')) out.asks = get('Hal-Asks')!;
   return out;
 }
 
