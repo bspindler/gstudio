@@ -141,9 +141,9 @@ export const PATTERNS = [
       const v = speedAt(x), zx = x + 0.5, L = 13 + r() * 5 + d * 2;
       const o = [{ t: 'flip', x: zx, w: L }, { t: 'pit', x: zx + 3, w: L - 6 }];
       const gap = Math.max(range(x) * (intro ? 0.6 : 0.95), 4.6);
-      let sx = zx + 8;
+      let sx = zx + (intro ? 5.7 : 8);
       while (sx <= zx + L - 4) {
-        const n = (intro ? 4 : 1) + Math.floor(r() * 2);
+        const n = (intro ? 8 : 1) + Math.floor(r() * 2);
         spikes(o, sx, n, CEIL_Y, true);
         sx += n * SW + gap + r() * 1.5;
       }

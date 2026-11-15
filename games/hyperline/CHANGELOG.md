@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.7.0 (2026-11-15)
 - Sector intros are sharper: the Crumble Track and Twin Fangs openers now ask for tighter jump timing.
 - New sector BOOST PADS: pads launch you over tall walls onto a short landing strip, then time one tap through the spikes.
+- Flip City's first gravity-flip stretch now has wider ceiling spike clusters, so timing your drop matters.
 
 ## 0.6.1 (2026-11-14)
 - A cyan neon ripple spreads across the track each time you land, making jump timing easier to feel.
