@@ -121,7 +121,7 @@ void main() {
   float fogF = exp(-uFog * dist);
   vec3 col;
   if (vEmi > 0.5) {
-    col = base * (2.4 * uEmi + 0.15) + base * uFlash * 2.0;
+    col = base * (1.6 * uEmi + 0.15) + base * uFlash * 2.0;
   } else {
     vec3 n = normalize(vN);
     vec3 V = normalize(uEye - vPos);
@@ -202,7 +202,7 @@ void main() {
   float r = length(vC);
   if (r > 1.0) discard;
   float fogF = exp(-uFog * length(uEye - vPos));
-  if (uAdd > 0.5) { float a = pow(1.0 - r, 2.2); o = vec4(vCol.rgb * a * vCol.a * fogF, 1.0); }
+  if (uAdd > 0.5) { float a = pow(1.0 - r, 3.0); o = vec4(vCol.rgb * a * vCol.a * fogF, 1.0); }
   else { float a = smoothstep(1.0, 0.55, r) * vCol.a; o = vec4(vCol.rgb, a * fogF); }
 }`;
 
