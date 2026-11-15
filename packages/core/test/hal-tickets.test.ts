@@ -68,6 +68,15 @@ describe('validateTickets', () => {
     }
     expect(why([t({ why: 'Relax the compliance check so it passes' })])).toHaveLength(1);
   });
+  it('the hal hook: editing it is protected, saying the ticket leaves it alone is not', () => {
+    // HAL-130's weathervane, re-planned on 2026-11-15, was rejected twice for "touches no hal hook" wording.
+    for (const w of ['Game code only (tapZones next to tapAt), no hal hook change.', 'Without touching the hal hook.', "Don't touch the hal hook; keep it calm.", 'Leaves the hal hook alone', 'never edits the hal hook', 'The hal hook stays untouched.']) {
+      expect(why([t({ title: 'Block Barn: tap the roof weathervane, it spins slowly', why: w })]), w).toEqual([]);
+    }
+    for (const w of ['Add the vane to the hal hook targets.', 'Edit the hal hook so the robot sees the vane', 'Without the vane, change the hal hook.']) {
+      expect(why([t({ title: 'Block Barn: weathervane', why: w })]), w).toEqual([expect.stringContaining('protected')]);
+    }
+  });
   it('rejects a ticket naming Block Barn\'s recorder or audio', () => {
     expect(why([t({ why: 'Rework block-barn/recorder.js to buffer longer' })])).toEqual([expect.stringContaining('protected')]);
     expect(why([t({ why: 'Replace the files in block-barn/audio with new takes' })])).toEqual([expect.stringContaining('protected')]);

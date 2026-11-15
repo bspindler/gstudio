@@ -60,6 +60,15 @@ const LIABILITY: RegExp[] = [
 
 const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
+// "No hal hook change" / "without touching the hal hook" / "the hal hook stays untouched" say the ticket leaves the
+// hook alone: drop those phrases before the protected check (it rejected the weathervane twice for saying so). The
+// hal-hook tripwire still rejects any build that really edits the block. Only within one clause (no , . ; or newline).
+const HOOK_DENIALS = [
+  /\b(?:no|not|never|without|don'?t|do not|doesn'?t|does not|leaves?|leaving|avoids?|avoiding)\b[^.;,\n]{0,30}?\bhal hook\b/gi,
+  /\bhal hook\b[^.;,\n]{0,12}?\b(?:stays|is left|remains|untouched|unchanged|alone)\b/gi,
+];
+const withoutHookDenials = (s: string) => HOOK_DENIALS.reduce((x, re) => x.replace(re, ' '), s);
+
 /** `json` is the planner's parsed `{tickets:[...]}` or its raw text. `measures` maps game slug to its measure names. */
 export function validateTickets(json: unknown, games: string[], measures: Record<string, string[]>): TicketResult {
   let data = json;
@@ -92,7 +101,7 @@ export function validateTickets(json: unknown, games: string[], measures: Record
       }
     }
     const text = `${k.title ?? ''}\n${k.why ?? ''}`;
-    if (PROTECTED.some((re) => re.test(text))) errors.push('touches a protected area by its own description');
+    if (PROTECTED.some((re) => re.test(withoutHookDenials(text)))) errors.push('touches a protected area by its own description');
     else if (k.liability === undefined && LIABILITY.some((re) => re.test(text))) errors.push('looks like a liability item (dependency, host, money); set "liability"');
     if (errors.length) {
       rejected.push({ index: i + 1, ...(str('id') ? { id: k.id as string } : {}), ...(typeof k.title === 'string' ? { title: k.title } : {}), reasons: errors });
