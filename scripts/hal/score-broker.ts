@@ -110,12 +110,20 @@ export function startScoreBroker(o: BrokerOptions): Broker {
 }
 
 /** The implementer's side: asks Hal to score, waits for the answer. Throws on an error response or a timeout. */
+// A retry after a timeout waits on the request it already sent (its id is kept in `wait-<scorer>` until the answer is
+// read), instead of queueing a second score behind the one still running: a score longer than the client's wait
+// (Lanternkeep's took ~164 s under load) would otherwise time out on every retry.
 export async function askHalToScore(dir: string, scorer: string, o: { timeoutMs?: number; pollMs?: number } = {}): Promise<unknown> {
-  const id = randomBytes(8).toString('hex');
-  if (!ID_RE.test(id)) throw new Error('bad request id');
-  const tmp = join(dir, `.req-${id}.tmp`);
-  await writeFile(tmp, JSON.stringify({ scorer } satisfies ScoreRequest), { flag: 'wx' });
-  await rename(tmp, join(dir, `req-${id}.json`));
+  const waitFile = /^[a-z0-9-]{1,64}$/.test(scorer) ? join(dir, `wait-${scorer}`) : undefined;
+  let id = waitFile ? await readFile(waitFile, 'utf8').then((s) => s.trim(), () => '') : '';
+  if (!ID_RE.test(id)) {
+    id = randomBytes(8).toString('hex');
+    if (!ID_RE.test(id)) throw new Error('bad request id');
+    const tmp = join(dir, `.req-${id}.tmp`);
+    await writeFile(tmp, JSON.stringify({ scorer } satisfies ScoreRequest), { flag: 'wx' });
+    if (waitFile) await writeFile(waitFile, id);
+    await rename(tmp, join(dir, `req-${id}.json`));
+  }
   const res = join(dir, `res-${id}.json`);
   const deadline = Date.now() + (o.timeoutMs ?? CLIENT_TIMEOUT_MS);
   for (;;) {
@@ -123,11 +131,12 @@ export async function askHalToScore(dir: string, scorer: string, o: { timeoutMs?
     try { text = await readFile(res, 'utf8'); } catch { /* not yet */ }
     if (text !== undefined) {
       await rm(res, { force: true });
+      if (waitFile) await rm(waitFile, { force: true });
       const r = JSON.parse(text) as ScoreResponse;
       if (!r.ok) throw new Error(`Hal could not score ${scorer}: ${r.error}`);
       return r.report;
     }
-    if (Date.now() > deadline) throw new Error(`Hal did not answer the ${scorer} score request in time; run the same command again`);
+    if (Date.now() > deadline) throw new Error(`Hal did not answer the ${scorer} score request in time (it is still scoring); run the same command again to keep waiting for the same score`);
     await new Promise((d) => setTimeout(d, o.pollMs ?? 250));
   }
 }

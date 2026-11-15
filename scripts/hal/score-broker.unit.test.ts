@@ -73,6 +73,24 @@ describe('score broker', () => {
     expect(readdirSync(dir)).toContain('req-NOTVALID.json');
   });
 
+  it('a retry after a timeout waits on the same request instead of queueing another score behind it', async () => {
+    // A score longer than the client's wait (Lanternkeep ~164 s vs 110 s): the retry must pick up the running score.
+    const dir = fresh();
+    let calls = 0, release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    broker = startScoreBroker({ dir, scorers: ['lanternkeep'], score: async () => { calls++; await gate; return { fitness: calls }; }, ...fast });
+    await expect(askHalToScore(dir, 'lanternkeep', { pollMs: 10, timeoutMs: 60 })).rejects.toThrow(/did not answer.*run the same command again/);
+    const retry = askHalToScore(dir, 'lanternkeep', { ...fast, timeoutMs: 5000 });
+    await new Promise((d) => setTimeout(d, 50));
+    release();
+    await expect(retry).resolves.toEqual({ fitness: 1 });
+    expect(calls).toBe(1);
+    expect(broker.served()).toBe(1);
+    expect(readdirSync(dir)).toEqual([]);
+    // Once answered, the next ask is a fresh score.
+    await expect(askHalToScore(dir, 'lanternkeep', { ...fast, timeoutMs: 5000 })).resolves.toEqual({ fitness: 2 });
+  });
+
   it('the client times out with a retry hint when nobody answers', async () => {
     const dir = fresh();
     await expect(askHalToScore(dir, 'gearhold', { pollMs: 10, timeoutMs: 50 })).rejects.toThrow(/did not answer.*run the same command again/);
