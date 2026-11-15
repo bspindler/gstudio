@@ -1,7 +1,9 @@
 // A pure Gearhold player policy: state snapshot in, controls out. No browser, no clock, no unseeded randomness.
-// Combat: aim at the nearest visible enemy after a reaction delay, with Gaussian aim error. Otherwise follow the map route.
+// Combat: aim at the nearest visible enemy in range after a reaction delay, with Gaussian aim error. Otherwise follow
+// the map route, waiting at the edge of a gear press while it glows or slams (it reads the game's own press.js beat).
 import { mulberry32 } from '../../../../games/hyperline/lib/rng.js';
 import { WALLS } from '../../../../games/gearhold/levels.js';
+import { PRESS, pressState } from '../../../../games/gearhold/press.js';
 import { routePath, type Cell } from './gearhold-walk.js';
 
 export { mulberry32 };
@@ -35,6 +37,18 @@ export const MAX_TURN = 8;
  * It should stay near the in-game radii (0.21 to 0.4); the in-game sphere sets the true hit rate, not this gate.
  */
 export const GATE_RADIUS = 0.3;
+/**
+ * Enemies farther than this (tiles) are not engaged: the bot walks on instead of sniping. At 11 tiles a drone's hit
+ * sphere (r 0.25) is about 1.3 degrees wide, about the finest aim a thumb on a phone holds (measurement v2 P2); a
+ * frame-perfect long shot is not how people play, and it hid how levels feel up close.
+ */
+export const FIRE_RANGE = 11;
+/** The player's top speed, tiles/s (index.html maxSp), and the extra time a start from rest costs. */
+const RUN_SPEED = 3.6, START_LAG = 0.15;
+/** Seconds the bot's centre needs to cross a press cell, with a margin; it enters only if the press stays open that long. */
+const PRESS_CROSS = 0.5;
+/** Within this distance (tiles) of a press cell's edge the bot decides; at 3.6 tiles/s it coasts about 0.5 to a stop. */
+const PRESS_HOLD_DIST = 1.0;
 const EYE = 0.6; // the game's eye height (index.html EYE)
 const REACT_JITTER = 0.15, AIM_RESAMPLE = 0.5;
 const SCATTER_IN = 4, SCATTER_OUT = 5;
@@ -88,6 +102,28 @@ function clear(map: string[], state: GearholdState, ax: number, ay: number, bx: 
     }
   }
   return true;
+}
+
+/** True while the press in column x stays open (safe) from t through t + span seconds. */
+function pressOpenFor(t: number, x: number, span: number): boolean {
+  const dt = Math.min(0.05, PRESS.down / 4); // fine enough never to step over a slam
+  for (let s = 0; s <= span + 1e-9; s += dt) if (pressState(t + s, x) !== 'open') return false;
+  return pressState(t + span, x) === 'open';
+}
+
+/**
+ * True when the next step is onto a press plate that is hot, slamming, or will be before the bot is across: hold at the
+ * edge. Never while already standing on a plate (stopping there is the worst choice), and only for the next cell.
+ */
+function pressHold(state: GearholdState, map: string[], goal: Pt | null): boolean {
+  if (!goal) return false;
+  const { p, time } = state;
+  const cx = Math.floor(p.x), cy = Math.floor(p.y), gx = Math.floor(goal.x), gy = Math.floor(goal.y);
+  if (at(map, cx, cy) === 'u' || at(map, gx, gy) !== 'u' || (gx === cx && gy === cy)) return false;
+  const dx = Math.max(0, gx - p.x, p.x - (gx + 1)), dy = Math.max(0, gy - p.y, p.y - (gy + 1));
+  const dist = Math.hypot(dx, dy);
+  if (dist > PRESS_HOLD_DIST) return false;
+  return !pressOpenFor(time, gx, dist / RUN_SPEED + START_LAG + PRESS_CROSS);
 }
 
 function findCells(map: string[], ch: string): Cell[] {
@@ -150,10 +186,11 @@ export function decide(state: GearholdState, map: string[], mem: BotMemory, rng:
   let target: { i: number; d: number; bearing: number } | null = null;
   const visible = new Set<number>();
   state.enemies.forEach((e, i) => {
-    if (e.dead || e.prop || (mem.ignore[i] ?? -1) > time || !clear(map, state, p.x, p.y, e.x, e.y)) return;
+    if (e.dead || e.prop || (mem.ignore[i] ?? -1) > time) return;
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    if (d > FIRE_RANGE || !clear(map, state, p.x, p.y, e.x, e.y)) return;
     visible.add(i);
     if (mem.seen[i] === undefined) mem.seen[i] = { t: time, delay: REACT + rng() * REACT_JITTER };
-    const d = Math.hypot(e.x - p.x, e.y - p.y);
     if (!target || d < target.d) target = { i, d, bearing: Math.atan2(e.y - p.y, e.x - p.x) };
   });
   for (const k of Object.keys(mem.seen)) if (!visible.has(Number(k))) { delete mem.seen[Number(k)]; delete mem.offset[Number(k)]; delete mem.engage[Number(k)]; }
@@ -211,8 +248,12 @@ export function decide(state: GearholdState, map: string[], mem: BotMemory, rng:
     out.pitch = sub(-p.look); // level the view
   }
 
+  // Gear presses: hold at the edge rather than step onto a plate that is (or is about to be) hot or slamming.
+  const holding = out.fwd === 1 && pressHold(state, map, goal);
+  if (holding) out.fwd = 0;
+
   // Stuck detector (runs during engagement too): 0.3 tiles in 2 s, else strafe randomly for 0.5 s.
-  if (out.fire) mem.ref = null; // planted and shooting is not being stuck
+  if (out.fire || holding) mem.ref = null; // planted and shooting, or waiting out a press, is not being stuck
   if (time < mem.strafeUntil) { out.str = mem.strafeDir; out.fwd = 0; return out; }
   if (!mem.ref || Math.hypot(p.x - mem.ref.x, p.y - mem.ref.y) >= STUCK_DIST) mem.ref = { x: p.x, y: p.y, t: time };
   else if (time - mem.ref.t >= STUCK_SECS - EPS) {

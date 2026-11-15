@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { PRESS, pressState } from '../../../games/gearhold/press.js';
 import {
-  AIM_ERR, DECIDE_HZ, MAX_TURN, REACT, SUBSTEPS, createMemory, decide, gaussian, mulberry32,
+  AIM_ERR, DECIDE_HZ, FIRE_RANGE, MAX_TURN, REACT, SUBSTEPS, createMemory, decide, gaussian, mulberry32,
   type GearholdState,
 } from '../src/hal/gearhold-bot.js';
 
@@ -396,5 +397,72 @@ describe('decide: engagement', () => {
     const prop = { kind: 'o', x: 3.5, y: 1.5, hp: 18, awake: false, dead: false, prop: true };
     const out = decide(st({ p: { x: 2.5, y: 1.5 }, enemies: [prop] }), map, createMemory(), mulberry32(1));
     expect(out.turn).toBeGreaterThan(0.05); // turns toward +y, not straight through the prop
+  });
+});
+
+describe('decide: firing range (measurement v2 P2)', () => {
+  const HALL = ['####################', '#S.................#', '#..................#', '####################'];
+  it('pins the range at 11 tiles', () => {
+    expect(FIRE_RANGE).toBe(11);
+  });
+  it('does not engage a visible enemy beyond FIRE_RANGE: it never fires and starts no reaction timer', () => {
+    const mem = createMemory();
+    const rng = mulberry32(4);
+    for (let t = 0; t < 2; t += 1 / DECIDE_HZ) {
+      const out = decide(st({ time: t, enemies: [enemy(1.5 + 13, 1.5)] }), HALL, mem, rng);
+      expect(out.fire).toBe(false);
+    }
+    expect(Object.keys(mem.seen)).toEqual([]);
+  });
+  it('engages and fires at an enemy inside FIRE_RANGE', () => {
+    const mem = createMemory();
+    const rng = mulberry32(4);
+    let fired = false;
+    for (let t = 0; t < 2; t += 1 / DECIDE_HZ) fired ||= decide(st({ time: t, enemies: [enemy(1.5 + 9, 1.5)] }), HALL, mem, rng).fire;
+    expect(fired).toBe(true);
+  });
+});
+
+describe('decide: gear presses (measurement v2 P2)', () => {
+  // A corridor with a press plate at column 5; the route runs east through it to the exit.
+  const GALLERY = ['##########', '#S...u...X', '##########'];
+  const X = 5;
+  /** The first time the press in column X enters `want` and stays in it for at least `span` s. */
+  const timeIn = (want: string, span = 0): number => {
+    for (let t = 0.01; t < 8; t += 0.01) {
+      let ok = pressState(t - 0.01, X) !== want;
+      for (let s = 0; ok && s <= span; s += 0.01) if (pressState(t + s, X) !== want) ok = false;
+      if (ok) return t + 0.005;
+    }
+    throw new Error('no such time');
+  };
+  const at = (time: number, x = 4.6) => decide(st({ time, p: { x, y: 1.5, a: 0 } }), GALLERY, createMemory(), mulberry32(1));
+
+  it('waits at the edge while the press glows (warn) or slams (down)', () => {
+    expect(at(timeIn('warn')).fwd).toBe(0);
+    expect(at(timeIn('down')).fwd).toBe(0);
+  });
+  it('waits when the press will turn hot before it is across', () => {
+    const t = timeIn('warn') - 0.1; // still open, but it glows before the bot is through
+    expect(pressState(t, X)).toBe('open');
+    expect(at(t).fwd).toBe(0);
+  });
+  it('crosses while the press rests with time to spare', () => {
+    expect(at(timeIn('open', PRESS.period - PRESS.warn - PRESS.down - 0.05)).fwd).toBe(1);
+  });
+  it('never stops on a plate: standing on one it keeps going', () => {
+    expect(at(timeIn('warn'), 5.5).fwd).toBe(1);
+  });
+  it('does not wait for a press that is not next on its route', () => {
+    expect(at(timeIn('warn'), 2.5).fwd).toBe(1);
+  });
+  it('waiting for a press is not being stuck: no unstick strafe while it waits', () => {
+    const mem = createMemory();
+    const rng = mulberry32(1);
+    const t0 = timeIn('warn');
+    for (let t = t0; t < t0 + PRESS.warn + PRESS.down + 1.2; t += 1 / DECIDE_HZ) {
+      const out = decide(st({ time: t, p: { x: 4.6, y: 1.5, a: 0 } }), GALLERY, mem, rng);
+      expect(out.str).toBe(0);
+    }
   });
 });
