@@ -23,6 +23,8 @@
 //     an online voice and a local one; a line in any voice but an on-device one is an error (the score is rejected).
 // Page and console errors, blocked requests, a page that leaves the barn, and a viewport run over VIEW_DEADLINE_MS go
 // to `errors` / `page.leftBarn`. A browser that can't launch throws "browser unavailable: ..."; the CLI exits 1 on it.
+// The page runs on a fake clock by default (see "The fake clock"): the same play, but every wait costs page time, not
+// wall time. `clock: 'real'` plays in real time (a test checks that both give the same records, gestures and page).
 // Run it with `npm run hal -- score --game block-barn`.
 import type { Browser, BrowserContextOptions, CDPSession, Page } from 'playwright';
 import {
@@ -43,6 +45,8 @@ export type BlockBarnPlayOptions = {
   toddlerSeeds?: number[];
   /** Test hook: these steps instead of each seed's toddlerPlan. */
   toddlerSteps?: ToddlerStep[];
+  /** The page's clock (default 'fake': the same play, without the real waits; see "The fake clock"). */
+  clock?: BlockBarnClock;
 };
 export type BlockBarnPlayResult = { records: BlockBarnRecord[]; page: BlockBarnPage; errors: string[] };
 
@@ -79,6 +83,9 @@ function instrument(flashMs: number, gapMs: number): void {
   // A gesture of several fingers (two fingers, a palm) is one tap on the clock: only a pointerdown with no other finger
   // down moves it on.
   let taps = 0, held = 0, tapAt = 0, vnow = 0;
+  // The tap probe's milliseconds are real time: on the fake clock the page's own clock stands still while a tap is
+  // handled, so the runner hands over the real performance.now from before the fake one was installed.
+  const now: () => number = w.__bbRealNow ?? performance.now.bind(performance);
   const down = new Set<number>();
   for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click', 'keydown', 'keyup']) {
     addEventListener(type, (e) => {
@@ -340,6 +347,18 @@ function instrument(flashMs: number, gapMs: number): void {
   for (const t of ['animationstart', 'transitionrun']) document.addEventListener(t, onStart, true);
   const animate = Element.prototype.animate;
   Element.prototype.animate = function (this: Element, ...args: Parameters<Element['animate']>) { const x = animate.apply(this, args); judge(x); return x; };
+  // `sweep()`: the fake clock's frames call it. There, many of the page's timers run between two real frames, so an
+  // animation can start and be gone before a start event is ever dispatched. Each sweep does what those events do:
+  // a transition is judged as soon as it exists (transitionrun), a CSS animation once its delay is over
+  // (animationstart), and then every animation on its element.
+  const sweep = () => {
+    for (const a of document.getAnimations()) {
+      if (judged.has(a)) continue;
+      const fx = a.effect as KeyframeEffect | null;
+      if ((a as any).animationName !== undefined && Number(a.currentTime ?? 0) < Number(fx?.getTiming().delay ?? 0)) continue;
+      try { for (const x of fx?.target?.getAnimations() ?? [a]) judge(x); } catch { judge(a); }
+    }
+  };
 
   // ---- Tap probe: a change made while this tap's own pointerdown or pointerup is being handled ----
   // Window capture runs before the page hears the event, window bubble after all its handlers: records taken at the
@@ -361,7 +380,7 @@ function instrument(flashMs: number, gapMs: number): void {
   type Dispatch = { kind: 'down' | 'release'; changes: Change[]; sounds: number };
   let gest: { dispatches: Dispatch[] } | null = null;
   let current: Event | null = null, since = 0, soundsAt = 0, pending: MutationRecord[] = [];
-  const hit = () => { if (probe && probe.ms === undefined) probe.ms = performance.now() - since; };
+  const hit = () => { if (probe && probe.ms === undefined) probe.ms = now() - since; };
   const regionOf = (n: Node | null): string => {
     let el: Element | null = n && n.nodeType === 1 ? (n as Element) : n?.parentElement ?? null;
     while (el && !el.id) el = el.parentElement;
@@ -382,7 +401,7 @@ function instrument(flashMs: number, gapMs: number): void {
   };
   const mo = new MutationObserver((recs) => { if (current && current.eventPhase !== Event.NONE) note(recs); });
   mo.observe(document, { subtree: true, childList: true, attributes: true, attributeOldValue: true, characterData: true });
-  const begin = (e: Event) => { mo.takeRecords(); current = e; since = performance.now(); soundsAt = sources.length; pending = []; }; // records taken here are someone else's
+  const begin = (e: Event) => { mo.takeRecords(); current = e; since = now(); soundsAt = sources.length; pending = []; }; // records taken here are someone else's
   const finish = (e: Event) => {
     note(mo.takeRecords());
     current = null;
@@ -396,14 +415,14 @@ function instrument(flashMs: number, gapMs: number): void {
     pending = [];
     gest.dispatches.push({ kind: e.type === 'pointerdown' ? 'down' : 'release', changes, sounds: sources.length - soundsAt });
   };
-  addEventListener('pointerdown', (e) => { if (!e.isTrusted) return; if (down.size <= 1) probe = { t0: performance.now(), up: false }; begin(e); }, true);
+  addEventListener('pointerdown', (e) => { if (!e.isTrusted) return; if (down.size <= 1) probe = { t0: now(), up: false }; begin(e); }, true);
   addEventListener('pointerdown', (e) => { if (e.isTrusted && current === e) finish(e); });
   for (const type of ['pointerup', 'pointercancel']) {
     addEventListener(type, (e) => { if (e.isTrusted) begin(e); }, true);
     addEventListener(type, (e) => {
       if (!e.isTrusted || current !== e) return;
       finish(e);
-      if (type === 'pointerup' && probe && !probe.up) { probe.up = true; probe.end = performance.now() - probe.t0; }
+      if (type === 'pointerup' && probe && !probe.up) { probe.up = true; probe.end = now() - probe.t0; }
     });
   }
   /**
@@ -436,13 +455,114 @@ function instrument(flashMs: number, gapMs: number): void {
   };
 
   // `hold(ms)`: the runner is holding a finger down for ms; the virtual clock moves on by that much.
-  w.__bbPlay = { spoken, offDevice, played, flashes, audio, reset() { probe = null; }, probe: () => probe, startGesture() { gest = { dispatches: [] }; }, gesture, hold(ms: number) { held += Number(ms) || 0; tapAt += (Number(ms) || 0) / 1000; vnow = tapAt; } };
+  w.__bbPlay = { spoken, offDevice, played, flashes, audio, sweep, reset() { probe = null; }, probe: () => probe, startGesture() { gest = { dispatches: [] }; }, gesture, hold(ms: number) { held += Number(ms) || 0; tapAt += (Number(ms) || 0) / 1000; vnow = tapAt; } };
 }
 
 /** The runner's in-page instrumentation as an init script (exported for tests). */
 export function instrumentScript(): string {
   // tsx compiles with keepNames, so functions sent to the page may call esbuild's __name helper: give the page one.
   return `globalThis.__name = globalThis.__name || ((f) => f); (${instrument.toString()})(${BLOCK_BARN_RULES.flashMs}, ${TAP_GAP_MS});`;
+}
+
+// ---- The fake clock ----
+// On the fake clock (the default) the page's time only moves when the runner moves it: Playwright's page clock is
+// installed paused before the page loads (setTimeout, setInterval, requestAnimationFrame, performance.now and Date
+// are fake; time 0 at load), the document timeline is stopped (CDP Animation.setPlaybackRate 0), and every wait of
+// the driver (the tap gap, the 1 s press, the 3 s hold, waiting for the tower and the animals to settle, waiting for
+// a voice) advances both together, one 16 ms frame at a time:
+//   - every running animation and transition moves on by the frame (its currentTime; nothing else moves them),
+//   - the page's timers and animation frames due in the frame run (Playwright's runFor),
+//   - the calm sweep judges every animation that started (no real frame need be drawn in between),
+//   - the page yields once to real tasks (network, storage), so they still land between frames.
+// A wait for something to happen checks after every frame and stops as soon as it holds, as waitForFunction would;
+// one that runs out of page time keeps polling in real time up to the same timeout before it gives up, so real
+// work that is slower than the fake clock (a fetch, a decode) is never cut short.
+// The page plays the same: the same timers fire in the same order relative to each tap, and the tap probe, the
+// audio recorder and the virtual audio clock are unchanged (they never read the page's clock, except the probe,
+// which reads real time). What changes is that the waits cost no wall time.
+
+/** 'fake' (default): the page's clock and animations move only when the runner waits; 'real': in real time. */
+export type BlockBarnClock = 'real' | 'fake';
+const FRAME_MS = 16;
+/** The fake clock's date at load (the barn never reads the date; any fixed one keeps runs the same). */
+const CLOCK_DATE = Date.parse('2026-01-01T00:00:00Z');
+/** The real performance.now, saved before the fake clock replaces it (the tap probe reads it). */
+const REAL_NOW_SCRIPT = `Object.defineProperty(globalThis, '__bbRealNow', { value: performance.now.bind(performance) });`;
+
+/** Runs in the page after the instrumentation on the fake clock: window.__bbClock advances it (see above). */
+function fakeClock(frameMs: number): void {
+  const w = window as any;
+  const pw = w.__pwClock;
+  if (!pw?.controller?.runFor || !pw.builtins?.setTimeout) throw new Error('block barn fake clock: Playwright page clock not installed');
+  const realNow: () => number = w.__bbRealNow;
+  const realSleep = (ms: number) => new Promise<void>((r) => pw.builtins.setTimeout(r, ms));
+  const yieldReal = () => new Promise<void>((r) => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
+  const pageNow = () => Number(w.performance.now()); // the fake clock's ticks: 0 at load
+  const frame = async (ms: number) => {
+    for (const a of document.getAnimations()) if (a.playState === 'running') a.currentTime = Number(a.currentTime ?? 0) + ms * a.playbackRate;
+    try { await pw.controller.runFor(ms); } catch (e) {
+      // A timer that threw: on the real clock that is an uncaught page error, so make it one here too.
+      pw.builtins.setTimeout(() => { throw e; }, 0);
+    }
+    w.__bbPlay?.sweep?.();
+    await yieldReal();
+  };
+  /** The next step: up to the next frame boundary of the page clock, at most `left` ms. */
+  const next = (left: number) => Math.min(left, frameMs - (pageNow() % frameMs) || frameMs);
+  w.__bbClock = {
+    /** Moves the page on by ms; resolves to ms. */
+    async advance(ms: number) {
+      for (let left = Math.max(0, Number(ms) || 0); left > 0;) { const d = next(left); await frame(d); left -= d; }
+      return ms;
+    },
+    /**
+     * Waits until fn(arg) is truthy, moving the page on frame by frame for at most timeoutMs of page time (then real
+     * time, to the same total): { ok, value, elapsed } with elapsed the page time it moved on.
+     */
+    async until(fn: (a: unknown) => unknown, arg: unknown, timeoutMs: number) {
+      const t0 = pageNow(), r0 = realNow();
+      for (;;) {
+        const value = fn(arg), elapsed = pageNow() - t0;
+        if (value) return { ok: true, value, elapsed };
+        if (elapsed < timeoutMs) { await frame(next(timeoutMs - elapsed)); continue; }
+        if (realNow() - r0 >= timeoutMs) return { ok: false, elapsed };
+        await realSleep(frameMs);
+      }
+    },
+  };
+}
+function fakeClockScript(): string {
+  return `globalThis.__name = globalThis.__name || ((f) => f); (${fakeClock.toString()})(${FRAME_MS});`;
+}
+
+type Until = { ok: true; value: any } | { ok: false; error: Error };
+/** The driver's waits, on the page's clock: real time, or the fake clock's frames. */
+type Ticker = {
+  /** The driver's time in ms (wall time on the real clock, page time on the fake). */
+  now(): number;
+  wait(ms: number): Promise<void>;
+  /** waitForFunction: fn(arg) in the page until it is truthy (its value), or the timeout. */
+  until<A>(fn: (a: A) => unknown, arg: A, timeoutMs: number, polling?: number): Promise<Until>;
+};
+function realTicker(page: Page): Ticker {
+  return {
+    now: () => Date.now(),
+    wait: (ms) => page.waitForTimeout(ms),
+    until: (fn, arg, timeout, polling) => page.waitForFunction(fn as (a: unknown) => unknown, arg as unknown, { timeout, ...(polling ? { polling } : {}) })
+      .then(async (h): Promise<Until> => ({ ok: true, value: await h.jsonValue() }), (error: Error): Until => ({ ok: false, error })),
+  };
+}
+function fakeTicker(page: Page): Ticker {
+  let t = 0;
+  return {
+    now: () => t,
+    async wait(ms) { await page.evaluate(`window.__bbClock.advance(${Number(ms)})`); t += ms; },
+    async until(fn, arg, timeout) {
+      const r = await page.evaluate(`window.__bbClock.until(${fn.toString()}, ${JSON.stringify(arg ?? null)}, ${Number(timeout)})`) as { ok: boolean; value?: unknown; elapsed: number };
+      t += r.elapsed;
+      return r.ok ? { ok: true, value: r.value } : { ok: false, error: new Error(`timeout: ${timeout} ms of page time (fake clock) exceeded`) };
+    },
+  };
 }
 
 const center = (t: Target) => ({ x: t.x + t.w / 2, y: t.y + t.h / 2 });
@@ -459,15 +579,16 @@ class Barn {
   /** The toddler seed whose random phase is playing (unset for the combinations). */
   seed?: number;
   /** `measure`: record every target's size before each tap (the tap script does; the alphabet walk does not). */
-  constructor(readonly page: Page, readonly viewport: BlockBarnViewport, readonly measure: boolean) {}
+  constructor(readonly page: Page, readonly viewport: BlockBarnViewport, readonly measure: boolean, readonly clock: Ticker) {}
   state(): Promise<State> { return this.page.evaluate(() => (window as any).__hal.state()); }
   targets(): Promise<Target[]> { return this.page.evaluate(() => (window as any).__hal.targets()); }
   /** Waits until the tower's own animations (wobble, bump) are over: its box, and the free floor beside it, are still. */
   async still(): Promise<void> {
-    await this.page.waitForFunction(() => {
+    const r = await this.clock.until(() => {
       const t = document.getElementById('tower');
       return !t || t.getAnimations({ subtree: true }).every((a) => a.playState !== 'running' || (a.effect?.getComputedTiming().iterations ?? 1) === Infinity);
-    }, null, { timeout: 5000 });
+    }, null, 5000);
+    if (!r.ok) throw r.error;
   }
   /** Lists the targets (measuring every one of them), then finds the one to tap. */
   async find(kind: BlockBarnKind, letter?: string): Promise<Target> {
@@ -484,16 +605,17 @@ class Barn {
   /** One real tap on `t`, judged in the page; returns whether the page answered it. */
   async tap(t: Target): Promise<boolean> {
     const { page } = this;
-    const gap = this.last + TAP_GAP_MS - Date.now();
-    if (gap > 0) await page.waitForTimeout(gap);
+    const gap = this.last + TAP_GAP_MS - this.clock.now();
+    if (gap > 0) await this.clock.wait(gap);
     await page.evaluate(() => (window as any).__bbPlay.reset());
     const c = center(t);
     await page.touchscreen.tap(c.x, c.y);
     // Only waits for the tap's own events to have been dispatched; nothing that happens after them counts.
-    const p = await page.waitForFunction(() => { const x = (window as any).__bbPlay.probe(); return x?.up ? x : false; }, null, { timeout: 1000 })
-      .then((h) => h.jsonValue() as Promise<{ ms?: number; end?: number }>, async () => (await page.evaluate(() => (window as any).__bbPlay.probe())) as { ms?: number; end?: number } | null);
+    type P = { ms?: number; end?: number } | null;
+    const w = await this.clock.until(() => { const x = (window as any).__bbPlay.probe(); return x?.up ? x : false; }, null, 1000);
+    const p: P = w.ok ? w.value : await page.evaluate(() => (window as any).__bbPlay.probe());
     const changed = p?.ms !== undefined;
-    this.last = Date.now();
+    this.last = this.clock.now();
     this.tapped.add(t.kind);
     this.records.push({ kind: t.kind, ...(t.letter ? { letter: t.letter } : {}), ms: r1(changed ? p!.ms! : p?.end ?? 0), changed, w: r1(t.w), h: r1(t.h), viewport: this.viewport });
     return changed;
@@ -512,10 +634,11 @@ class Barn {
    * finite animation running. A toddler would not wait, but where a tap lands must not depend on the driver's timing.
    */
   async settle(): Promise<void> {
-    await this.page.waitForFunction(() => {
+    const r = await this.clock.until(() => {
       const els = [document.getElementById('tower'), ...Array.from(document.querySelectorAll('#slots .animal'))].filter(Boolean) as Element[];
       return els.every((el) => el.getAnimations({ subtree: el.id === 'tower' }).every((a) => a.playState !== 'running' || (a.effect?.getComputedTiming().iterations ?? 1) === Infinity));
-    }, null, { timeout: 8000, polling: 50 });
+    }, null, 8000, 50);
+    if (!r.ok) throw r.error;
   }
   /**
    * One toddler gesture with real touches (CDP): every finger lands, (for a press) stays PRESS_MS, then all lift (or
@@ -524,23 +647,23 @@ class Barn {
   async gesture(gesture: BlockBarnGestureKind, phase: 'random' | 'combo', points: Point[]): Promise<BlockBarnGesture> {
     const { page } = this;
     await this.settle();
-    const gap = this.last + TAP_GAP_MS - Date.now();
-    if (gap > 0) await page.waitForTimeout(gap);
+    const gap = this.last + TAP_GAP_MS - this.clock.now();
+    if (gap > 0) await this.clock.wait(gap);
     const before = await this.state();
     const on = kindAt(await this.targets(), points[0]!);
     await page.evaluate(() => (window as any).__bbPlay.startGesture());
     const cdp = await this.cdp();
     await touch(cdp, 'touchStart', points);
     if (gesture === 'press') {
-      await page.waitForTimeout(PRESS_MS);
+      await this.clock.wait(PRESS_MS);
       await page.evaluate((ms) => (window as any).__bbPlay.hold(ms), PRESS_MS);
     }
     await touch(cdp, gesture === 'cancel' ? 'touchCancel' : 'touchEnd', []);
     const n = points.length;
     type G = { responses: number; regions: string[]; sounds: number; releases: number; downs: number };
-    const g = await page.waitForFunction((k) => { const x = (window as any).__bbPlay.gesture(); return x && x.releases >= k ? x : false; }, n, { timeout: 1000 })
-      .then((h) => h.jsonValue() as Promise<G>, () => page.evaluate(() => (window as any).__bbPlay.gesture()) as Promise<G>);
-    this.last = Date.now();
+    const w = await this.clock.until((k) => { const x = (window as any).__bbPlay.gesture(); return x && x.releases >= k ? x : false; }, n, 1000);
+    const g: G = w.ok ? w.value : await page.evaluate(() => (window as any).__bbPlay.gesture());
+    this.last = this.clock.now();
     const after = await this.state();
     const stuck = await this.stuck(after);
     if (g.downs < n || g.releases < n) stuck.push(`${n} finger${n === 1 ? '' : 's'} landed, the page heard ${g.downs} down and ${g.releases} up`);
@@ -565,7 +688,7 @@ class Barn {
     if (s.tower.length > 5) out.push(`the tower has ${s.tower.length} blocks`);
     return out;
   }
-  private session?: CDPSession;
+  session?: CDPSession;
   async cdp(): Promise<CDPSession> { return (this.session ??= await this.page.context().newCDPSession(this.page)); }
   /** One finger on the centre of the first target of `kind` (and `letter`), as a combination tap. */
   async comboTap(kind: BlockBarnKind, letter?: string): Promise<BlockBarnGesture> {
@@ -681,9 +804,9 @@ async function script(b: Barn): Promise<void> {
   await b.tapKind('block', invited);
   // The grown-up corner: a real 3 s hold opens it; back to the barn, and every kind of target still answers.
   const corner = center(await b.find('corner'));
-  const cdp = await page.context().newCDPSession(page);
+  const cdp = await b.cdp();
   await touch(cdp, 'touchStart', [corner]);
-  await page.waitForTimeout(HOLD_MS);
+  await b.clock.wait(HOLD_MS);
   await page.evaluate((ms) => (window as any).__bbPlay.hold(ms), HOLD_MS);
   await touch(cdp, 'touchEnd', []);
   if (!(await b.state()).corner) throw new Error(`${b.viewport}: the grown-up corner did not open after a 3 s hold`);
@@ -791,20 +914,20 @@ async function combos(b: Barn): Promise<void> {
  * After the tap that names `letter`: waits until its voice starts, a spoken line with the letter as a word of its own
  * or a clip whose key ends in it (letter-c, name-c), or VOICE_WAIT_MS passes. Lines from before the tap don't count.
  */
-function voiceFor(page: Page, letter: string | null, before: { s: number; p: number }): Promise<boolean> {
-  return page.waitForFunction(([l, s, p]) => {
+function voiceFor(b: Barn, letter: string | null, before: { s: number; p: number }): Promise<boolean> {
+  return b.clock.until(([l, s, p]) => {
     const b = (window as any).__bbPlay;
     const spoken = (b.spoken as string[]).slice(s as number), played = (b.played as string[]).slice(p as number);
     if (l === null) return spoken.length > 0 || played.length > 0;
     const word = new RegExp(`(^|[^a-z])${l}([^a-z]|$)`, 'i'), key = new RegExp(`-${l}\\.[a-z0-9]+$`, 'i');
     return spoken.some((x) => word.test(x)) || played.some((x) => key.test(x.split(/[?#]/)[0]!));
-  }, [letter, before.s, before.p] as const, { timeout: VOICE_WAIT_MS }).then(() => true, () => false);
+  }, [letter, before.s, before.p] as const, VOICE_WAIT_MS).then((r) => r.ok, () => false);
 }
 const voiceCount = (page: Page) => page.evaluate(() => { const b = (window as any).__bbPlay; return { s: b.spoken.length as number, p: b.played.length as number }; });
 
 /** True when the named animal of `letter` is drawn: an svg (with shapes), image or canvas filling its target. */
-function pictured(page: Page, letter: string): Promise<boolean> {
-  return page.waitForFunction((l) => {
+function pictured(b: Barn, letter: string): Promise<boolean> {
+  return b.clock.until((l) => {
     const t = ((window as any).__hal.targets() as Target[]).find((x) => x.kind === 'animal' && x.letter === l);
     if (!t) return false;
     return Array.from(document.querySelectorAll('svg, img, canvas')).some((e) => {
@@ -816,7 +939,7 @@ function pictured(page: Page, letter: string): Promise<boolean> {
       if (e instanceof HTMLImageElement) return e.complete && e.naturalWidth > 0;
       return true;
     });
-  }, letter, { timeout: 1500 }).then(() => true, () => false);
+  }, letter, 1500).then((r) => r.ok, () => false);
 }
 
 /**
@@ -834,27 +957,41 @@ async function alphabet(b: Barn, steps: number): Promise<Pick<BlockBarnPage, 'le
       checked.add(l);
       const before = await voiceCount(page);
       await b.tapKind('block', l);
-      if (await voiceFor(page, l, before)) voiced.add(l);
-      if (await pictured(page, l)) drawn.add(l);
+      if (await voiceFor(b, l, before)) voiced.add(l);
+      if (await pictured(b, l)) drawn.add(l);
     }
   };
   await nameAll();
   for (let i = 0; i < steps && checked.size < 26; i++) { // stops early once every letter has been named
     const before = await voiceCount(page);
     await b.tapKind('block', (await b.state()).floor[0]); // named, so this stacks it; a new letter arrives
-    await voiceFor(page, null, before); // let the stacked letter's line start before the next tap is judged
+    await voiceFor(b, null, before); // let the stacked letter's line start before the next tap is judged
     await nameAll();
   }
   return { letters: [...letters].sort(), voiced: [...voiced].sort(), pictured: [...drawn].sort() };
 }
 
-type Opened = { page: Page; viewport: BlockBarnViewport; close(): Promise<void>; failed(): string; navigations(): number; popups(): number };
-async function openBarn(browser: Browser, origin: string, viewport: BlockBarnViewport, initScript?: string): Promise<Opened> {
+type Opened = { page: Page; viewport: BlockBarnViewport; clock: Ticker; cdp?: CDPSession; barn(measure: boolean): Barn; close(): Promise<void>; failed(): string; navigations(): number; popups(): number };
+async function openBarn(browser: Browser, origin: string, viewport: BlockBarnViewport, initScript: string | undefined, clock: BlockBarnClock): Promise<Opened> {
   const { context, blockedRequests, consoleErrors } = await newHalContext(browser, { contextOptions: CONTEXT[viewport] });
   const pageErrors: string[] = [];
+  // Init scripts run in the order added: the real clock is saved, then the fake one installed (paused at load), then
+  // the instrumentation wraps the (fake) timers, then the fake clock's driver.
+  const fake = clock === 'fake';
+  if (fake) {
+    await context.addInitScript({ content: REAL_NOW_SCRIPT });
+    await context.clock.pauseAt(CLOCK_DATE);
+  }
   await context.addInitScript({ content: instrumentScript() });
+  if (fake) await context.addInitScript({ content: fakeClockScript() });
   if (initScript) await context.addInitScript({ content: initScript });
   const page = await context.newPage();
+  let cdp: CDPSession | undefined;
+  if (fake) {
+    cdp = await context.newCDPSession(page);
+    await cdp.send('Animation.setPlaybackRate', { playbackRate: 0 }); // the document timeline stands still (kept across navigation)
+  }
+  const ticker = fake ? fakeTicker(page) : realTicker(page);
   let navigations = 0, popups = 0;
   context.on('page', () => { popups++; }); // a popup or new tab leaves the barn too
   page.on('framenavigated', (f) => { if (f === page.mainFrame()) navigations++; });
@@ -866,6 +1003,8 @@ async function openBarn(browser: Browser, origin: string, viewport: BlockBarnVie
   return {
     page,
     viewport,
+    clock: ticker,
+    barn(measure) { const b = new Barn(page, viewport, measure, ticker); b.session = cdp; return b; },
     close: () => context.close().catch(() => {}),
     navigations: () => navigations,
     popups: () => popups,
@@ -887,7 +1026,7 @@ const why = (e: unknown, ms: number, what: string) => ((e as Error)?.message ===
   ? `hang: ${what} took over ${Math.round(ms / 1000)} s wall` : String((e as Error)?.message ?? e).split('\n')[0]);
 
 /** Plays the tap script at each viewport and the alphabet walk on the phone; one browser and one static server. */
-export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], alphabetSteps = BLOCK_BARN_ALPHABET_STEPS, initScript, deadlineMs = VIEW_DEADLINE_MS, toddlerSeeds = [...TODDLER_SEEDS], toddlerSteps }: BlockBarnPlayOptions = {}): Promise<BlockBarnPlayResult> {
+export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], alphabetSteps = BLOCK_BARN_ALPHABET_STEPS, initScript, deadlineMs = VIEW_DEADLINE_MS, toddlerSeeds = [...TODDLER_SEEDS], toddlerSteps, clock = 'fake' }: BlockBarnPlayOptions = {}): Promise<BlockBarnPlayResult> {
   let server: StaticServer | undefined, browser: Browser | undefined;
   const records: BlockBarnRecord[] = [], errors: string[] = [];
   const page: BlockBarnPage = { letters: [], voiced: [], pictured: [], flashes: 0, masterGain: 0, peakGain: 0, leftBarn: false, targets: [], gestures: [] };
@@ -903,9 +1042,9 @@ export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], 
     browser = await launchBrowser(); // throws "browser unavailable: ..."
     server = await serveGames();
     for (const v of viewports) {
-      const o = await openBarn(browser, server.origin, v, initScript);
+      const o = await openBarn(browser, server.origin, v, initScript, clock);
       try {
-        const b = new Barn(o.page, v, true);
+        const b = o.barn(true);
         let hung = false;
         try { await bounded(script(b), deadlineMs); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v}: ${why(e, deadlineMs, 'the tap script')}`); }
         if (!hung) try { await bounded(combos(b), deadlineMs); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v}: ${why(e, deadlineMs, 'the state combinations')}`); }
@@ -913,7 +1052,7 @@ export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], 
         page.targets.push(...b.sizes);
         page.gestures.push(...b.gestures);
         if (!hung) {
-          await o.page.waitForTimeout(200); // let a late async error surface
+          await o.clock.wait(200); // let a late async error surface
           await facts(o).catch((e) => errors.push(`${v}: ${why(e, 30_000, 'reading the page')}`));
         }
         if (o.failed()) errors.push(o.failed());
@@ -924,14 +1063,14 @@ export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], 
       const worker = async () => {
         for (let job = queue.shift(); job; job = queue.shift()) {
           const { seed, i } = job;
-          const s = await openBarn(browser!, server!.origin, v, initScript);
+          const s = await openBarn(browser!, server!.origin, v, initScript, clock);
           try {
-            const b = new Barn(s.page, v, false);
+            const b = s.barn(false);
             let hung = false;
             try { await bounded(randomPhase(b, seed, toddlerSteps), deadlineMs); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v} toddler seed ${seed}: ${why(e, deadlineMs, 'the toddler phase')}`); }
             seeded[i] = b.gestures;
             if (!hung) {
-              await s.page.waitForTimeout(200);
+              await s.clock.wait(200);
               await facts(s).catch((e) => errors.push(`${v} toddler seed ${seed}: ${why(e, 30_000, 'reading the page')}`));
             }
             if (s.failed()) errors.push(s.failed()); // the same words as the main page's, so one fault is reported once
@@ -943,9 +1082,9 @@ export async function runBlockBarnPlay({ viewports = [...BLOCK_BARN_VIEWPORTS], 
     }
     {
       const v = viewports[0] ?? '390x844';
-      const o = await openBarn(browser, server.origin, v, initScript);
+      const o = await openBarn(browser, server.origin, v, initScript, clock);
       try {
-        const b = new Barn(o.page, v, false);
+        const b = o.barn(false);
         let hung = false;
         try { Object.assign(page, await bounded(alphabet(b, alphabetSteps), deadlineMs)); } catch (e) { hung = (e as Error)?.message === HANG; errors.push(`${v} alphabet: ${why(e, deadlineMs, 'the alphabet walk')}`); }
         if (!hung) await facts(o).catch((e) => errors.push(`${v}: ${why(e, 30_000, 'reading the page')}`));

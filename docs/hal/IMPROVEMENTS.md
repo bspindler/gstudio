@@ -115,6 +115,8 @@ games' mechanics, some measures punished growth or moved in 25-point steps, and 
   87.0 → 89.81, Gearhold-play 87.37 → 87.47, Block Barn 100.
 **Open:** Block Barn's scorer now takes about 5 min (real-time browser play); the fake-clock follow-up in the plan
 should cut it. Watch the first nights for gains that the wider noise bands now reject.
+Done 2026-11-15: Block Barn plays on a fake clock (paused page clock + stopped animation timeline, advanced frame by
+frame); a default score run went from 4 min 53 s to 22 s with an identical report.
 
 ## 8. Smaller issues
 

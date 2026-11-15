@@ -102,7 +102,7 @@ steering: 11 of 73 kept passes moved fitness. Causes, common to every game:
 
 ## Follow-ups (after this plan)
 
-- [ ] **Block Barn plays on a fake clock.** `scripts/hal/block-barn-play.ts` drives the real page in real time: the
+- [x] **Block Barn plays on a fake clock.** `scripts/hal/block-barn-play.ts` drives the real page in real time: the
   toddler phase's 1 s presses, tap runs and settle waits cost about 11 s per seed per viewport (12 seeds on two
   viewports took 258 s on 2026-11-15), so each scorer run and review takes minutes. Install Playwright's
   `page.clock` before the page loads and advance it with `runFor()` instead of waiting, so presses and animations

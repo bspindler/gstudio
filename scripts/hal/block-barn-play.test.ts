@@ -82,7 +82,53 @@ describe('runBlockBarnPlay', () => {
     const shape = (rs: typeof a.records) => rs.map(({ ms: _ms, ...r }) => r);
     expect(shape(b.records)).toEqual(shape(a.records));
     expect(b.page).toEqual(a.page);
-  }, 1_800_000);
+  }, 300_000);
+
+  it('the fake clock plays exactly as the real clock (records, gestures, page, scores), in a fraction of the wall time', async () => {
+    const opts = { viewports: ['390x844' as const], toddlerSeeds: TODDLER_SEEDS.slice(0, 2), alphabetSteps: 2 };
+    let t0 = Date.now();
+    const real = await runBlockBarnPlay({ ...opts, clock: 'real' });
+    const realMs = Date.now() - t0;
+    t0 = Date.now();
+    const fake = await runBlockBarnPlay({ ...opts, clock: 'fake' });
+    const fakeMs = Date.now() - t0;
+    expect(real.errors).toEqual([]);
+    expect(fake.errors).toEqual([]);
+    // `ms` is the page's real handling time on either clock (it varies from run to run, so only its range is compared).
+    const shape = (rs: typeof real.records) => rs.map(({ ms: _ms, ...r }) => r);
+    expect(shape(fake.records)).toEqual(shape(real.records));
+    for (const r of [...real.records, ...fake.records]) expect(r.ms, `${r.viewport} ${r.kind}`).toBeLessThan(50);
+    expect(fake.page.gestures.length).toBeGreaterThan(60);
+    expect(fake.page).toEqual(real.page);
+    expect(scoreBlockBarn(fake.records, fake.page)).toEqual(scoreBlockBarn(real.records, real.page));
+    // The same workload, measured in this test under the same load: the fake clock skips every real wait.
+    expect(fakeMs, `fake ${fakeMs} ms, real ${realMs} ms`).toBeLessThan(realMs / 3);
+  }, 600_000);
+
+  it('on the fake clock a slow answer is still slow: `ms` is real time, not the frozen page clock', async () => {
+    // The first tap's pointerup busy-works for a long while before the barn hears it (a fixed amount of work, not a
+    // timed wait: the page's own clock does not move on the fake clock).
+    const slow = `(() => { let k = 0; window.addEventListener('pointerup', (e) => {
+      if (!e.isTrusted || ++k !== 1) return; let x = 0; for (let i = 0; i < 6e8; i++) x += Math.sqrt(i); window.__x = x; }, true); })();`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, toddlerSteps: [], initScript: slow, clock: 'fake' });
+    expect(r.errors).toEqual([]);
+    expect(r.records[0]).toMatchObject({ kind: 'floor', changed: true });
+    expect(r.records[0]!.ms).toBeGreaterThan(BLOCK_BARN_RULES.responsiveMs);
+    expect(r.records.slice(1).every((x) => x.ms < 50)).toBe(true);
+  }, 200_000);
+
+  it('on the fake clock a flash is caught even when it is gone before a real frame could show it', async () => {
+    // 30 ms after the first tap a fast-blinking square appears, and 20 ms later it is gone: many fake frames, but
+    // perhaps no real one, in between (the main page and the alphabet walk's page each see one).
+    const flash = `(() => { let k = 0; window.addEventListener('pointerup', (e) => { if (!e.isTrusted || ++k !== 1) return;
+      setTimeout(() => { const s = document.createElement('style'); s.textContent = '@keyframes hb { 50% { opacity: 0; } } .hb { animation: hb .1s linear 6; }';
+        document.head.append(s); const d = document.createElement('div'); d.className = 'hb'; d.style.cssText = 'position:fixed;width:40px;height:40px;background:#fff';
+        document.body.append(d); setTimeout(() => { d.remove(); s.remove(); }, 20); }, 30); }, true); })();`;
+    const r = await runBlockBarnPlay({ ...PHONE, alphabetSteps: 0, toddlerSteps: [], initScript: flash, clock: 'fake' });
+    expect(r.errors).toEqual([]);
+    expect(r.page.flashes).toBe(2);
+    expect(scoreBlockBarn(r.records, r.page).measures.calm).toBeLessThan(100);
+  }, 200_000);
 
   it('a barn that answers every finger of a two-finger tap or a palm fails: more than one response', async () => {
     // The barn's own handlers ignore extra fingers; this one (on the document, so inside the dispatch) does not.
@@ -378,10 +424,10 @@ describe('block barn instrumentation', () => {
 
 describe('npm run hal -- score --game block-barn', () => {
   it('prints a score report with the six measures', () => {
-    const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/hal.ts', 'score', '--game', 'block-barn'], { cwd: repo, encoding: 'utf8', timeout: 1_080_000 });
+    const r = spawnSync(process.execPath, ['--import', 'tsx', 'scripts/hal.ts', 'score', '--game', 'block-barn'], { cwd: repo, encoding: 'utf8', timeout: 180_000 });
     expect(r.stderr).not.toMatch(/error|unknown game/i);
     expect(r.status).toBe(0);
     for (const m of ['responsive', 'noDeadEnds', 'bigTargets', 'alphabet', 'calm', 'variety']) expect(r.stdout).toMatch(new RegExp(`^${m}: 100\\.0$`, 'm'));
     expect(r.stdout).toMatch(/^fitness: 100\.0$/m);
-  }, 1_100_000);
+  }, 200_000);
 });
