@@ -15,3 +15,18 @@ Changes:
 
 Changes:
 - HAL-129 tuning(hyperline): Hyperline: make weak sector intros bite 3-25%: **merged** (0.6.2)
+
+## Run run-2026-11-15T21-24-29-875Z
+
+**Hyperline**
+
+Identity: a single-lane, jump-only neon runner in the restored 0.4.1 chase camera with bloom.
+
+- **HAL-136, BOOST PADS (held, 0.7.0):** a new sector 10, before HYPERCORE, which becomes sector 11.
+  - Pads launch you over tall walls onto a short landing, then you time one tap through a spike field.
+  - The intro kills the casual bot 10% of the time, and the narrowest timing windows stay around 108 ms, well above the 50 ms floor.
+  - Sector survival is 71%, and fitness went 94.1 → 94.8.
+  - This fixes HAL-125's flaw, where the casual bot never died in the sector.
+
+Changes:
+- HAL-136 feature(hyperline): Hyperline: BOOST PADS sector with a tight landing: **held** (0.7.0)

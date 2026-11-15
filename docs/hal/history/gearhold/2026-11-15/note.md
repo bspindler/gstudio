@@ -19,3 +19,19 @@ Changes:
 
 Changes:
 - HAL-127 fix(gearhold): Gearhold: fix three.js renderer crash on load: **merged** (0.5.2)
+
+## Run run-2026-11-15T21-24-29-875Z
+
+**Gearhold**
+
+Identity: a brass clockwork platformer with presses, gears and kiln heat.
+
+- **HAL-135, Cog Bridge (dropped):** level 5, with turning gear platforms on the main route that spin faster and glow before they bite.
+  - In band on win rate (0.83) and pace (47 s median).
+  - It lifted gearhold-play 87.7 → 89.2.
+  - The gate rejected it because the level's feel was 81.6, below the roughly 94.8 bar the existing levels set.
+  - The ticket quoted the wrong band, so the next try should aim at the gate's real number.
+- The 0.5.2 three.js renderer still hasn't been seen loading in a browser.
+
+Changes:
+- HAL-135 feature(gearhold): Gearhold: level 5 Cog Bridge, turning gear platforms: **discarded** (0.6.0) (gearhold-play: new levels[4] feel 81.64 is out of its band (needs >= 94.84))
