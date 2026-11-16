@@ -55,13 +55,14 @@ function zoneProblems(src: string): string[] {
   return out;
 }
 
-// A tappable weathervane, as a game change would add it: its own box, routed by tapAt, listed in tapZones.
-const VANE_BOX = 'function vaneBox() { return { x: 10, y: 10, w: 90, h: 90 }; }\n';
-const VANE_ROUTE = '  const vb = vaneBox();\n  if (x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h) { spinVane(); return; }\n';
+// A made-up new tappable thing (a pennant, so it never collides with a real zone the game already has, like its
+// weathervane): its own box, routed by tapAt, listed in tapZones.
+const VANE_BOX = 'function pennantBox() { return { x: 10, y: 10, w: 90, h: 90 }; }\n';
+const VANE_ROUTE = '  const vb = pennantBox();\n  if (x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h) { spinVane(); return; }\n';
 const withVane = (src: string, { listed = true, route = VANE_ROUTE } = {}): string => {
   let s = src.replace('\nfunction tapAt(', `\n${VANE_BOX}function tapAt(`);
   s = s.replace(/(\nfunction tapAt\([^)]*\) \{\n)/, `$1${route}`);
-  if (listed) s = s.replace(/(\nfunction tapZones\(\) \{[\s\S]*?return \[\n)/, "$1    { kind: 'vane', ...vaneBox() },\n");
+  if (listed) s = s.replace(/(\nfunction tapZones\(\) \{[\s\S]*?return \[\n)/, "$1    { kind: 'pennant', ...pennantBox() },\n");
   return s;
 };
 
@@ -81,13 +82,13 @@ describe('block barn: tapZones() lists every tap zone tapAt routes', () => {
   it('a new zone routed by tapAt and listed in tapZones passes with the hook untouched', () => {
     const grown = withVane(HTML);
     expect(grown).toContain('spinVane()');
-    expect(grown).toContain("{ kind: 'vane', ...vaneBox() }");
+    expect(grown).toContain("{ kind: 'pennant', ...pennantBox() }");
     expect(hookBlock(grown)).toBe(hookBlock(HTML));
     expect(zoneProblems(grown)).toEqual([]);
   });
 
   it('a zone routed by tapAt but left out of tapZones is caught', () => {
-    expect(zoneProblems(withVane(HTML, { listed: false }))).toEqual(['vaneBox() is routed by tapAt but not listed in tapZones()']);
+    expect(zoneProblems(withVane(HTML, { listed: false }))).toEqual(['pennantBox() is routed by tapAt but not listed in tapZones()']);
   });
 
   it('a zone hit-tested without a listed box is caught', () => {

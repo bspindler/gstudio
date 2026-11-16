@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.3.0 (2026-11-15)
+- Tap the weathervane on the barn roof and it spins slowly, then settles.
+
 ## 0.2.3 (2026-11-15)
 - Internal only, nothing changes for players: the list of tappable places now lives next to the code that answers taps, so the test robot reads it from the game.
 

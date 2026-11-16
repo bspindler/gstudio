@@ -56,7 +56,7 @@
   @container (max-height: 76px) { #window { display: none; } }
   /* the big barn doors: tap them (the whole wall strip around them is the target) and they swing open; the named
      animals trot inside one by one and peek out of the window; tap again and they trot back out */
-  #door { position: absolute; left: 24%; bottom: 0; top: 14px; aspect-ratio: 1 / 1; z-index: 2; box-sizing: border-box; display: flex; overflow: hidden;
+  #door { position: absolute; left: 26%; bottom: 0; top: 14px; aspect-ratio: 1 / 1; z-index: 2; box-sizing: border-box; display: flex; overflow: hidden;
     border: 5px solid #f4e6c8; border-bottom: 0; border-radius: 8px 8px 0 0; background: linear-gradient(180deg, #2e1b12, #4a2a1b); }
   #door .leaf { flex: 1; background:
       linear-gradient(135deg, transparent 46%, rgba(0,0,0,.28) 46% 54%, transparent 54%),
@@ -71,6 +71,12 @@
   #moon { position: absolute; left: 62%; top: 18%; width: 22%; aspect-ratio: 1 / 1; border-radius: 50%; background: transparent; box-shadow: inset -7px -1px 0 0 #fff3c4; }
   #dusk { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity 3s ease-in-out; background: rgba(50, 40, 100, .26); }
   .dusk-on #dusk-sky { opacity: 1; } .dusk-on #dusk { opacity: 1; }
+  /* tap the roof weathervane (on the free strip of the wall, clear of the door and window): the arrow turns slowly and settles. No sound, flashing or text. */
+  #vane { position: absolute; bottom: 0; top: 30px; width: 40px; z-index: 3; pointer-events: none; display: none; }
+  #vane .pole { position: absolute; left: 50%; bottom: 0; top: 40%; width: 5px; margin-left: -2.5px; background: var(--beam); border-radius: 2px; }
+  #vane .arrow { position: absolute; left: 50%; top: 40%; width: 34px; height: 14px; margin: -7px 0 0 -17px; background: #d9a520; clip-path: polygon(0 50%, 22% 0, 22% 35%, 78% 35%, 78% 0, 100% 50%, 78% 100%, 78% 65%, 22% 65%, 22% 100%);
+    transform: rotate(var(--vr, 0deg)); transition: transform 3.2s cubic-bezier(.15, .6, .25, 1); }
+  #vane .hub { position: absolute; left: 50%; top: 40%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--beam); }
   .animal.nap .eye { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(.12); transition: transform 1.6s ease-in-out; }
   .animal.nap .art { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(1, .94); transition: transform 1.6s ease-in-out; }
   #peeks { position: absolute; inset: 0; overflow: hidden; border-radius: 999px 999px 0 0; pointer-events: none; display: flex; justify-content: center; align-items: flex-end; gap: 2%; }
@@ -294,6 +300,7 @@
     .animal.oh .eye { animation: none; }
     #door .leaf { transition: none; }
     #dusk, #dusk-sky { transition: none; }
+    #vane .arrow { transition: none; }
     .animal.nap .eye, .animal.nap .art { transition: none; }
     #peeks .peek { animation: none; }
     .animal.trot-in { animation: none; opacity: 0; }
@@ -325,7 +332,7 @@
 </head>
 <body>
 <main id="barn" aria-label="Block Barn">
-  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div></div></div>
+  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
   <div id="play">
     <div id="floor"></div>
     <div id="stage">
@@ -378,7 +385,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.2.3', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.3.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -608,6 +615,7 @@ function applyLayout() {
   root.setProperty('--T', `${layout.T}px`);
   placeTower();
   layout.floorBox = emptyFloor();
+  vaneBox(); // places (or hides) the weathervane to match its zone
   return layout;
 }
 // The stack stands in the middle of a narrow tower zone, at the left of a wide one; the tower's animal goes where
@@ -1052,6 +1060,30 @@ function resetSky() {
   slotsEl.querySelectorAll('.nap').forEach((a) => a.classList.remove('nap'));
 }
 
+// ---------- the weathervane ----------
+// Tap the vane on the roof wall: the arrow turns slowly and settles. Its zone is the widest strip of wall left free by
+// the sky and door zones, so it never overlaps them; it is left out when less than 44px is free. No sound, text or count.
+let vaneAngle = 0;
+function vaneBox() {
+  const w = $('wall').getBoundingClientRect(), v = $('vane');
+  const d = doorBox(), sk = skyBox();
+  const taken = [d, ...(sk ? [sk] : [])].sort((a, b) => a.x - b.x);
+  // the free strips of the wall: before, between and after the door and sky zones; the widest one holds the vane
+  let best = null, at = w.left;
+  for (const t of [...taken, { x: w.right, w: 0 }]) {
+    if (!best || t.x - at > best.w) best = { x: at, w: t.x - at };
+    at = Math.max(at, t.x + t.w);
+  }
+  if (!best || best.w < 44) { v.style.display = 'none'; return null; }
+  v.style.display = 'block';
+  v.style.left = `${best.x - w.left + best.w / 2 - 20}px`;
+  return { x: best.x, y: w.top, w: best.w, h: w.height };
+}
+function tapVane() {
+  vaneAngle += 300;
+  $('vane').querySelector('.arrow').style.setProperty('--vr', `${vaneAngle}deg`);
+}
+
 /** The tappable things (CSS px boxes), for routing and for the hook. */
 function hitBoxes() {
   const out = [];
@@ -1078,6 +1110,7 @@ function tapZones() {
     ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
     { kind: 'door', ...box(doorBox()) },
     ...(sk ? [{ kind: 'sky', ...box(sk) }] : []),
+    ...(vaneBox() ? [{ kind: 'vane', ...box(vaneBox()) }] : []),
     { kind: 'floor', ...box(applyLayout().floorBox) },
     { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
   ];
@@ -1095,6 +1128,8 @@ function tapAt(x, y) {
   if (x >= dr.x && x <= dr.x + dr.w && y >= dr.y && y <= dr.y + dr.h) { tapDoor(); return; }
   const sk = skyBox();
   if (sk && x >= sk.x && x <= sk.x + sk.w && y >= sk.y && y <= sk.y + sk.h) { tapSky(); return; }
+  const vb = vaneBox();
+  if (vb && x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h) { tapVane(); return; }
   let best = null, bestD = Infinity, bestC = Infinity;
   for (const b of hitBoxes()) {
     const d = distTo(b, x, y), c = Math.hypot(b.x + b.w / 2 - x, b.y + b.h / 2 - y);
