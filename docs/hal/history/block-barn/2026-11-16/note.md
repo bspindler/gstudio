@@ -55,3 +55,20 @@ The margins (about 139 px each side) are calculated, not measured from a screens
 
 Changes:
 - HAL-167 fix(block-barn): Centre the block columns on the hay floor: 0.3.2 still sits them far right: **merged** (0.3.2)
+
+## Run run-2026-11-16T14-52-23-174Z
+
+### Block Barn
+
+Block Barn is a calm, wordless barn toy for small children. There are no timers, no text for the child and no flashing, just animals and gentle things to tap. Tonight's two changes keep that.
+
+- **HAL-168:** the grown-up hint is now gender-neutral ("the letters of your child's name"). Nothing the child sees changed.
+- **HAL-169:** the vane's post and hub are gold with a light outline, so the whole weathervane should stand out from the beam. Spin, size, tap area and sound are unchanged.
+
+The score held at 100 for both. Neither change was checked on a phone screenshot before merge, so please check the vane post on your phone. Both also report version 0.3.2, a number already in use, so the versions need confirming.
+
+New toys stay paused. The trough (HAL-158), nuzzle (HAL-159), butterfly (HAL-162) and sunbeam (HAL-163) are waiting for you.
+
+Changes:
+- HAL-168 fix(block-barn): Grown-up corner: say "your child's name" instead of "her name's letters": **merged** (0.3.2)
+- HAL-169 polish(block-barn): Weathervane post stands out from the dark roof beam behind it: **merged** (0.3.2)
