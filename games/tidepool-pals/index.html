@@ -568,13 +568,13 @@ import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { ABILITIES, GRAVITY, activeMask, applyAbility, bestSwap, buildBoard, collapse, counter, doubleCounts, ensureBubbles, extraMovesCanWin, goalStatus, goalsMet,
   hasMoves, helperCharge, isFixed, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveMatches, resolveSwap, rockOf,
   shuffle, starsFor, tidePhase, tideTurns, turnTide, COLS, ROWS } from './board.js';
-import { HELPER_LEVEL, levelDef, withoutTides } from './levels.js';
+import { HELPER_LEVEL, levelDef, levelFromSearch, withoutTides } from './levels.js';
 import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, buyPalWithSandDollars, loadSave, palEarned, pickHelper,
   recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, writeSave } from './save.js';
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.11.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.12.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -2135,5 +2135,5 @@ hud();
 // A returning player opens on the reef map with Continue at their furthest unlocked level; a new player starts level 1.
 { const c = continueAt(S); if (c && c.level > S.level) { S.level = c.level; persist(); } }
 showView('map');
-if (!continueAt(S)) openLevel(1);
+{ const want = levelFromSearch(location.search); if (want) openLevel(want); else if (!continueAt(S)) openLevel(1); }
 </script>

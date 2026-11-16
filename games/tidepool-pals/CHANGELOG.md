@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.12.0 (2026-11-16)
+- Adding ?level=N to the page address opens straight onto that level's mission card and board (levels 1 to 24).
+
 ## 0.11.0 (2026-11-15)
 - Swiping the reef board on iPhone no longer triggers double-tap or pinch zoom.
 - New level 24: a crab-shaped pool with litter to clear and just 8 moves.

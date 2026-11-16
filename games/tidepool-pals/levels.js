@@ -255,6 +255,13 @@ const SPECIAL = {
 export function levelDef(n) { return n >= 1 && n <= AUTHORED.length ? AUTHORED[n - 1] : SPECIAL[n] ?? generateLevel(n); }
 /** The level for number n, with its `pool` index. Same as levelDef; reef.js reads levelFor(n).pool. */
 export const levelFor = levelDef;
+/** `?level=N` in the page address: a whole number from 1 to the level count, otherwise null (ignored). */
+export function levelFromSearch(search) {
+  const v = new URLSearchParams(search || '').get('level');
+  if (v === null || !/^\d+$/.test(v)) return null;
+  const n = Number(v);
+  return n >= 1 && n <= Math.max(AUTHORED.length, ...Object.keys(SPECIAL).map(Number)) ? n : null;
+}
 
 /**
  * The level with tides switched off (the `tides` flag): high tide only. Rock pools stay water for good, so
