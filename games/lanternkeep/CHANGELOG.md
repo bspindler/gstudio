@@ -6,6 +6,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Lanternkeep: between waves, a few fireflies drift in to the lantern for a calm breather.
 - Night Watch's late waves now swell faster and arrive closer together, so the endless night ends sooner.
 - Later nights (6 to 15) now hit harder, scaled to the perks you'd typically own by then, so they stay a real challenge.
+- Night Watch: the swelling after night 15 is a little gentler, so more ways of playing last a fair stretch of the night.
 
 ## 0.3.1 (2026-11-14)
 - The creature path now glows faintly at night, with a slow moonlit breathing, so the route reads more clearly.

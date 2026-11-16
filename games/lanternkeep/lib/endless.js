@@ -2,7 +2,7 @@
 // run faces the same nights; only your plants and timing differ. The best wave reached is kept locally.
 const WAVES = 60;
 const RAMP_FROM = 14; // waves up to here (0-based) are unchanged
-const RAMP = 1.06;  // extra growth per wave after that
+const RAMP = 1.045; // extra growth per wave after that
 
 function lcg(seed) {
   let s = seed >>> 0;
