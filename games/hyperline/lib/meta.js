@@ -28,6 +28,15 @@ export function clampStart(n, far) {
   return Math.max(1, Math.min(Math.max(1, Math.floor(far) || 1), Math.floor(n) || 1));
 }
 
+export const MAX_URL_SECTOR = 99;
+/** Reads ?sector=N from a page address's search string. Whole numbers 1 to 99 only; anything else gives 0 (ignored). */
+export function sectorFromSearch(search) {
+  const v = new URLSearchParams(search || '').get('sector');
+  if (v === null || !/^\d{1,3}$/.test(v.trim())) return 0;
+  const n = Number(v);
+  return n >= 1 && n <= MAX_URL_SECTOR ? n : 0;
+}
+
 /** Folds one sim (or game) event into the run stats. Returns a new object. */
 export function applyEvent(s, ev) {
   const n = { ...s };

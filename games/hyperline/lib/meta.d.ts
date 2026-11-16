@@ -18,6 +18,8 @@ export function newRunStats(mode: Mode, start?: number): RunStats;
 export function sectorStart(n: number): number;
 export function isPractice(s: RunStats): boolean;
 export function clampStart(n: number, far: number): number;
+export const MAX_URL_SECTOR: number;
+export function sectorFromSearch(search: string): number;
 export function applyEvent(s: RunStats, ev: MetaEvent): RunStats;
 export function runCredits(s: RunStats): number;
 export const MISSIONS: Mission[];

@@ -240,12 +240,12 @@ import { createCourse, extendCourse, pruneCourse } from './lib/course.js';
 import { createRunner, step } from './lib/sim.js';
 import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
-import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, migrateSave, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
+import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, sectorFromSearch, migrateSave, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
 import { createBloom, drawScene, drawSkinThumb, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.7.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.8.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -399,8 +399,11 @@ new ResizeObserver(resize).observe(stage);
 
 let G, pressed = false;
 /* Practice start: endless runs may begin at any sector already reached. Free, and never saved as a BEST or ghost. */
-let pick = 1;
-const startFor = (mode) => (mode === 'endless' ? clampStart(pick, S.far) : 1);
+// ?sector=N in the page address opens the picker up to N (read locally, never saved or sent); S.far is untouched.
+const urlSector = sectorFromSearch(location.search);
+let pick = urlSector || 1;
+const reach = () => Math.max(S.far, urlSector);
+const startFor = (mode) => (mode === 'endless' ? clampStart(pick, reach()) : 1);
 function makeCourse(mode, start = 1) {
   const from = sectorStart(start);
   const c = createCourse(mode === 'daily' ? dailySeed(today()) : (Math.random() * 4294967296) >>> 0, from);
@@ -494,7 +497,7 @@ function simStep() {
     G.stats = applyEvent(G.stats, { t: 'sector', sector: sec });
     banner(sec - 1); audio.sector(); audio.setSector(sec - 1);
     studio.track('custom', { event: 'sector_reached', sector: sec, mode: G.mode, run: G.run });
-    if (sec > S.far) { S.far = sec; save(); }
+    if (sec > S.far && G.start <= S.far) { S.far = sec; save(); } // a ?sector= jump past your progress doesn't count as reached
   }
   for (const id of checkMissions(S.missions, G.stats)) {
     if (G.doneM.includes(id)) continue;
@@ -631,8 +634,8 @@ function renderReady() {
   $('modeBestE').textContent = `Best ${fmt(S.best)}m`;
   $('modeBestD').textContent = `Today ${fmt(dailyBest())}m`;
   const start = startFor(S.mode), sp = $('startPick');
-  sp.hidden = S.mode !== 'endless' || S.far < 2; sp.classList.toggle('on', start > 1);
-  sp.querySelector('[data-d="-1"]').disabled = start <= 1; sp.querySelector('[data-d="1"]').disabled = start >= S.far;
+  sp.hidden = S.mode !== 'endless' || reach() < 2; sp.classList.toggle('on', start > 1);
+  sp.querySelector('[data-d="-1"]').disabled = start <= 1; sp.querySelector('[data-d="1"]').disabled = start >= reach();
   $('startTxt').innerHTML = `Start · Sector ${start}<small>${start > 1 ? `${sectorInfo(start - 1).name} · practice, no BEST or missions` : 'Full run · counts for BEST'}</small>`;
   $('readySub').textContent = S.mode === 'daily'
     ? `Same course for everyone today · new course in ${untilReset()}`
@@ -827,7 +830,7 @@ document.addEventListener('click', async (e) => {
     case 'close': closeModal(); break;
     case 'mode': if (G.state !== 'ready') break; S.mode = b.dataset.mode === 'daily' ? 'daily' : 'endless'; save(); audio.click(); reset(); break;
     case 'start': if (G.state !== 'ready' || S.mode !== 'endless') break;
-      pick = clampStart(startFor('endless') + Number(b.dataset.d), S.far); audio.click(); reset(); break;
+      pick = clampStart(startFor('endless') + Number(b.dataset.d), reach()); audio.click(); reset(); break;
     case 'pause': pause(); break;
     case 'settings': pause(); showSettings(); break;
     case 'set': {

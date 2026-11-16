@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.8.0 (2026-11-16)
+- Test any sector directly: add ?sector=N to the page address to start an Endless practice run at that sector (1 to 99); your BEST and reached progress stay untouched.
+
 ## 0.7.0 (2026-11-15)
 - Sector intros are sharper: the Crumble Track and Twin Fangs openers now ask for tighter jump timing.
 - New sector BOOST PADS: pads launch you over tall walls onto a short landing strip, then time one tap through the spikes.
