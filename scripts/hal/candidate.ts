@@ -42,6 +42,12 @@ import type { ScreensResult } from './screens.js';
 import { startScoreBroker } from './score-broker.js';
 
 export const IMPLEMENTER_TIMEOUT_MS = 20 * 60_000;
+/** Features (a new level or sector, scored again and again with the slower play scorers) get longer: HAL-140 ran out of 20 min. */
+export const FEATURE_IMPLEMENTER_TIMEOUT_MS = 35 * 60_000;
+/** The implementer's time limit for a ticket of `kind`; a ctx override wins. */
+export function implementerTimeoutFor(kind: Ticket['kind'], override?: number): number {
+  return override ?? (kind === 'feature' ? FEATURE_IMPLEMENTER_TIMEOUT_MS : IMPLEMENTER_TIMEOUT_MS);
+}
 export const CHECK_TIMEOUT_MS = 20 * 60_000;
 export const RESULT_PREFIX = 'HAL-RESULT ';
 export const NONCE_ENV = 'HAL_CHECK_NONCE';
@@ -434,7 +440,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
       const askDir = await mkdtemp(join(tmpdir(), 'hal-ask-'));
       const call: ClaudeCall = {
         role: 'implementer', prompt: text, cwd: wt.dir, scoreDir: askDir, billing: ctx.billing, maxBudgetUsd: slice, model: ctx.model,
-        allowedTools: roleAllowedTools('implementer'), disallowedTools: [], timeoutMs: ctx.implementerTimeoutMs ?? IMPLEMENTER_TIMEOUT_MS,
+        allowedTools: roleAllowedTools('implementer'), disallowedTools: [], timeoutMs: implementerTimeoutFor(ticket.kind, ctx.implementerTimeoutMs),
         denyReadPaths: denyRead,
         ...(ctx.appendSystemPromptFile ? { appendSystemPromptFile: ctx.appendSystemPromptFile } : {}),
       };

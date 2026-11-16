@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTrailers, type ScoreReport, type Ticket } from '@studio/core/hal';
 import { secretReadPaths } from './env.js';
-import { defaultCommands, isHalFault, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseResult, runCandidate, scriptArgv, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
+import { defaultCommands, FEATURE_IMPLEMENTER_TIMEOUT_MS, implementerTimeoutFor, isHalFault, HISTORY_SIZE, IMPLEMENTER_TIMEOUT_MS, jpegSize, parseResult, runCandidate, scriptArgv, scorersFor, type CandidateCtx, type CandidateResult, type CheckCommands } from './candidate.js';
 import type { ClaudeCall, ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
 import { sandboxAvailable } from './sandbox.js';
@@ -162,6 +162,12 @@ describe('runCandidate (temp git repo)', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ role: 'implementer', cwd: join(repo, '.data/hal/wt/HAL-1'), model: 'test-model', billing: 'api', maxBudgetUsd: 3, timeoutMs: IMPLEMENTER_TIMEOUT_MS, denyReadPaths: secretReadPaths(repo) });
     expect(IMPLEMENTER_TIMEOUT_MS).toBe(20 * 60_000);
+    // A feature (a new level or sector, scored again and again with the slower play scorers) gets longer: HAL-140, a
+    // new Gearhold level, ran out of 20 minutes on 2026-11-15. A ctx override still wins (tests).
+    expect(FEATURE_IMPLEMENTER_TIMEOUT_MS).toBe(35 * 60_000);
+    expect(implementerTimeoutFor('feature')).toBe(FEATURE_IMPLEMENTER_TIMEOUT_MS);
+    for (const k of ['fix', 'tuning', 'polish'] as const) expect(implementerTimeoutFor(k)).toBe(IMPLEMENTER_TIMEOUT_MS);
+    expect(implementerTimeoutFor('feature', 5)).toBe(5);
     expect(calls[0]!.prompt).toContain('Smoother jumps');
     expect(calls[0]!.prompt).not.toContain(KEY);
     expect(calls[0]!.prompt).not.toMatch(/\{\{\w+\}\}/);
