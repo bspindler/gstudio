@@ -50,3 +50,12 @@ Changes:
 Changes:
 - HAL-145 tuning(gearhold): Gearhold: ease Kiln Heart and Press Gallery together toward the win band: **discarded** (0.5.4) (gearhold-play: no real gain: 6.67 < 17.31)
 - HAL-147 feature(gearhold): Gearhold: level 5 Cog Bridge with turning gear platforms, feel at the bar: **discarded** (0.6.0) (gearhold-play: new levels[4] pace 94.94 is out of its band (needs >= 97.12))
+
+## Run run-2026-11-16T10-59-37-219Z
+
+### Gearhold
+Gearhold is a brass clockwork dungeon where you win by timing your moves to the machinery. Cog Bridge (HAL-150, held) keeps that identity: the wait sits on the main route, at presses you have to read. It reached pace 100 with feel 99.5 and 63% wins, and lifted gearhold-play from 87.69 to 90.12. It is built from press plates, not true turning gears, and overall tension dipped from 21.9 to 17.5. The Kiln Heart crawler cut (HAL-149) was dropped for no real gain. Winnable is now held back by The Orrery and Press Gallery being too easy, not too hard.
+
+Changes:
+- HAL-149 tuning(gearhold): Gearhold: Kiln Heart, one fewer crawler in the exit room: **discarded** (0.5.4) (gearhold-play: no real gain: 0.00 < 17.08)
+- HAL-150 feature(gearhold): Gearhold: level 5 Cog Bridge, longer main route to reach the pace bar: **held** (0.6.0)
