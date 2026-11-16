@@ -35,3 +35,10 @@ Changes:
 - HAL-161 polish(block-barn): Tumbled blocks settle neatly onto the hay bale instead of overlapping a block: **merged** (0.3.2)
 - HAL-162 feature(block-barn): A butterfly drifts in through the window and lands on the newest named animal: **held** (0.4.0)
 - HAL-163 feature(block-barn): Morning sunbeam slowly crosses the hay floor from the barn window: **held** (0.4.0)
+
+## Run run-2026-11-16T14-28-16-591Z
+
+Changes:
+- HAL-164 fix(block-barn): Centre the block columns on the hay floor using the measured free floor width: **merged** (0.3.2)
+- HAL-165 polish(block-barn): Centre a lone block in the last row instead of leaving it under the left column: **discarded** (0.3.2) (block-barn: fitness regressed 1.17 (> 1); block-barn: bigTargets regressed 7.02 (> 1))
+- HAL-166 polish(block-barn): Let the block rows share the spare floor height so tall phones have no bare gaps: **discarded** (implementer blocked: The ticket's premise doesn't match the code: tall-phone rows are already 3 equal 1fr rows filling the floor, so there is no spare height to share, and I can't see 1.png or 3-tumble.png to measure row-top y before and after (L-096). Needs a fresh screenshot and the viewport size,)
