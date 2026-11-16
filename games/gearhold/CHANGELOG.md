@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.6.0 (2026-11-16)
+- New level 5, Cog Bridge: a long clockwork walkway with a drone, a crawler and a kilnwarden, and gear platforms you have to wait on before they line up.
+
 ## 0.5.3 (2026-11-15)
 - Internal only, nothing changes for players: the list of on-screen overlays left out of the test robot's top-down level pictures now lives in the game code.
 

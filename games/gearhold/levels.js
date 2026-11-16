@@ -115,4 +115,22 @@ export const LEVELS = [
       '################################################',
     ],
   },
+  {
+    name: 'Cog Bridge',
+    hint: 'Gear platforms turn over the drop. Wait for one to line up, then cross; a hot glow means it is about to slam.',
+    mood: {
+      skyTop: [0.1, 0.3, 0.55], skyHorizon: [0.98, 0.78, 0.5], cloud: [0.96, 0.86, 0.76],
+      sunDir: [0.3, 0.4, -0.5], sunColor: [1.6, 1.2, 0.75],
+      ambient: [0.45, 0.52, 0.7], ground: [0.38, 0.3, 0.22], lamp: [1.0, 0.74, 0.4], crystal: [0.5, 0.85, 0.95],
+      fog: 0.017, stars: 0,
+    },
+    map: [
+      '##################################################',
+      '#S...#MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM####',
+      '#....D....w....d...u...c...b...u...u...u......h.X#',
+      '#.a..#.........o...u.h.ca......u.a.u...u..d.....##',
+      '#....#MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM####',
+      '##################################################',
+    ],
+  },
 ];
