@@ -26,3 +26,11 @@ Changes:
 
 Changes:
 - HAL-142 feature(tidepool-pals): Tidepool: level 24, a crab-shaped pool with litter: **discarded** (0.11.0) (implementer blocked: The remaining failures are 60s timeouts in Hal's protected hal-browser tests (candidate.unit.test.ts, run.unit.test.ts), which don't exercise Tidepool; my change passes typecheck and all tidepool tests.)
+
+## Run run-2026-11-16T06-00-02-465Z
+
+**Tidepool:** the zoom guard shipped as 0.10.2, so iPhone swipes no longer zoom the reef (HAL-143). Level 24 is held (HAL-148): a crab silhouette with litter and 8 moves, winning 72%. It sits clearly apart from the starfish level 23 beside it, which is the less-generic direction you asked for. Score holds at 94.4.
+
+Changes:
+- HAL-143 fix(tidepool-pals): Tidepool: stop double-tap and pinch zoom while swiping the board: **merged** (0.10.2)
+- HAL-148 feature(tidepool-pals): Tidepool: level 24, a crab-shaped pool with litter and one fewer move: **held** (0.11.0)

@@ -37,3 +37,10 @@ Changes:
 
 Changes:
 - HAL-137 tuning(hyperline): Hyperline: make flip, bar and padPit intros bite: **merged** (0.7.0)
+
+## Run run-2026-11-16T06-00-02-465Z
+
+**Hyperline:** rapid jump taps no longer trigger double-tap or pinch zoom (HAL-144). The neon runner, your 0.4.1 camera and the bloom are untouched, and the score holds at 99.1. The version label appears to reuse 0.7.0, so I'll check it gets its own patch number.
+
+Changes:
+- HAL-144 fix(hyperline): Hyperline: stop double-tap zoom when tapping fast to jump: **merged** (0.7.0)

@@ -21,3 +21,10 @@ Changes:
 Changes:
 - HAL-139 feature(block-barn): Block Barn: tap the roof weathervane, it spins slowly: **held** (0.3.0)
 - HAL-141 feature(block-barn): Block Barn: tap the cloud for soft rain and a rainbow: **held** (0.3.0)
+
+## Run run-2026-11-16T06-00-02-465Z
+
+**Block Barn:** the weathervane is live (0.3.0). The rain-cloud toy is rebuilt on top of it and held (HAL-146): slow code-drawn rain, then a fading rainbow, in its own tap zone, with calm and variety at 100. The zoom fix you reported was wrongly rejected as a liability item and comes first next run.
+
+Changes:
+- HAL-146 feature(block-barn): Block Barn: tap the cloud for soft rain and a rainbow, rebuilt on 0.3.0: **held** (0.3.0)

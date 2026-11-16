@@ -42,3 +42,11 @@ Changes:
 
 Changes:
 - HAL-140 feature(gearhold): Gearhold: level 5 Cog Bridge with clear sightlines: **discarded** (implementer timed out)
+
+## Run run-2026-11-16T06-00-02-465Z
+
+**Gearhold:** both tickets were dropped, but both moved closer. The easing pass (HAL-145) lifted winnable from 71.7 to 78.3 and put Kiln Heart in band, while Press Gallery overshot to 0.92 wins. Cog Bridge (HAL-147) now passes feel (100) with a kilnwarden and foes on the main route, and misses only the per-level pace bar (94.9 against 97.1). The beat-timed brass identity is intact in both.
+
+Changes:
+- HAL-145 tuning(gearhold): Gearhold: ease Kiln Heart and Press Gallery together toward the win band: **discarded** (0.5.4) (gearhold-play: no real gain: 6.67 < 17.31)
+- HAL-147 feature(gearhold): Gearhold: level 5 Cog Bridge with turning gear platforms, feel at the bar: **discarded** (0.6.0) (gearhold-play: new levels[4] pace 94.94 is out of its band (needs >= 97.12))
