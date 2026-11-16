@@ -99,6 +99,23 @@ describe('validateTickets', () => {
     }
     expect(why([t({ title: 'Add a CDN script for particles', liability: 'CDN script: cdn.example.com/p.js' })])).toEqual([]);
   });
+  it('near misses: the game\'s own address is not a new host', () => {
+    // 2026-11-16: all five tickets were rejected two nights running for "url" (Block Barn zoom guard, ?level= starts).
+    for (const [title, w] of [
+      ['Block Barn: stop iPhone double-tap and pinch zoom on the whole page', 'Brian saw it on the Pages url on an iPhone: touch-action: manipulation plus a gesturestart guard'],
+      ['Tidepool: open any level from the URL (?level=24) for testing', 'read the level from the page URL query string so Brian can jump to level 24'],
+      ['Gearhold: start any level from the URL (?level=4) for testing', 'URLSearchParams on location.search, no network'],
+      ['Hyperline: start any sector from the URL (?sector=9) for testing', 'a ?sector= link'],
+    ] as const) {
+      expect(why([t({ title, why: w })]), title).toEqual([]);
+    }
+    for (const title of ['Load sprites from a URL', 'Fetch the level list from a remote URL', 'Send scores to an API URL']) {
+      expect(why([t({ title })]), title).toEqual([expect.stringContaining('liability')]);
+    }
+  });
+  it('a liability rejection names the words that tripped it', () => {
+    expect(why([t({ title: 'Add a CDN script for particles' })])).toEqual([expect.stringContaining('"CDN"')]);
+  });
   it('near misses: in-game coin prices are not money', () => {
     for (const [title, w] of [
       ['Lower shop prices in coins', 'Hyperline players cannot afford the second trail'],

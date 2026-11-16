@@ -52,11 +52,20 @@ const PROTECTED: RegExp[] = [
 // currency ("shop prices in coins") is not money: only real-money signals count.
 const LIABILITY: RegExp[] = [
   /\bcdn\b/i, /\bnpm (?:install|i)\b/i, /\b(?:add|install|import|use)\b[^.;\n]{0,20}\b(?:dependency|dependencies|library|package|framework|engine)\b/i,
-  /\bpackage(?:-lock)?\.json\b/i, /\banalytics\b/i, /\bhttps?:\/\//i, /\burls?\b/i,
+  /\bpackage(?:-lock)?\.json\b/i, /\banalytics\b/i, /\bhttps?:\/\//i,
+  // A URL is a liability only when the game reaches out to it; its own address ("the Pages url", "?level=24") is not.
+  /\b(?:load\w*|fetch\w*|download\w*|stream\w*|request\w*|call\w*|send\w*|post\w*|upload\w*|remote|external|third[- ]party|api)\b[^.;\n]{0,24}\burls?\b/i,
   /[$€£]/, /\breal[- ]money\b/i, /\b(?:iap|in-app purchases?|purchases?|purchasing|subscriptions?)\b/i,
   /\b(?:ads|adverts?|advertising|advertisements?|ad (?:network|banner|sdk)s?)\b/i,
   /\bgoogle fonts\b/i, /\bapi key\b/i,
 ];
+
+// Phrases that name the game's own address: dropped before the liability check so "read ?level= from the page URL" passes.
+const OWN_ADDRESS = [
+  /\b(?:page|pages|game'?s?|own|current|its|this)\s+urls?\b/gi,
+  /\burls?\b\s*\(?\s*(?:\?|#|query|param|search|hash|fragment)/gi,
+];
+const withoutOwnAddress = (s: string) => OWN_ADDRESS.reduce((x, re) => x.replace(re, ' '), s);
 
 const norm = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -102,7 +111,12 @@ export function validateTickets(json: unknown, games: string[], measures: Record
     }
     const text = `${k.title ?? ''}\n${k.why ?? ''}`;
     if (PROTECTED.some((re) => re.test(withoutHookDenials(text)))) errors.push('touches a protected area by its own description');
-    else if (k.liability === undefined && LIABILITY.some((re) => re.test(text))) errors.push('looks like a liability item (dependency, host, money); set "liability"');
+    else if (k.liability === undefined) {
+      const own = withoutOwnAddress(text);
+      const hit = LIABILITY.map((re) => own.match(re)?.[0]).find(Boolean);
+      // Name the words that tripped it, so the planner (and Brian) can see a misfire instead of guessing.
+      if (hit) errors.push(`looks like a liability item (dependency, host, money: "${hit.trim().slice(0, 40)}"); set "liability"`);
+    }
     if (errors.length) {
       rejected.push({ index: i + 1, ...(str('id') ? { id: k.id as string } : {}), ...(typeof k.title === 'string' ? { title: k.title } : {}), reasons: errors });
       return;
