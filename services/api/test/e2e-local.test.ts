@@ -60,5 +60,5 @@ describe('local end-to-end: play -> ingest -> rollup -> gate', () => {
     expect(evals.find((e) => e.slug === 'tidepool-pals')?.decision).toBe('hold');
     expect((await store.getGame('hyperline'))?.stage).toBe(3);
     expect((await store.getGame('tidepool-pals'))?.stage).toBe(2);
-  });
+  }, 30_000); // copies two whole game folders and runs every job: 5.6 s on CI's Windows runner (2026-11-16), past vitest's 5 s default
 });
