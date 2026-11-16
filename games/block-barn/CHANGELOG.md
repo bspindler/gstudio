@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.3.1 (2026-11-16)
+- Pinching, palms and quick double taps no longer zoom the page into a block or two on iPhone.
+
 ## 0.3.0 (2026-11-15)
 - Tap the weathervane on the barn roof and it spins slowly, then settles.
 

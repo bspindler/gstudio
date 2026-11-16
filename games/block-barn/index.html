@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#6b3a26">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -20,7 +20,7 @@
     color-scheme: light;
   }
   [hidden] { display: none !important; }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; margin: 0; touch-action: none; }
   body {
     background: var(--wall);
     color: var(--ink);
@@ -385,7 +385,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.3.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.3.1', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1174,7 +1174,19 @@ function endPointer(e, cancelled) {
 document.addEventListener('pointerup', (e) => endPointer(e, false));
 document.addEventListener('pointercancel', (e) => endPointer(e, true));
 document.addEventListener('contextmenu', (e) => e.preventDefault());
-document.addEventListener('gesturestart', (e) => e.preventDefault());
+// Zoom guard. iOS Safari ignores user-scalable=no and, on an iPhone, still zoomed into a block or two past
+// touch-action and gesturestart alone, so every layer is here: the gesture events, any two-finger move (non-passive,
+// or Safari ignores preventDefault), and a quick second tap on the barn (taps are pointer events, so dropping the
+// touchend's default loses nothing there). The corner's buttons keep their clicks: only touches on the barn count.
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = performance.now();
+  if (e.target instanceof Element && e.target.closest('#barn') && now - lastTouchEnd < 400) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault());
 
 // ---------- the grown-up corner: press and hold 3 s ----------
 const cornerBtn = $('corner'), dialog = $('grownups');
