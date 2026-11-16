@@ -42,3 +42,16 @@ Changes:
 - HAL-164 fix(block-barn): Centre the block columns on the hay floor using the measured free floor width: **merged** (0.3.2)
 - HAL-165 polish(block-barn): Centre a lone block in the last row instead of leaving it under the left column: **discarded** (0.3.2) (block-barn: fitness regressed 1.17 (> 1); block-barn: bigTargets regressed 7.02 (> 1))
 - HAL-166 polish(block-barn): Let the block rows share the spare floor height so tall phones have no bare gaps: **discarded** (implementer blocked: The ticket's premise doesn't match the code: tall-phone rows are already 3 equal 1fr rows filling the floor, so there is no spare height to share, and I can't see 1.png or 3-tumble.png to measure row-top y before and after (L-096). Needs a fresh screenshot and the viewport size,)
+
+## Run run-2026-11-16T14-43-45-679Z
+
+**Block Barn**
+
+Block Barn is calm and roomy, with big alphabet blocks for small hands and gentle farm animals and toys around them. Tonight's change protects that: the columns should now sit centred, with even hay on both sides.
+
+HAL-167 moved the tower and hay bale to the empty bottom-right beside the lone last block. It also sizes the left margin from the free floor width. Nothing a child taps changed, and fitness stayed at 100 (bigTargets 100, variety 100).
+
+The margins (about 139 px each side) are calculated, not measured from a screenshot. Please check them on your phone. The held trough (HAL-158) was designed for that same bottom-right hay, so watch for overlap if you try it. New toys stay paused until you've tried HAL-158, HAL-159, HAL-162 and HAL-163.
+
+Changes:
+- HAL-167 fix(block-barn): Centre the block columns on the hay floor: 0.3.2 still sits them far right: **merged** (0.3.2)
