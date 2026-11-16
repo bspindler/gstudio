@@ -29,3 +29,10 @@ Identity: a calm garden defence where you guard a lantern through 15 story night
 Changes:
 - HAL-131 tuning(lanternkeep): Lanternkeep: Night Watch late waves ramp up faster: **merged** (0.3.2)
 - HAL-132 tuning(lanternkeep): Lanternkeep: scale late nights to a typical player's perks: **merged** (0.3.2)
+
+## Run run-2026-11-15T23-32-53-315Z
+
+**Lanternkeep**: a calm night that swells into the endless Night Watch. 0.3.2 lowers the late ramp from 1.06 to 1.045 per wave, so watch rose from 80.7 to 87.5 and fitness from 93.6 to 95.8. Nights 1-15 are untouched, and inBand and noSpikes stay at 100. Watch isn't at 100, and the scorer can't show which play style is outside the band. A sweep showed that changing the rate alone tops out around 87.5, so moving the ramp start is the next lever. The calm-then-swell shape is kept.
+
+Changes:
+- HAL-138 tuning(lanternkeep): Lanternkeep: ease Night Watch ramp toward 30-60% reach: **merged** (0.3.2)

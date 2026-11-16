@@ -35,3 +35,10 @@ Identity: a brass clockwork platformer with presses, gears and kiln heat.
 
 Changes:
 - HAL-135 feature(gearhold): Gearhold: level 5 Cog Bridge, turning gear platforms: **discarded** (0.6.0) (gearhold-play: new levels[4] feel 81.64 is out of its band (needs >= 94.84))
+
+## Run run-2026-11-15T23-32-53-315Z
+
+**Gearhold**: brass clockwork exploration. The Cog Bridge retry timed out before building, so nothing changed tonight. Still outstanding: confirming in a real browser that the 0.5.2 three.js renderer loads rather than silently falling back.
+
+Changes:
+- HAL-140 feature(gearhold): Gearhold: level 5 Cog Bridge with clear sightlines: **discarded** (implementer timed out)

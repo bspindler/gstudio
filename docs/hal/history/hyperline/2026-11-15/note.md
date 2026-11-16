@@ -30,3 +30,10 @@ Identity: a single-lane, jump-only neon runner in the restored 0.4.1 chase camer
 
 Changes:
 - HAL-136 feature(hyperline): Hyperline: BOOST PADS sector with a tight landing: **held** (0.7.0)
+
+## Run run-2026-11-15T23-32-53-315Z
+
+**Hyperline**: single lane, jump timing, neon. 0.7.0 widens the flip intro's spike clusters (8-9 wide, was 4-5), so the casual bot now dies there 4% of the time. The tightest 10% of tap windows are still 125 ms or more. Bites rose from 83.0 to 95.5 and fitness from 94.8 to 99.1. The bar and padPit intros were left alone because the scorer doesn't judge them (they are don't-press moments). The game's identity is kept: this is pure jump timing. BOOST PADS is on Hal's branch after your 👍.
+
+Changes:
+- HAL-137 tuning(hyperline): Hyperline: make flip, bar and padPit intros bite: **merged** (0.7.0)

@@ -19,3 +19,10 @@ Identity: rescue sea-animal pals on a reef, with tides, trapped pals and Sea Can
 Changes:
 - HAL-133 fix(tidepool-pals): Tidepool: hide +5 offer when the goal is unreachable: **discarded** (tripwire payment: games/tidepool-pals/index.html: payment-shaped line: ${canWin && offered(CATALOG.moves) ? `<button class="btn buy" data-act="buy-moves">${CATALOG.moves.title} · ${price(CATA)
 - HAL-134 feature(tidepool-pals): Tidepool: swipe to swap neighbours, match 3+ to clear: **held** (0.10.0)
+
+## Run run-2026-11-15T23-32-53-315Z
+
+**Tidepool Pals**: reef pals, a trapped pal to rescue, and tides. Swipe-to-swap is live (HAL-134), and your +5 fix is in 0.10.1. Level 24, a crab-shaped pool with litter and a moderate tide, won 84% of the time for the swap robot. It was blocked only by unrelated browser-test timeouts, so it will be retried. The shaped board keeps the reef character rather than drifting toward generic match-3.
+
+Changes:
+- HAL-142 feature(tidepool-pals): Tidepool: level 24, a crab-shaped pool with litter: **discarded** (0.11.0) (implementer blocked: The remaining failures are 60s timeouts in Hal's protected hal-browser tests (candidate.unit.test.ts, run.unit.test.ts), which don't exercise Tidepool; my change passes typecheck and all tidepool tests.)
