@@ -8,6 +8,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Tumbled blocks now settle on and around the hay bale in the bottom-left corner instead of spilling over the big letter blocks.
 - Block Barn's blocks now sit centred on the hay floor on tall phones, with even space left and right.
 - Block Barn's two block columns now sit centred on the hay on tall phones, and the hay bale and tower moved to the empty bottom-right beside the last block.
+- Grown-up corner now says "the letters of your child's name" instead of assuming the child is a girl.
 
 ## 0.3.1 (2026-11-16)
 - Pinching, palms and quick double taps no longer zoom the page into a block or two on iPhone.
