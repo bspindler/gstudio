@@ -930,7 +930,10 @@ function tumbleDown(letters) {
   const t = layout.T;
   const st = stackEl.getBoundingClientRect();
   const baseY = st.bottom, cx = st.left;
-  const groundY = layout.H - 30 - t;
+  // the pile settles on and around the bale, inside the tower's own column, clear of every other block
+  const tw = layout.tower;
+  const groundY = tw.y + tw.h - t - 8;
+  const minX = tw.x + 0.15 * t, maxX = Math.max(minX, tw.x + tw.w - 1.15 * t);
   letters.forEach((l, k) => {
     const b = document.createElement('div');
     b.className = 'tblock falling';
@@ -938,9 +941,9 @@ function tumbleDown(letters) {
     b.textContent = `${l.toUpperCase()} ${l}`;
     const y = baseY - (k + 1) * t;
     Object.assign(b.style, { left: `${cx}px`, top: `${y}px`, width: `${t}px`, height: `${t}px` });
-    const dx = (20 + rng() * (layout.W * 0.45)) * (k % 2 ? 1 : 0.6);
+    const dx = minX + rng() * (maxX - minX) - cx;
     b.style.setProperty('--dx', `${dx}px`);
-    b.style.setProperty('--dy', `${Math.max(0, groundY - y - rng() * 40)}px`);
+    b.style.setProperty('--dy', `${Math.max(0, groundY - y - rng() * 0.2 * t)}px`);
     b.style.setProperty('--rot', `${(rng() * 2 - 1) * 160}deg`);
     b.style.animationDelay = `${k * 40}ms`;
     fx.append(b);
