@@ -73,10 +73,11 @@
   .dusk-on #dusk-sky { opacity: 1; } .dusk-on #dusk { opacity: 1; }
   /* tap the roof weathervane (on the free strip of the wall, clear of the door and window): the arrow turns slowly and settles. No sound, flashing or text. */
   #vane { position: absolute; bottom: 0; top: 30px; width: 40px; z-index: 3; pointer-events: none; display: none; }
-  #vane .pole { position: absolute; left: 50%; bottom: 0; top: 40%; width: 5px; margin-left: -2.5px; background: var(--beam); border-radius: 2px; }
-  #vane .arrow { position: absolute; left: 50%; top: 40%; width: 34px; height: 14px; margin: -7px 0 0 -17px; background: #d9a520; clip-path: polygon(0 50%, 22% 0, 22% 35%, 78% 35%, 78% 0, 100% 50%, 78% 100%, 78% 65%, 22% 65%, 22% 100%);
+  #vane .pole { position: absolute; left: 50%; bottom: 0; top: 22%; width: 6px; margin-left: -3px; background: var(--beam); border-radius: 3px; }
+  #vane .pole::before { content: ""; position: absolute; left: 50%; top: -5px; width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%; background: #c98a1b; }
+  #vane .arrow { position: absolute; left: 50%; top: 40%; width: 38px; height: 26px; margin: -13px 0 0 -19px; background: linear-gradient(180deg, #e8b43a, #c98a1b); clip-path: polygon(0 0, 30% 30%, 62% 30%, 62% 0, 100% 50%, 62% 100%, 62% 70%, 30% 70%, 0 100%, 12% 50%);
     transform: rotate(var(--vr, 0deg)); transition: transform 3.2s cubic-bezier(.15, .6, .25, 1); }
-  #vane .hub { position: absolute; left: 50%; top: 40%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--beam); }
+  #vane .hub { position: absolute; left: 50%; top: 40%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: var(--beam); }
   .animal.nap .eye { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(.12); transition: transform 1.6s ease-in-out; }
   .animal.nap .art { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(1, .94); transition: transform 1.6s ease-in-out; }
   #peeks { position: absolute; inset: 0; overflow: hidden; border-radius: 999px 999px 0 0; pointer-events: none; display: flex; justify-content: center; align-items: flex-end; gap: 2%; }
@@ -385,7 +386,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.3.1', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.3.2', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
