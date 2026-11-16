@@ -7,6 +7,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - On tall phones the block columns sit a little further from the right edge, so the hay floor feels more balanced and the blocks are easier to reach.
 - Tumbled blocks now settle on and around the hay bale in the bottom-left corner instead of spilling over the big letter blocks.
 - Block Barn's blocks now sit centred on the hay floor on tall phones, with even space left and right.
+- Block Barn's two block columns now sit centred on the hay on tall phones, and the hay bale and tower moved to the empty bottom-right beside the last block.
 
 ## 0.3.1 (2026-11-16)
 - Pinching, palms and quick double taps no longer zoom the page into a block or two on iPhone.

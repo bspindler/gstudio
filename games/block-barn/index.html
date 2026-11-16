@@ -109,15 +109,14 @@
     grid-template-rows: calc(var(--S0) * 1.97) calc(var(--S0) * 1.97) minmax(0, 1fr);
     grid-template-areas: "s0 s1 s2" "s3 s4 tower" "free free tower"; }
   @media (max-aspect-ratio: 13 / 25) {
-    /* tall phones: two big columns, three rows; the tower has its own band down the left */
-    /* the bale and tower pile stay in their band on the left */
+    /* tall phones: two big columns, three rows; the bale and tower pile stand in the empty bottom-right cell beside the lone last block */
     /* the block columns are sized to the block itself (--Sc), and the left offset is the free floor width worked out,
-       (floor - grid) / 2, so the margins match; it only gives way to the bale's band (.26 of the width) where they'd overlap */
+       (floor - grid) / 2, so the left and right margins match exactly; the bale no longer sits at the left, so nothing pushes the grid */
     #stage { --Sc: min((var(--ih) - 2 * var(--g)) / 5.91, (var(--iw) * .74 - 2 * var(--g)) / 2);
       --gw: calc(2 * var(--Sc) + var(--g)); --lm: calc((var(--iw) - var(--gw)) / 2);
       justify-content: start;
-      grid-template-columns: max(calc(var(--iw) * .26), calc(var(--lm) - var(--g))) var(--Sc) var(--Sc); grid-template-rows: repeat(3, minmax(0, 1fr));
-      grid-template-areas: "tower s0 s1" "tower s2 s3" "tower s4 free"; }
+      grid-template-columns: max(0px, calc(var(--lm) - var(--g))) var(--Sc) var(--Sc); grid-template-rows: repeat(3, minmax(0, 1fr));
+      grid-template-areas: "free s0 s1" "free s2 s3" "free s4 tower"; }
   }
   @media (min-aspect-ratio: 5 / 4) {
     /* landscape (tablets on their side, desktop windows, phones on their side): one big row of taller blocks (up to
