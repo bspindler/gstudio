@@ -30,7 +30,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html,body{height:100%;margin:0}
+html,body{height:100%;margin:0;touch-action:manipulation}
 body{background:#061524;color:var(--foam);font-family:var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;overscroll-behavior:none}
 button{font-family:inherit;color:inherit}
 button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
@@ -562,6 +562,8 @@ button.card:active{transform:scale(.97)}
 <div class="modal" id="modal" hidden><div class="mcard" id="mcard" role="dialog" aria-modal="true"></div></div>
 
 <script type="module">
+// iOS Safari pinch-zoom guard (gesturestart ignores touch-action)
+document.addEventListener('gesturestart', (e) => e.preventDefault());
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { ABILITIES, GRAVITY, activeMask, applyAbility, bestSwap, buildBoard, collapse, counter, doubleCounts, ensureBubbles, extraMovesCanWin, goalStatus, goalsMet,
   hasMoves, helperCharge, isFixed, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveMatches, resolveSwap, rockOf,
@@ -572,7 +574,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, 
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.10.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.10.2', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
