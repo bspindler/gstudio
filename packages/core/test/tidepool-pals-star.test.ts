@@ -15,4 +15,13 @@ describe('tidepool pals: level 23, starfish board', () => {
     const g = buildBoard(def, mulberry32(3), counter(1));
     expect(g[3]![3]).toMatchObject({ k: 'bubble', hp: 2 });
   });
+  it('level 24, the crab pool, is valid with litter and 8 moves', () => {
+    const def = levelDef(24);
+    expect(def.n).toBe(24);
+    expect(validateLevel(def)).toEqual([]);
+    expect(validateLevel(withoutTides(def))).toEqual([]);
+    expect(def.moves).toBe(8);
+    expect(features(def).litter).toBe(8);
+    expect(def.pool).toBe(2);
+  });
 });

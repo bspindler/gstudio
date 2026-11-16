@@ -246,6 +246,11 @@ const SPECIAL = {
     { tide: T(5, 3, 'up'),
       intro: 'A starfish pool! The bubbled pal sits in the middle: clear pals right next to it twice to set it free.' }),
     pool: poolOf(23) },
+  24: { ...L(24, 8, 5, [LITTER],
+    ['.x...x.', '.......', '.......', '.......', '.l...l.', '..lll..', 'xl.l.lx', 'x.x.x.x'],
+    { tide: T(4, 3, 'up'),
+      intro: 'A crab pool! Clean the litter out of its shell and from between its legs. Only 8 moves, so make each swipe count.' }),
+    pool: poolOf(24) },
 };
 export function levelDef(n) { return n >= 1 && n <= AUTHORED.length ? AUTHORED[n - 1] : SPECIAL[n] ?? generateLevel(n); }
 /** The level for number n, with its `pool` index. Same as levelDef; reef.js reads levelFor(n).pool. */

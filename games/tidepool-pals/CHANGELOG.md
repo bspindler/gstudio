@@ -2,8 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
-## 0.10.2 (2026-11-15)
+## 0.11.0 (2026-11-15)
 - Swiping the reef board on iPhone no longer triggers double-tap or pinch zoom.
+- New level 24: a crab-shaped pool with litter to clear and just 8 moves.
 
 ## 0.10.1 (2026-11-15)
 - When you run out of moves, extra moves are offered only if five more could still win the level. If the goal is out of reach, the screen says so plainly and offers a fresh try, so nobody is asked to buy (or spend pearls on) moves that can't help.
