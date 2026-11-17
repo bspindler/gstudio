@@ -16,3 +16,20 @@
 Changes:
 - HAL-180 feature(block-barn): Rebuild the neighbour nuzzle on the centred layout: **held** (0.4.0)
 - HAL-181 feature(block-barn): Rebuild the window butterfly on the centred layout: **held** (0.4.0)
+
+## Run run-2026-11-17T13-41-27-044Z
+
+**Block Barn:** a calm toddler barn of named blocks and animals, with no flashing, pressure or noise.
+
+Three 👍'd toys were rebuilt on the centred layout and held. All six measures stay at 100.
+
+- **HAL-185, window butterfly:** zone-free. It drifts slowly to the newest named animal and rests there about 9 s.
+- **HAL-186, morning sunbeam:** CSS only. It drifts across the hay over 120 s and has no tap zone.
+- **HAL-187, water trough:** has its own tap zone with one gentle ripple per tap. It **doesn't appear at 390×844 or 1024×768**, because the hay cell is too small there.
+
+All three stay on-identity and calm. None has been seen on a phone screenshot.
+
+Changes:
+- HAL-185 feature(block-barn): Rebuild the window butterfly on the centred layout: **held** (0.4.0)
+- HAL-186 feature(block-barn): Rebuild the morning sunbeam on the centred layout: **held** (0.4.0)
+- HAL-187 feature(block-barn): Rebuild the water trough beside the bottom-right hay bale: **held** (0.4.0)
