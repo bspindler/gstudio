@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.12.1 (2026-11-17)
+- Swapping is easier to see: the pal you press follows your finger and its neighbour slides to meet it before the swap happens.
+
 ## 0.12.0 (2026-11-16)
 - Adding ?level=N to the page address opens straight onto that level's mission card and board (levels 1 to 24).
 
