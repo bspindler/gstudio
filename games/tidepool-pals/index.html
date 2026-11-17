@@ -112,6 +112,10 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes wiggle{0%,60%,100%{transform:rotate(0) scale(1)}15%{transform:rotate(-9deg) scale(1.06)}30%{transform:rotate(9deg) scale(1.06)}45%{transform:rotate(-4deg)}}
 .tile.shake .tl{animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-12%)}75%{transform:translateX(12%)}}
+.tile.matchglow::before{content:"";position:absolute;inset:-12%;border-radius:50%;pointer-events:none;background:radial-gradient(circle,var(--mg,#fff) 0,transparent 68%);opacity:0;animation:mglow .26s ease-out forwards}
+.tile.matchglow .tl{animation:mgpulse .26s ease-out forwards}
+@keyframes mglow{to{opacity:.85;transform:scale(1.15)}}
+@keyframes mgpulse{to{transform:scale(1.1)}}
 .tile.pop .tl{animation:pop .22s ease-in forwards}
 @keyframes pop{35%{transform:scale(1.28)}100%{transform:scale(0);opacity:0}}
 .tile.crumble .tl{animation:crumble .32s ease-in forwards}
@@ -1184,7 +1188,21 @@ function onSwipe(el, dr, dc) {
   lvl.snap = goalStatus(lvl.def, lvl.prog).map((g) => g.got); // this move's gain, cascades and rescues included, is read in check()
   // the two pieces trade places first, then the match pops
   if (other) { place(el, r2, c2); place(other, r, c); el._r = r2; el._c = c2; other._r = r; other._c = c; }
-  setTimeout(() => finishMove(res, r2, c2), other && motion() ? 230 : 0);
+  setTimeout(() => glowThenFinish(res, r2, c2), other && motion() ? 230 : 0);
+}
+const GLOW_MS = 260;
+/** A short soft glow, in their own colour, on exactly the matched pals; calls `then` once it has been seen. */
+function glowMatched(res, then) {
+  if (!motion()) { then(); return; }
+  let any = false;
+  for (const { cell } of res.cleared) {
+    const t = els.get(cell.id); if (!t || cell.k !== 'pal') continue;
+    t.style.setProperty('--mg', TC[cell.c][0]); t.classList.add('matchglow'); any = true;
+  }
+  if (any) setTimeout(then, GLOW_MS); else then();
+}
+function glowThenFinish(res, r, c) {
+  glowMatched(res, () => finishMove(res, r, c));
 }
 function finishMove(res, r, c) {
   grid = res.grid;
@@ -1258,8 +1276,7 @@ function cascade(res) {
   addProgress(lvl.prog, res.counts);
   chargeHelper(res.counts);
   lvl.chains = (lvl.chains || 0) + 1;
-  sfx.pop(res.cleared.length); buzz(10);
-  animateResult(res);
+  glowMatched(res, () => { sfx.pop(res.cleared.length); buzz(10); animateResult(res); });
   if (res.spawned) lvl.specials++;
   const first = res.cleared[0];
   const gained = goalStatus(lvl.def, lvl.prog).reduce((a, g, i) => a + (g.got - before[i]), 0);
@@ -1284,7 +1301,7 @@ function settle(done) {
     const chain = resolveMatches(grid, newId);
     if (chain.ok) cascade(chain);
     if (!saved.length && !chain.ok) { done(); return; }
-    setTimeout(() => settle(done), chain.ok ? 420 : motion() ? 520 : 60);
+    setTimeout(() => settle(done), chain.ok ? 420 + (motion() ? GLOW_MS : 0) : motion() ? 520 : 60);
   }, 340);
 }
 

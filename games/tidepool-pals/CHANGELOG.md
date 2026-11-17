@@ -6,6 +6,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Swapping is easier to see: the pal you press follows your finger and its neighbour slides to meet it before the swap happens.
 - After a few quiet seconds, two pals gently drift toward each other to show a swap that would work.
 - Swaps that make no match now show a soft ripple between the two pals as they slide back, and the first levels' how-to adds: 'Swaps must line up 3 of a kind.'
+- Matched pals now glow softly in their own colour for a beat before they clear, so you can see what your swap did; chain clears glow too.
 
 ## 0.12.0 (2026-11-16)
 - Adding ?level=N to the page address opens straight onto that level's mission card and board (levels 1 to 24).

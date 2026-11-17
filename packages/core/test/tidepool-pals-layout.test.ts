@@ -64,6 +64,14 @@ describe('tidepool-pals play layout', () => {
     expect(html.match(/\.pp \.ppal\{([^}]*)\}/)![1]).toContain('width:40px');
   });
 
+  it('glows matched pals before clearing, for swaps and cascades, without changing finishMove', () => {
+    expect(html).toContain('function glowMatched(res, then)');
+    expect(html).toMatch(/glowMatched\(res, \(\) => finishMove\(res, r, c\)\)/);
+    expect(html).toMatch(/glowThenFinish\(res, r2, c2\)/);
+    expect(html).toMatch(/glowMatched\(res, \(\) => \{ sfx\.pop/);
+    expect(html).toContain('.tile.matchglow::before');
+  });
+
   it('reserves the measured height of the label and pool strip under the board, so the strip never runs onto the tabs', () => {
     const wrap = html.match(/\.boardwrap\{([^}]*)\}/)![1];
     expect(wrap).toMatch(/width:min\(100cqw,calc\(\(100cqh - var\(--below,\s*\d+px\)\) \* 7 \/ 8\)\)/);
