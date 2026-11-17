@@ -1567,8 +1567,8 @@ function win() {
   studio.track('level_end', { level: lvl.n, result: 'win', score: stars, moves_left: lvl.moves, specials: lvl.specials, assisted: lvl.assisted, ...endProps() });
   const pearlLine = rec.pearls ? `+${rec.pearls} pearls` : 'No new stars this time';
   showModal(`${confetti()}<div class="label">Level ${lvl.n} cleared</div><div class="stars">${[1, 2, 3].map((i) => STAR(i <= stars)).join('')}</div>
-    ${!lvl.assisted ? (lvl.shellDrop ? `<h2>Splendid!</h2><div class="shellart">${SHELL}</div><p class="muted">${pearlLine}, and a shell washed up on the shore.</p>
-    <div class="row2"><button class="btn buy" data-act="win-shell">Open now</button><button class="btn ghost" data-act="bank-shell">Save for later</button></div>
+    ${!lvl.assisted ? (lvl.shellDrop ? `<h2>Splendid!</h2><button class="shellbtn" data-act="win-shell" aria-label="Open the shell">${SHELL}</button><p class="muted">${pearlLine}, and a shell washed up on the shore. Tap it to open.</p>
+    <div class="row2"><button class="btn ghost" data-act="bank-shell">Save for later</button></div>
     <p class="fine">${oddsLine()}</p>`
     : `<h2>${rec.prevBest >= 3 ? 'Still perfect!' : 'Nice run!'}</h2><p class="muted">${pearlLine}. Beat your best star score here to find another shell.</p>
     <div class="row"><button class="btn buy" data-act="next">Next level</button><button class="btn ghost" data-act="map">Map</button></div>`)
@@ -2105,7 +2105,9 @@ document.addEventListener('click', (e) => {
   const a = b.dataset.act;
   if (a !== 'reset') resetArm = false;
   switch (a) {
-    case 'win-shell': if (lvl.assisted) break; if (!lvl.shellDrop || lvl.shellTaken) break; lvl.shellTaken = true; ctx = 'win'; offerShell(); break;
+    case 'win-shell': if (lvl.assisted) break; if (!lvl.shellDrop || lvl.shellTaken) break; lvl.shellTaken = true; ctx = 'win';
+      b.classList.add('crack'); b.disabled = true; modal.querySelectorAll('[data-act="bank-shell"]').forEach((x) => { x.disabled = true; });
+      sfx.crack(); buzz(25); ev('shell_opened', { source: 'win' }); setTimeout(() => showResult(roll()), 540); break;
     case 'bank-shell': if (lvl.assisted) break;
       if (bankShell(S, lvl)) { persist(); hud(); ev('shell_banked', { level: lvl.n, banked: S.shells }); toast(`Shell saved. You have ${S.shells}: open them from the Album or Shop.`); }
       goNext(); break;
