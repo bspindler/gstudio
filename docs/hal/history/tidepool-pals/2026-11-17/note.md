@@ -31,3 +31,30 @@ Changes:
 Changes:
 - HAL-182 fix(tidepool-pals): Refills avoid ready-made matches so cascades can't finish a level for you: **discarded** (0.12.1) (tidepool-pals: goalReach regressed 6.71 (> 4.37))
 - HAL-183 polish(tidepool-pals): Matched pals glow together for a beat before clearing, so swaps read as cause: **merged** (0.12.1)
+
+## Run run-2026-11-17T21-53-26-952Z
+
+**Tidepool Pals**
+
+**Merged**
+- **HAL-188:** the shell on the win card is now the tap target, so the prize takes one tap instead of three.
+- **HAL-189:** a CSS-3D hinge and pearly glow before the pal appears.
+
+**Held**
+- **HAL-191:** a 3D three.js pal reveal with an SVG fallback. Not seen on a device.
+- **HAL-190:** calm refills plus a move retune on levels 8, 12, 16, 25 and 27.
+  - Fitness is 94.38 → 93.81, against 92.66 for calm refills alone.
+  - Per-level win rates are not yet re-scored.
+  - It includes a test patch that moves the robot-stuck check from level 14 to level 11.
+
+**Unchanged**
+- Earned-only shells, odds at the point of opening, no reward for assisted wins, level 19 untouched.
+
+**Watch**
+- All three report 0.12.1, so the versions need checking.
+
+Changes:
+- HAL-188 polish(tidepool-pals): Win card opens the shell in place with one tap, no extra shell screen: **merged** (0.12.1)
+- HAL-189 polish(tidepool-pals): The shell opens with a 3D hinge and a pearly glow before the pal pops out: **merged** (0.12.1)
+- HAL-190 fix(tidepool-pals): Calm refills plus per-level move retune so cascades can't win a level for you: **held** (0.12.1)
+- HAL-191 feature(tidepool-pals): Revealed pal appears as a soft 3D figure that turns in the light: **held** (0.13.0)
