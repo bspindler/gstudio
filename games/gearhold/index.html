@@ -162,6 +162,7 @@
 <script type="module">
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { LEVELS, WALLS } from './levels.js';
+import { startIndexFromSearch } from './startlink.js';
 import { PRESS, pressState } from './press.js';
 import { createRenderer, M4 } from './render3d.js';
 import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildScenery, buildArmillary } from './models.js';
@@ -1330,6 +1331,9 @@ if (HAL) {
 // ---- end hal hook ----
 
 title();
+// ?level=N starts at that level (1-based, clamped to the real count), for testing later levels.
+const startAt = startIndexFromSearch(location.search, LEVELS.length);
+if (startAt !== null && R3) startLevel(startAt);
 requestAnimationFrame(loop);
 </script>
 </body>

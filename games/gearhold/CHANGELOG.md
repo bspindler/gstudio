@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.6.0 (2026-11-16)
 - New level 5, Cog Bridge: a long clockwork walkway with a drone, a crawler and a kilnwarden, and gear platforms you have to wait on before they line up.
+- Add ?level=N to the page address to start Gearhold straight at that level (1 is the first; a number past the last level starts the last one).
 
 ## 0.5.3 (2026-11-15)
 - Internal only, nothing changes for players: the list of on-screen overlays left out of the test robot's top-down level pictures now lives in the game code.
