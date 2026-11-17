@@ -106,7 +106,9 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .tile.spawn .tl{animation:spawn .45s cubic-bezier(.34,1.7,.6,1)}
 @keyframes spawn{from{transform:scale(0) rotate(-120deg)}}
-.tile.hintme .tl{animation:wiggle 1s ease-in-out infinite}
+.tile.hintme .tl{animation:nudge 2.4s ease-in-out infinite}
+@keyframes nudge{0%,100%{transform:translate(0,0)}50%{transform:translate(calc(var(--hx,0) * 7px),calc(var(--hy,0) * 7px))}}
+@media (prefers-reduced-motion:reduce){.tile.hintme .tl{animation:none}}
 @keyframes wiggle{0%,60%,100%{transform:rotate(0) scale(1)}15%{transform:rotate(-9deg) scale(1.06)}30%{transform:rotate(9deg) scale(1.06)}45%{transform:rotate(-4deg)}}
 .tile.shake .tl{animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-12%)}75%{transform:translateX(12%)}}
@@ -1453,7 +1455,7 @@ function floatAt(r, c, text) { const s = document.createElement('span'); s.class
 function shake(size) { if (!motion()) return; const v = $('view-play'); v.classList.remove('shk-s', 'shk-l'); void v.offsetWidth; v.classList.add('shk-' + size); }
 
 /* ---------- idle hint: after ~6s without a move, the two pals of the best swap wiggle ---------- */
-function clearHint() { clearTimeout(idleT); document.querySelectorAll('.tile.hintme').forEach((t) => t.classList.remove('hintme')); fxEl.querySelectorAll('.coach').forEach((x) => x.remove()); }
+function clearHint() { clearTimeout(idleT); document.querySelectorAll('.tile.hintme').forEach((t) => { t.classList.remove('hintme'); t.style.removeProperty('--hx'); t.style.removeProperty('--hy'); }); fxEl.querySelectorAll('.coach').forEach((x) => x.remove()); }
 /** The best swap, preferring a match of a colour a collect goal still needs, so the hint also teaches the goal. */
 function hintSwap() {
   const want = new Set(goalStatus(lvl.def, lvl.prog).filter((g) => g.t === 'collect' && !g.done).map((g) => g.c));
@@ -1468,8 +1470,13 @@ function armIdle() {
     const s = hintSwap();
     if (!s) return;
     if (teach) fxNode('coach', `left:${cx(s.c)};top:${cy(s.r)}`, 60_000).textContent = s.r2 > s.r ? 'Swipe ↓' : 'Swipe →';
-    for (const [r, c] of [[s.r, s.c], [s.r2, s.c2]]) els.get(grid[r][c].id)?.classList.add('hintme');
-  }, teach ? 900 : 6000);
+    for (const [r, c, dr, dc] of [[s.r, s.c, s.r2 - s.r, s.c2 - s.c], [s.r2, s.c2, s.r - s.r2, s.c - s.c2]]) {
+      const el = els.get(grid[r][c].id);
+      if (!el) continue;
+      el.style.setProperty('--hx', String(dc)); el.style.setProperty('--hy', String(dr));
+      el.classList.add('hintme');
+    }
+  }, teach ? 900 : 5000);
 }
 
 /* ---------- parallax tilt (pointer) ---------- */
@@ -2008,6 +2015,7 @@ function goNext() { closeModal(); const n = lvl ? lvl.n + 1 : S.level; if (!cele
   let drag = null;
   const lean = () => tilesEl.clientWidth / COLS * 0.3;
   tilesEl.addEventListener('pointerdown', (e) => {
+    if (lvl && !lvl.over) armIdle(); // any touch ends the nudge hint and restarts the idle wait
     const t = e.target.closest('.tile');
     if (!t || t.disabled || (e.pointerType === 'mouse' && e.button !== 0)) return;
     drag = { el: t, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
