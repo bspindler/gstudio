@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.4.0 (2026-11-16)
+- Add ?night=N to the page address to jump straight into any night.
+
 ## 0.3.2 (2026-11-15)
 - Lanternkeep: between waves, a few fireflies drift in to the lantern for a calm breather.
 - Night Watch's late waves now swell faster and arrive closer together, so the endless night ends sooner.

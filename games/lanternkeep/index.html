@@ -379,7 +379,7 @@ import { createAudio } from './audio.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 // Keep version the same as in game.yaml and CHANGELOG.md. Under the test robot the SDK sends nothing.
-const studio = createStudio({ game: 'lanternkeep', version: '0.3.2', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'lanternkeep', version: '0.4.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
@@ -1075,6 +1075,12 @@ if (HAL) {
 if (renderer.kind === '2d') for (const t of TOWER_ORDER) renderer.snapshot(t, 0, cards[t].querySelector('canvas'));
 renderTitle();
 setMode('title');
+// ?night=N in the page address starts that night directly (clamped to the nights that exist).
+{
+  const raw = new URLSearchParams(location.search).get('night');
+  const n = raw === null || !/^\s*\d+\s*$/.test(raw) ? NaN : parseInt(raw, 10);
+  if (Number.isFinite(n)) startLevel(Math.min(Math.max(n, 1), LEVELS.length) - 1);
+}
 requestAnimationFrame(frame);
 </script>
 </body>
