@@ -17,6 +17,23 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-17T12-49-09-133Z",
+      "at": "2026-11-17T13:27:20.703Z",
+      "scorers": {
+        "block-barn": {
+          "fitness": 100,
+          "measures": {
+            "responsive": 100,
+            "noDeadEnds": 100,
+            "bigTargets": 100,
+            "alphabet": 100,
+            "calm": 100,
+            "variety": 100
+          }
+        }
+      }
     }
   ]
 }
