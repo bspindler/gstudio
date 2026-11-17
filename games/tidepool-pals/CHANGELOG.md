@@ -2,7 +2,7 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
-## 0.12.1 (2026-11-17)
+## 0.13.0 (2026-11-17)
 - Swapping is easier to see: the pal you press follows your finger and its neighbour slides to meet it before the swap happens.
 - After a few quiet seconds, two pals gently drift toward each other to show a swap that would work.
 - Swaps that make no match now show a soft ripple between the two pals as they slide back, and the first levels' how-to adds: 'Swaps must line up 3 of a kind.'
@@ -12,6 +12,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - The mission card's how-to picture now shows a looping swap: a pal slides over, three line up and pop.
 - The first levels' how-to now says it simply: 'Swipe a pal to swap. Make 3 in a row to pop them!'
 - Refill pals now land with a small squash-and-bounce as they settle into place.
+- New level 25: a seahorse-shaped reef pool with a stranded pal floating in its belly. Clear the pals beneath it so it sinks to open water, and collect Droplets.
 
 ## 0.12.0 (2026-11-16)
 - Adding ?level=N to the page address opens straight onto that level's mission card and board (levels 1 to 24).

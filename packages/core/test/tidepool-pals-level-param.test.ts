@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error plain JS module
 import { levelFromSearch } from '../../../games/tidepool-pals/levels.js';
 
-const COUNT = 24; // hand-built levels run to 24
+const COUNT = 25; // hand-built levels run to 25
 describe('tidepool ?level=N', () => {
   it('accepts whole numbers from 1 to the level count', () => {
     expect(levelFromSearch('?level=24')).toBe(24);
