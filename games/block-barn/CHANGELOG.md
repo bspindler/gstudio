@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.4.0 (2026-11-17)
+- Block Barn: when you name an animal next to another one, the two now lean toward each other for a slow, gentle nuzzle.
+
 ## 0.3.2 (2026-11-16)
 - The roof weathervane now looks like a real one: a solid golden arrow with a wide tail fin, a round ball on top of the post and a slightly bigger shape.
 - On tall phones the block columns sit a little further from the right edge, so the hay floor feels more balanced and the blocks are easier to reach.

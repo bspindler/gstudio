@@ -391,7 +391,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.3.2', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.4.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -760,6 +760,14 @@ function lookToward(k) {
     near.push({ a, d });
   });
   near.sort((x, y) => x.d - y.d);
+  // the newly named animal leans back toward its nearest neighbour at the same moment, so the pair nuzzle each other
+  const mine = slotsEl.children[k].querySelector('.animal');
+  if (mine && near.length && near[0].d <= me.width * 1.5) {
+    const nr = near[0].a.getBoundingClientRect();
+    mine.style.setProperty('--dir', nr.left > me.left ? '1' : '-1');
+    setTimeout(() => { mine.classList.remove('look', 'nuz'); void mine.offsetWidth; mine.classList.add('look', 'nuz'); }, 500);
+    setTimeout(() => mine.classList.remove('look', 'nuz'), 5300);
+  }
   near.forEach(({ a }, i) => {
     const them = a.getBoundingClientRect();
     a.style.setProperty('--dir', me.left > them.left ? '1' : '-1');
