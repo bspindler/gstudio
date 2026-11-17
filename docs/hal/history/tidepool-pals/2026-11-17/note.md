@@ -58,3 +58,24 @@ Changes:
 - HAL-189 polish(tidepool-pals): The shell opens with a 3D hinge and a pearly glow before the pal pops out: **merged** (0.12.1)
 - HAL-190 fix(tidepool-pals): Calm refills plus per-level move retune so cascades can't win a level for you: **held** (0.12.1)
 - HAL-191 feature(tidepool-pals): Revealed pal appears as a soft 3D figure that turns in the light: **held** (0.13.0)
+
+## Run run-2026-11-17T22-19-47-475Z
+
+**Tidepool Pals:** a gentle cartoon reef where you rescue a pal from shaped pools, with tides, Sea Candy and blooming coral.
+
+Tonight kept that identity. Every change reuses the game's own pals and glow, and none makes it look like a generic match-3. The work went to teaching the swap (N-031):
+- a looping how-to picture (HAL-192);
+- a shorter how-to text, "Swipe a pal to swap. Make 3 in a row to pop them!" (HAL-193);
+- squash-and-bounce refills (HAL-194).
+
+Fitness stayed at 94.38 for all three, as expected, and none has been seen on a phone.
+
+The seahorse level 25 (HAL-195) is held. Its first narrow build won only 19–33%. Widening the lower body and setting 22 moves gave 77% wins (fitness 94.51). Its goals are a rescue plus a Droplet collect, which differs from the crab level's litter-only goal. Stuck levels 11, 14 and 19 are untouched.
+
+The three merges all claim 0.12.1, so the numbering needs correcting. HAL-190 also retunes a level 25, so it may collide with HAL-195.
+
+Changes:
+- HAL-192 polish(tidepool-pals): Mission card how-to picture plays a looping swap: one pal slides over, three pop: **merged** (0.12.1)
+- HAL-193 polish(tidepool-pals): Mission card how-to text says the swap rule once, in two short lines: **merged** (0.12.1)
+- HAL-194 polish(tidepool-pals): Falling refill pals land with a small squash-and-bounce: **merged** (0.12.1)
+- HAL-195 feature(tidepool-pals): New hand-made level after the last one: a seahorse-shaped pool with a stranded…: **held** (0.13.0)
