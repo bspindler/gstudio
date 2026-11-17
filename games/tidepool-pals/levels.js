@@ -25,7 +25,7 @@ export const poolOf = (n) => Math.floor((n - 1) / 10);
 /* Hand-authored 1-20: one new idea at a time, and the tide arrives early. Colours: 0 Coral, 1 Sunstar,
    2 Droplet, 3 Gem, 4 Kelp. */
 const RAW = [
-  L(1, 18, 4, [C(0, 12)], FULL, { intro: 'Swipe a pal onto its neighbour to swap them. Line up 3 or more matching pals to pop them.' }),
+  L(1, 18, 4, [C(0, 12)], FULL, { intro: 'Swipe a pal to swap. Make 3 in a row to pop them!' }),
   L(2, 20, 4, [C(1, 18)], FULL, { intro: 'Match 5 or more at once to make an urchin bomb. Swipe it onto a neighbour to blast the pals around it.' }),
   L(3, 22, 4, [RESCUE(1), C(2, 16)],
     ['.......', '.......', '.......', '...B...', '.......', '.......', '.......', '.......'],

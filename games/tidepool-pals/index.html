@@ -1659,7 +1659,7 @@ function renderMission() {
   const title = gs.length === 1 ? goalText(gs[0]) : 'Your mission';
   const c = gs.find((g) => g.t === 'collect')?.c ?? 0;
   // How to play, until the player has the hang of it (and again on any level that brings something new).
-  const how = n <= 3 ? `<div class="how"><span class="demo" aria-hidden="true"><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="dt">${TILES[(c + 1) % 4]}</span><span class="dt">${TILES[c]}</span><span class="finger">${FINGER}</span></span><span>Swipe a pal onto its neighbour to swap them. Line up 3 or more matching pals and they pop and count toward your goal. Swaps must line up 3 of a kind.</span></div>` : '';
+  const how = n <= 3 ? `<div class="how"><span class="demo" aria-hidden="true"><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="dt">${TILES[(c + 1) % 4]}</span><span class="dt">${TILES[c]}</span><span class="finger">${FINGER}</span></span><span>Swipe a pal to swap. Make 3 in a row to pop them!</span></div>` : '';
   showModal(`<div class="label">Level ${n} · ${chapter(n)}</div>
     <h2 class="mtitle">${title}</h2>
     <div class="mgoals">${gs.map((g) => `<div class="mg"><span class="gi">${goalIcon(g)}</span><b>${g.need}</b>${gs.length > 1 ? `<span>${goalWord(g)}</span>` : ''}</div>`).join('')}</div>

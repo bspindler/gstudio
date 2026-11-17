@@ -10,6 +10,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Win card: tap the shell to open it right there, so the prize takes one tap instead of three.
 - Shells now open with a 3D hinge and a soft pearly glow before your new pal pops out.
 - The mission card's how-to picture now shows a looping swap: a pal slides over, three line up and pop.
+- The first levels' how-to now says it simply: 'Swipe a pal to swap. Make 3 in a row to pop them!'
 
 ## 0.12.0 (2026-11-16)
 - Adding ?level=N to the page address opens straight onto that level's mission card and board (levels 1 to 24).
