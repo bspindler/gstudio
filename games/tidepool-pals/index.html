@@ -187,9 +187,16 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .how .demo .dt{width:30px;height:30px;margin-left:-6px}
 .how .demo .dt:first-child{margin-left:0}
 .how .demo .dt svg{width:100%;height:100%;overflow:visible}
-.how .demo .finger{position:absolute;right:-8px;bottom:-10px;width:26px;height:26px;animation:swipe 1.6s ease-in-out infinite}
-@keyframes swipe{0%,15%{transform:translate(0,0)}65%,100%{transform:translate(-30px,0)}}
-@media (prefers-reduced-motion:reduce){.how .demo .finger{animation:none}}
+.how .demo .finger{position:absolute;right:-8px;bottom:-10px;width:26px;height:26px;animation:swipe 3.2s ease-in-out infinite}
+/* One looping swap: the last pal slides onto its neighbour, three match with a glow, pop, then the row resets. */
+.how .demo .dt:nth-child(1),.how .demo .dt:nth-child(2){animation:dpop 3.2s ease-in-out infinite}
+.how .demo .dt:nth-child(3){animation:dsw-b 3.2s ease-in-out infinite}
+.how .demo .dt:nth-child(4){animation:dsw-a 3.2s ease-in-out infinite}
+@keyframes swipe{0%,12%{transform:translate(0,0);opacity:1}38%,62%{transform:translate(-24px,0);opacity:1}72%,96%{transform:translate(-24px,0);opacity:0}100%{transform:translate(0,0);opacity:1}}
+@keyframes dsw-a{0%,12%{transform:translateX(0) scale(1);opacity:1}38%,50%{transform:translateX(-24px) scale(1);opacity:1;filter:none}58%{transform:translateX(-24px) scale(1.15);filter:drop-shadow(0 0 6px #FFD98A)}74%,92%{transform:translateX(-24px) scale(0);opacity:0}100%{transform:translateX(0) scale(1);opacity:1;filter:none}}
+@keyframes dsw-b{0%,12%{transform:translateX(0)}38%,92%{transform:translateX(24px)}100%{transform:translateX(0)}}
+@keyframes dpop{0%,50%{transform:scale(1);opacity:1;filter:none}58%{transform:scale(1.15);filter:drop-shadow(0 0 6px #FFD98A)}74%,92%{transform:scale(0);opacity:0}100%{transform:scale(1);opacity:1;filter:none}}
+@media (prefers-reduced-motion:reduce){.how .demo .finger,.how .demo .dt{animation:none!important}}
 .mission .mech{text-align:left}
 .mission .btn.buy{font-size:20px;min-height:56px}
 .coach{position:absolute;transform:translate(-50%,-150%);pointer-events:none;z-index:5;background:var(--sand);color:var(--ink);font:400 18px var(--display);padding:6px 12px;border-radius:14px;box-shadow:0 4px 0 rgba(0,0,0,.25);white-space:nowrap;animation:coach 1s ease-in-out infinite}
