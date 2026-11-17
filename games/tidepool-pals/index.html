@@ -104,6 +104,8 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes glow{50%{transform:scale(1.08)}}
 .tile .spin{transform-origin:20px 20px;animation:spin 2.2s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.tile.land:not(.pop):not(.crumble):not(.shake):not(.matchglow) .tl{animation:landsq .3s ease-out;transform-origin:50% 90%}
+@keyframes landsq{0%{transform:scale(1.08,.88)}55%{transform:scale(.97,1.04)}100%{transform:scale(1)}}
 .tile.spawn .tl{animation:spawn .45s cubic-bezier(.34,1.7,.6,1)}
 @keyframes spawn{from{transform:scale(0) rotate(-120deg)}}
 .tile.hintme .tl{animation:nudge 2.4s ease-in-out infinite}
@@ -965,6 +967,11 @@ function render(from = new Map(), stagger = null) {
       const f = from.get(cell.id), [fr, fc] = Array.isArray(f) ? f : [f ?? r, c];
       placeNow(el, fr, fc); later.push([el, r, c]);
       el.style.transitionDelay = delay(Math.max(0, Math.min(ROWS - 1, fr)), Math.max(0, Math.min(COLS - 1, fc)));
+      if (motion() && fr !== r && fc === c) {
+        // a soft squash as the refill lands (transform on the inner .tl only, so board logic is untouched)
+        const wait = 230 + (parseInt(el.style.transitionDelay, 10) || 0);
+        setTimeout(() => { if (!el.isConnected || el._dying || el.classList.contains('pop')) return; el.classList.add('land'); setTimeout(() => el.classList.remove('land'), 320); }, wait);
+      }
       continue;
     }
     if (el._sig !== sig(cell)) paint(el, cell);
