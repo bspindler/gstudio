@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.4.0 (2026-11-17)
 - Block Barn: when you name an animal next to another one, the two now lean toward each other for a slow, gentle nuzzle.
+- A soft morning sunbeam from the window slowly drifts across the hay floor.
 
 ## 0.3.2 (2026-11-16)
 - The roof weathervane now looks like a real one: a solid golden arrow with a wide tail fin, a round ball on top of the post and a slightly bigger shape.

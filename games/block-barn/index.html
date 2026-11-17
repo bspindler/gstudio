@@ -292,7 +292,17 @@
   .flyer { position: absolute; transition: transform .38s cubic-bezier(.4,.1,.4,1), width .38s, height .38s; z-index: 5; }
   .flyer .body { transition: inherit; }
 
+  /* morning sunbeam: a soft slanted band of light from the window slowly crosses the hay. Ambient only: no flashing,
+     no sound, no tap zone (pointer-events none); it fades out at dusk. */
+  #sunbeam { position: absolute; inset: 0; overflow: hidden; pointer-events: none; transition: opacity 3s ease-in-out; }
+  #sunbeam::before { content: ""; position: absolute; top: -10%; bottom: -10%; left: 30%; width: 34%;
+    background: linear-gradient(90deg, rgba(255,238,170,0), rgba(255,238,170,.38) 30%, rgba(255,238,170,.38) 70%, rgba(255,238,170,0));
+    transform: skewX(-24deg); animation: sunbeam-drift 120s ease-in-out infinite alternate; }
+  @keyframes sunbeam-drift { 0% { translate: -55% 0; } 100% { translate: 85% 0; } }
+  .dusk-on #sunbeam { opacity: 0; }
+
   @media (prefers-reduced-motion: reduce) {
+    #sunbeam::before { animation: none; }
     .body.flip, .body.arrive { animation-duration: .3s; }
     .body.flip { animation-name: flip; }
     .mv .pic, .dance .pic { animation-duration: .5s !important; }
@@ -341,6 +351,7 @@
   <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
   <div id="play">
     <div id="floor"></div>
+    <div id="sunbeam" aria-hidden="true"></div>
     <div id="stage">
       <div id="tower" aria-hidden="true"><div class="bale" id="bale-bump"></div><div class="stack"></div><div class="tblock" id="tprobe"></div></div>
       <div id="free"></div>
