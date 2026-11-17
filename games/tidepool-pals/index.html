@@ -136,6 +136,8 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes flash{to{opacity:0}}
 .float{position:absolute;pointer-events:none;font-family:var(--display);font-size:24px;color:var(--sand);text-shadow:0 2px 0 var(--ink),0 0 12px rgba(0,0,0,.4);animation:rise .85s ease-out forwards;transform:translate(-50%,-50%);white-space:nowrap}
 @keyframes rise{to{transform:translate(-50%,-170%);opacity:0}}
+.puff{position:absolute;pointer-events:none;width:calc(100% / 8);aspect-ratio:1;border-radius:50%;border:2px solid rgba(191,241,255,.8);background:radial-gradient(circle,rgba(191,241,255,.25),rgba(191,241,255,0) 70%);transform:translate(-50%,-50%) scale(.3);opacity:0;animation:puff .55s ease-out forwards}
+@keyframes puff{20%{opacity:.9}to{transform:translate(-50%,-50%) scale(1.5);opacity:0}}
 .shk-s{animation:shk .28s}
 .shk-l{animation:shkL .5s}
 @keyframes shk{20%{transform:translate(-3px,2px)}40%{transform:translate(3px,-2px)}60%{transform:translate(-2px,1px)}80%{transform:translate(2px,-1px)}}
@@ -1171,7 +1173,10 @@ function onSwipe(el, dr, dc) {
       // slide across and back, so it is clear the swap was tried and made no match
       busy = true;
       place(el, r2, c2); place(other, r, c);
-      setTimeout(() => { place(el, r, c); place(other, r2, c2); setTimeout(() => { busy = false; armIdle(); }, 330); }, 260);
+      setTimeout(() => { place(el, r, c); place(other, r2, c2);
+        // a soft ripple between the two pals: no match here
+        fxNode('puff', `width:${100 / COLS}%;left:${((c + c2) / 2 + .5) / COLS * 100}%;top:${((r + r2) / 2 + .5) / ROWS * 100}%`, 600);
+        setTimeout(() => { busy = false; armIdle(); }, 330); }, 260);
     } else armIdle();
     return;
   }
@@ -1622,7 +1627,7 @@ function renderMission() {
   const title = gs.length === 1 ? goalText(gs[0]) : 'Your mission';
   const c = gs.find((g) => g.t === 'collect')?.c ?? 0;
   // How to play, until the player has the hang of it (and again on any level that brings something new).
-  const how = n <= 3 ? `<div class="how"><span class="demo" aria-hidden="true"><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="dt">${TILES[(c + 1) % 4]}</span><span class="dt">${TILES[c]}</span><span class="finger">${FINGER}</span></span><span>Swipe a pal onto its neighbour to swap them. Line up 3 or more matching pals and they pop and count toward your goal.</span></div>` : '';
+  const how = n <= 3 ? `<div class="how"><span class="demo" aria-hidden="true"><span class="dt">${TILES[c]}</span><span class="dt">${TILES[c]}</span><span class="dt">${TILES[(c + 1) % 4]}</span><span class="dt">${TILES[c]}</span><span class="finger">${FINGER}</span></span><span>Swipe a pal onto its neighbour to swap them. Line up 3 or more matching pals and they pop and count toward your goal. Swaps must line up 3 of a kind.</span></div>` : '';
   showModal(`<div class="label">Level ${n} · ${chapter(n)}</div>
     <h2 class="mtitle">${title}</h2>
     <div class="mgoals">${gs.map((g) => `<div class="mg"><span class="gi">${goalIcon(g)}</span><b>${g.need}</b>${gs.length > 1 ? `<span>${goalWord(g)}</span>` : ''}</div>`).join('')}</div>
