@@ -14,6 +14,15 @@ export function moverH(o, x) {
   return o.base + o.amp * Math.sin(x * o.k + o.ph);
 }
 
+/**
+ * Left edge of a block when the runner's left edge is at x0. A shuttle block (o.sl > 0) slides back toward the runner
+ * at o.sl times the runner's own progress until the runner passes o.m; o.x is its resting (leftmost) place. A function
+ * of x0 alone, so a run still replays exactly.
+ */
+export function blockX(o, x0) {
+  return o.sl ? o.x + o.sl * Math.max(0, o.m - x0) : o.x;
+}
+
 /** Whether a pulse rail is lit when the runner's centre is at x: lit for half of every beat (o.per units). */
 export function railLit(o, x) {
   const u = (x - o.x) / o.per + (o.ph || 0);
@@ -60,7 +69,8 @@ export function step(r, c, jump) {
     for (let i = i0; i < iEnd; i++) {
       const o = objs[i];
       if (o.t === 'block') {
-        if (x1 > o.x + 0.06 && x0 < o.x + o.w - 0.06) {
+        const bx = blockX(o, x0);
+        if (x1 > bx + 0.06 && x0 < bx + o.w - 0.06) {
           if (prevY >= o.h - 0.14) sup = Math.max(sup, o.h);
           else if (r.y < o.h - 0.14 && r.y + PS > 0) die = 'block';
         }

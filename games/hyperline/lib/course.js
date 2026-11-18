@@ -271,7 +271,26 @@ export const PATTERNS = [
       o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
       return { o, len: lead + bw + 0.5 + n * SW + 0.5 };
     } },
+
+  // Sector 14: shuttle blocks. A one-unit block slides back along the track toward the runner (it closes at 1.6x the
+  // track speed), so the hop depends on how fast it is coming, not on a fixed spacing. A short spike strip lies past
+  // the block's contact point: hop too early and the arc lands in the spikes, too late and the block is in your face.
+  // The tap has two windows: an early jump that lands on the block's top (then rides it off), and a late hop clean
+  // over it. A later strip widens the first and narrows the second; a longer strip narrows the first. `want` and `n`
+  // are tuned with jumpWindow (hyperline-shuttle-probe) so both come out near 80-110 ms.
+  { id: 'shuttle', sector: 14, weight: (s) => (s === 14 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const xc = x + 8 + r() * 2, v = speedAt(xc + 6), want = intro ? 0.076 : 0.096, n = 5, SL = 0.6, M = 12;
+      const sx = xc - (TB + want) * v + 0.16 + T2 * v - (n - 1) * SW - 0.6;
+      const o = [{ t: 'block', x: xc + (PS - 0.06) - SL * M, w: 1.4 + r() * 0.4, h: 1, sl: SL, m: xc + M }];
+      spikes(o, sx, n);
+      o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
+      return { o, len: sx + n * SW - x + 0.5 };
+    } },
 ];
+
+// Seconds after a jump when the runner first clears a one-unit block's side (top at 1 less the 0.14 sink-in).
+const TB = (JV - Math.sqrt(JV * JV - 2 * GRAV * 0.86)) / GRAV;
 
 // Seconds a jump from the ledge (one unit up) stays at least 0.5 above the track, the height that clears a spike.
 const DROP_TOP = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.5)) / GRAV;
@@ -282,7 +301,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

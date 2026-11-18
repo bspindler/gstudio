@@ -9,10 +9,9 @@ const X0 = 13 * SECTOR_LEN;
 const pattern = () => PATTERNS.find((q) => q.id === 'drop')!;
 
 describe('hyperline DROP LEDGES', () => {
-  it('is sector 14 for players, right before HYPERCORE, and introduces the drop pattern', () => {
+  it('is sector 14 for players, after STAGGER SPIKES, and introduces the drop pattern', () => {
     expect(sectorInfo(12).name).toBe('STAGGER SPIKES');
     expect(sectorInfo(13).name).toBe('DROP LEDGES');
-    expect(sectorInfo(14).name).toBe('HYPERCORE');
     expect(INTRO[13]).toBe('drop');
   });
 

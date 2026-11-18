@@ -12,5 +12,6 @@ export type SimEvent =
   | { t: 'die'; cause: string };
 export function createRunner(): Runner;
 export function moverH(o: Obj, x: number): number;
+export function blockX(o: Obj, x0: number): number;
 export function railLit(o: Obj, x: number): boolean;
 export function step(r: Runner, c: Course, jump: boolean): SimEvent[];
