@@ -1140,6 +1140,7 @@ function renderPoolPanel() {
       <div class="rmeter" role="progressbar" aria-label="${info.name} restoration" aria-valuemin="0" aria-valuemax="${x.total}" aria-valuenow="${x.cleared}"><i style="width:${(x.fraction * 100).toFixed(0)}%"></i></div>
       <p class="psub">${x.cleared} of ${x.total} levels cleaned up · ${st.name}</p>${palLine ? `
       <p class="psub ppline">${palLine}</p>` : ''}</div></div>`;
+  if (owned) { const sv = el.querySelector('.ppal svg'); if (sv) { sv.dataset.pal = cr.id; upgradeStripPal(cr); } }
 }
 
 /** The board leaves room under it for the booster tray, the level label and the pool strip, measured rather than
@@ -1768,29 +1769,49 @@ async function mountFigure(box, cr) {
     const T = await loadThree();
     const canvas = box.querySelector('canvas');
     if (!T || !canvas || !box.isConnected) return flat();
-    const renderer = new T.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
-    renderer.setSize(400, 400, false);
-    renderer.outputColorSpace = T.SRGBColorSpace;
-    const scene = new T.Scene();
-    const parts = figureParts(cr), cam = figureCamera(parts, 1, 30);
-    const fig = new T.Group();
-    for (const p of parts) {
-      const geo = p.g === 'cone' ? new T.ConeGeometry(1, 2, 20) : new T.SphereGeometry(1, 32, 20);
-      const mat = new T.MeshStandardMaterial({ color: p.col, roughness: p.soft ? 1 : 0.5, metalness: 0, transparent: !!p.soft, opacity: p.soft ? 0.28 : 1,
-        emissive: p.glow ? p.col : '#000000', emissiveIntensity: p.glow ? 0.5 : 0 });
-      const m = new T.Mesh(geo, mat);
-      m.position.set(...p.p); m.scale.set(...p.s); if (p.rot) m.rotation.z = p.rot;
-      fig.add(m);
-    }
-    fig.rotation.y = -0.3; // a small turn so it reads as solid
-    scene.add(fig, new T.HemisphereLight('#ffffff', '#7fa6b8', 1.6));
-    const key = new T.DirectionalLight('#ffffff', 2.2); key.position.set(-3, 5, 6); scene.add(key);
-    const camera = new T.PerspectiveCamera(cam.fov, 1, 0.1, 100);
-    camera.position.set(0, cam.centreY, cam.distance); camera.lookAt(0, cam.centreY, 0);
-    renderer.render(scene, camera);
-    renderer.dispose();
+    renderFigure(T, cr, canvas, 400);
     if (box.isConnected) box.classList.add('ready');
   } catch (e) { flat(); }
+}
+/** Draws the soft 3D pal into a canvas (the one figure used by the prize card and the pool strip). */
+function renderFigure(T, cr, canvas, size) {
+  const renderer = new T.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer.setSize(size, size, false);
+  renderer.outputColorSpace = T.SRGBColorSpace;
+  const scene = new T.Scene();
+  const parts = figureParts(cr), cam = figureCamera(parts, 1, 30);
+  const fig = new T.Group();
+  for (const p of parts) {
+    const geo = p.g === 'cone' ? new T.ConeGeometry(1, 2, 20) : new T.SphereGeometry(1, 32, 20);
+    const mat = new T.MeshStandardMaterial({ color: p.col, roughness: p.soft ? 1 : 0.5, metalness: 0, transparent: !!p.soft, opacity: p.soft ? 0.28 : 1,
+      emissive: p.glow ? p.col : '#000000', emissiveIntensity: p.glow ? 0.5 : 0 });
+    const m = new T.Mesh(geo, mat);
+    m.position.set(...p.p); m.scale.set(...p.s); if (p.rot) m.rotation.z = p.rot;
+    fig.add(m);
+  }
+  fig.rotation.y = -0.3; // a small turn so it reads as solid
+  scene.add(fig, new T.HemisphereLight('#ffffff', '#7fa6b8', 1.6));
+  const key = new T.DirectionalLight('#ffffff', 2.2); key.position.set(-3, 5, 6); scene.add(key);
+  const camera = new T.PerspectiveCamera(cam.fov, 1, 0.1, 100);
+  camera.position.set(0, cam.centreY, cam.distance); camera.lookAt(0, cam.centreY, 0);
+  renderer.render(scene, camera);
+  renderer.dispose();
+}
+/** The pool strip's pal: the same soft 3D figure, rendered once per pal and shown as an image inside the strip's own svg, so the
+    wiggle and peek still apply. The flat pal stays when WebGL is unavailable. */
+const stripImg = {};
+async function upgradeStripPal(cr) {
+  const svg = document.querySelector('#poolPanel .ppal svg'); if (!svg || !cr) return;
+  try {
+    if (!stripImg[cr.id]) {
+      const T = await loadThree(); if (!T) return;
+      const c = document.createElement('canvas'); c.width = c.height = 160;
+      renderFigure(T, cr, c, 160);
+      stripImg[cr.id] = c.toDataURL('image/png');
+    }
+    const now = document.querySelector('#poolPanel .ppal svg');
+    if (now && now.isConnected && now.dataset.pal === cr.id) now.innerHTML = `<image href="${stripImg[cr.id]}" x="0" y="0" width="100" height="100"/>`;
+  } catch (e) { /* the flat pal stays */ }
 }
 
 /* ---------- reef art: the stage drives everything (murk, litter, kelp, coral, fish, light) ---------- */
