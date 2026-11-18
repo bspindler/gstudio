@@ -36,3 +36,16 @@ The Orrery got one press row on the key route (HAL-209). Wins stayed at 96% and 
 
 Changes:
 - HAL-209 tuning(gearhold): The Orrery: add one timed full-width press crossing on the key route: **discarded** (0.6.1) (gearhold-play: no real gain: 1.34 < 14.03)
+
+## Run run-2026-11-18T08-33-09-103Z
+
+**Identity:** a brass clockwork dungeon, with a fetch-the-key route and a walk back.
+
+- **Boiler Stair (HAL-216)**
+  - It aims at Gearhold's weak spot: wins that end with health to spare (tension 17.5).
+  - It uses only existing enemies, crystals and presses, so it stays on identity.
+  - A fix round added a second health crystal early on the route to pass the supply test.
+  - gearhold-play rose from 90.1 to 91.7, but the level's own wins, pace and tension were not reported. Whether it actually ends close is unconfirmed.
+
+Changes:
+- HAL-216 feature(gearhold): New level 6 'Boiler Stair': key deep inside, guarded room just before the exit: **held** (0.7.0)

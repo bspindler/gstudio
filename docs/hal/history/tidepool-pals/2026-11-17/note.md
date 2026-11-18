@@ -109,3 +109,18 @@ The level 28 reshape (HAL-208) put that level in band at 50%, but it missed the 
 Changes:
 - HAL-207 polish(tidepool-pals): A freed bubble pal does a small soft 3D hop on the board before it swims off: **merged** (0.13.0)
 - HAL-208 tuning(tidepool-pals): Reshape level 28's board to open space under the goal so it lands in band: **discarded** (0.13.0) (tidepool-pals: no real gain: 0.57 < 1.77)
+
+## Run run-2026-11-18T08-33-09-103Z
+
+**Identity:** sea-animal pals in a reef, rescuing a bubbled pal, with tides and Sea Candy.
+
+- **Level 29, the octopus (HAL-218)**
+  - It follows the seahorse and crab hand-made boards you liked.
+  - It wins 75%, in band, with open water left beneath the pal per L-111.
+  - Its 'different goal type from level 28' rests on a Gem collect goal and is unconfirmed.
+- **The 26/28 reshape (HAL-213)** was discarded on the gain bar, even though it brought level 28 into band.
+- Both of tonight's Tidepool changes say 0.13.0, which main already uses.
+
+Changes:
+- HAL-213 tuning(tidepool-pals): Reshape boards of levels 26 and 28 together to open space under the goal: **discarded** (0.13.0) (tidepool-pals: no real gain: 0.57 < 1.77)
+- HAL-218 feature(tidepool-pals): New hand-made level 29: an octopus-shaped pool with a bubbled pal between arms: **held** (0.13.0)

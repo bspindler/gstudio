@@ -15,3 +15,24 @@ The moon-motes (HAL-210) fit the look, but they are the small, calm leaps you sa
 
 Changes:
 - HAL-210 polish(lanternkeep): Defeated creatures dissolve into a few drifting moon-motes: **merged** (0.4.1)
+
+## Run run-2026-11-18T08-33-09-103Z
+
+**Identity:** a moonlit garden defence, with plants against creatures on a path.
+
+Tonight's work stays on identity and is the kind of leap you asked for: new mechanics, not new looks.
+
+- **Hollow Mole, night 16 (HAL-214)**
+  - It forces you to cover the whole road, which no current creature asks for.
+  - Night 16 wins 63%, a 14-point step from night 15.
+  - Scores: inBand 100, noSpikes 100, watch 87.5 unchanged.
+- **Moonbell (HAL-215)**
+  - It adds a stun 'pulse' role with two branches, and nights 1–8 are unchanged.
+  - Its score is blind to it, because the bot never plants it.
+  - Its art hasn't been seen in a browser.
+  - The five-column tray may truncate names on small screens.
+- Both features claim version 0.5.0. They need separate bumps.
+
+Changes:
+- HAL-214 feature(lanternkeep): New night 16 'Burrowing Dark' brings the Hollow Mole, which dives under the path: **held** (0.5.0)
+- HAL-215 feature(lanternkeep): New fifth plant Moonbell: rings a slow pulse that briefly stuns nearby creatures: **held** (0.5.0)

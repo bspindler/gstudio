@@ -22,3 +22,18 @@ DROP LEDGES (HAL-212) mirrors RISER STEPS on-identity and is held at 99.35. HYPE
 
 Changes:
 - HAL-212 feature(hyperline): New sector DROP LEDGES: step down ledges with spikes at each ledge's foot: **held** (0.9.0)
+
+## Run run-2026-11-18T08-33-09-103Z
+
+**Identity:** a neon runner where you read the track ahead, under your restored 0.4.1 camera.
+
+- **SHUTTLE BLOCKS (HAL-217)**
+  - It adds the first moving obstacle, so you read a closing speed instead of a fixed gap.
+  - The camera and the neon look are untouched.
+  - Intro kills 14%, the p10 tap window is 100 ms, and sector 14 is only 0.12 deadlier than sector 13.
+  - HYPERCORE moves to index 15.
+  - The builder edited the index-pinning tests directly rather than asking.
+  - A misnamed probe test file was left behind.
+
+Changes:
+- HAL-217 feature(hyperline): New sector SHUTTLE BLOCKS: a block slides toward you along the track; hop it: **held** (0.9.0)
