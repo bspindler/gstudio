@@ -1,4 +1,4 @@
-// Lanternkeep levels: fifteen nights in three regions. Paths are waypoint lists in grid cells
+// Lanternkeep levels: sixteen nights in three regions. Paths are waypoint lists in grid cells
 // (9 columns x 13 rows); the first point sits just off the board, and every path ends on the lantern
 // (the last point of path 0). A wave is a list of groups: [enemy, count, gap seconds, start offset, lane?].
 // Without a lane, a wave's enemies alternate across the paths. Each early level teaches one new thing.
@@ -223,6 +223,20 @@ export const LEVELS = [
       [['beetle', 24, 0.45], ['wisp', 20, 0.35, 3], ['mossback', 4, 1.5, 4]],
       [['toad', 6, 2.5], ['beetle', 16, 0.5, 4], ['wisp', 16, 0.4, 8]],
       [['mothmother', 2, 6], ['toad', 3, 3, 3], ['mossback', 6, 1, 4]],
+    ],
+  }),
+  L('Burrowing Dark', 'Hollow Moles dive under the path where no plant can reach them. Cover the whole road.', {
+    region: 'ember', towers: ALL, gold: 380, hpMul: 1.75,
+    paths: [[[-1, 2], [7, 2], [7, 5], [1, 5], [1, 8], [7, 8], [7, 11], [4, 11]]],
+    waves: [
+      [['moth', 16, 0.4], ['mole', 4, 1.6, 2]],
+      [['mole', 14, 0.8]],
+      [['wisp', 14, 0.5], ['mole', 12, 0.7, 2]],
+      [['beetle', 14, 0.7], ['mole', 12, 0.7, 3]],
+      [['firefly', 36, 0.18], ['mole', 20, 0.45, 2]],
+      [['toad', 3, 3], ['mole', 18, 0.5, 2], ['mossback', 4, 2, 4]],
+      [['mothmother', 1, 1], ['mole', 24, 0.4, 2], ['beetle', 12, 0.6, 3]],
+      [['mole', 36, 0.3], ['wisp', 20, 0.35, 2], ['toad', 4, 3, 5]],
     ],
   }),
 ];

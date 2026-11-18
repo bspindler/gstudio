@@ -731,6 +731,13 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         for (const l of P.legs) l.g.rotation.y = Math.sin(t * 10 * frozen + k + l.j) * 0.3 * l.s;
         if (e.type === 'mossback' && tierName !== 'low') glowP.add(x, 0.4, z, 1.6, 0.06, 0.16, 0.04, 1);
       }
+      // a diving mole sinks out of sight under the path and leaves a faint moving mound of earth
+      if (e.type === 'mole') {
+        c.sink = (c.sink ?? 0) + ((e.under ? 1 : 0) - (c.sink ?? 0)) * 0.25;
+        c.root.position.y = -0.5 * c.sink;
+        c.root.visible = c.sink < 0.9;
+        if (c.sink > 0.15) glowP.add(x, 0.08, z, 0.38, 0.35, 0.22, 0.12, Math.min(1, c.sink));
+      }
       // status: stars when stunned, frost motes when slowed, green when healed, a white flash when hit
       if (e.stunLeft > 0) for (let i = 0; i < 3; i++) { const a = t * 4 + (i / 3) * TAU; glowP.add(x + Math.cos(a) * 0.3, 0.85, z + Math.sin(a) * 0.3, 0.14, 1.6, 1.3, 0.5, 1); }
       if (e.slow > 0) for (let i = 0; i < 4; i++) { const a = t * 2 + (i / 4) * TAU + k; glowP.add(x + Math.cos(a) * 0.32, 0.25 + (i % 2) * 0.3, z + Math.sin(a) * 0.32, 0.1, 0.6, 1, 1.6, 0.9); }

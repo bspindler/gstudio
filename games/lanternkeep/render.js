@@ -169,6 +169,15 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
   const k = e.id * 1.37;
   if (e.type === 'mothmother') { drawEnemy(ctx, { ...e, type: 'moth', slow: 0, hitFlash: 0 }, x, y, s * 2, t * 0.5, heading); ctx.fillStyle = 'rgba(255,150,230,0.8)'; ctx.beginPath(); ctx.arc(x, y, s * 0.06, 0, TAU); ctx.fill(); }
   else if (e.type === 'mossback') { drawEnemy(ctx, { ...e, type: 'beetle', slow: 0, hitFlash: 0 }, x, y, s * 1.1, t, heading); ctx.fillStyle = 'rgba(110,190,90,0.85)'; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(x + Math.cos(i * 1.3) * s * 0.1, y + Math.sin(i * 1.3) * s * 0.1, s * 0.06, 0, TAU); ctx.fill(); } }
+  if (e.type === 'mole') {
+    // 2D fallback: a furrow of earth while under the path, a small dark mole when up
+    ctx.fillStyle = e.under ? 'rgba(90,70,50,0.55)' : '#4a3f4e';
+    ctx.beginPath();
+    ctx.ellipse(x, y, s * (e.under ? 0.16 : 0.2), s * (e.under ? 0.08 : 0.15), heading, 0, TAU);
+    ctx.fill();
+    if (!e.under) { ctx.fillStyle = '#d8a8b0'; ctx.beginPath(); ctx.arc(x + Math.cos(heading) * s * 0.2, y + Math.sin(heading) * s * 0.2, s * 0.05, 0, TAU); ctx.fill(); }
+    return;
+  }
   ctx.save();
   ctx.translate(x, y);
   if (e.type === 'moth') {
@@ -281,7 +290,7 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
   }
 }
 
-const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42, mossback: 0.32, mothmother: 0.46 };
+const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, mothmother: 0.46 };
 
 // ---------- renderer ----------
 

@@ -325,6 +325,17 @@ export function creatureModel(type) {
     body.add(mesh(new THREE.SphereGeometry(0.09, 16, 12), mat(0x5a7044, { rough: 0.7 }), { y: 0.05, z: 0.34 }));
     addEyes(body, 0.04, 0.08, 0.41, 0.018, 0xfff080, 2.4);
     for (const s of [-1, 1]) for (const j of [-1, 1]) { const leg = new THREE.Group(); leg.position.set(s * 0.22, 0, j * 0.18); leg.add(mesh(new THREE.CapsuleGeometry(0.045, 0.06, 4, 10), mat(0x5a7044, { rough: 0.7 }), { y: -0.04 })); body.add(leg); parts.legs.push({ g: leg, s, j }); }
+  } else if (type === 'mole') {
+    body.position.y = 0.1;
+    body.add(mesh(blob(0.26, 0.06, 2, 5, 28, 16, 0.8), mat(0x4a3f4e, { rough: 0.8, sheen: 1, sheenColor: 0xb8a0d8 }), { y: 0.06, sz: 1.3 }));
+    body.add(mesh(new THREE.ConeGeometry(0.09, 0.22, 12), mat(0xd8a8b0, { rough: 0.6 }), { y: 0.06, z: 0.42, rx: Math.PI / 2, shadow: false }));
+    body.add(mesh(new THREE.SphereGeometry(0.03, 10, 8), glow(0xff9ab0, 2.2), { y: 0.06, z: 0.54, shadow: false }));
+    addEyes(body, 0.07, 0.14, 0.33, 0.016, 0xffe8a0, 2);
+    for (const s of [-1, 1]) {
+      const claw = new THREE.Group(); claw.position.set(s * 0.25, 0, 0.12);
+      claw.add(mesh(new THREE.CapsuleGeometry(0.05, 0.08, 4, 10), mat(0xd8a8b0, { rough: 0.6 }), { rz: s * 0.9, shadow: false }));
+      body.add(claw); parts.legs.push({ g: claw, s, j: 1 });
+    }
   } else if (type === 'toad') {
     body.position.y = 0.3;
     body.add(mesh(blob(0.42, 0.06, 2.5, 11, 36, 24, 0.75), mat(0x3a2c4c, { rough: 0.35, clearcoat: 0.7, ccRough: 0.25 })));

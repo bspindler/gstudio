@@ -75,6 +75,7 @@ export const ENEMIES = {
   wisp: { name: 'Wisp', hp: 45, speed: 1.15, armor: 0, reward: 8, leak: 1, r: 0.24, slowImmune: true, tip: 'Frost does not touch them.' },
   mossback: { name: 'Mossback', hp: 120, speed: 0.7, armor: 1, reward: 14, leak: 1, r: 0.32, heal: { r: 1.4, pct: 0.06 }, tip: 'Heals creatures near it. Take it out first.' },
   toad: { name: 'Gloom Toad', hp: 650, speed: 0.5, armor: 3, reward: 75, leak: 5, r: 0.42, tip: 'A boss. Costs five lives if it reaches the lantern.' },
+  mole: { name: 'Hollow Mole', hp: 70, speed: 0.95, armor: 1, reward: 10, leak: 1, r: 0.28, dive: { up: 2.4, down: 1.6 }, tip: 'Dives under the path for a stretch. Nothing can hit it down there, so cover the whole road.' },
   mothmother: { name: 'Mothmother', hp: 900, speed: 0.45, armor: 2, reward: 90, leak: 5, r: 0.46, split: { type: 'moth', n: 6 }, tip: 'A boss. She bursts into moths when she falls.' },
 };
 
@@ -278,7 +279,7 @@ export function useFlare(g) {
   const r2 = FLARE_RADIUS * FLARE_RADIUS;
   let hits = 0;
   for (const e of g.enemies) {
-    if (e.hp <= 0 || dist2(e, g.lantern) > r2) continue;
+    if (e.hp <= 0 || e.under || dist2(e, g.lantern) > r2) continue;
     hits += 1;
     e.stunLeft = Math.max(e.stunLeft, FLARE_STUN);
     hurt(g, e, dmg, true, g.pending);
@@ -291,7 +292,7 @@ function spawn(g, type, lane, d = 0) {
   const def = ENEMIES[type];
   const hp = Math.round(def.hp * (g.level.hpMul ?? 1) * (1 + 0.04 * Math.max(0, g.waveIndex)));
   const p = pointAt(g.paths[lane], d);
-  const e = { id: g.nextId++, type, lane, hp, maxHp: hp, d, x: p.x, y: p.y, slow: 0, slowLeft: 0, stunLeft: 0, hitFlash: 0, healed: 0 };
+  const e = { id: g.nextId++, type, lane, hp, maxHp: hp, d, x: p.x, y: p.y, slow: 0, slowLeft: 0, stunLeft: 0, hitFlash: 0, healed: 0, under: false };
   g.enemies.push(e);
   return e;
 }
@@ -316,10 +317,12 @@ function hurt(g, e, dmg, ignoreArmor, events) {
 }
 
 const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+// A creature that has dived under the path can't be hit by plants, bursts, embers, beams or the Flare.
+const hittable = (e) => e.hp > 0 && !e.under;
 
 function inRange(g, t, range) {
   const r2 = range * range;
-  return g.enemies.filter((e) => e.hp > 0 && dist2(e, t) <= r2);
+  return g.enemies.filter((e) => hittable(e) && dist2(e, t) <= r2);
 }
 
 function pickTarget(list, prefer) {
@@ -350,7 +353,7 @@ function fire(g, t, events) {
   if (kind === 'splash') {
     const r2 = s.splash * s.splash;
     const at = { x: target.x, y: target.y };
-    for (const e of g.enemies) if (e.hp > 0 && dist2(e, at) <= r2) hurt(g, e, s.dmg, false, events);
+    for (const e of g.enemies) if (hittable(e) && dist2(e, at) <= r2) hurt(g, e, s.dmg, false, events);
     if (s.burn) g.patches.push({ x: at.x, y: at.y, r: s.burn.r, dps: s.burn.dps, left: s.burn.dur });
     events.push({ e: 'burst', id: t.id, x1: t.x, y1: t.y, x2: at.x, y2: at.y, splash: s.splash, burn: !!s.burn });
   } else if (kind === 'beam') {
@@ -368,7 +371,7 @@ function fire(g, t, events) {
       end = { x: t.x + ux * s.range, y: t.y + uy * s.range };
       hits = 0;
       for (const e of g.enemies) {
-        if (e.hp <= 0) continue;
+        if (!hittable(e)) continue;
         const ex = e.x - t.x, ey = e.y - t.y;
         const along = ex * ux + ey * uy;
         if (along < 0 || along > s.range || Math.abs(ex * uy - ey * ux) > s.pierce) continue;
@@ -424,6 +427,7 @@ export function step(g) {
     const p = pointAt(path, e.d);
     e.x = p.x;
     e.y = p.y;
+    if (def.dive) e.under = e.d % (def.dive.up + def.dive.down) >= def.dive.up;
   }
 
   // healers mend their neighbours
@@ -443,7 +447,7 @@ export function step(g) {
     p.left -= DT;
     const r2 = p.r * p.r;
     for (const e of g.enemies) {
-      if (e.hp <= 0 || dist2(e, p) > r2) continue;
+      if (!hittable(e) || dist2(e, p) > r2) continue;
       e.hp -= p.dps * DT;
       if (e.hp <= 0) killed(g, e, events);
     }

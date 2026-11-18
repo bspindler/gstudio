@@ -2,9 +2,10 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
-## 0.4.1 (2026-11-17)
+## 0.5.0 (2026-11-17)
 - The lantern now swells with a soft warm glow when you clear a wave.
 - Defeated creatures now dissolve into a few soft, pale moon-motes that drift up and fade.
+- New night 16, Burrowing Dark: the Hollow Mole dives under the path where nothing can hit it, so cover the whole road.
 
 ## 0.4.0 (2026-11-16)
 - Add ?night=N to the page address to jump straight into any night.
