@@ -406,6 +406,12 @@ export function createRenderer(canvas, opts = {}) {
           const sp = 0.8 + hash(i, n) * 1.4;
           fx.push({ k: 'spark', x: ev.x, y: ev.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, life: 0.5 + hash(n, i) * 0.3 });
         }
+        // moon-motes: a few soft pale specks drift up and fade (slow fade, no flashing)
+        const mn = reduced ? 3 : ev.type === 'toad' || ev.type === 'mothmother' ? 7 : 4;
+        for (let i = 0; i < mn; i++) {
+          const a = hash(i, 77 + ev.reward) * TAU, d = 0.03 + hash(i, 31) * 0.14;
+          fx.push({ k: 'mote', x: ev.x + Math.cos(a) * d, y: ev.y + Math.sin(a) * d, rise: (reduced ? 0.15 : 0.25) + hash(i, 9) * 0.2, ph: hash(i, 13) * TAU, t: 0, life: reduced ? 1.5 : 1.9 + hash(i, 17) * 0.8 });
+        }
       } else if (ev.e === 'leak') leakT = 0.5;
       else if (ev.e === 'flare') fx.push({ k: 'pulse', x: ev.x, y: ev.y, r: ev.r, t: 0, life: 0.8, flare: true });
     }
@@ -609,6 +615,10 @@ export function createRenderer(canvas, opts = {}) {
         ctx.beginPath();
         ctx.arc(f.x * s, f.y * s, f.r * s * (1 - k * 0.7), 0, TAU);
         ctx.stroke();
+      } else if (f.k === 'mote') {
+        const q = f.t / f.life, m = Math.sin(Math.min(1, q * 4) * Math.PI / 2) * (1 - q) * (1 - q);
+        const sway = reduced ? 0 : Math.sin(f.t * 2.2 + f.ph) * 0.04;
+        glow((f.x + sway) * s, (f.y - f.rise * f.t) * s, s * 0.1, '#cfe0ff', 0.7 * m);
       } else if (f.k === 'spark') {
         ctx.fillStyle = rgba(COLOR.gold, k);
         ctx.beginPath();

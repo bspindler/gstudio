@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.4.1 (2026-11-17)
 - The lantern now swells with a soft warm glow when you clear a wave.
+- Defeated creatures now dissolve into a few soft, pale moon-motes that drift up and fade.
 
 ## 0.4.0 (2026-11-16)
 - Add ?night=N to the page address to jump straight into any night.

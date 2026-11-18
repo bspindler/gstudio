@@ -569,6 +569,9 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         const c = ev.type === 'firefly' ? [2, 2.2, 0.6] : ev.type === 'wisp' ? [0.8, 1.8, 2.2] : ev.type === 'mossback' ? [0.9, 2, 0.6] : [2.2, 1.6, 0.8];
         for (let i = 0; i < n; i++) { const a = (i / n) * TAU + hash(i, ev.reward) * 0.6, sp = 0.8 + hash(i, n) * 1.8; fx.push({ k: 'spark', x: ev.x, y: 0.35, z: ev.y, vx: Math.cos(a) * sp, vy: 1 + hash(n, i) * 2.4, vz: Math.sin(a) * sp, t: 0, life: 0.55 + hash(n, i) * 0.45, c }); }
         fx.push({ k: 'puff', x: ev.x, z: ev.y, t: 0, life: 0.6, big });
+        // moon-motes: a few soft pale specks drift up and fade (slow fade, no flashing)
+        const mn = (tierName === 'low' ? 3 : big ? 9 : 5) - (reduced ? 1 : 0);
+        for (let i = 0; i < mn; i++) { const a = hash(i, 77 + ev.reward) * TAU, d = 0.05 + hash(i, 31) * 0.22; fx.push({ k: 'mote', x: ev.x + Math.cos(a) * d, y: 0.3 + hash(i, 5) * 0.25, z: ev.y + Math.sin(a) * d, rise: (reduced ? 0.25 : 0.4) + hash(i, 9) * 0.3, ph: hash(i, 13) * TAU, t: 0, life: reduced ? 1.5 : 1.9 + hash(i, 17) * 0.8 }); }
         if (big) { shakeT = 1; shakeAmp = 0.18; }
       } else if (ev.e === 'leak') { leakT = 0.5; shakeT = 1; shakeAmp = 0.08; }
       else if (ev.e === 'flare') { fx.push({ k: 'flare', x: ev.x, z: ev.y, r: ev.r, t: 0, life: 1 }); shakeT = 1; shakeAmp = 0.22; }
@@ -789,6 +792,10 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         fxLight(f.x, 1.2, f.z, [1, 0.75, 0.45], 40 * k, 7);
       } else if (f.k === 'spark') {
         glowP.add(f.x, f.y, f.z, 0.09, f.c[0] * k, f.c[1] * k, f.c[2] * k, 1);
+      } else if (f.k === 'mote') {
+        const q = f.t / f.life, m = Math.sin(Math.min(1, q * 4) * Math.PI / 2) * (1 - q) * (1 - q);
+        const sway = reduced ? 0 : Math.sin(f.t * 2.2 + f.ph) * 0.06;
+        glowP.add(f.x + sway, f.y + f.rise * f.t, f.z, 0.1, 0.7 * m, 0.85 * m, 1.1 * m, 1);
       } else if (f.k === 'puff') {
         smokeP.add(f.x, 0.3 + (1 - k) * 0.4, f.z, (f.big ? 1.6 : 0.7) * (1.3 - k * 0.6), 0.55, 0.5, 0.65, 0.45 * k);
       }
