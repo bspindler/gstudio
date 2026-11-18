@@ -23,6 +23,17 @@ function grid(rows: string[], ice: [number, number][] = []): Grid {
   for (const [r, c] of ice) { const cell = g[r]![c]!; if (cell.k === 'pal') cell.ice = true; }
   return g;
 }
+/** True if any 3 pals of one colour sit in a straight line. */
+function hasMatchOnBoard(g: Grid): boolean {
+  const col = (r: number, c: number) => { const x = g[r]?.[c]; return x && x.k === 'pal' ? x.c : -1; };
+  for (let r = 0; r < g.length; r++) for (let c = 0; c < g[r]!.length; c++) {
+    const v = col(r, c);
+    if (v < 0) continue;
+    if (col(r, c + 1) === v && col(r, c + 2) === v) return true;
+    if (col(r + 1, c) === v && col(r + 2, c) === v) return true;
+  }
+  return false;
+}
 const at = (g: Grid, r: number, c: number) => g[r]![c];
 const key = (cells: [number, number][]) => cells.map(([r, c]) => `${r},${c}`).sort();
 
@@ -168,6 +179,19 @@ describe('tidepool board: gravity, refills and moves', () => {
     expect(spawned.length).toBe(3);
     expect(spawned.every((s) => s.fromR < s.r)).toBe(true);
     for (const row of g) for (const cell of row) if (cell?.k === 'pal') expect(cell.c).toBeLessThan(5);
+  });
+
+  it('calm refills: new pals never land in a ready-made run, whatever the rng gives', () => {
+    for (let seed = 1; seed < 40; seed++) {
+      const g = grid(['*****', '*****', '*****', '*****', '*****']);
+      const mask = g.map((row) => row.map(() => true));
+      collapse(g, mask, mulberry32(seed), 4, counter(100));
+      expect(hasMatchOnBoard(g)).toBe(false);
+    }
+    const always0 = () => 0; // a rng that would fill the board with one colour
+    const g = grid(['*****', '*****', '*****']);
+    collapse(g, g.map((row) => row.map(() => true)), always0, 3, counter(100));
+    expect(hasMatchOnBoard(g)).toBe(false);
   });
 
   it('hasMoves is true when some swap makes a match (or a special can be swapped); shuffle always leaves one', () => {

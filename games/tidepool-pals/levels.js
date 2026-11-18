@@ -57,7 +57,7 @@ const RAW = [
   L(12, 17, 5, [C(1, 24)],
     ['o.....o', 'o.....o', '.......', '.......', '.......', '.......', '.......', '.......'],
     { tide: T(4, 3, 'left'), intro: 'Match 9 or more for a whirlpool: it swirls away every pal of its colour.' }),
-  L(13, 18, 5, [C(0, 16), C(3, 16)],
+  L(13, 19, 5, [C(0, 16), C(3, 16)],
     ['.......', 'x.....x', 'xx...xx', 'xx...xx', 'x.....x', '.......', '.......', '.......'],
     { tide: T(5, 2, 'up'), intro: 'Swipe a special that touches another special to combine them into a bigger blast.' }),
   L(14, 42, 5, [LITTER, ICE(3)],
@@ -66,7 +66,7 @@ const RAW = [
   L(15, 34, 5, [RESCUE(1)],
     ['.P...P.', '.......', '.......', '.l...l.', '.......', '.......', '.......', '.......'],
     { tide: T(5, 2, 'up'), exit: 'down', intro: 'Two pals are stranded this time, with litter in the way: rescue either one. Careful: at low tide they float back up.' }),
-  L(16, 13, 5, [C(2, 22)],
+  L(16, 15, 5, [C(2, 22)],
     ['.......', '.......', 'o.....o', 'o.....o', 'o.....o', 'o.....o', '.......', '.......'],
     { tide: T(4, 3, 'left') }),
   L(17, 12, 5, [ICE(10)],
@@ -131,7 +131,7 @@ const ROCKS = [
 ];
 const TIDE_DIRS = ['up', 'left', 'right'];
 /** Extra moves for generated levels that hard-stopped players (measured by the play scorer). */
-export const MOVE_BONUS = { 25: 8, 26: 9, 28: 17 };
+export const MOVE_BONUS = { 25: 8, 26: 13, 27: 3, 28: 17, 29: 3, 31: 3 };
 /** Lighter boards for generated levels that walled players: [row, replacement row] pairs, moves untouched. */
 export const BOARD_EASE = { 21: [[6, '.......']], 28: [[1, '.......'], [4, '...P...']] };
 
@@ -241,7 +241,7 @@ export function generateLevel(n) {
 
 /* Hand-authored levels past the generated stretch: level 23 is a five-point starfish with a pal bubbled in the middle. */
 const SPECIAL = {
-  23: { ...L(23, 15, 5, [RESCUE(1), C(1, 16)],
+  23: { ...L(23, 17, 5, [RESCUE(1), C(1, 16)],
     ['xxx.xxx', 'xx...xx', '.......', '...B...', '.......', 'x.....x', 'x..x..x', 'x..x..x'],
     { tide: T(5, 3, 'up'),
       intro: 'A starfish pool! The bubbled pal sits in the middle: clear pals right next to it twice to set it free.' }),

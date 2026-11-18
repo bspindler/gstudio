@@ -455,7 +455,33 @@ export function collapse(g, mask, rng, colors, newId, dir = 'down') {
       });
     }
   }
+  calmRefills(g, spawned, colors);
   return { spawned };
+}
+
+/** Straight run length of free pals of colour `col` through (r, c), counting that cell as `col`. */
+function runThrough(g, r, c, col) {
+  const same = (y, x) => y >= 0 && x >= 0 && y < g.length && x < g[y].length && isFreePal(g[y][x]) && g[y][x].c === col;
+  let best = 1;
+  for (const [dy, dx] of [[0, 1], [1, 0]]) {
+    let n = 1;
+    for (let y = r + dy, x = c + dx; same(y, x); y += dy, x += dx) n++;
+    for (let y = r - dy, x = c - dx; same(y, x); y -= dy, x -= dx) n++;
+    best = Math.max(best, n);
+  }
+  return best;
+}
+
+/**
+ * Calm refills: a new pal that would land in a ready-made match takes the next colour that does not (no extra
+ * rng draw), so a refill never starts a cascade by luck. Only the new pals are recoloured.
+ */
+function calmRefills(g, spawned, colors) {
+  for (const s of spawned) {
+    const cell = g[s.r][s.c];
+    if (!cell || cell.id !== s.id) continue;
+    for (let i = 0; i < colors && runThrough(g, s.r, s.c, cell.c) >= MIN_RUN; i++) cell.c = (cell.c + colors - 1) % colors;
+  }
 }
 
 /* ---------- tides ----------
