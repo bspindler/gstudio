@@ -301,7 +301,21 @@
   @keyframes sunbeam-drift { 0% { translate: -55% 0; } 100% { translate: 85% 0; } }
   .dusk-on #sunbeam { opacity: 0; }
 
+  /* window butterfly: a small soft butterfly drifts slowly inside the window pane (drawn in code, no asset, no sound,
+     no text, no tap zone). Slow wing-fold only (no flashing); it rests out of sight at dusk. */
+  #butterfly { position: absolute; left: 12%; top: 22%; width: 16px; height: 12px; pointer-events: none; z-index: 1; transition: opacity 3s ease-in-out;
+    animation: bfly-drift 26s ease-in-out infinite alternate; }
+  #butterfly i { position: absolute; top: 0; width: 7px; height: 10px; background: #f5a6c8; box-shadow: inset 0 0 0 1.5px rgba(176,84,130,.55);
+    animation: bfly-flap 2.4s ease-in-out infinite; }
+  #butterfly i:first-child { left: 0; border-radius: 80% 20% 60% 40%; transform-origin: 100% 50%; }
+  #butterfly i:last-child { right: 0; border-radius: 20% 80% 40% 60%; transform-origin: 0 50%; }
+  #butterfly::after { content: ""; position: absolute; left: 50%; top: 0; width: 2px; height: 11px; margin-left: -1px; border-radius: 1px; background: #7a4a5e; }
+  @keyframes bfly-drift { 0% { left: 12%; top: 26%; } 22% { left: 38%; top: 14%; } 45% { left: 62%; top: 34%; } 70% { left: 28%; top: 44%; } 100% { left: 66%; top: 20%; } }
+  @keyframes bfly-flap { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.45); } }
+  .dusk-on #butterfly { opacity: 0; }
+
   @media (prefers-reduced-motion: reduce) {
+    #butterfly, #butterfly i { animation: none; }
     #sunbeam::before { animation: none; }
     .body.flip, .body.arrive { animation-duration: .3s; }
     .body.flip { animation-name: flip; }
@@ -348,7 +362,7 @@
 </head>
 <body>
 <main id="barn" aria-label="Block Barn">
-  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
+  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div><div id="butterfly" aria-hidden="true"><i></i><i></i></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
   <div id="play">
     <div id="floor"></div>
     <div id="sunbeam" aria-hidden="true"></div>
