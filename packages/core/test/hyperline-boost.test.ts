@@ -8,7 +8,7 @@ import { clearable, jumpWindow } from '../src/hal/hyperline-bot.js';
 describe('hyperline BOOST PADS', () => {
   it('is sector 11 for players, right before HYPERCORE, and introduces the boost pattern', () => {
     expect(sectorInfo(10).name).toBe('BOOST PADS');
-    expect(sectorInfo(11).name).toBe('HYPERCORE');
+    expect(sectorInfo(11).name).toBe('RISER STEPS');
     expect(INTRO[10]).toBe('boost');
   });
 

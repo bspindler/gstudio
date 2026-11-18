@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.9.0 (2026-11-17)
+- New sector: RISER STEPS. Hop up onto a short raised step, then jump again before the edge to clear the gap that follows. It comes before HYPERCORE, which is now sector 13.
+
 ## 0.8.0 (2026-11-16)
 - Test any sector directly: add ?sector=N to the page address to start an Endless practice run at that sector (1 to 99); your BEST and reached progress stay untouched.
 

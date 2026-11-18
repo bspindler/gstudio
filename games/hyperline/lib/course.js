@@ -224,12 +224,30 @@ export const PATTERNS = [
       o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
       return { o, len: sx + n * SW - x + 0.5 };
     } },
+
+  // Sector 11: riser steps. A short raised block (hop up onto it) ends straight at a pit: land on the step, then
+  // jump before the edge. The pit is as wide as it can be while the take-off window stays at `want` seconds.
+  { id: 'riser', sector: 11, weight: (s) => (s === 11 ? 2.6 : 1.1),
+    build(x, d, r, intro) {
+      const v = speedAt(x + 6), lead = range(x) * 0.6, bx = x + lead, bw = 2 + r() * 0.8, want = intro ? 0.075 : 0.09;
+      const pw = 0.34 + v * (RISER_REACH - want), ex = bx + bw;
+      const o = [
+        { t: 'block', x: bx, w: bw, h: 1 },
+        { t: 'pit', x: ex, w: pw },
+        { t: 'chip', x: bx + bw / 2, y: 1.7 },
+        { t: 'chip', x: ex + pw / 2, y: 2.4 },
+      ];
+      return { o, len: lead + bw + pw + 0.5 };
+    } },
 ];
 
-const BY_ID = Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
+// Seconds a jump from the edge of a one-unit step takes to come down to the track on the far side of the pit.
+const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
+
+const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {
