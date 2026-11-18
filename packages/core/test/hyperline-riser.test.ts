@@ -37,7 +37,7 @@ describe('hyperline RISER STEPS', () => {
   it('is sector 12 for players, right before HYPERCORE, and introduces the riser pattern', () => {
     expect(sectorInfo(10).name).toBe('BOOST PADS');
     expect(sectorInfo(11).name).toBe('RISER STEPS');
-    expect(sectorInfo(12).name).toBe('HYPERCORE');
+    expect(sectorInfo(12).name).toBe('STAGGER SPIKES');
     expect(INTRO[11]).toBe('riser');
   });
 

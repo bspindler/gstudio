@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.9.0 (2026-11-17)
 - New sector: RISER STEPS. Hop up onto a short raised step, then jump again before the edge to clear the gap that follows. It comes before HYPERCORE, which is now sector 13.
+- New sector: STAGGER SPIKES. Spike pairs come at uneven gaps, short then long, so you have to read each gap instead of tapping to a beat. It comes before HYPERCORE, which is now sector 14.
 
 ## 0.8.0 (2026-11-16)
 - Test any sector directly: add ?sector=N to the page address to start an Endless practice run at that sector (1 to 99); your BEST and reached progress stay untouched.

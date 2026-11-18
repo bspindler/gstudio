@@ -239,6 +239,24 @@ export const PATTERNS = [
       ];
       return { o, len: lead + bw + pw + 0.5 };
     } },
+
+  // Sector 12: stagger spikes. Two spike pairs, each close enough to clear in one jump, then a long gap, so the rhythm
+  // of a held jump is wrong: read the gap, jump the first pair, land, wait, and jump the second. The first pair's
+  // take-off window is wide; the second opens a beat after any landing from the first and is as narrow as `want`.
+  { id: 'stagger', sector: 12, weight: (s) => (s === 12 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const v = speedAt(x + 6), want = intro ? 0.09 : 0.115, w1 = 0.2 + r() * 0.04;
+      const cw1 = (T2 - T1 - w1) * v - 0.08, cw2 = (T2 - T1 - want) * v - 0.08; // cluster widths: first spike start to last spike end
+      const hi1 = -0.44 - T1 * v;
+      const lo2 = hi1 + (AIR + 0.05) * v;
+      const sx2 = lo2 - cw2 + 0.36 + T2 * v, ax = x + 1, bx = ax + sx2;
+      const o = [
+        { t: 'spike', x: ax, y: 0, inv: false }, { t: 'spike', x: ax + cw1 - SW, y: 0, inv: false },
+        { t: 'spike', x: bx, y: 0, inv: false }, { t: 'spike', x: bx + cw2 - SW, y: 0, inv: false },
+        { t: 'chip', x: ax + cw1 / 2, y: 2.7 }, { t: 'chip', x: bx + cw2 / 2, y: 2.7 },
+      ];
+      return { o, len: bx + cw2 - x + 0.5 };
+    } },
 ];
 
 // Seconds a jump from the edge of a one-unit step takes to come down to the track on the far side of the pit.
@@ -247,7 +265,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {
