@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.7.0 (2026-11-17)
+- New level 6, Boiler Stair: the gear key is hidden deep in the boilers, and the walk back to the exit passes one last guarded hall.
+
 ## 0.6.0 (2026-11-16)
 - New level 5, Cog Bridge: a long clockwork walkway with a drone, a crawler and a kilnwarden, and gear platforms you have to wait on before they line up.
 - Add ?level=N to the page address to start Gearhold straight at that level (1 is the first; a number past the last level starts the last one).
