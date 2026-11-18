@@ -2,6 +2,7 @@
 // The look rests on one idea: the garden is dark, and only light pushes the dark back.
 // Towers and the lantern cut holes in a darkness layer; the lantern's light shrinks as lives drop.
 import { COLS, ROWS, stats } from './lib/sim.js';
+import { createSwell } from './swell.js';
 
 export const COLOR = {
   night: '#1b1530',
@@ -287,6 +288,7 @@ const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42
 export function createRenderer(canvas, opts = {}) {
   const ctx = canvas.getContext('2d');
   const reduced = !!opts.reducedMotion;
+  const swell = createSwell();
   let tile = 40, dpr = 1, W = 0, H = 0;
   let ground = null, dark = null, dctx = null;
   let fx = [];
@@ -461,6 +463,7 @@ export function createRenderer(canvas, opts = {}) {
     // lantern
     const lx = (g.lantern.c + 0.5) * s, ly = (g.lantern.r + 0.5) * s;
     const life = g.lives / g.maxLives;
+    const sw = swell.update(g, t, reduced);
     const flick = reduced ? 1 : 0.92 + 0.08 * Math.sin(t * 9) * Math.sin(t * 5.3) + (life < 0.35 ? 0.1 * Math.sin(t * 31) : 0);
     ctx.fillStyle = '#2d2416';
     ctx.fillRect(lx - s * 0.04, ly - s * 0.1, s * 0.08, s * 0.5);
@@ -554,7 +557,7 @@ export function createRenderer(canvas, opts = {}) {
       ctx.restore();
     };
     pathGlow();
-    glow(lx, ly - s * 0.2, s * (0.6 + 0.9 * life) * flick, COLOR.lantern, 0.55);
+    glow(lx, ly - s * 0.2, s * (0.6 + 0.9 * life) * flick * (1 + 0.4 * sw), COLOR.lantern, Math.min(0.85, 0.55 + 0.25 * sw));
     for (const tw of g.towers) {
       const ready = tw.cd < 0.15 ? 1 : 0.6;
       glow(tw.x * s, tw.y * s - s * 0.1, s * 0.55, TOWER_LIGHT[tw.type], 0.22 * ready + 0.06 * tw.tier);

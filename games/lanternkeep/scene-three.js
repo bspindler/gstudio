@@ -4,6 +4,7 @@
 // World: x = grid column, z = grid row, y = up; the camera sits past the last row looking back.
 import * as THREE from '../sdk/vendor/three.module.js';
 import { COLS, ROWS, FLARE_RADIUS, TOWERS, flareCharge, stats } from './lib/sim.js';
+import { createSwell } from './swell.js';
 import { creatureModel, glow, hash, lanternModel, mat, plantModel, rockGeometry, treeModel } from './models-three.js';
 
 const TAU = Math.PI * 2;
@@ -615,6 +616,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
 
   let frameTimes = [], downgradeAt = 0;
   const lanternWorld = new THREE.Vector3();
+  const swell = createSwell();
   function draw(g, view) {
     const t = view.time;
     ensureWorld(g);
@@ -632,12 +634,13 @@ export function createRendererThree(canvas, overlay, opts = {}) {
     const hang = lantern.userData.hang;
     hang.rotation.x = reduced ? 0 : Math.sin(t * 1.3) * 0.08;
     hang.rotation.z = reduced ? 0 : Math.sin(t * 0.9) * 0.05;
-    lantern.userData.paper.material.emissiveIntensity = (0.8 + 2.4 * life) * flick;
+    const sw = swell.update(g, t, reduced);
+    lantern.userData.paper.material.emissiveIntensity = (0.8 + 2.4 * life) * flick * (1 + 0.5 * sw);
     hang.getWorldPosition(lanternWorld);
     lanternLight.position.copy(lanternWorld);
-    lanternLight.intensity = (2 + 9 * life) * flick;
-    lanternLight.distance = 3 + 6 * life;
-    glowP.add(lanternWorld.x, lanternWorld.y, lanternWorld.z, (1.6 + 1.4 * life) * flick, 0.7, 0.32, 0.08, 0.8);
+    lanternLight.intensity = (2 + 9 * life) * flick * (1 + 0.35 * sw);
+    lanternLight.distance = (3 + 6 * life) * (1 + 0.12 * sw);
+    glowP.add(lanternWorld.x, lanternWorld.y, lanternWorld.z, (1.6 + 1.4 * life) * flick * (1 + 0.4 * sw), 0.7, 0.32, 0.08, 0.8);
     const charge = flareCharge(g);
     flareRing.visible = g.phase === 'wave' || g.phase === 'ready';
     flareRing.position.set(lx, 0.04, lz);
