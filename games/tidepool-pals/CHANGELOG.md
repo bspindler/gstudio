@@ -13,6 +13,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - The first levels' how-to now says it simply: 'Swipe a pal to swap. Make 3 in a row to pop them!'
 - Refill pals now land with a small squash-and-bounce as they settle into place.
 - New level 25: a seahorse-shaped reef pool with a stranded pal floating in its belly. Clear the pals beneath it so it sinks to open water, and collect Droplets.
+- The prize pal now appears as a soft 3D figure, fully inside the card with room on both sides, with no flat 2D flash first.
 
 ## 0.12.0 (2026-11-16)
 - Adding ?level=N to the page address opens straight onto that level's mission card and board (levels 1 to 24).

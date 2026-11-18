@@ -506,6 +506,12 @@ button.card:active{transform:scale(.97)}
 .reveal{width:170px;margin:0 auto;animation:revealin .5s cubic-bezier(.34,1.6,.64,1)}
 .reveal svg{width:100%;display:block}
 @keyframes revealin{from{transform:scale(0) rotate(-20deg)}}
+/* The prize pal is a 3D figure. Nothing shows until it has rendered, so there is no flat flash; the flat pal is only the fallback without WebGL. */
+.reveal.fig{width:200px;height:200px;animation:none;position:relative}
+.reveal.fig .flatpal{display:none;width:170px;margin:15px auto 0}
+.reveal.fig.flat .flatpal{display:block;animation:revealin .5s cubic-bezier(.34,1.6,.64,1)}
+.reveal.fig canvas{display:block;width:200px;height:200px;visibility:hidden}
+.reveal.fig.ready canvas{visibility:visible;animation:revealin .5s cubic-bezier(.34,1.6,.64,1)}
 .newtag{font-family:var(--display);color:var(--coral);font-size:20px}
 .ggrid{display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
 .ggrid .g{display:flex;flex-direction:column;align-items:center;gap:2px;font-weight:900}
@@ -593,6 +599,7 @@ import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { ABILITIES, GRAVITY, activeMask, applyAbility, bestSwap, buildBoard, collapse, counter, doubleCounts, ensureBubbles, extraMovesCanWin, goalStatus, goalsMet,
   hasMoves, helperCharge, isFixed, maskOf, mulberry32, newProgress, addProgress, rescueLost, resolveMatches, resolveSwap, rockOf,
   shuffle, starsFor, tidePhase, tideTurns, turnTide, COLS, ROWS } from './board.js';
+import { figureCamera, figureParts } from './figure.js';
 import { HELPER_LEVEL, levelDef, levelFromSearch, withoutTides } from './levels.js';
 import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, buyPalWithSandDollars, loadSave, palEarned, pickHelper,
   recordWin, resetProgress, sandDollarCost, shellDrop, takeShell, writeSave } from './save.js';
@@ -1741,13 +1748,49 @@ function hingeOpen(b) {
 function showResult({ cr, dup, n }) {
   const done = setDone(cr.set) && !S.claimed[cr.set];
   showModal(`${dup ? '' : confetti()}<div class="newtag">${dup ? 'Again!' : 'New pal!'}</div>
-    <div class="reveal">${creatureSVG(cr, false)}</div>
+    <div class="reveal fig"><canvas width="400" height="400" aria-hidden="true"></canvas><div class="flatpal">${creatureSVG(cr, false)}</div></div>
     <h2>${cr.name}</h2><div><span class="rar ${cr.rar}">${cr.rar}</span> <span class="muted">· ${SETS[cr.set].name}</span></div>
     <p class="muted">${dup ? `You have ${n} now. Duplicates give +25 pearls and a sand dollar.` : `Added to your album, and ${cr.name} moved into your home pool.`}${done ? ` <b style="color:var(--sand)">Set complete! Claim ${SETS[cr.set].reward} pearls in the Album.</b>` : ''}</p>
     <div class="row">${ctx === 'win'
       ? `<button class="btn buy" data-act="next">Next level</button><button class="btn ghost" data-act="go-album">View album</button>`
       : `${S.shells > 0 ? `<button class="btn buy" data-act="open-shell">Open another (${S.shells} left)</button>` : ''}<button class="btn ghost" data-act="close">Done</button>`}</div>`);
   pearlsChanged(); renderCurrent();
+  mountFigure(mcard.querySelector('.reveal.fig'), cr);
+}
+let threeP = null;
+const loadThree = () => (threeP ||= import('../sdk/vendor/three.module.js').catch(() => null));
+setTimeout(loadThree, 1200);
+/** Renders the pal once as a 3D figure into the card's canvas, then shows it. Without WebGL the flat pal is shown instead. */
+async function mountFigure(box, cr) {
+  if (!box) return;
+  const flat = () => { if (box.isConnected) box.classList.add('flat'); };
+  try {
+    const T = await loadThree();
+    const canvas = box.querySelector('canvas');
+    if (!T || !canvas || !box.isConnected) return flat();
+    const renderer = new T.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(400, 400, false);
+    renderer.outputColorSpace = T.SRGBColorSpace;
+    const scene = new T.Scene();
+    const parts = figureParts(cr), cam = figureCamera(parts, 1, 30);
+    const fig = new T.Group();
+    for (const p of parts) {
+      const geo = p.g === 'cone' ? new T.ConeGeometry(1, 2, 20) : new T.SphereGeometry(1, 32, 20);
+      const mat = new T.MeshStandardMaterial({ color: p.col, roughness: p.soft ? 1 : 0.5, metalness: 0, transparent: !!p.soft, opacity: p.soft ? 0.28 : 1,
+        emissive: p.glow ? p.col : '#000000', emissiveIntensity: p.glow ? 0.5 : 0 });
+      const m = new T.Mesh(geo, mat);
+      m.position.set(...p.p); m.scale.set(...p.s); if (p.rot) m.rotation.z = p.rot;
+      fig.add(m);
+    }
+    fig.rotation.y = -0.3; // a small turn so it reads as solid
+    scene.add(fig, new T.HemisphereLight('#ffffff', '#7fa6b8', 1.6));
+    const key = new T.DirectionalLight('#ffffff', 2.2); key.position.set(-3, 5, 6); scene.add(key);
+    const camera = new T.PerspectiveCamera(cam.fov, 1, 0.1, 100);
+    camera.position.set(0, cam.centreY, cam.distance); camera.lookAt(0, cam.centreY, 0);
+    renderer.render(scene, camera);
+    renderer.dispose();
+    if (box.isConnected) box.classList.add('ready');
+  } catch (e) { flat(); }
 }
 
 /* ---------- reef art: the stage drives everything (murk, litter, kelp, coral, fish, light) ---------- */
