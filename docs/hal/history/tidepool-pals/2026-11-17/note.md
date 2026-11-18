@@ -90,3 +90,10 @@ Changes:
 - HAL-196 tuning(tidepool-pals): Rebuild calm refills with per-level move retune on the current game: **discarded** (0.13.0) (tidepool-pals: no real gain: 0.35 < 2.63)
 - HAL-197 fix(tidepool-pals): Prize reveal shows only the 3D pal, whole and centred, with no 2D flash first: **merged** (0.13.0)
 - HAL-198 polish(tidepool-pals): Pool strip shows the newly won pal as the same soft 3D figure: **merged** (0.13.0)
+
+## Run run-2026-11-18T01-22-37-272Z
+
+**Tidepool Pals.** The reef pals, the trapped pal and the tides stay central. Tonight was about giving you back control: refills can't start chains by luck any more (0.13.0, merged). Fitness went from 94.5 to 95.4, and level 14 wins 64%. The weakest levels are 19 (36%) and 28 (37%). Both have walled layouts, so the next step is reshaping those boards, not adding more moves. The freed-pal 3D hop was rejected before building on a wording problem and will be retried. Nothing tonight has been seen on a phone.
+
+Changes:
+- HAL-202 fix(tidepool-pals): Calm refills with per-level move retune, so cascades can't win a level for you: **merged** (0.13.0)

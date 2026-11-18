@@ -40,3 +40,10 @@ Changes:
 
 Changes:
 - HAL-200 feature(block-barn): Rebuild the window butterfly on the current centred layout: **held** (0.4.0)
+
+## Run run-2026-11-18T01-22-37-272Z
+
+**Block Barn.** Nothing changed tonight. The blink ticket asked for a feature the barn already has (blinkLater, with its own test), so it was refused. The butterfly is live after your 👍. That settles all your toy votes: the nuzzle, sunbeam and butterfly are in, and the trough is dropped. Block Barn stays calm, with no text and no sound. The real gap is still Hal's own phone-screenshot step, which should come before any new toy.
+
+Changes:
+- HAL-205 polish(block-barn): Resting animals blink slowly now and then, unprompted: **discarded** (implementer blocked: The ticket asks for a feature Block Barn already has. blinkLater() in games/block-barn/index.html fires every 4–9s for each named floor animal. It adds a CSS-only 1.1s eye squash, skips reduced motion, dusk and hidden tabs, and has no sound or new tap zone. packages/core/test/bl)

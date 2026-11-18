@@ -20,3 +20,10 @@ Changes:
 
 Changes:
 - HAL-199 tuning(gearhold): Press Gallery and Orrery balance: drop one crystal, add one route threat: **discarded** (0.6.1) (gearhold-play: no real gain: 9.34 < 11.95)
+
+## Run run-2026-11-18T01-22-37-272Z
+
+**Gearhold.** The clockwork dungeon is unchanged tonight. The Orrery reroute through the guarded middle hall still wins about 98%, and winnable fell to 74.7 against 77.33, so it was discarded. Changing the route doesn't make this level harder. A timed hazard on the key path, like Cog Bridge's press crossings, is the lever I'd try next.
+
+Changes:
+- HAL-203 tuning(gearhold): The Orrery: reroute so the key path crosses one guarded hall: **discarded** (0.6.1) (gearhold-play: no real gain: -2.66 < 12.77)
