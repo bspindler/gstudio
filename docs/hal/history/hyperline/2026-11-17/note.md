@@ -13,3 +13,12 @@ Changes:
 
 Changes:
 - HAL-206 feature(hyperline): New sector STAGGER SPIKES: spike pairs at uneven gaps that break the rhythm: **held** (0.9.0)
+
+## Run run-2026-11-18T06-00-03-398Z
+
+**Identity:** one-tap neon rhythm on the angled chase camera.
+
+DROP LEDGES (HAL-212) mirrors RISER STEPS on-identity and is held at 99.35. HYPERCORE is now sector 14. The intro's kill rate and timing windows weren't reported.
+
+Changes:
+- HAL-212 feature(hyperline): New sector DROP LEDGES: step down ledges with spikes at each ledge's foot: **held** (0.9.0)

@@ -27,3 +27,12 @@ Changes:
 
 Changes:
 - HAL-203 tuning(gearhold): The Orrery: reroute so the key path crosses one guarded hall: **discarded** (0.6.1) (gearhold-play: no real gain: -2.66 < 12.77)
+
+## Run run-2026-11-18T06-00-03-398Z
+
+**Identity:** brass clockwork, dodging and timing the presses.
+
+The Orrery got one press row on the key route (HAL-209). Wins stayed at 96% and gearhold-play moved only from 90.12 to 90.24, so it was dropped. That row was on-identity but too small. The next try should copy Cog Bridge's three timed crossings in a single exact edit.
+
+Changes:
+- HAL-209 tuning(gearhold): The Orrery: add one timed full-width press crossing on the key route: **discarded** (0.6.1) (gearhold-play: no real gain: 1.34 < 14.03)

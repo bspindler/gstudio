@@ -47,3 +47,12 @@ Changes:
 
 Changes:
 - HAL-205 polish(block-barn): Resting animals blink slowly now and then, unprompted: **discarded** (implementer blocked: The ticket asks for a feature Block Barn already has. blinkLater() in games/block-barn/index.html fires every 4–9s for each named floor animal. It adds a CSS-only 1.1s eye squash, skips reduced motion, dusk and hidden tabs, and has no sound or new tap zone. packages/core/test/bl)
+
+## Run run-2026-11-18T06-00-03-398Z
+
+**Identity:** a gentle toddler barn where animals react softly.
+
+The sleepy yawn on long press (HAL-211, 0.4.0) is animals moving, which is what you've liked. It adds no new zone, sound or text, and score held at 100. It has no dedicated test and no phone screenshot, so please try a hold on your phone.
+
+Changes:
+- HAL-211 polish(block-barn): A long press on an animal makes it give a slow, sleepy yawn and stretch: **merged** (0.4.0)

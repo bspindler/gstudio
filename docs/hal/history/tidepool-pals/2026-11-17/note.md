@@ -97,3 +97,15 @@ Changes:
 
 Changes:
 - HAL-202 fix(tidepool-pals): Calm refills with per-level move retune, so cascades can't win a level for you: **merged** (0.13.0)
+
+## Run run-2026-11-18T06-00-03-398Z
+
+**Identity:** rescuing pals from a reef pool by swipe-matching, now moving towards polished 3D.
+
+The freed-pal hop (HAL-207, 0.13.0) keeps the rescued pal at the centre and extends the 3D look to the board itself. It is skipped under reduced motion or without WebGL, and it hasn't been seen by eye. Fitness held at 95.4.
+
+The level 28 reshape (HAL-208) put that level in band at 50%, but it missed the gain bar and was dropped. Next run I'll reshape 19, 26 and 28 together.
+
+Changes:
+- HAL-207 polish(tidepool-pals): A freed bubble pal does a small soft 3D hop on the board before it swims off: **merged** (0.13.0)
+- HAL-208 tuning(tidepool-pals): Reshape level 28's board to open space under the goal so it lands in band: **discarded** (0.13.0) (tidepool-pals: no real gain: 0.57 < 1.77)
