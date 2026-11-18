@@ -3,7 +3,8 @@
 // (the last point of path 0). A wave is a list of groups: [enemy, count, gap seconds, start offset, lane?].
 // Without a lane, a wave's enemies alternate across the paths. Each early level teaches one new thing.
 
-const ALL = ['glowcap', 'frost', 'ember', 'sunspire'];
+const FOUR = ['glowcap', 'frost', 'ember', 'sunspire'];
+const ALL = [...FOUR, 'moonbell']; // the Moonbell joins from night 6
 const L = (name, intro, def) => ({ name, intro, lives: 20, hpMul: 1, ...def });
 
 export const REGIONS = [
@@ -56,7 +57,7 @@ export const LEVELS = [
     ],
   }),
   L('Sunspire Rise', 'A Gloom Toad comes tonight. The Sunspire pierces armour and hunts the biggest.', {
-    region: 'moon', towers: ALL, gold: 300,
+    region: 'moon', towers: FOUR, gold: 300,
     paths: [[[4, -1], [4, 5], [7, 5], [7, 9], [2, 9], [2, 11]]],
     waves: [
       [['moth', 14, 0.5]],
@@ -69,7 +70,7 @@ export const LEVELS = [
   }),
 
   // ---------- Frostmere ----------
-  L('The Fork', 'Two paths, one lantern. Wisps ignore frost; build where the paths meet.', {
+  L('The Fork', 'Two paths, one lantern. Wisps ignore frost; a Moonbell stills them. Build where the paths meet.', {
     region: 'frost', towers: ALL, gold: 280, hpMul: 1.7,
     paths: [
       [[1, -1], [1, 5], [4, 5], [4, 11]],

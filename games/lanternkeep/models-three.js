@@ -88,6 +88,7 @@ export const C = {
   frost: 0xa9dcff, frostDeep: 0x5d8fd0, ice: 0xdff6ff,
   ember: 0xff6a2a, emberCore: 0xffc060, leaf: 0x48703c, coal: 0x2a1c1c,
   sun: 0xffd35a, sunDeep: 0xc08a2a, sunCore: 0xfff2b8,
+  moon: 0xc9d6ff, moonCore: 0xeef2ff,
   paper: 0xffb060, wood: 0x5a3c26, iron: 0x2c2a30, stone: 0x6a6870, soil: 0x2a2220,
 };
 
@@ -214,6 +215,28 @@ export function plantModel(type, form, { physical = true } = {}) {
     } else {
       g.add(big(form === 1 ? 0.75 : 0.64, 0.13));
       if (form === 1) { g.add(big(0.36, 0.06, 0.17, 0.04, -0.28)); g.add(big(0.3, 0.06, -0.16, 0.05, 0.3)); }
+    }
+  } else if (type === 'moonbell') {
+    g.add(soil(0.36, 0x262434));
+    const bell = (h, r, x = 0, z = 0) => {
+      const b = new THREE.Group();
+      const stem = new THREE.CatmullRomCurve3([V3(0, 0, 0), V3(-0.03, h * 0.5, 0), V3(0, h, 0)]);
+      b.add(mesh(new THREE.TubeGeometry(stem, 10, 0.025, 8), mat(C.leaf, { rough: 0.7 })));
+      const profile = [[r * 0.2, 0.0], [r * 0.5, -r * 0.35], [r * 0.82, -r * 0.7], [r, -r * 0.95], [r * 1.08, -r * 1.02]];
+      b.add(mesh(lathe(profile, 28), mat(C.moon, { rough: 0.3, clearcoat: 0.8, emissive: C.moon, ei: 0.25, double: true }), { y: h }));
+      b.add(mesh(new THREE.SphereGeometry(r * 0.16, 12, 8), glow(C.moonCore, 1.6), { y: h - r * 0.98, shadow: false }));
+      b.position.set(x, 0.02, z);
+      return b;
+    };
+    if (form === 'a') { g.add(bell(0.62, 0.27)); g.add(bell(0.4, 0.17, 0.22, 0.1)); g.add(bell(0.34, 0.15, -0.2, 0.12)); }
+    else if (form === 'b') {
+      g.add(bell(0.58, 0.34));
+      const halo = mesh(new THREE.TorusGeometry(0.34, 0.02, 12, 48), glow(C.moonCore, 1.8), { y: 0.1, rx: Math.PI / 2, shadow: false });
+      halo.name = 'spin';
+      g.add(halo);
+    } else {
+      g.add(bell(form === 1 ? 0.6 : 0.5, form === 1 ? 0.27 : 0.22));
+      if (form === 1) g.add(bell(0.32, 0.13, 0.2, 0.1));
     }
   }
   return g;

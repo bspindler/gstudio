@@ -55,7 +55,9 @@ function pickTile(g: Game, type: TowerType, rnd: (() => number) | null): { c: nu
 /** Overflow planting starts when gold exceeds this many times the next plant's cost. */
 export const OVERFLOW_GOLD = 2;
 
-const ROTATION: TowerType[] = ['glowcap', 'glowcap', 'frost', 'ember', 'sunspire', 'ember', 'glowcap', 'sunspire'];
+// Moonbell sits after the first Sunspire, so on nights that offer it the bot plants one once it has a core of
+// plants; the rotation is filtered by the night's own plant list, so nights 1-5 play exactly as before.
+const ROTATION = ['glowcap', 'glowcap', 'frost', 'ember', 'sunspire', 'moonbell', 'ember', 'glowcap', 'sunspire'] as TowerType[];
 
 export function playLanternkeep(level: Level, opts: LanternkeepBotOptions = {}): LanternkeepPlay {
   const g = createGame(level, opts.mods);

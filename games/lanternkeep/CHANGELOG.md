@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.6.0 (2026-11-18)
+- New plant: the Moonbell, a slow, soft chime that stills every creature near it for a moment (bosses for half as long), grows into the Lullaby Bell or the Tollbell, and is available from night 6 and in Night Watch.
+
 ## 0.5.0 (2026-11-17)
 - The lantern now swells with a soft warm glow when you clear a wave.
 - Defeated creatures now dissolve into a few soft, pale moon-motes that drift up and fade.

@@ -65,8 +65,22 @@ export const TOWERS = {
       b: { name: 'Daybreak', blurb: 'A fast beam that burns hotter on the same target.', cost: 230, dmg: 70, rate: 1, range: 4.6, ramp: 0.4 },
     },
   },
+  moonbell: {
+    name: 'Moonbell', kind: 'chime', blurb: 'A slow, soft chime. Everything near it stops still for a moment.',
+    tiers: [
+      { cost: 90, dmg: 2, rate: 0.3, range: 1.9, stunFor: 0.6 },
+      { cost: 80, dmg: 3, rate: 0.33, range: 2.1, stunFor: 0.8 },
+    ],
+    branches: {
+      a: { name: 'Lullaby Bell', blurb: 'A wide, long hush over the path.', cost: 150, dmg: 3, rate: 0.33, range: 2.7, stunFor: 0.9 },
+      b: { name: 'Tollbell', blurb: 'A deep toll that stuns and really hurts.', cost: 150, dmg: 14, rate: 0.36, range: 2.2, stunFor: 0.7 },
+    },
+  },
 };
-export const TOWER_ORDER = ['glowcap', 'frost', 'ember', 'sunspire'];
+// Moonbell stuns bosses for half as long, and a creature it has just stilled shrugs off the next chime for a while.
+export const CHIME_BOSS_FACTOR = 0.5;
+export const CHIME_REST = 1.5;
+export const TOWER_ORDER = ['glowcap', 'frost', 'ember', 'sunspire', 'moonbell'];
 
 export const ENEMIES = {
   moth: { name: 'Moth', hp: 28, speed: 1.35, armor: 0, reward: 5, leak: 1, r: 0.22, tip: 'Drawn to light. Easy to stop alone, not in a crowd.' },
@@ -292,7 +306,7 @@ function spawn(g, type, lane, d = 0) {
   const def = ENEMIES[type];
   const hp = Math.round(def.hp * (g.level.hpMul ?? 1) * (1 + 0.04 * Math.max(0, g.waveIndex)));
   const p = pointAt(g.paths[lane], d);
-  const e = { id: g.nextId++, type, lane, hp, maxHp: hp, d, x: p.x, y: p.y, slow: 0, slowLeft: 0, stunLeft: 0, hitFlash: 0, healed: 0, under: false };
+  const e = { id: g.nextId++, type, lane, hp, maxHp: hp, d, x: p.x, y: p.y, slow: 0, slowLeft: 0, stunLeft: 0, chimeRest: 0, hitFlash: 0, healed: 0, under: false };
   g.enemies.push(e);
   return e;
 }
@@ -346,6 +360,18 @@ function fire(g, t, events) {
       hurt(g, e, s.dmg, false, events);
     }
     events.push({ e: 'pulse', id: t.id, x: t.x, y: t.y, range: s.range });
+    return true;
+  }
+  if (kind === 'chime') {
+    for (const e of near) {
+      if (e.chimeRest <= 0) {
+        const f = ENEMIES[e.type].leak >= 5 ? CHIME_BOSS_FACTOR : 1;
+        e.stunLeft = Math.max(e.stunLeft, s.stunFor * f);
+        e.chimeRest = s.stunFor * f + CHIME_REST;
+      }
+      hurt(g, e, s.dmg, false, events);
+    }
+    events.push({ e: 'chime', id: t.id, x: t.x, y: t.y, range: s.range });
     return true;
   }
   const target = pickTarget(near, kind === 'beam' ? 'strong' : 'first');
@@ -412,6 +438,7 @@ export function step(g) {
     const def = ENEMIES[e.type];
     if (e.slowLeft > 0) { e.slowLeft -= DT; if (e.slowLeft <= 0) e.slow = 0; }
     if (e.hitFlash > 0) e.hitFlash -= DT;
+    if (e.chimeRest > 0) e.chimeRest -= DT;
     if (e.healed > 0) e.healed -= DT;
     if (e.stunLeft > 0) { e.stunLeft = Math.max(0, e.stunLeft - DT); continue; }
     e.d += def.speed * (1 - e.slow) * DT;

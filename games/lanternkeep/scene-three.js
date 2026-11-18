@@ -44,7 +44,7 @@ export const REGIONS = {
   },
 };
 
-const PLANT_LIGHT = { glowcap: 0x5ff5cf, frost: 0x8ec8ff, ember: 0xff7a30, sunspire: 0xffd060 };
+const PLANT_LIGHT = { glowcap: 0x5ff5cf, frost: 0x8ec8ff, ember: 0xff7a30, sunspire: 0xffd060, moonbell: 0xaabfff };
 
 // ---------- shaders ----------
 const SKY = {
@@ -562,6 +562,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
       else if (ev.e === 'beam') { fx.push({ k: 'beam', x1: ev.x1, z1: ev.y1, x2: ev.x2, z2: ev.y2, t: 0, life: 0.34, heat: ev.heat }); fired.set(ev.id, 0); }
       else if (ev.e === 'burst') { fx.push({ k: 'lob', x1: ev.x1, z1: ev.y1, x2: ev.x2, z2: ev.y2, t: 0, life: 0.24, burn: ev.burn }); fx.push({ k: 'burst', x: ev.x2, z: ev.y2, r: ev.splash, t: -0.24, life: 0.5 }); fired.set(ev.id, 0); }
       else if (ev.e === 'pulse') { fx.push({ k: 'pulse', x: ev.x, z: ev.y, r: ev.range, t: 0, life: 0.7 }); fired.set(ev.id, 0); }
+      else if (ev.e === 'chime') { fx.push({ k: 'pulse', x: ev.x, z: ev.y, r: ev.range, t: 0, life: 1.2, moon: true }); fired.set(ev.id, 0); }
       else if (ev.e === 'kill') {
         const big = ev.type === 'toad' || ev.type === 'mothmother';
         if (ev.reward >= 5) fx.push({ k: 'coin', x: ev.x, z: ev.y, text: `+${ev.reward}`, t: 0, life: 0.95 });
@@ -790,7 +791,8 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         glowP.add(f.x, 0.35, f.z, f.r * (0.9 + (1 - k) * 1.2), 2 * k, 0.8 * k, 0.15 * k, 1);
         fxLight(f.x, 0.6, f.z, [1, 0.45, 0.15], 10 * k, 3.4);
       } else if (f.k === 'pulse') {
-        ring(f.x, f.z, f.r * (0.15 + 0.85 * (1 - k)), [0.7 * k, 1.3 * k, 2.2 * k], 1);
+        if (f.moon) ring(f.x, f.z, f.r * (0.15 + 0.85 * (1 - k)), [0.9 * k, 1 * k, 1.5 * k], 0.8);
+        else ring(f.x, f.z, f.r * (0.15 + 0.85 * (1 - k)), [0.7 * k, 1.3 * k, 2.2 * k], 1);
       } else if (f.k === 'flare') {
         const q = 1 - k;
         ring(f.x, f.z, f.r * (0.2 + 1 * ease(q)), [3 * k, 2.2 * k, 0.9 * k], 1);

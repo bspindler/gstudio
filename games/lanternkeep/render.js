@@ -14,6 +14,7 @@ export const COLOR = {
   frost: '#a8dcff',
   ember: '#ff7a45',
   sunspire: '#ffe27a',
+  moonbell: '#c9d6ff',
   gold: '#ffd36b',
 };
 
@@ -148,6 +149,33 @@ export function drawTower(ctx, type, x, y, s, tier, t, aim = 0) {
         ctx.fill();
       }
     }
+  } else if (type === 'moonbell') {
+    // a pale bell hung from a curved stem; it sways very slightly
+    const sway = Math.sin(t * 0.9) * 0.03;
+    ctx.strokeStyle = '#4d6b5b';
+    ctx.lineWidth = s * 0.05;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.26);
+    ctx.quadraticCurveTo(-s * 0.02, -s * 0.1, 0, -s * 0.2);
+    ctx.stroke();
+    ctx.rotate(sway);
+    const w = s * (0.2 + tier * 0.02);
+    ctx.fillStyle = COLOR.moonbell;
+    ctx.beginPath();
+    ctx.moveTo(-w, s * 0.1);
+    ctx.quadraticCurveTo(-w, -s * 0.2, 0, -s * 0.24);
+    ctx.quadraticCurveTo(w, -s * 0.2, w, s * 0.1);
+    ctx.quadraticCurveTo(0, s * 0.16, -w, s * 0.1);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(-w * 0.4, -s * 0.06, w * 0.16, s * 0.1, 0.2, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#e8e2cc';
+    ctx.beginPath();
+    ctx.arc(0, s * 0.16, s * 0.04, 0, TAU);
+    ctx.fill();
   }
   ctx.restore();
   // tier pips
@@ -161,7 +189,7 @@ export function drawTower(ctx, type, x, y, s, tier, t, aim = 0) {
   }
 }
 
-const TOWER_LIGHT = { glowcap: COLOR.glowcap, frost: COLOR.frost, ember: COLOR.ember, sunspire: COLOR.sunspire };
+const TOWER_LIGHT = { glowcap: COLOR.glowcap, frost: COLOR.frost, ember: COLOR.ember, sunspire: COLOR.sunspire, moonbell: COLOR.moonbell };
 
 // ---------- creatures ----------
 
@@ -407,6 +435,7 @@ export function createRenderer(canvas, opts = {}) {
         fx.push({ k: 'lob', x1: ev.x1, y1: ev.y1 - 0.12, x2: ev.x2, y2: ev.y2, t: 0, life: 0.16 });
         fx.push({ k: 'burst', x: ev.x2, y: ev.y2, r: ev.splash, t: -0.12, life: 0.4 });
       } else if (ev.e === 'pulse') fx.push({ k: 'pulse', x: ev.x, y: ev.y, r: ev.range, t: 0, life: 0.5 });
+      else if (ev.e === 'chime') fx.push({ k: 'pulse', x: ev.x, y: ev.y, r: ev.range, t: 0, life: 1.1, moon: true });
       else if (ev.e === 'kill') {
         if (ev.reward >= 5) fx.push({ k: 'coin', x: ev.x, y: ev.y, text: `+${ev.reward}`, t: 0, life: 0.9 });
         const n = ev.type === 'toad' ? 24 : 8;
@@ -619,7 +648,7 @@ export function createRenderer(canvas, opts = {}) {
       } else if (f.k === 'burst' && f.t > 0) {
         glow(f.x * s, f.y * s, s * f.r * (0.6 + 0.6 * (1 - k)), COLOR.ember, 0.6 * k);
       } else if (f.k === 'pulse') {
-        ctx.strokeStyle = rgba(f.flare ? COLOR.lantern : COLOR.frost, 0.6 * k);
+        ctx.strokeStyle = rgba(f.flare ? COLOR.lantern : f.moon ? COLOR.moonbell : COLOR.frost, (f.moon ? 0.4 : 0.6) * k);
         ctx.lineWidth = s * 0.05;
         ctx.beginPath();
         ctx.arc(f.x * s, f.y * s, f.r * s * (1 - k * 0.7), 0, TAU);
