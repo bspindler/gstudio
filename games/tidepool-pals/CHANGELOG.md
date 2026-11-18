@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.13.1 (2026-11-18)
+- Level 19 is easier to win: the litter along the bottom of the pool is thinned out so there's more room under the stranded pal.
+
 ## 0.13.0 (2026-11-17)
 - Swapping is easier to see: the pal you press follows your finger and its neighbour slides to meet it before the swap happens.
 - After a few quiet seconds, two pals gently drift toward each other to show a swap that would work.
