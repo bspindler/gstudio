@@ -6,6 +6,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - Block Barn: when you name an animal next to another one, the two now lean toward each other for a slow, gentle nuzzle.
 - A soft morning sunbeam from the window slowly drifts across the hay floor.
 - A small soft pink butterfly now drifts slowly inside the barn window and rests out of sight at dusk.
+- Press and hold on an animal and it gives a slow, sleepy yawn and stretch.
 
 ## 0.3.2 (2026-11-16)
 - The roof weathervane now looks like a real one: a solid golden arrow with a wide tail fin, a round ball on top of the post and a slightly bigger shape.

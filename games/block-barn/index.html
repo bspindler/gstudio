@@ -240,6 +240,12 @@
   .animal.blink .eye { transform-box: fill-box; transform-origin: 50% 50%; animation: blink 1.1s ease-in-out; }
   @keyframes blink { 40%, 60% { transform: scaleY(.12); } }
 
+  /* a long press on a named animal: one slow, sleepy yawn and stretch (eyes close, body rises tall and tips back, then settles) */
+  .animal.yawn .art { transform-box: fill-box; transform-origin: 50% 100%; animation: yawn-stretch 2.8s ease-in-out; }
+  .animal.yawn .eye { transform-box: fill-box; transform-origin: 50% 50%; animation: yawn-eyes 2.8s ease-in-out; }
+  @keyframes yawn-stretch { 30%, 65% { transform: scale(.94, 1.16) rotate(-4deg); } 45% { transform: scale(1.04, 1.2) rotate(-5deg); } }
+  @keyframes yawn-eyes { 20%, 70% { transform: scaleY(.1); } }
+
   /* the animal the barn asked for finds its way to a slow, happy side-to-side sway, then settles */
   .animal.sway .art { transform-box: fill-box; transform-origin: 50% 100%; animation: happy-sway 3s ease-in-out; }
   @keyframes happy-sway { 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
@@ -326,6 +332,7 @@
     .animal.blink .eye { animation: none; }
     .animal.look.nuz .art { animation: none; }
     .animal.sway .art { animation: none; }
+    .animal.yawn .art { animation: none; }
     .animal.oh .art { animation: none; }
     .animal.oh .eye { animation: none; }
     #door .leaf { transition: none; }
@@ -914,6 +921,16 @@ function nameBlock(k) {
   lookToward(k);
   if (rng() < 0.14) hiddenFriend(k);
 }
+// A press held LONGPRESS ms or more and let go on a named animal is answered by one slow yawn instead of the tap
+// reaction, so the gesture still answers exactly once. A cancelled touch never reaches here. No sound, no text.
+const LONGPRESS = 600;
+function yawnAnimal(l) {
+  const a = animalEl(l);
+  if (!a) return;
+  a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop', 'blink', 'look', 'nuz', 'sway', 'oh');
+  restart(a, 'yawn');
+  setTimeout(() => a.classList.remove('yawn'), 3000);
+}
 function tapAnimal(l) {
   const n = (tapCount[l] = (tapCount[l] || 0) + 1);
   moveAnimal(l, n % 4);
@@ -1161,7 +1178,7 @@ function distTo(b, x, y) {
   const dx = Math.max(b.x - x, 0, x - (b.x + b.w)), dy = Math.max(b.y - y, 0, y - (b.y + b.h));
   return Math.hypot(dx, dy);
 }
-function tapAt(x, y) {
+function tapAt(x, y, heldMs = 0) {
   quietMs = 0;
   invitedThisQuiet = false;
   const wasInvited = invited;
@@ -1180,7 +1197,7 @@ function tapAt(x, y) {
   if (!best || bestD > NEAR) { puffAt(x, y); return; }
   if (best.kind === 'tower') { tapTower(); return; }
   const l = best.letter;
-  if (best.kind === 'animal') tapAnimal(l);
+  if (best.kind === 'animal') { if (heldMs >= LONGPRESS) yawnAnimal(l); else tapAnimal(l); }
   else if (!named.has(l)) nameBlock(best.k);
   else stackBlock(best.k);
   if (wasInvited && wasInvited === l && floor.includes(l)) {
@@ -1208,7 +1225,7 @@ function endPointer(e, cancelled) {
   if (!gesture || !gesture.fingers.has(e.pointerId)) return;
   if (e.pointerId === gesture.id && !gesture.fired) {
     gesture.fired = true;
-    if (!cancelled && !cornerOpen) { prime(); tapAt(gesture.x, gesture.y); }
+    if (!cancelled && !cornerOpen) { prime(); tapAt(gesture.x, gesture.y, performance.now() - gesture.start); }
   }
   gesture.fingers.delete(e.pointerId);
   if (!gesture.fingers.size) gesture = null;
