@@ -256,6 +256,11 @@ const SPECIAL = {
     { exit: 'down',
       intro: 'A seahorse pool! The stranded pal floats in its belly: clear the pals under it so it sinks down to the open water at the tail.' }),
     pool: poolOf(25) },
+  29: { ...L(29, 15, 5, [RESCUE(1), C(3, 15)],
+    ['xx...xx', 'x.....x', '.......', '...B...', '.......', '.......', '.x.x.x.', '.x.x.x.'],
+    { tide: T(5, 3, 'up'),
+      intro: 'An octopus pool! A pal is bubbled in its head, with open water below: clear pals right next to the bubble twice to set it free.' }),
+    pool: poolOf(29) },
 };
 export function levelDef(n) { return n >= 1 && n <= AUTHORED.length ? AUTHORED[n - 1] : SPECIAL[n] ?? generateLevel(n); }
 /** The level for number n, with its `pool` index. Same as levelDef; reef.js reads levelFor(n).pool. */

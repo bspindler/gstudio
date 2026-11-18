@@ -17,6 +17,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - The pal you won now shows as the same soft 3D figure in the pool strip under the board, with the win wiggle kept.
 - Refills no longer start accidental cascades, so a swipe can't win a level on its own, and a few tough levels got a few extra moves.
 - A freed bubble pal now does a small, soft 3D hop and turn on the board when its bubble pops.
+- New level 29: an octopus-shaped pool with a pal bubbled in its head and open water below it.
 
 ## 0.12.0 (2026-11-16)
 - Adding ?level=N to the page address opens straight onto that level's mission card and board (levels 1 to 24).
