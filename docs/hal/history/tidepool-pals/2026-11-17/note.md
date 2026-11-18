@@ -79,3 +79,14 @@ Changes:
 - HAL-193 polish(tidepool-pals): Mission card how-to text says the swap rule once, in two short lines: **merged** (0.12.1)
 - HAL-194 polish(tidepool-pals): Falling refill pals land with a small squash-and-bounce: **merged** (0.12.1)
 - HAL-195 feature(tidepool-pals): New hand-made level after the last one: a seahorse-shaped pool with a stranded…: **held** (0.13.0)
+
+## Run run-2026-11-18T00-06-50-986Z
+
+**Tidepool Pals:** Its identity is the cartoon reef pals, the trapped pal you rescue, and the tides. Tonight leaned into that: the prize is now a soft 3D pal that appears whole and centred with no 2D flash, and the same figure shows in the pool strip, where the win wiggle and slim strip are kept. Neither has been seen on a phone yet.
+
+The calm-refill fix was dropped by the tuning gain bar even though fitness rose from 94.5 to 95.4. The new colour rule for refills keeps the random sequence the same, so the frozen level 14 test still holds. Next run it comes back as a fix for your Ship or Drop. Levels 19, 28 and 26 are well under their band and need reshaped boards.
+
+Changes:
+- HAL-196 tuning(tidepool-pals): Rebuild calm refills with per-level move retune on the current game: **discarded** (0.13.0) (tidepool-pals: no real gain: 0.35 < 2.63)
+- HAL-197 fix(tidepool-pals): Prize reveal shows only the 3D pal, whole and centred, with no 2D flash first: **merged** (0.13.0)
+- HAL-198 polish(tidepool-pals): Pool strip shows the newly won pal as the same soft 3D figure: **merged** (0.13.0)

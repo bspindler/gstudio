@@ -33,3 +33,10 @@ Changes:
 - HAL-185 feature(block-barn): Rebuild the window butterfly on the centred layout: **held** (0.4.0)
 - HAL-186 feature(block-barn): Rebuild the morning sunbeam on the centred layout: **held** (0.4.0)
 - HAL-187 feature(block-barn): Rebuild the water trough beside the bottom-right hay bale: **held** (0.4.0)
+
+## Run run-2026-11-18T00-06-50-986Z
+
+**Block Barn:** Its identity is a calm, toddler-gentle barn. The butterfly is rebuilt in the window pane: slow, soft and silent, with no tap zone. It fades at dusk and stops moving under reduced motion. The score stays at 100. It is held without a phone screenshot, so check it on your phone before deciding.
+
+Changes:
+- HAL-200 feature(block-barn): Rebuild the window butterfly on the current centred layout: **held** (0.4.0)
