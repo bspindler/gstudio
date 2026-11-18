@@ -8,10 +8,9 @@ import { clearable, jumpWindow } from '../src/hal/hyperline-bot.js';
 const X0 = 12 * SECTOR_LEN;
 
 describe('hyperline STAGGER SPIKES', () => {
-  it('is sector 13 for players, right before HYPERCORE, and introduces the stagger pattern', () => {
+  it('is sector 13 for players, after RISER STEPS, and introduces the stagger pattern', () => {
     expect(sectorInfo(11).name).toBe('RISER STEPS');
     expect(sectorInfo(12).name).toBe('STAGGER SPIKES');
-    expect(sectorInfo(13).name).toBe('HYPERCORE');
     expect(INTRO[12]).toBe('stagger');
   });
 

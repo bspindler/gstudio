@@ -257,7 +257,24 @@ export const PATTERNS = [
       ];
       return { o, len: bx + cw2 - x + 0.5 };
     } },
+
+  // Sector 13: drop ledges. A raised ledge (hop up onto it) ends straight over a spike strip on the floor: running
+  // off the edge drops you into the spikes, so jump off the edge. The strip is as long as it can be while the
+  // take-off window (the last `want` seconds before the edge) still clears its far end.
+  { id: 'drop', sector: 13, weight: (s) => (s === 13 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const v = speedAt(x + 6), lead = range(x) * 0.6, bx = x + lead, bw = 3 + r() * 0.8, want = intro ? 0.06 : 0.08;
+      const ex = bx + bw, sx = ex + 0.5, farEnd = ex - 0.06 + v * (DROP_TOP - want) - 0.44; // last spike's start
+      const n = Math.max(3, Math.floor((farEnd - sx) / SW) + 1);
+      const o = [{ t: 'block', x: bx, w: bw, h: 1 }, { t: 'chip', x: bx + bw / 2, y: 1.7 }];
+      spikes(o, sx, n);
+      o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
+      return { o, len: lead + bw + 0.5 + n * SW + 0.5 };
+    } },
 ];
+
+// Seconds a jump from the ledge (one unit up) stays at least 0.5 above the track, the height that clears a spike.
+const DROP_TOP = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.5)) / GRAV;
 
 // Seconds a jump from the edge of a one-unit step takes to come down to the track on the far side of the pit.
 const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
@@ -265,7 +282,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

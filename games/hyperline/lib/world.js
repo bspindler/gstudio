@@ -66,6 +66,8 @@ export const SECTORS = [
     pal: { sky: ['#0A0214', '#2A0A40', '#5A1A78'], sun: ['#FF8A3D', '#FF2BD6'], grid: '#B98CFF', rail: '#FFE45C', neon: '#7CFF6B', block: '#FF8A3D' } },
   { name: 'STAGGER SPIKES', hint: 'Spike pairs at uneven gaps: read each gap, do not tap to a beat.',
     pal: { sky: ['#020A0A', '#06303A', '#0C5A5E'], sun: ['#FFE45C', '#7CFFEA'], grid: '#7CFFEA', rail: '#FF2BD6', neon: '#FFE45C', block: '#22F0FF' } },
+  { name: 'DROP LEDGES', hint: 'Do not run off the ledge: jump off the edge to clear the spikes below.',
+    pal: { sky: ['#0A0408', '#321020', '#6A1E3A'], sun: ['#FFB86B', '#FF2B5E'], grid: '#FF6B9A', rail: '#22F0FF', neon: '#FFE45C', block: '#7CFFEA' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];
