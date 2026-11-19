@@ -24,3 +24,16 @@ Changes:
 Changes:
 - HAL-225 tuning(lanternkeep): Retune the nights Moonbell's rebuild pushed out of band: **discarded** (0.6.0) (lanternkeep: no real gain: 12.50 < 17.78)
 - HAL-229 feature(lanternkeep): New night 17 'Mirror Mist': Twin Wisps split in two when first struck: **held** (0.6.0)
+
+## Run run-2026-11-19T05-55-40-173Z
+
+**Lanternkeep 0.6.0**: The Fork, Mossy Ford and Crosswind are rebalanced so those nights are a fair fight with Moonbell in the arsenal (HAL-231).
+
+- Fitness went from 89.4 to 95.8, with inBand and noSpikes both at 100.
+- It went in as a fix and changed only the three hpMul values.
+- Moonbell and the held night 17 (Mirror Mist) are untouched.
+
+The moonlit tower defence is intact.
+
+Changes:
+- HAL-231 fix(lanternkeep): Restore night bands after Moonbell: hpMul for The Fork, Mossy Ford, Crosswind: **merged** (0.6.0)

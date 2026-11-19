@@ -27,3 +27,24 @@ Changes:
 
 Changes:
 - HAL-228 feature(gearhold): New level 7 'Ram Foundry': brass rams charge in lines and stun on walls: **held** (0.8.0)
+
+## Run run-2026-11-19T05-55-40-173Z
+
+**Gearhold**: two merges, both labelled 0.7.1 (a version clash).
+
+**Boiler Stair furnace look (HAL-232)**
+- Dim red-orange boiler lamps and slow steam wisps, on the existing three.js renderer.
+- Glow is restrained and only on real lamps, as you asked in N-018.
+- Layout and enemies are unchanged, and the score held at 91.73.
+
+**The Orrery press crossings (HAL-233)**
+- Three timed press rows on the key route.
+- Whole-game winnable went from 81.1 to 84.4 and fitness from 91.7 to 92.3.
+- The Orrery itself is still too easy at 0.95 wins, and tension dipped from 35.0 to 30.4.
+- Presses have now failed twice on this level, so the next attempt will change the layout or put a threat on the main route.
+
+The levels are starting to feel like different places, which is the identity you asked for. Ram Foundry (level 7) is still held.
+
+Changes:
+- HAL-232 polish(gearhold): Give Boiler Stair its own furnace look: low red-orange boiler lamps, rising…: **merged** (0.7.1)
+- HAL-233 fix(gearhold): The Orrery: three full-width timed press crossings on the key route: **merged** (0.7.1)

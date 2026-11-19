@@ -25,3 +25,16 @@ Changes:
 Changes:
 - HAL-226 fix(tidepool-pals): Reshape level 28's board to open space under the goal so it lands in band: **merged** (0.13.1)
 - HAL-227 fix(tidepool-pals): Reshape level 26's board to open space under the goal so it lands in band: **merged** (0.13.1)
+
+## Run run-2026-11-19T05-55-40-173Z
+
+**Tidepool**: new hand-made level 30 is held as 0.14.0 (HAL-236).
+
+- It is a sea-turtle pool with a pal bubbled on its shell, open water beneath it, and litter on the flippers.
+- Its goals are rescue plus litter, in 12 moves, with the tide draining sideways.
+- It wins 67%, inside the band, and fitness is steady at 97.35.
+
+It keeps the shaped-pool and reef identity you've voted up.
+
+Changes:
+- HAL-236 feature(tidepool-pals): New hand-made level 30: a sea-turtle-shaped pool with a bubbled pal on its shell: **held** (0.14.0)
