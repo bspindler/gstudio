@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.7.1 (2026-11-18)
+- Boiler Stair now has its own furnace look: dim red-orange boiler lamps along the walls and slow rising steam wisps.
+
 ## 0.7.0 (2026-11-17)
 - New level 6, Boiler Stair: the gear key is hidden deep in the boilers, and the walk back to the exit passes one last guarded hall.
 

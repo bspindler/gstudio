@@ -173,7 +173,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.7.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.7.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -383,12 +383,29 @@ function placeLamps() {
   }
   return lamps;
 }
+const FURNACE = [1.0, 0.3, 0.1];
+// Open floor cells that touch a wall, spaced apart; the lamp sits on the wall side of the cell.
+function placeFurnaces() {
+  const open = (x, y) => { const c = cell(x, y); return !isWall(c) && !isDoor(c); };
+  const out = [];
+  for (let y = 1; y < mh - 1; y++) for (let x = 1; x < mw - 1; x++) {
+    if (!open(x, y)) continue;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => isWall(cell(x + dx, y + dy)));
+    if (dirs.length !== 1) continue;
+    if (out.some(([fx, fy]) => (fx - x - 0.5) ** 2 + (fy - y - 0.5) ** 2 < 5.5 * 5.5)) continue;
+    out.push([x + 0.5 + dirs[0][0] * 0.4, y + 0.5 + dirs[0][1] * 0.4]);
+  }
+  return out;
+}
 function buildGfx() {
   if (G) for (const m of [G.level, G.scenery, G.lantern]) R3.free(m);
   const L = buildLevel(grid, mw, mh, mood);
   wallH = L.heights;
   const lamps = placeLamps();
+  // Boiler Stair only: dim red-orange furnace lamps low against the walls (a look, not a layout change).
+  const furnaces = LEVELS[level].name === 'Boiler Stair' ? placeFurnaces() : [];
   G = {
+    furnaces,
     level: R3.mesh(L.data),
     scenery: R3.mesh(buildScenery(mw / 2, mh / 2)),
     lantern: R3.mesh(buildLantern(mood)),
@@ -398,6 +415,7 @@ function buildGfx() {
     lights: [
       ...lamps.map(([x, y]) => ({ p: [x + 0.5, 1.75, y + 0.5], r: 6.5, c: lin(mood.lamp, 1.6) })),
       ...L.emitters.map((e) => ({ p: e.p, r: e.r, c: lin(e.c, 1.4) })),
+      ...furnaces.map(([x, y]) => ({ p: [x, 0.55, y], r: 4.2, c: lin(FURNACE, 1.1) })),
     ],
   };
 }
@@ -556,6 +574,16 @@ function render(now) {
   const lampC = lin(mood.lamp, 0.55);
   for (const [x, y] of G.lamps) bb.push({ p: [x + 0.5, 1.75, y + 0.5], size: 0.45, c: lampC, a: 0.22, add: 1 });
   for (const e of G.emitters) bb.push({ p: e.p, size: e.kind === 'exit' ? 1.1 : 0.7, c: lin(e.c, 0.35), a: 0.3, add: 1 });
+  // Boiler Stair furnaces: a dim red-orange glow on the lamp itself and slow steam wisps rising from it.
+  // Pure functions of time (no random stream), so frames stay deterministic.
+  G.furnaces.forEach(([fx0, fy0], i) => {
+    bb.push({ p: [fx0, 0.55, fy0], size: 0.38, c: lin(FURNACE, 0.7), a: 0.3, add: 1 });
+    for (let k = 0; k < 3; k++) {
+      const ph = (t * 0.16 + k / 3 + i * 0.37) % 1;
+      const sway = Math.sin(t * 0.9 + i + k * 2) * 0.12;
+      bb.push({ p: [fx0 + sway, 0.7 + ph * 1.5, fy0 + sway * 0.6], size: 0.22 + ph * 0.4, c: [0.72, 0.5, 0.4], a: 0.22 * Math.sin(ph * Math.PI) });
+    }
+  });
   for (const p of presses) {
     // Brass plate: dim while resting, hot orange while warning, a white-gold flash on the slam.
     const st = pressState(levelTime, p.x), pos = [p.x + 0.5, 0.06, p.y + 0.5];
