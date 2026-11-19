@@ -90,6 +90,7 @@ export const ENEMIES = {
   mossback: { name: 'Mossback', hp: 120, speed: 0.7, armor: 1, reward: 14, leak: 1, r: 0.32, heal: { r: 1.4, pct: 0.06 }, tip: 'Heals creatures near it. Take it out first.' },
   toad: { name: 'Gloom Toad', hp: 650, speed: 0.5, armor: 3, reward: 75, leak: 5, r: 0.42, tip: 'A boss. Costs five lives if it reaches the lantern.' },
   mole: { name: 'Hollow Mole', hp: 70, speed: 0.95, armor: 1, reward: 10, leak: 1, r: 0.28, dive: { up: 2.4, down: 1.6 }, tip: 'Dives under the path for a stretch. Nothing can hit it down there, so cover the whole road.' },
+  lampmoth: { name: 'Lampmoth', hp: 16, speed: 2.5, armor: 0, reward: 3, leak: 1, r: 0.17, lamp: { dazzle: 3.2, reach: 0.32 }, tip: 'Leaves the path and dives at your brightest plant. It dazzles that plant until it burns out, then flits for the lantern.' },
   mothmother: { name: 'Mothmother', hp: 900, speed: 0.45, armor: 2, reward: 90, leak: 5, r: 0.46, split: { type: 'moth', n: 6 }, tip: 'A boss. She bursts into moths when she falls.' },
 };
 
@@ -307,8 +308,51 @@ function spawn(g, type, lane, d = 0) {
   const hp = Math.round(def.hp * (g.level.hpMul ?? 1) * (1 + 0.04 * Math.max(0, g.waveIndex)));
   const p = pointAt(g.paths[lane], d);
   const e = { id: g.nextId++, type, lane, hp, maxHp: hp, d, x: p.x, y: p.y, slow: 0, slowLeft: 0, stunLeft: 0, chimeRest: 0, hitFlash: 0, healed: 0, under: false };
+  if (def.lamp) { e.mode = 'dive'; e.dazzleLeft = 0; e.tid = 0; }
   g.enemies.push(e);
   return e;
+}
+
+// The brightest plant: the most grown one (it has put the most light into the garden); the oldest wins a tie.
+function brightest(g) {
+  let best = null;
+  for (const t of g.towers) if (!best || t.spent > best.spent) best = t;
+  return best;
+}
+
+// A Lampmoth leaves its path: dive at the brightest plant, dazzle it, then flit straight for the lantern.
+// Returns true when it has leaked.
+function moveLamp(g, e, def, events) {
+  const sp = def.speed * (1 - e.slow) * DT;
+  const toward = (tx, ty) => {
+    const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy);
+    if (d > 1e-6) { const k = Math.min(1, sp / d); e.x += dx * k; e.y += dy * k; }
+    return d;
+  };
+  if (e.mode === 'dive') {
+    const t = brightest(g);
+    if (!t) { // no plants to dive at: stay on the path
+      e.d += sp;
+      const p = pointAt(g.paths[e.lane], e.d);
+      e.x = p.x; e.y = p.y;
+      return e.d >= g.paths[e.lane].len;
+    }
+    e.tid = t.id;
+    if (toward(t.x, t.y) <= def.lamp.reach) { e.mode = 'dazzle'; e.dazzleLeft = def.lamp.dazzle; t.dazzled = true; }
+    return false;
+  }
+  if (e.mode === 'dazzle') {
+    const t = g.towers.find((x) => x.id === e.tid);
+    if (!t) { e.mode = 'dive'; return false; }
+    t.dazzled = true;
+    const a = g.t * 7 + e.id * 1.9;
+    e.x = t.x + Math.cos(a) * 0.3;
+    e.y = t.y + Math.sin(a) * 0.3;
+    e.dazzleLeft -= DT;
+    if (e.dazzleLeft <= 0) e.mode = 'home';
+    return false;
+  }
+  return toward(g.lantern.x, g.lantern.y) <= 0.15;
 }
 
 function killed(g, e, events) {
@@ -433,6 +477,7 @@ export function step(g) {
     spawn(g, s.type, s.lane);
   }
 
+  for (const t of g.towers) t.dazzled = false;
   for (const e of g.enemies) {
     if (e.hp <= 0) continue;
     const def = ENEMIES[e.type];
@@ -441,6 +486,16 @@ export function step(g) {
     if (e.chimeRest > 0) e.chimeRest -= DT;
     if (e.healed > 0) e.healed -= DT;
     if (e.stunLeft > 0) { e.stunLeft = Math.max(0, e.stunLeft - DT); continue; }
+    if (def.lamp) {
+      if (moveLamp(g, e, def, events)) {
+        e.hp = 0;
+        e.leaked = true;
+        g.lives = Math.max(0, g.lives - def.leak);
+        g.stats.leaks += def.leak;
+        events.push({ e: 'leak', type: e.type, lives: g.lives });
+      }
+      continue;
+    }
     e.d += def.speed * (1 - e.slow) * DT;
     const path = g.paths[e.lane];
     if (e.d >= path.len) {
@@ -483,8 +538,9 @@ export function step(g) {
 
   for (const t of g.towers) {
     t.cd -= DT;
-    if (t.cd <= 0 && fire(g, t, events)) t.cd = 1 / stats(t).rate;
     if (t.cd < 0) t.cd = 0;
+    if (t.dazzled) continue; // a plant a Lampmoth is dazzling can't fire
+    if (t.cd <= 0 && fire(g, t, events)) t.cd = 1 / stats(t).rate;
   }
 
   g.enemies = g.enemies.filter((e) => e.hp > 0);

@@ -221,6 +221,20 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
     ctx.beginPath();
     ctx.ellipse(0, 0, s * 0.05, s * 0.14, 0, 0, TAU);
     ctx.fill();
+  } else if (e.type === 'lampmoth') {
+    // soft pale wings with a warm glow at the belly
+    ctx.rotate(heading + Math.PI / 2);
+    const flap = 0.5 + 0.5 * Math.abs(Math.sin(t * 22 + k));
+    ctx.fillStyle = 'rgba(255,246,214,0.8)';
+    for (const d of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(d * s * 0.11 * flap, 0, s * 0.12 * flap, s * 0.16, d * 0.4, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ffe9a0';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.045, s * 0.1, 0, 0, TAU);
+    ctx.fill();
   } else if (e.type === 'firefly') {
     ctx.rotate(heading + Math.PI / 2);
     const flap = 0.5 + 0.5 * Math.abs(Math.sin(t * 24 + k));
@@ -318,7 +332,7 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
   }
 }
 
-const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, mothmother: 0.46 };
+const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, lampmoth: 0.17, mothmother: 0.46 };
 
 // ---------- renderer ----------
 

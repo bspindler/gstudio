@@ -286,9 +286,9 @@ export function creatureModel(type) {
   const body = new THREE.Group();
   root.add(body);
   const parts = { body, wings: [], legs: [] };
-  if (type === 'moth' || type === 'mothmother' || type === 'firefly') {
-    const big = type === 'mothmother', fly = type === 'firefly';
-    const k = big ? 2.1 : fly ? 0.6 : 1;
+  if (type === 'moth' || type === 'mothmother' || type === 'firefly' || type === 'lampmoth') {
+    const big = type === 'mothmother', fly = type === 'firefly' || type === 'lampmoth', lamp = type === 'lampmoth';
+    const k = big ? 2.1 : lamp ? 0.7 : fly ? 0.6 : 1;
     body.position.y = (big ? 0.5 : fly ? 0.36 : 0.3);
     body.add(mesh(new THREE.CapsuleGeometry(0.05 * k, 0.16 * k, 6, 14), mat(big ? 0x3a2a4a : 0x4a3a58, { rough: 0.9, sheen: 1, sheenColor: 0xc8b0ff }), { rx: Math.PI / 2 }));
     body.add(mesh(new THREE.SphereGeometry(0.055 * k, 16, 12), mat(0x3e3050, { rough: 0.85, sheen: 1, sheenColor: 0xc8b0ff }), { z: 0.15 * k }));
@@ -297,12 +297,12 @@ export function creatureModel(type) {
       const ant = new THREE.QuadraticBezierCurve3(V3(s * 0.02 * k, 0.03 * k, 0.18 * k), V3(s * 0.07 * k, 0.12 * k, 0.24 * k), V3(s * 0.11 * k, 0.12 * k, 0.3 * k));
       body.add(mesh(new THREE.TubeGeometry(ant, 8, 0.005 * k, 5), mat(0x2a2030, { rough: 0.8 }), { shadow: false }));
     }
-    if (fly) body.add(mesh(new THREE.SphereGeometry(0.07, 16, 12), glow(0xe8ff70, 4), { z: -0.1, sz: 1.3, shadow: false }));
+    if (fly) body.add(mesh(new THREE.SphereGeometry(0.07, 16, 12), glow(lamp ? 0xffe9a8 : 0xe8ff70, 4), { z: -0.1, sz: 1.3, shadow: false }));
     if (big) {
       for (let i = 0; i < 5; i++) body.add(mesh(new THREE.ConeGeometry(0.016, 0.1 + (i % 2) * 0.06, 6), glow(0xff8ad8, 2.6), { x: (i - 2) * 0.035, y: 0.12, z: 0.32, rx: -0.3, shadow: false }));
       for (let i = 0; i < 4; i++) body.add(mesh(new THREE.TorusGeometry(0.1 - i * 0.008, 0.008, 6, 20), glow(0xff8ad8, 1.6), { z: -0.05 - i * 0.07, rx: 0, shadow: false }));
     }
-    const wingCol = big ? 0x9a7ad8 : fly ? 0xdde8ff : 0xd6caf2;
+    const wingCol = big ? 0x9a7ad8 : lamp ? 0xfff2cc : fly ? 0xdde8ff : 0xd6caf2;
     const wm = mat(wingCol, { rough: 0.6, double: true, sheen: 1, sheenColor: 0xffffff, opacity: fly ? 0.55 : 0.95, emissive: big ? 0x5a2a8a : 0x2a2040, ei: big ? 0.8 : 0.3 });
     const wg = wingGeometry(0.34 * k, 0.32 * k, big ? 0.75 : 0.55);
     for (const s of [-1, 1]) {

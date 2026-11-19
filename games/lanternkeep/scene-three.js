@@ -713,12 +713,13 @@ export function createRendererThree(canvas, overlay, opts = {}) {
       const sc = 1.45;
       c.root.scale.setScalar(sc);
       const P = c.parts;
-      if (e.type === 'moth' || e.type === 'firefly' || e.type === 'mothmother') {
+      if (e.type === 'moth' || e.type === 'firefly' || e.type === 'lampmoth' || e.type === 'mothmother') {
         const big = e.type === 'mothmother';
         c.root.position.y = Math.sin(t * (big ? 3 : 6) + k) * 0.05;
-        const flap = Math.sin(t * (e.type === 'firefly' ? 30 : big ? 7 : 16) * frozen + k) * 0.85;
+        const flap = Math.sin(t * (e.type === 'firefly' || e.type === 'lampmoth' ? 30 : big ? 7 : 16) * frozen + k) * 0.85;
         for (const w of P.wings) w.g.rotation.z = w.s * (0.2 + flap * 0.65);
         if (e.type === 'firefly') glowP.add(x, 0.34 * sc, z, 0.5, 0.9, 1.1, 0.2, 0.8);
+        if (e.type === 'lampmoth') glowP.add(x, 0.34 * sc, z, 0.6, 1.4, 1.1, 0.5, e.mode === 'dazzle' ? 1 : 0.7);
       } else if (e.type === 'wisp') {
         c.root.position.y = Math.sin(t * 3 + k) * 0.07;
         P.body.rotation.z = Math.sin(t * 4 + k) * 0.1;

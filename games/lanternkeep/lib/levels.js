@@ -240,4 +240,18 @@ export const LEVELS = [
       [['mole', 36, 0.3], ['wisp', 20, 0.35, 2], ['toad', 4, 3, 5]],
     ],
   }),
+  L('Lamplit Orchard', 'Lampmoths leave the path and dive at your brightest plant, dazzling it. Guard it with its neighbours.', {
+    region: 'ember', towers: ALL, gold: 420, hpMul: 1.5,
+    paths: [[[4, -1], [4, 2], [1, 2], [1, 6], [7, 6], [7, 10], [4, 10], [4, 11]]],
+    waves: [
+      [['moth', 14, 0.45], ['lampmoth', 3, 1.2, 4]],
+      [['beetle', 8, 0.9], ['lampmoth', 4, 1, 3]],
+      [['wisp', 12, 0.55], ['lampmoth', 6, 0.6, 4]],
+      [['mossback', 3, 1.5], ['lampmoth', 7, 0.5, 2], ['firefly', 16, 0.28, 3]],
+      [['toad', 2, 4], ['lampmoth', 8, 0.5, 3]],
+      [['beetle', 10, 0.7], ['lampmoth', 9, 0.45, 2], ['wisp', 8, 0.55, 4]],
+      [['mothmother', 1, 1], ['lampmoth', 10, 0.4, 3], ['mossback', 3, 1.5, 3]],
+      [['toad', 3, 3], ['lampmoth', 12, 0.4, 2], ['beetle', 10, 0.6, 4]],
+    ],
+  }),
 ];
