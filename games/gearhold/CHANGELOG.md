@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.8.1 (2026-11-19)
+- The Orrery: the kilnwarden in the exit hall now stands by the exit arch and is a little less tough, so the walk home is a fair fight.
+
 ## 0.8.0 (2026-11-18)
 - Boiler Stair now has its own furnace look: dim red-orange boiler lamps along the walls and slow rising steam wisps.
 - The Orrery: timed gear presses now guard the top-right chamber and the key room, so you have to time your dash to the gear key.
