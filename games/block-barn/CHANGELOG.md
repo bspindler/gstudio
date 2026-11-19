@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.4.1 (2026-11-18)
 - The hay bale gives a slow, soft squash and settles back when tumbled blocks land on it.
+- Tap the weathervane and the butterfly in the window flutters around in one slow, gentle loop.
 
 ## 0.4.0 (2026-11-17)
 - Block Barn: when you name an animal next to another one, the two now lean toward each other for a slow, gentle nuzzle.

@@ -1148,6 +1148,22 @@ function vaneBox() {
 function tapVane() {
   vaneAngle += 300;
   $('vane').querySelector('.arrow').style.setProperty('--vr', `${vaneAngle}deg`);
+  butterflyLoop();
+}
+// The spinning vane stirs the window butterfly into one slow, soft loop (once per tap, never stacked). It uses the
+// translate/rotate properties, so the butterfly's own drift keeps going; nothing shows at dusk or with reduced motion.
+let bflyLoop = null;
+function butterflyLoop() {
+  const b = $('butterfly');
+  if (dusk || !b.animate || (bflyLoop && bflyLoop.playState === 'running')) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  bflyLoop = b.animate([
+    { translate: '0 0', rotate: '0deg' },
+    { translate: '14px -10px', rotate: '40deg', offset: 0.25 },
+    { translate: '28px 0', rotate: '140deg', offset: 0.5 },
+    { translate: '14px 10px', rotate: '220deg', offset: 0.75 },
+    { translate: '0 0', rotate: '360deg' },
+  ], { duration: 5000, easing: 'ease-in-out' });
 }
 
 /** The tappable things (CSS px boxes), for routing and for the hook. */
