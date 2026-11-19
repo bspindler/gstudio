@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.7.1 (2026-11-18)
 - Boiler Stair now has its own furnace look: dim red-orange boiler lamps along the walls and slow rising steam wisps.
 - The Orrery: timed gear presses now guard the top-right chamber and the key room, so you have to time your dash to the gear key.
+- The Orrery: a kilnwarden now wakes in the exit hall once you take the gear key, so the walk home is a real fight.
 
 ## 0.7.0 (2026-11-17)
 - New level 6, Boiler Stair: the gear key is hidden deep in the boilers, and the walk back to the exit passes one last guarded hall.
