@@ -2,11 +2,12 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
-## 0.13.1 (2026-11-18)
+## 0.14.0 (2026-11-18)
 - Level 19 is easier to win: the litter along the bottom of the pool is thinned out so there's more room under the stranded pal.
 - Level 28 is easier to win: the litter under the stranded pal is thinned out so there's more open water to work with.
 - Tidepool Pals: level 26's pool has open water under the stranded pal, so it sinks free more easily.
 - Stranded and bubbled pals now turn toward a clear next to them and give a small hopeful bounce, so you can see each match helping the rescue.
+- New level 30: a sea-turtle pool with a pal bubbled on its shell, open water around it, and nets on the flippers to untangle.
 
 ## 0.13.0 (2026-11-17)
 - Swapping is easier to see: the pal you press follows your finger and its neighbour slides to meet it before the swap happens.
