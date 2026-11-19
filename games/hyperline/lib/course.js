@@ -287,7 +287,33 @@ export const PATTERNS = [
       o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
       return { o, len: sx + n * SW - x + 0.5 };
     } },
+
+  // Sector 15: falling pillars. A one-unit pillar drops onto the track (o.f: the runner position where it lands) with a
+  // short spike strip right behind it. Hop it and the strip in one jump: too early and the arc comes down on the strip,
+  // too late and the pillar is in your face. The pillar lands `PILLAR_LEAD` seconds before the take-off window opens,
+  // so the read is the landing, and the window is `want` seconds wide (110-125 ms, the L-133 sizing).
+  { id: 'pillars', sector: 15, weight: (s) => (s === 15 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const v = speedAt(x + 8), want = intro ? 0.112 : 0.125, units = intro ? 1 : 1 + (r() < 0.45 ? 1 : 0);
+      // Take-off window (runner left edge) relative to the pillar's left edge: clear its side, then stay above the strip's far end.
+      const hiRel = 0.06 - PS - TB * v, loRel = hiRel - want * v, midRel = (loRel + hiRel) / 2;
+      const o = [];
+      let bx = x + 1 - loRel + v * PILLAR_LEAD, end = bx;
+      for (let i = 0; i < units; i++) {
+        const pw = 0.9 + r() * 0.2, sl = bx + loRel - 0.44 + T2 * v; // last spike start, so the window is exactly `want` wide
+        const n = Math.max(2, Math.floor((sl - (bx + pw + 0.1)) / SW) + 1), sx = sl - (n - 1) * SW;
+        o.push({ t: 'block', x: bx, w: pw, h: 1, f: bx + loRel - v * PILLAR_LEAD });
+        spikes(o, sx, n);
+        o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
+        end = sx + n * SW;
+        bx = bx + midRel + AIR * v + v * (PILLAR_LEAD + 0.2) + 1 - loRel;
+      }
+      return { o, len: end - x + 0.5 };
+    } },
 ];
+
+// Seconds a falling pillar has been on the track when its take-off window opens.
+const PILLAR_LEAD = 0.12;
 
 // Seconds after a jump when the runner first clears a one-unit block's side (top at 1 less the 0.14 sink-in).
 const TB = (JV - Math.sqrt(JV * JV - 2 * GRAV * 0.86)) / GRAV;
@@ -301,7 +327,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

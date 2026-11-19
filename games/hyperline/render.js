@@ -403,7 +403,15 @@ export function drawScene(c, W, H, st) {
     const fade = Math.max(0, Math.min(1, 1 - (o.x - rx - 38) / 36));
     if (fade <= 0) continue;
     switch (o.t) {
-      case 'block': dr.push({ z: depth(o.x + w, o.h / 2, 0), f: () => { const bx = blockX(o, st.runner.x); c.globalAlpha = fade; box(c, cam, bx, bx + o.w, 0, o.h, -1, 1, pal.block, 1, 2); } }); break;
+      case 'block': dr.push({ z: depth(o.x + w, o.h / 2, 0), f: () => {
+        const bx = blockX(o, st.runner.x); c.globalAlpha = fade;
+        if (o.f !== undefined) {
+          // a falling pillar: a faint outline on the track where it will land, and the pillar dropping until it lands at o.f
+          const left = o.f - st.runner.x, lift = left > 0 ? Math.min(1, left / 7) * 9 : 0;
+          if (left > 0) box(c, cam, bx, bx + o.w, 0, 0.04, -1, 1, pal.block, 0.35, 1);
+          box(c, cam, bx, bx + o.w, lift, lift + o.h, -1, 1, pal.block, 1, 2);
+        } else box(c, cam, bx, bx + o.w, 0, o.h, -1, 1, pal.block, 1, 2);
+      } }); break;
       case 'spike': dr.push({ z: depth(o.x + 0.4, o.y, 0), f: () => {
         c.globalAlpha = fade;
         for (const zz of [-0.52, 0.52]) mesh(c, cam, MESHES.pyramid, [o.x + 0.4, o.inv ? o.y - 0.4 : o.y + 0.4, zz], [0.76, 0.8, 0.92], [o.inv ? Math.PI : 0, 0, 0], mixHex(pal.neon, '#12051F', 0.55), mixHex(pal.neon, '#12051F', 0.85), 1, false, pal.neon);

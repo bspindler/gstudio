@@ -2,8 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
-## 0.9.1 (2026-11-18)
+## 0.10.0 (2026-11-18)
 - A near miss now throws a brief cyan spark off the runner's edge.
+- New sector FALLING PILLARS: a pillar drops onto the track in front of a short spike strip; wait for it to land, then hop both in one jump. It comes before HYPERCORE, which is now sector 16.
 
 ## 0.9.0 (2026-11-17)
 - New sector: RISER STEPS. Hop up onto a short raised step, then jump again before the edge to clear the gap that follows. It comes before HYPERCORE, which is now sector 13.

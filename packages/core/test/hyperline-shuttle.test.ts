@@ -9,10 +9,10 @@ const X0 = 14 * SECTOR_LEN;
 const pattern = () => PATTERNS.find((q) => q.id === 'shuttle')!;
 
 describe('hyperline SHUTTLE BLOCKS', () => {
-  it('is sector 15 for players, right before HYPERCORE, and introduces the shuttle pattern', () => {
+  it('is sector 15 for players, right before FALLING PILLARS, and introduces the shuttle pattern', () => {
     expect(sectorInfo(13).name).toBe('DROP LEDGES');
     expect(sectorInfo(14).name).toBe('SHUTTLE BLOCKS');
-    expect(sectorInfo(15).name).toBe('HYPERCORE');
+    expect(sectorInfo(15).name).toBe('FALLING PILLARS');
     expect(INTRO[14]).toBe('shuttle');
   });
 

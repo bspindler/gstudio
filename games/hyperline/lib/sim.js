@@ -69,6 +69,7 @@ export function step(r, c, jump) {
     for (let i = i0; i < iEnd; i++) {
       const o = objs[i];
       if (o.t === 'block') {
+        if (o.f !== undefined && x0 < o.f) continue; // a falling pillar is not on the track until the runner reaches o.f
         const bx = blockX(o, x0);
         if (x1 > bx + 0.06 && x0 < bx + o.w - 0.06) {
           if (prevY >= o.h - 0.14) sup = Math.max(sup, o.h);
