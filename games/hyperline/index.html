@@ -245,7 +245,7 @@ import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } fr
 import { createBloom, drawScene, drawSkinThumb, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.9.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.9.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -482,6 +482,7 @@ function simStep() {
         G.stats = applyEvent(G.stats, e); audio.near(); buzz(10);
         pop(`CLOSE! +${NEAR_CR}`, e.x, e.y + 0.4, '#22F0FF', 20);
         spawn(e.x, e.y, 8, '#22F0FF', 4, 0.35, 0.08);
+        spawn(r.x + PS, r.flip ? r.y + PS : r.y, 5, '#22F0FF', 2.5, 0.22, 0.06);
         G.nearFlash = reduced ? 0.25 : 0.5; break;
       case 'pad': G.stats = applyEvent(G.stats, e); audio.pad(); spawn(cxw, r.y, 14, '#7CFF6B', 5, 0.45, 0.1, 4); break;
       case 'bar': G.stats = applyEvent(G.stats, e); break;

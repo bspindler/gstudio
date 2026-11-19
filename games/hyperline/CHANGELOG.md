@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.9.1 (2026-11-18)
+- A near miss now throws a brief cyan spark off the runner's edge.
+
 ## 0.9.0 (2026-11-17)
 - New sector: RISER STEPS. Hop up onto a short raised step, then jump again before the edge to clear the gap that follows. It comes before HYPERCORE, which is now sector 13.
 - New sector: STAGGER SPIKES. Spike pairs come at uneven gaps, short then long, so you have to read each gap instead of tapping to a beat. It comes before HYPERCORE, which is now sector 14.
