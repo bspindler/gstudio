@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.13.1 (2026-11-18)
 - Level 19 is easier to win: the litter along the bottom of the pool is thinned out so there's more room under the stranded pal.
 - Level 28 is easier to win: the litter under the stranded pal is thinned out so there's more open water to work with.
+- Tidepool Pals: level 26's pool has open water under the stranded pal, so it sinks free more easily.
 
 ## 0.13.0 (2026-11-17)
 - Swapping is easier to see: the pal you press follows your finger and its neighbour slides to meet it before the swap happens.
