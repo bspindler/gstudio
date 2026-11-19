@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.4.1 (2026-11-18)
+- The hay bale gives a slow, soft squash and settles back when tumbled blocks land on it.
+
 ## 0.4.0 (2026-11-17)
 - Block Barn: when you name an animal next to another one, the two now lean toward each other for a slow, gentle nuzzle.
 - A soft morning sunbeam from the window slowly drifts across the hay floor.

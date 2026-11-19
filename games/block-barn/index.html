@@ -284,6 +284,10 @@
   .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1), tower-hop 1s ease-in-out .5s; }
   @keyframes tower-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-9px); } 70% { transform: translateY(0) scale(1.03, .97); } }
   #bale-bump.bump { animation: nudge .4s ease-out; }
+  /* a tumbled block settles on the bale: it gives one slow, soft squash and eases back (no sound, no flash) */
+  #bale-bump { transform-origin: 50% 100%; }
+  #bale-bump.squash { animation: bale-squash 1.1s ease-in-out; }
+  @keyframes bale-squash { 0%, 100% { transform: scale(1, 1); } 40% { transform: scale(1.04, .86); } 70% { transform: scale(.99, 1.03); } }
 
   /* ---- effects ---- */
   #fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
@@ -343,6 +347,7 @@
     .animal.trot-in { animation: none; opacity: 0; }
     .animal.trot-out { animation: none; }
     .falling { animation-name: fall-calm; }
+    #bale-bump.squash { animation: none; }
     .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
   }
 
@@ -423,7 +428,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.4.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.4.1', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1002,6 +1007,8 @@ function tumbleDown(letters) {
     setTimeout(() => b.remove(), 1500 + k * 40);
   });
   sfx.tumble(letters.length);
+  // the bale answers as the first block lands on it (45% of the 1.3 s fall)
+  setTimeout(() => restart($('bale-bump'), 'squash'), 600);
   ohLook();
   setTimeout(() => puffAt(layout.tower.x + layout.tower.w / 2, layout.tower.y + layout.tower.h - 20), 500);
 }
