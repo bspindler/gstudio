@@ -71,7 +71,7 @@ export const LEVELS = [
 
   // ---------- Frostmere ----------
   L('The Fork', 'Two paths, one lantern. Wisps ignore frost; a Moonbell stills them. Build where the paths meet.', {
-    region: 'frost', towers: ALL, gold: 280, hpMul: 1.7,
+    region: 'frost', towers: ALL, gold: 280, hpMul: 1.62,
     paths: [
       [[1, -1], [1, 5], [4, 5], [4, 11]],
       [[7, -1], [7, 5], [4, 5], [4, 11]],
@@ -86,7 +86,7 @@ export const LEVELS = [
     ],
   }),
   L('Mossy Ford', 'Mossbacks heal the creatures around them. Hit them first, and hit them hard.', {
-    region: 'frost', towers: ALL, gold: 340, hpMul: 1.4,
+    region: 'frost', towers: ALL, gold: 340, hpMul: 1.25,
     paths: [[[-1, 3], [3, 3], [3, 9], [7, 9], [7, 4], [5, 4]]],
     waves: [
       [['moth', 10, 0.5], ['mossback', 1, 1, 2]],
@@ -98,7 +98,7 @@ export const LEVELS = [
     ],
   }),
   L('Crosswind', 'They come from both sides now.', {
-    region: 'frost', towers: ALL, gold: 320, hpMul: 1.28,
+    region: 'frost', towers: ALL, gold: 320, hpMul: 1.15,
     paths: [
       [[-1, 2], [3, 2], [3, 8], [4, 8], [4, 11]],
       [[9, 4], [6, 4], [6, 8], [4, 8], [4, 11]],

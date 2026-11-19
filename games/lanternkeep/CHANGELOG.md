@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.6.0 (2026-11-18)
 - New plant: the Moonbell, a slow, soft chime that stills every creature near it for a moment (bosses for half as long), grows into the Lullaby Bell or the Tollbell, and is available from night 6 and in Night Watch.
+- Rebalanced The Fork, Mossy Ford and Crosswind so those nights are a fairer fight now that Moonbell is in your arsenal.
 
 ## 0.5.0 (2026-11-17)
 - The lantern now swells with a soft warm glow when you clear a wave.
