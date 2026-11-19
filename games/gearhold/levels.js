@@ -8,10 +8,11 @@
 //           o volatile energy cell (shoot it; chains)
 //           u gear press (floor plate that thumps on a fixed beat; see press.js)
 //           d wisp drone (shoots)   c tick crawler (bites up close)   b kilnwarden (tough, shoots spreads)
+//           r brass ram (rears up, then charges in a straight line; stunned after hitting a wall)
 // packages/core/test/gearhold-levels.test.ts checks that every level is sealed and finishable.
 
 export const WALLS = '#MPX';
-export const FLOOR_THINGS = 'khawdcbou';
+export const FLOOR_THINGS = 'khawdcbour';
 
 export const LEVELS = [
   {
@@ -151,6 +152,29 @@ export const LEVELS = [
       '#.....#..cd....#.............#',
       'X.....K....c...D..c..h.......#',
       '#.....#...cd.c.#.............#',
+      '##############################',
+    ],
+  },
+  {
+    name: 'Ram Foundry',
+    hint: 'Brass rams rear up, glow, then charge in a straight line. Step aside and shoot them while they reel from the wall.',
+    mood: {
+      skyTop: [0.14, 0.08, 0.16], skyHorizon: [0.95, 0.42, 0.18], cloud: [0.62, 0.34, 0.3],
+      sunDir: [0.4, 0.3, -0.5], sunColor: [1.6, 0.8, 0.4],
+      ambient: [0.4, 0.34, 0.46], ground: [0.36, 0.2, 0.12], lamp: [1.0, 0.6, 0.28], crystal: [1.0, 0.55, 0.2],
+      fog: 0.018, stars: 0,
+    },
+    map: [
+      '##############################',
+      '#S...#.........#.............#',
+      '#....#.........#.............#',
+      '#.a..#...P.P...#...P...P...h.#',
+      '#....D..r...r..D.......r...d.#',
+      '#.h..#...P.P...#...P...P.....#',
+      '#....#....r....#..r..........#',
+      '#.w..#.........#...........d.#',
+      '#....#.......o.#.....c.r.....#',
+      '#....#.......c.#.........a...X',
       '##############################',
     ],
   },

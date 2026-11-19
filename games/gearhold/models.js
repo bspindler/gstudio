@@ -278,6 +278,22 @@ export function buildMachines() {
   ba.obox([0, -0.44, 0], I, [0.1, 0.1, 0.1], PAL.brass);
   M.b = { body: bb.data(), leg: bl.data(), arm: ba.data() };
 
+  // Brass ram: a low barrel of riveted brass on four stubby legs, a wedge head with two curled horns
+  // and a glowing furnace slot that flares when it winds up. Faces +z.
+  const rb = builder();
+  rb.sphere([0, 0.42, -0.05], 0.3, 0.24, 0.42, 12, 8, PAL.brass);
+  rb.obox([0, 0.42, -0.05], I, [0.31, 0.02, 0.2], PAL.brassDark);
+  rb.obox([0, 0.66, -0.1], I, [0.1, 0.03, 0.22], PAL.bronze);
+  rb.obox([0, 0.44, 0.44], I, [0.2, 0.2, 0.17], PAL.ceramicDark);
+  rb.obox([0, 0.44, 0.615], I, [0.15, 0.15, 0.015], PAL.brass);
+  rb.obox([0, 0.5, 0.63], I, [0.11, 0.025, 0.008], PAL.ember, 1);
+  for (const s of [-1, 1]) {
+    rb.cyl([s * 0.18, 0.55, 0.45], [s * 0.34, 0.5, 0.62], 0.055, 0.04, 8, PAL.porcelain);
+    rb.cyl([s * 0.34, 0.5, 0.62], [s * 0.3, 0.4, 0.82], 0.04, 0.012, 8, PAL.porcelain);
+    for (const z of [-0.28, 0.22]) rb.obox([s * 0.2, 0.12, z], I, [0.07, 0.12, 0.07], PAL.ceramicDark);
+  }
+  M.r = { body: rb.data() };
+
   // Volatile energy cell.
   const ob = builder();
   ob.cyl([0, 0, 0], [0, 0.08, 0], 0.19, 0.19, 12, PAL.brass);

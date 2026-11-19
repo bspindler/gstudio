@@ -173,7 +173,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.7.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.8.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -266,6 +266,7 @@ const STATS = {
   d: { hp: 30, speed: 1.7, radius: 0.3 },
   c: { hp: 20, speed: 3.0, radius: 0.3 },
   b: { hp: 260, speed: 1.05, radius: 0.5 },
+  r: { hp: 60, speed: 1.6, radius: 0.4 },
   o: { hp: 18, speed: 0, radius: 0.26, prop: true },
 };
 const ITEM_KINDS = 'hakw';
@@ -274,6 +275,7 @@ function volumes(e) {
   if (e.kind === 'd') return [[0, e.hz, 0.25]];
   if (e.kind === 'c') return [[0, 0.17, 0.26], [0.26, 0.15, 0.11]];
   if (e.kind === 'b') return [[0, 0.3, 0.24], [0, 0.8, 0.4], [0, 1.27, 0.17]];
+  if (e.kind === 'r') return [[-0.05, 0.42, 0.32], [0.45, 0.44, 0.2]];
   return [[0, 0.28, 0.21]];
 }
 
@@ -321,7 +323,7 @@ function loadLevel(i) {
     if (c === 'u') presses.push({ x, y, was: 'open', hit: false });
     else if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
-      enemies.push({ kind: c, ...STATS[c], x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0 });
+      enemies.push({ kind: c, ...STATS[c], x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false });
     } else if (ITEM_KINDS.includes(c)) items.push({ id: items.length, kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
   }
   foes = enemies.filter((e) => !e.prop).length;
@@ -538,6 +540,9 @@ function machineDraws(e, t, out) {
       const swing = Math.sin(ph) * 0.42 * e.moving, lift = Math.max(0, Math.cos(ph)) * 0.25 * e.moving;
       put(mesh.leg, M4.mul(root, M4.trs(side * 0.17, 0.15, -0.14 + k * 0.14, (side > 0 ? 0 : Math.PI) + swing, 0, lift)));
     }
+  } else if (e.kind === 'r') {
+    const bob = e.rm === 'charge' ? Math.sin(t * 40) * 0.025 : e.rm === 'wind' ? Math.sin(t * 30) * 0.015 : 0;
+    put(mesh.body, M4.trs(e.x, bob, e.y, yaw));
   } else if (e.kind === 'b') {
     const root = M4.trs(e.x, 0, e.y, yaw), walk = Math.sin(t * 6) * 0.45 * e.moving;
     put(mesh.body, root);
@@ -902,7 +907,8 @@ function updateEnemies(dt) {
     // turn smoothly to face the player
     let turn = Math.atan2(dy, dx) - e.face;
     turn = Math.atan2(Math.sin(turn), Math.cos(turn));
-    e.face += turn * Math.min(1, dt * 8);
+    if (e.kind !== 'r' || e.rm === 'seek') e.face += turn * Math.min(1, dt * 8);
+    else if (e.rm === 'wind' && e.rt > 0.4) e.face += Math.atan2(Math.sin(Math.atan2(e.rdy, e.rdx) - e.face), Math.cos(Math.atan2(e.rdy, e.rdx) - e.face)) * Math.min(1, dt * 8);
     const ux = dx / (d || 1), uy = dy / (d || 1);
     let mx = 0, my = 0;
     if (e.kind === 'd') {
@@ -914,6 +920,33 @@ function updateEnemies(dt) {
     } else if (e.kind === 'c') {
       if (d > 0.85) { mx = ux; my = uy; }
       else if (e.cd <= 0) { hurt(10, !sees, e.x, e.y); sfx.bite(); e.cd = 0.8; e.atk = 0.25; }
+    } else if (e.kind === 'r') {
+      // Brass ram: closes in, rears up (glowing, tracks you for a moment, then locks its line), charges
+      // straight along that line until it hits a wall, then sits stunned and shootable.
+      e.rt -= dt;
+      if (e.rm === 'seek') {
+        if (d > 3) { mx = ux; my = uy; }
+        if (sees && d < 13 && d > 2 && e.cd <= 0) { e.rm = 'wind'; e.rt = 0.9; sfx.locked(); steamPuff(e.x, e.y); }
+      } else if (e.rm === 'wind') {
+        e.atk = 0.1;
+        if (e.rt > 0.4) { const a = Math.atan2(dy, dx); e.rdx = Math.cos(a); e.rdy = Math.sin(a); }
+        else { e.face = Math.atan2(e.rdy, e.rdx); }
+        if (e.rt <= 0) { e.rm = 'charge'; e.rt = 2.2; sfx.thump(); }
+      } else if (e.rm === 'charge') {
+        e.atk = 0.1; e.face = Math.atan2(e.rdy, e.rdx);
+        const cs = 8.5 * dt, bx = e.x, by = e.y;
+        if (!bumpsEnemy(e.x + e.rdx * cs, e.y + e.rdy * cs, e)) tryMove(e, e.rdx * cs, e.rdy * cs, e.radius * 0.8);
+        if (Math.hypot(e.x - bx, e.y - by) < cs * 0.5 || e.rt <= 0) {
+          e.rm = 'stun'; e.rt = 1.6; e.cd = 1.2; sfx.thump(); shake = Math.max(shake, 0.2); sparks(e.x, e.y, 0.4, 8, 'ember'); steamPuff(e.x, e.y);
+        } else if (Math.hypot(P.x - e.x, P.y - e.y) < e.radius + 0.35 && !e.hitP) {
+          hurt(20, !sees, e.x, e.y); e.hitP = true; sfx.bite();
+        }
+      } else {
+        e.hitP = false;
+        if (e.rt <= 0) e.rm = 'seek';
+      }
+      if (e.rm !== 'charge') e.hitP = false;
+      if (e.rm !== 'seek') { mx = 0; my = 0; }
     } else {
       if (d > 1.15) { mx = ux; my = uy; }
       if (d < 1.3 && e.cd <= 0) { hurt(22, !sees, e.x, e.y); e.cd = 1.3; e.atk = 0.3; }
@@ -925,7 +958,7 @@ function updateEnemies(dt) {
     }
     const step = e.speed * dt, ox = e.x, oy = e.y;
     const nx = e.x + mx * step, ny = e.y + my * step;
-    if (Math.hypot(P.x - nx, P.y - ny) > e.radius + 0.3 && !bumpsEnemy(nx, ny, e)) tryMove(e, mx * step, my * step, e.radius * 0.8);
+    if ((mx || my) && Math.hypot(P.x - nx, P.y - ny) > e.radius + 0.3 && !bumpsEnemy(nx, ny, e)) tryMove(e, mx * step, my * step, e.radius * 0.8);
     const moved = Math.hypot(e.x - ox, e.y - oy) / Math.max(step, 1e-4);
     e.moving += (Math.min(1, moved) - e.moving) * Math.min(1, dt * 10);
   }
