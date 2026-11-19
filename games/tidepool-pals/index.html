@@ -286,6 +286,9 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes nudge{50%{transform:translate(var(--nx),var(--ny))}}
 .lost .tl{animation:bobble 2.2s ease-in-out infinite}
 @keyframes bobble{50%{transform:translateY(-6%) rotate(-4deg)}}
+/* a clear lands next to a stranded or bubbled pal: it turns toward it (--pt) and gives a small hopeful bounce */
+.lost.perk .tl{animation:perk .55s ease-out 1}
+@keyframes perk{0%{transform:rotate(0) translateY(0)}30%{transform:rotate(var(--pt,8deg)) translateY(-14%) scale(1.08)}60%{transform:rotate(var(--pt,8deg)) translateY(0) scale(1)}80%{transform:rotate(var(--pt,8deg)) translateY(-5%)}100%{transform:rotate(0) translateY(0)}}
 .swimmer{position:absolute;width:calc(100% / 7);height:calc(100% / 8);pointer-events:none;animation:swimoff 1.1s cubic-bezier(.4,0,.6,1) forwards}
 .swimmer svg{width:100%;height:100%;display:block;animation:paddle .25s ease-in-out infinite alternate}
 @keyframes swimoff{20%{transform:scale(1.25)}100%{transform:translate(var(--wx),var(--wy)) scale(1);opacity:0}}
@@ -1266,6 +1269,23 @@ function finishMove(res, r, c) {
   setTimeout(() => settle(afterMove), big ? 260 : 170);
 }
 
+/** A stranded or bubbled pal next to a clear turns toward it and perks up (animation only; none for reduced motion). */
+function perkLost(clears) {
+  if (!motion()) return;
+  const done = new Set();
+  for (const { r: y, c: x } of clears) {
+    for (const [dy, dx] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      const cell = grid[y + dy]?.[x + dx];
+      if (!cell || (cell.k !== 'lost' && cell.k !== 'bubble') || done.has(cell.id)) continue;
+      const t = els.get(cell.id); if (!t) continue;
+      done.add(cell.id);
+      t.style.setProperty('--pt', (dx < 0 || (dx === 0 && dy < 0) ? -9 : 9) + 'deg');
+      t.classList.remove('perk'); void t.offsetWidth; t.classList.add('perk');
+      setTimeout(() => t.classList.remove('perk'), 600);
+    }
+  }
+}
+
 /** Pops, crumbles, thaws, recolours and new specials for a tap or helper result. */
 function animateResult(res) {
   if (res.broke.length) setTimeout(() => sfx.sand(), 60);
@@ -1284,6 +1304,7 @@ function animateResult(res) {
     if (budget > 0) { burst(y, x, cell.k === 'litter' ? '#B9C7BD' : '#E8C27A', per); budget -= per; }
   }
   for (const { cell } of res.freed) { const t = els.get(cell.id); if (t) thaw(t, cell); }
+  perkLost([...res.cleared, ...res.broke]);
   if (res.cracked?.length) setTimeout(() => sfx.ice(), 90);
   for (const { r: y, c: x, cell } of res.released || []) {
     const t = els.get(cell.id); if (t) retire(t, cell.id, 'pop', 230);
