@@ -15,3 +15,15 @@ Changes:
 - HAL-221 feature(gearhold): New enemy brass ram: charges in a straight line, stuns itself on walls; level 8: **discarded** (0.8.0) (asks refused: the reply asks for a protected change but there is no hal-asks.patch)
 - HAL-222 feature(gearhold): New level 9 'Lift Siege': hold the rising cargo lift while waves climb aboard: **discarded** (0.8.0) (gearhold-play: new levels[6] feel 77.10 is out of its band (needs >= 97.58))
 - HAL-223 feature(gearhold): New enemy sentry lens: fixed turret sweeping a visible beam; level 10: **discarded** (0.8.0) (gearhold-play: new levels[6] feel 60.43 is out of its band (needs >= 97.40))
+
+## Run run-2026-11-19T04-32-26-271Z
+
+**Identity:** brass clockwork. Ram Foundry adds a new verb: dodge, let the ram crash, then scrap it. That is the first real break from 'same level, more baddies'.
+
+- Built cleanly in slot 7, with no judge change and no mention of protected files.
+- 82% wins, pace 100, feel 100, and gearhold-play went from 91.7 to 92.9.
+- Its tension wasn't reported.
+- The regulator, lift and lens ideas still need the bot taught first.
+
+Changes:
+- HAL-228 feature(gearhold): New level 7 'Ram Foundry': brass rams charge in lines and stun on walls: **held** (0.8.0)

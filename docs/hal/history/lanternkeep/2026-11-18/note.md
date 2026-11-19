@@ -12,3 +12,15 @@
 
 Changes:
 - HAL-224 feature(lanternkeep): Rebuild Moonbell, the fifth plant that stuns, on current main: **held** (0.6.0)
+
+## Run run-2026-11-19T04-32-26-271Z
+
+**Identity:** a gentle, moonlit garden defence. Mirror Mist keeps that and is the kind of big leap you asked for: a creature that changes where you plant, not just how much.
+
+- **Moonbell** is live on your 👍. It pushed three nights out of band, and fitness fell from 95.8 to 89.4.
+- **The retune (HAL-225)** fixed those nights exactly, back to 95.8, but was dropped on the tuning gain bar. It will be resent as a fix.
+- **Mirror Mist (HAL-229)** is held: 46% wins, and fitness went from 89.44 to 89.83.
+
+Changes:
+- HAL-225 tuning(lanternkeep): Retune the nights Moonbell's rebuild pushed out of band: **discarded** (0.6.0) (lanternkeep: no real gain: 12.50 < 17.78)
+- HAL-229 feature(lanternkeep): New night 17 'Mirror Mist': Twin Wisps split in two when first struck: **held** (0.6.0)

@@ -11,3 +11,17 @@
 
 Changes:
 - HAL-219 fix(tidepool-pals): Reshape level 19's board to open space under the goal so it lands in band: **merged** (0.13.1)
+
+## Run run-2026-11-19T04-32-26-271Z
+
+**Identity:** hand-made shaped pools with a pal to rescue. Both reshapes kept each level's motif, moves and tide, and only thinned the litter under the pal.
+
+- **Level 28** went from 37% to 50%.
+- **Level 26** went from 42% to 53%.
+- Fitness went from 96.8 to 97.4, with neighbouring levels unchanged.
+- Both builds reported version 0.13.1, which needs checking.
+- A leftover test name, `tidepool-pals-l28peek`, could be tidied.
+
+Changes:
+- HAL-226 fix(tidepool-pals): Reshape level 28's board to open space under the goal so it lands in band: **merged** (0.13.1)
+- HAL-227 fix(tidepool-pals): Reshape level 26's board to open space under the goal so it lands in band: **merged** (0.13.1)
