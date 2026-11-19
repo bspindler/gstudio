@@ -21,3 +21,14 @@ Changes:
 
 Changes:
 - HAL-234 polish(hyperline): Near miss gives a brief cyan spark off the runner's edge: **merged** (0.9.1)
+
+## Run run-2026-11-19T08-03-16-458Z
+
+**Hyperline:** neon one-tap timing.
+- **Held:** FALLING PILLARS rebuilt (HAL-246). The read is when the pillar lands, not a narrower window, so it stays on identity.
+  - The take-off window keeps the 112-125 ms sizing from L-133.
+  - Intro kill rate is 7%, down from 13% in the first build. Sector 15 death rate is 0.31, the p10 window is 125 ms, and fitness went from 99.4 to 99.45.
+  - HYPERCORE becomes sector 16. The builder updated the pinned indexes in the tests directly.
+
+Changes:
+- HAL-246 feature(hyperline): Rebuild sector FALLING PILLARS (hop each dropping pillar) on current main: **held** (0.10.0)

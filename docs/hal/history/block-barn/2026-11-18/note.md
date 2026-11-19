@@ -20,3 +20,15 @@ Changes:
 
 Changes:
 - HAL-239 polish(block-barn): Nearby animals slowly turn their heads to watch a tumbled block settle: **discarded** (implementer blocked: Duplicate of existing behaviour: ohLook() already makes the nearest named animals slowly look toward a tumbled tower and settle back.)
+
+## Run run-2026-11-19T08-03-16-458Z
+
+**Block Barn:** calm, gentle toddler barn.
+- **Merged:** tapping the weathervane now sends the window butterfly on one slow 5-second loop (HAL-243, 0.4.1).
+  - It adds no new zone, sound or text.
+  - It doesn't stack, and it is skipped at dusk and under reduced motion.
+  - calm stays at 100.
+  - It has not been seen on a phone screenshot, which the ticket required.
+
+Changes:
+- HAL-243 polish(block-barn): When the weathervane spins, the window butterfly does one slow loop: **merged** (0.4.1)

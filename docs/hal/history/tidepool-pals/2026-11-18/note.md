@@ -49,3 +49,14 @@ Changes:
 
 Changes:
 - HAL-238 polish(tidepool-pals): Stranded pal turns and perks up when a clear lands next to it: **merged** (0.13.1)
+
+## Run run-2026-11-19T08-03-16-458Z
+
+**Tidepool Pals:** pals and rescue on hand-made reef shapes.
+- **Held:** level 30 rebuilt on main (HAL-247): a sea-turtle pool with a bubbled pal on its shell, open water around it, netted flippers and a left-pulling tide.
+  - Robot wins are 81%, near the top of the 45-85% band, so it may be a little generous.
+  - Fitness held at 97.35.
+  - botStuck isn't in the score output, so it isn't reported.
+
+Changes:
+- HAL-247 feature(tidepool-pals): Rebuild level 30: sea-turtle pool with a bubbled pal on its shell, on main: **held** (0.14.0)

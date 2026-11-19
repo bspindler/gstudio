@@ -48,3 +48,16 @@ Changes:
 
 Changes:
 - HAL-241 feature(lanternkeep): New night after the last: Lampmoths swarm toward the brightest plant: **held** (0.6.0)
+
+## Run run-2026-11-19T08-03-16-458Z
+
+**Lanternkeep:** moonlit garden defence, now taking the big leaps you asked for (N-033).
+- **Held:** Mirror Mist rebuilt on 0.6.0 with Moonbell (HAL-245). Twin Wisps split in two when struck, each half quicker and carrying half the remaining health. That is a new read on the path, not a harder copy of an old night.
+  - Night 17 scored 0.65 wins and a 0.32 close-win share. Night 16 sits at 0.42, so there is no spike.
+  - Fitness held at 95.83.
+  - It carries the label 0.6.0, which is already used.
+  - It shares night 17 with Lampmoths (HAL-241).
+  - Burning ground damages a twin without splitting it. That was left as is.
+
+Changes:
+- HAL-245 feature(lanternkeep): Rebuild night 17 'Mirror Mist' (Twin Wisps split when struck) on current main: **held** (0.6.0)

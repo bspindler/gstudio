@@ -68,6 +68,23 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-19T08-03-16-458Z",
+      "at": "2026-11-19T09:19:06.560Z",
+      "scorers": {
+        "hyperline": {
+          "fitness": 99.4,
+          "measures": {
+            "inBand": 100,
+            "noSpikes": 100,
+            "reach": 100,
+            "fair": 100,
+            "bites": 97.01,
+            "tension": 50.5
+          }
+        }
+      }
     }
   ]
 }

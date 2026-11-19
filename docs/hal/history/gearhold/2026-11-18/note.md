@@ -61,3 +61,20 @@ Changes:
 Changes:
 - HAL-237 tuning(gearhold): The Orrery: a kilnwarden wakes in the exit hall once the gear key is taken: **discarded** (0.7.1) (gearhold-play: no real gain: 2.47 < 9.02)
 - HAL-240 feature(gearhold): New level 'Regulator Hall': wreck 3 steam regulators to unseal the exit: **held** (0.8.0)
+
+## Run run-2026-11-19T08-03-16-458Z
+
+**Gearhold:** the brass clockwork shooter, now with levels that differ in enemy and goal (your N-034).
+- **Merged:** The Orrery's kilnwarden fix (HAL-242). Taking the gear key now makes the walk home a fight, which suits Gearhold well.
+  - Wins fell to 0.43, below the 0.60 last night's version reached.
+  - Tension rose from 30.45 to 47.1, and gearhold-play from 92.32 to 94.03.
+  - It is reported as 0.7.1, a reused version.
+- **Held:** Ram Foundry rebuilt on main (HAL-244). It adds a new brass ram that rears up, locks its line, charges, then reels from the wall.
+  - Level 7 scored 62% wins, pace 100, feel 100 and winnable 100.
+  - gearhold-play rose from 94.03 to 94.88.
+  - The score prints no per-level tension row, so level 7's own tension is unknown.
+  - It shares slot 7 with Regulator Hall (HAL-240).
+
+Changes:
+- HAL-242 fix(gearhold): The Orrery: a kilnwarden wakes in the exit hall once the gear key is taken: **merged** (0.7.1)
+- HAL-244 feature(gearhold): Rebuild level 7 'Ram Foundry' (brass rams charge in lines) on current main: **held** (0.8.0)
