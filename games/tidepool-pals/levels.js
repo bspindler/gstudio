@@ -133,7 +133,7 @@ const TIDE_DIRS = ['up', 'left', 'right'];
 /** Extra moves for generated levels that hard-stopped players (measured by the play scorer). */
 export const MOVE_BONUS = { 25: 8, 26: 13, 27: 3, 28: 17, 29: 3, 31: 3 };
 /** Lighter boards for generated levels that walled players: [row, replacement row] pairs, moves untouched. */
-export const BOARD_EASE = { 21: [[6, '.......']], 28: [[1, '.......'], [4, '...P...']] };
+export const BOARD_EASE = { 21: [[6, '.......']], 28: [[1, '.......'], [4, '...P...'], [6, '.......'], [7, 'll...ll']] };
 
 export function generateLevel(n) {
   const rng = mulberry32(hashSeed('tidepool:' + n));

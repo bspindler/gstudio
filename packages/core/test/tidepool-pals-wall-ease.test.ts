@@ -13,7 +13,7 @@ describe('tidepool pals: levels the scorer still flagged as walls get gentler', 
 
   it('level 28 starts its stranded pal closer to the open water, with the same moves and goals', () => {
     const def = levelDef(28);
-    expect(def.layout).toEqual(['.......', '.......', '.......', '.......', '...P...', '.......', '...l...', 'lllllll']);
+    expect(def.layout).toEqual(['.......', '.......', '.......', '.......', '...P...', '.......', '.......', 'll...ll']);
     expect(def.moves).toBe(33);
     expect(def.goals).toEqual([{ t: 'rescue', n: 1 }, { t: 'litter' }]);
   });
