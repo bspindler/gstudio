@@ -38,3 +38,14 @@ It keeps the shaped-pool and reef identity you've voted up.
 
 Changes:
 - HAL-236 feature(tidepool-pals): New hand-made level 30: a sea-turtle-shaped pool with a bubbled pal on its shell: **held** (0.14.0)
+
+## Run run-2026-11-19T06-46-57-019Z
+
+**Tidepool Pals.** Sea-animal pals, sea candy, and a trapped pal you rescue by matching next to it.
+
+- **HAL-238, merged.** A stranded or bubbled pal turns toward a nearby clear and bounces. This strengthens the rescue at the centre of the game rather than adding generic sparkle.
+- **Scores.** No rule change, so fitness stays at 97.35.
+- **Not yet checked.** It has not been seen on a phone. Its version label, 0.13.1, was already claimed, so the real version still needs to be confirmed on main.
+
+Changes:
+- HAL-238 polish(tidepool-pals): Stranded pal turns and perks up when a clear lands next to it: **merged** (0.13.1)

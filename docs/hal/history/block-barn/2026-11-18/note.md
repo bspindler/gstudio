@@ -10,3 +10,13 @@
 
 Changes:
 - HAL-235 polish(block-barn): Hay bale gives a slow soft squash when a tumbled block settles on it: **merged** (0.4.1)
+
+## Run run-2026-11-19T06-46-57-019Z
+
+**Block Barn.** A gentle, calm barn where the animals react to each other.
+
+- **Head-turn toy (HAL-239), dropped.** The animals already do this through `ohLook()`. That is the second duplicate toy, so the planner must check the game first.
+- **Scores.** Calm and fitness stay at 100. Nothing changed.
+
+Changes:
+- HAL-239 polish(block-barn): Nearby animals slowly turn their heads to watch a tumbled block settle: **discarded** (implementer blocked: Duplicate of existing behaviour: ohLook() already makes the nearest named animals slowly look toward a tumbled tower and settle back.)

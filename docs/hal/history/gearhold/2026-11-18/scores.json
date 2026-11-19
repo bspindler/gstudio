@@ -48,6 +48,22 @@
           }
         }
       }
+    },
+    {
+      "run": "run-2026-11-19T06-46-57-019Z",
+      "at": "2026-11-19T08:01:19.585Z",
+      "scorers": {
+        "gearhold-play": {
+          "fitness": 92.32,
+          "measures": {
+            "winnable": 84.44,
+            "fairDamage": 99.57,
+            "pace": 92.16,
+            "feel": 93.12,
+            "tension": 30.45
+          }
+        }
+      }
     }
   ]
 }

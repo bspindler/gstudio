@@ -37,3 +37,14 @@ The moonlit tower defence is intact.
 
 Changes:
 - HAL-231 fix(lanternkeep): Restore night bands after Moonbell: hpMul for The Fork, Mossy Ford, Crosswind: **merged** (0.6.0)
+
+## Run run-2026-11-19T06-46-57-019Z
+
+**Lanternkeep.** A moonlit garden you defend with plants under a lantern.
+
+- **Lamplit Orchard (HAL-241), held.** It is a big leap, as you asked: Lampmoths dive at the brightest plant and blind it for a few seconds. That makes plant placement a real choice. They are drawn in code with pale glowing wings and no new assets, so the soft look is kept.
+- **Balance.** Night 17 wins 58% and is in band. No earlier night moved.
+- **Clashes.** It shares the night-17 slot with Mirror Mist (HAL-229), and it reuses version 0.6.0.
+
+Changes:
+- HAL-241 feature(lanternkeep): New night after the last: Lampmoths swarm toward the brightest plant: **held** (0.6.0)

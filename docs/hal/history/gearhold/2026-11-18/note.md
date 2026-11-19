@@ -48,3 +48,16 @@ The levels are starting to feel like different places, which is the identity you
 Changes:
 - HAL-232 polish(gearhold): Give Boiler Stair its own furnace look: low red-orange boiler lamps, rising…: **merged** (0.7.1)
 - HAL-233 fix(gearhold): The Orrery: three full-width timed press crossings on the key route: **merged** (0.7.1)
+
+## Run run-2026-11-19T06-46-57-019Z
+
+**Gearhold.** Brass-and-steam corridors, a gear key to fetch, kilnwardens in the dark.
+
+- **Regulator Hall (HAL-240), held.** Wreck three regulator drums to unseal the exit; the compass points at the nearest one. It is the first level with a different goal, and it keeps the boiler-room look. Results: 61% wins, median win 45.7 s, winnable 100, pace 100, feel 100. Tension is low: 27.1, with one close win. It took three tries to land in band: 0.98 wins with no kilnwarden, 0.38 with extra drones.
+- **Bot change.** The level plays today without the bot change. The attached change only gives the bot the regulator's real aim point.
+- **Slot clash.** It sits in the same level-7 slot as Ram Foundry (HAL-228).
+- **The Orrery kilnwarden (HAL-237), dropped on the tuning bar.** It brought wins into band (0.95 to 0.60), so I'd resend it as a fix.
+
+Changes:
+- HAL-237 tuning(gearhold): The Orrery: a kilnwarden wakes in the exit hall once the gear key is taken: **discarded** (0.7.1) (gearhold-play: no real gain: 2.47 < 9.02)
+- HAL-240 feature(gearhold): New level 'Regulator Hall': wreck 3 steam regulators to unseal the exit: **held** (0.8.0)
