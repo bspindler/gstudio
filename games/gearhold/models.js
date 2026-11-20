@@ -301,6 +301,19 @@ export function buildMachines() {
   ob.cyl([0, 0.08, 0], [0, 0.47, 0], 0.12, 0.12, 10, PAL.amber, 1);
   for (let i = 0; i < 4; i++) { const t = (i / 4) * Math.PI * 2 + 0.4; ob.obox([Math.cos(t) * 0.16, 0.275, Math.sin(t) * 0.16], [[Math.cos(t), 0, Math.sin(t)], [0, 1, 0], [-Math.sin(t), 0, Math.cos(t)]], [0.02, 0.2, 0.025], PAL.brassDark); }
   M.o = { body: ob.data() };
+
+  // Steam regulator: a brass drum on a plinth with a glowing gauge and a crown valve. Shoot it to wreck it.
+  const gb = builder();
+  gb.cyl([0, 0, 0], [0, 0.1, 0], 0.42, 0.4, 14, PAL.ceramicDark);
+  gb.cyl([0, 0.1, 0], [0, 0.86, 0], 0.34, 0.34, 14, PAL.brass);
+  for (const y of [0.3, 0.62]) gb.cyl([0, y - 0.025, 0], [0, y + 0.025, 0], 0.365, 0.365, 14, PAL.brassDark);
+  gb.sphere([0, 0.86, 0], 0.34, 0.16, 0.34, 14, 6, PAL.bronze);
+  gb.cyl([0, 0.98, 0], [0, 1.1, 0], 0.045, 0.045, 8, PAL.brassDark);
+  gb.crystal([0, 1.18, 0], 0.07, 0.1, 4, PAL.teal, 1);
+  gb.cyl([0.0, 0.5, 0.33], [0.0, 0.5, 0.37], 0.12, 0.12, 12, PAL.porcelain);
+  gb.obox([0, 0.5, 0.375], I, [0.012, 0.09, 0.006], PAL.eye, 1);
+  for (const s of [-1, 1]) gb.cyl([s * 0.34, 0.4, 0], [s * 0.5, 0.4, 0], 0.05, 0.05, 8, PAL.bronze);
+  M.g = { body: gb.data() };
   return M;
 }
 

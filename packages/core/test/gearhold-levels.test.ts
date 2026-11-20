@@ -109,6 +109,15 @@ describe('gearhold levels', () => {
     for (const x of cols) for (let y = 1; y <= 4; y++) expect(map[y]![x], `column ${x} row ${y}`).toBe('u');
   });
 
+  it('Regulator Hall (level 8) has three steam regulators, no key, a kilnwarden and a long route', () => {
+    const l = LEVELS[7]!;
+    expect(l.name).toBe('Regulator Hall');
+    expect(find(l.map, 'g')).toHaveLength(3);
+    expect(find(l.map, 'k')).toHaveLength(0);
+    expect(find(l.map, 'K')).toHaveLength(0);
+    expect(find(l.map, 'b')).toHaveLength(1);
+  });
+
   it('places explosive canisters (o) somewhere in the campaign', () => {
     expect(FLOOR_THINGS).toContain('o');
     expect(LEVELS.some((l) => l.map.some((row) => row.includes('o')))).toBe(true);

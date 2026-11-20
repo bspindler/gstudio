@@ -173,7 +173,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.8.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.9.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -268,6 +268,7 @@ const STATS = {
   b: { hp: 260, speed: 1.05, radius: 0.5 },
   r: { hp: 60, speed: 1.6, radius: 0.4 },
   o: { hp: 18, speed: 0, radius: 0.26, prop: true },
+  g: { hp: 40, speed: 0, radius: 0.4, reg: true },
 };
 const ITEM_KINDS = 'hakw';
 // Hit volumes: spheres [forward offset, height, radius] fitted to each machine's model.
@@ -276,6 +277,7 @@ function volumes(e) {
   if (e.kind === 'c') return [[0, 0.17, 0.26], [0.26, 0.15, 0.11]];
   if (e.kind === 'b') return [[0, 0.3, 0.24], [0, 0.8, 0.4], [0, 1.27, 0.17]];
   if (e.kind === 'r') return [[-0.05, 0.42, 0.32], [0.45, 0.44, 0.2]];
+  if (e.kind === 'g') return [[0, 0.4, 0.36], [0, 0.9, 0.3]];
   return [[0, 0.28, 0.21]];
 }
 
@@ -543,6 +545,8 @@ function machineDraws(e, t, out) {
   } else if (e.kind === 'r') {
     const bob = e.rm === 'charge' ? Math.sin(t * 40) * 0.025 : e.rm === 'wind' ? Math.sin(t * 30) * 0.015 : 0;
     put(mesh.body, M4.trs(e.x, bob, e.y, yaw));
+  } else if (e.kind === 'g') {
+    put(mesh.body, M4.trs(e.x, 0, e.y, yaw));
   } else if (e.kind === 'b') {
     const root = M4.trs(e.x, 0, e.y, yaw), walk = Math.sin(t * 6) * 0.45 * e.moving;
     put(mesh.body, root);
@@ -791,6 +795,7 @@ function updateFx(dt) {
 }
 
 // ---------- combat ----------
+const regsLeft = () => enemies.filter((e) => e.reg && !e.dead).length;
 function damageEnemy(e, n) {
   if (e.dead) return;
   e.hp -= n; e.flash = 0.08; e.awake = true;
@@ -802,6 +807,10 @@ function damageEnemy(e, n) {
   sfx.boom();
   explosion(e.x, e.y, e.prop || e.kind === 'b');
   if (!e.prop) steamPuff(e.x, e.y);
+  if (e.reg) {
+    const left = regsLeft();
+    say(left > 0 ? `Regulator wrecked. ${left} left.` : 'All regulators wrecked. The exit is open.');
+  }
   if (e.prop) {
     for (const o of enemies) {
       const d = Math.hypot(o.x - e.x, o.y - e.y);
@@ -897,6 +906,7 @@ function updateEnemies(dt) {
       continue;
     }
     if (e.prop) continue;
+    if (e.reg) { e.flash -= dt; continue; } // a steam regulator just stands there, venting
     e.flash -= dt; e.cd -= dt; e.atk -= dt;
     const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy);
     const sees = d < 18 && lineOfSight(e.x, e.y, P.x, P.y);
@@ -1013,7 +1023,11 @@ function updateWorld(dt) {
   }
 
   for (let y = py0 - 1; y <= py0 + 1; y++) for (let x = px0 - 1; x <= px0 + 1; x++) {
-    if (cell(x, y) === 'X' && Math.hypot(P.x - x - 0.5, P.y - y - 0.5) < 0.95) { endLevel('win'); return; }
+    if (cell(x, y) === 'X' && Math.hypot(P.x - x - 0.5, P.y - y - 0.5) < 0.95) {
+      const left = regsLeft();
+      if (left > 0) { if (lockedNag <= 0) { say(`Exit sealed. Wreck the steam regulators: ${left} left.`); sfx.locked(); lockedNag = 2.5; } continue; }
+      endLevel('win'); return;
+    }
   }
 }
 
@@ -1099,7 +1113,10 @@ let needleDeg = null;
 function updateCompass() {
   let tx = null, ty = 0;
   const key = P.key ? null : items.find((it) => it.kind === 'k');
+  let reg = null, rd = Infinity;
+  for (const e of enemies) if (e.reg && !e.dead) { const d = (e.x - P.x) ** 2 + (e.y - P.y) ** 2; if (d < rd) { rd = d; reg = e; } }
   if (key) { tx = key.x; ty = key.y; }
+  else if (reg) { tx = reg.x; ty = reg.y; }
   else {
     let best = Infinity;
     for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {

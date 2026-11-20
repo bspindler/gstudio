@@ -9,10 +9,11 @@
 //           u gear press (floor plate that thumps on a fixed beat; see press.js)
 //           d wisp drone (shoots)   c tick crawler (bites up close)   b kilnwarden (tough, shoots spreads)
 //           r brass ram (rears up, then charges in a straight line; stunned after hitting a wall)
+//           g steam regulator (a brass drum: wreck every one to unseal the exit; it never moves or shoots)
 // packages/core/test/gearhold-levels.test.ts checks that every level is sealed and finishable.
 
 export const WALLS = '#MPX';
-export const FLOOR_THINGS = 'khawdcbour';
+export const FLOOR_THINGS = 'khawdcbourg';
 
 export const LEVELS = [
   {
@@ -176,6 +177,29 @@ export const LEVELS = [
       '#....#.......o.#.....c.r.....#',
       '#....#.......c.#.........a...X',
       '##############################',
+    ],
+  },
+  {
+    name: 'Regulator Hall',
+    hint: 'The exit is sealed until every steam regulator is wrecked. Shoot the brass drums; a kilnwarden guards the last crossing.',
+    mood: {
+      skyTop: [0.08, 0.2, 0.26], skyHorizon: [0.62, 0.86, 0.74], cloud: [0.74, 0.88, 0.8],
+      sunDir: [0.2, 0.5, 0.4], sunColor: [1.3, 1.45, 1.2],
+      ambient: [0.34, 0.5, 0.5], ground: [0.26, 0.3, 0.26], lamp: [1.0, 0.78, 0.42], crystal: [0.3, 1.0, 0.8],
+      fog: 0.021, stars: 0,
+    },
+    map: [
+      '####################################',
+      '#........#....#.......#....#.......#',
+      '#..c.....#..g.#..d....D....#....g..#',
+      '#........#....#.......#.h..#.......#',
+      '#........#....#...#...#....#.......#',
+      '#S.......D....#...#...#....#.......#',
+      '#........#....#...#.h.#....#.......#',
+      '#.a...g..#......c.#...#............#',
+      '#.w...c..#........#...#......b.....X',
+      '#.h......#........#...#..a.........#',
+      '####################################',
     ],
   },
 ];
