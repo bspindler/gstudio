@@ -53,6 +53,7 @@ export function createAudio() {
         else if (ev.e === 'beam' && limited('beam', 120)) tone(1320, 0.25, { type: 'sine', gain: 0.07, slide: 0.6 });
         else if (ev.e === 'pulse' && limited('pulse', 200)) tone(1760, 0.18, { type: 'sine', gain: 0.03, slide: 1.3 });
         else if (ev.e === 'chime' && limited('chime', 400)) { tone(659, 0.9, { type: 'sine', gain: 0.035 }); tone(988, 1.1, { type: 'sine', gain: 0.02, delay: 0.04 }); }
+        else if (ev.e === 'thornhit' && limited('thornhit', 80)) tone(520, 0.08, { type: 'triangle', gain: 0.06, slide: 0.5 });
         else if (ev.e === 'kill' && limited('kill', 45)) tone(PENTA[Math.floor(Math.random() * PENTA.length)], 0.12, { type: 'triangle', gain: ev.type === 'toad' ? 0.2 : 0.07 });
         else if (ev.e === 'leak') tone(110, 0.4, { type: 'sawtooth', gain: 0.08, slide: 0.6 });
         else if (ev.e === 'wave') { tone(392, 0.25, { gain: 0.1 }); tone(523, 0.35, { gain: 0.1, delay: 0.12 }); }

@@ -18,7 +18,7 @@ const chimes = (evs: { e: string }[]) => evs.filter((e) => e.e === 'chime');
 
 describe('Moonbell', () => {
   it('is the fifth plant and is a slow, soft chime', () => {
-    expect(TOWER_ORDER).toHaveLength(5);
+    expect((TOWER_ORDER as string[]).indexOf('moonbell')).toBe(4);
     const def = TOWERS_ANY.moonbell!;
     expect(def.kind).toBe('chime');
     expect(def.tiers[0]!.rate).toBeLessThan(0.5);

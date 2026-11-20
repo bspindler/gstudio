@@ -42,7 +42,7 @@ export function endlessLevel() {
     lives: 20,
     gold: 320,
     hpMul: 1,
-    towers: ['glowcap', 'frost', 'ember', 'sunspire', 'moonbell'],
+    towers: ['glowcap', 'frost', 'ember', 'sunspire', 'moonbell', 'thornbriar'],
     region: 'moon',
     paths: [
       [[-1, 2], [6, 2], [6, 6], [2, 6], [2, 10], [4, 10], [4, 11]],

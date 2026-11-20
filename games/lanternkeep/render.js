@@ -15,6 +15,7 @@ export const COLOR = {
   ember: '#ff7a45',
   sunspire: '#ffe27a',
   moonbell: '#c9d6ff',
+  thornbriar: '#b8e07a',
   gold: '#ffd36b',
 };
 
@@ -176,6 +177,30 @@ export function drawTower(ctx, type, x, y, s, tier, t, aim = 0) {
     ctx.beginPath();
     ctx.arc(0, s * 0.16, s * 0.04, 0, TAU);
     ctx.fill();
+  } else if (type === 'thornbriar') {
+    // a tangle of curved canes, each bristling with small thorns
+    const canes = 3 + tier;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < canes; i++) {
+      const a = -Math.PI / 2 + (i / (canes - 1) - 0.5) * 1.9;
+      const len = s * (0.36 + 0.05 * Math.cos(i * 2.1));
+      const ex = Math.cos(a) * len, ey = s * 0.24 + Math.sin(a) * len;
+      ctx.strokeStyle = '#4d6b3b';
+      ctx.lineWidth = s * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(0, s * 0.24);
+      ctx.quadraticCurveTo(Math.cos(a) * len * 0.2 + (i % 2 ? 1 : -1) * s * 0.1, s * 0.1, ex, ey);
+      ctx.stroke();
+      ctx.fillStyle = COLOR.thornbriar;
+      for (let k = 1; k <= 3; k++) {
+        const px = ex * (k / 3.4), py = s * 0.24 + (ey - s * 0.24) * (k / 3.4);
+        ctx.beginPath();
+        ctx.moveTo(px - s * 0.03, py);
+        ctx.lineTo(px + (i % 2 ? 1 : -1) * s * 0.11, py - s * 0.05);
+        ctx.lineTo(px + s * 0.03, py + s * 0.02);
+        ctx.fill();
+      }
+    }
   }
   ctx.restore();
   // tier pips
@@ -189,7 +214,7 @@ export function drawTower(ctx, type, x, y, s, tier, t, aim = 0) {
   }
 }
 
-const TOWER_LIGHT = { glowcap: COLOR.glowcap, frost: COLOR.frost, ember: COLOR.ember, sunspire: COLOR.sunspire, moonbell: COLOR.moonbell };
+const TOWER_LIGHT = { glowcap: COLOR.glowcap, frost: COLOR.frost, ember: COLOR.ember, sunspire: COLOR.sunspire, moonbell: COLOR.moonbell, thornbriar: COLOR.thornbriar };
 
 // ---------- creatures ----------
 
@@ -564,6 +589,21 @@ export function createRenderer(canvas, opts = {}) {
     for (const p of g.patches) {
       ctx.fillStyle = `rgba(255,110,40,${0.25 * Math.min(1, p.left)})`;
       ctx.beginPath(); ctx.arc(p.x * s, p.y * s, p.r * s, 0, TAU); ctx.fill();
+    }
+
+    // thorn patches on the path: a few green barbs, fewer as the patch is used up
+    for (const p of g.thorns ?? []) {
+      const n = Math.min(7, Math.max(2, p.hits));
+      ctx.fillStyle = rgba(COLOR.thornbriar, 0.85 * Math.min(1, p.left / 3));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU + p.id, rr = (0.12 + 0.18 * hash(i, p.id)) * s;
+        const bx = p.x * s + Math.cos(a) * rr, by = p.y * s + Math.sin(a) * rr;
+        ctx.beginPath();
+        ctx.moveTo(bx - s * 0.04, by + s * 0.03);
+        ctx.lineTo(bx, by - s * 0.14);
+        ctx.lineTo(bx + s * 0.04, by + s * 0.03);
+        ctx.fill();
+      }
     }
 
     // darkness, with light cut out

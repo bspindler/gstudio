@@ -76,11 +76,25 @@ export const TOWERS = {
       b: { name: 'Tollbell', blurb: 'A deep toll that stuns and really hurts.', cost: 150, dmg: 14, rate: 0.36, range: 2.2, stunFor: 0.7 },
     },
   },
+  thornbriar: {
+    name: 'Thornbriar', kind: 'thorn', blurb: 'Seeds thorns on the path. Walkers that cross them are cut, a few times each patch.',
+    tiers: [
+      { cost: 80, dmg: 14, rate: 0.5, range: 2.2, patches: 1, hits: 4 },
+      { cost: 70, dmg: 20, rate: 0.6, range: 2.4, patches: 2, hits: 6 },
+    ],
+    branches: {
+      a: { name: 'Bramble Hedge', blurb: 'More thorn patches, each with more bite left in it.', cost: 140, dmg: 24, rate: 0.7, range: 2.6, patches: 3, hits: 9 },
+      b: { name: 'Barbed Snare', blurb: 'Fewer patches that hit hard and hold the creature a moment.', cost: 140, dmg: 42, rate: 0.55, range: 2.4, patches: 2, hits: 5, stunFor: 0.6 },
+    },
+  },
 };
 // Moonbell stuns bosses for half as long, and a creature it has just stilled shrugs off the next chime for a while.
 export const CHIME_BOSS_FACTOR = 0.5;
 export const CHIME_REST = 1.5;
-export const TOWER_ORDER = ['glowcap', 'frost', 'ember', 'sunspire', 'moonbell'];
+// Thornbriar: a thorn patch is one path tile. It cuts each walker once, has a limited number of hits, and withers after a while.
+export const THORN_RADIUS = 0.5;
+export const THORN_LIFE = 30;
+export const TOWER_ORDER = ['glowcap', 'frost', 'ember', 'sunspire', 'moonbell', 'thornbriar'];
 
 export const ENEMIES = {
   moth: { name: 'Moth', hp: 28, speed: 1.35, armor: 0, reward: 5, leak: 1, r: 0.22, tip: 'Drawn to light. Easy to stop alone, not in a crowd.' },
@@ -167,6 +181,7 @@ export function createGame(level, mods = {}) {
     towers: [],
     enemies: [],
     patches: [], // burning ground: { x, y, r, dps, left }
+    thorns: [], // thorn patches: { id, tid, x, y, dmg, hits, left, seen: [enemy ids already cut], stunFor }
     flareMax,
     flareCd: flareMax * (1 - (level.flareStart ?? 0)), // a level can start with the Flare part-charged
     pending: [], // events raised outside step(), reported by the next step
@@ -392,9 +407,29 @@ function pickTarget(list, prefer) {
   return best;
 }
 
+// Thornbriar seeds a patch on the nearest path tile in reach that has no thorns yet, up to its patch cap.
+function seedThorns(g, t, s, events) {
+  if (g.thorns.reduce((n, p) => n + (p.tid === t.id ? 1 : 0), 0) >= s.patches) return false;
+  const r2 = s.range * s.range;
+  let best = null, bd = Infinity;
+  for (const k of g.blocked) {
+    const [c, r] = k.split(',').map(Number);
+    const at = { x: c + 0.5, y: r + 0.5 };
+    const d = dist2(at, t);
+    if (d > r2 || d >= bd) continue;
+    if (g.thorns.some((p) => p.x === at.x && p.y === at.y)) continue;
+    best = at; bd = d;
+  }
+  if (!best) return false;
+  g.thorns.push({ id: g.nextId++, tid: t.id, x: best.x, y: best.y, dmg: s.dmg, hits: s.hits, left: THORN_LIFE, seen: [], stunFor: s.stunFor ?? 0 });
+  events.push({ e: 'thorn', id: t.id, x1: t.x, y1: t.y, x2: best.x, y2: best.y });
+  return true;
+}
+
 function fire(g, t, events) {
   const s = stats(t);
   const kind = TOWERS[t.type].kind;
+  if (kind === 'thorn') return seedThorns(g, t, s, events);
   const near = inRange(g, t, s.range);
   if (near.length === 0) return false;
   if (kind === 'aura') {
@@ -535,6 +570,22 @@ export function step(g) {
     }
   }
   g.patches = g.patches.filter((p) => p.left > 0);
+
+  // thorn patches: each walker is cut once per patch, the patch has a limited number of hits
+  for (const p of g.thorns) {
+    p.left -= DT;
+    for (const e of g.enemies) {
+      if (p.hits <= 0) break;
+      if (!hittable(e) || ENEMIES[e.type].lamp || p.seen.includes(e.id)) continue;
+      if (Math.hypot(e.x - p.x, e.y - p.y) > THORN_RADIUS) continue;
+      p.seen.push(e.id);
+      p.hits -= 1;
+      if (p.stunFor) e.stunLeft = Math.max(e.stunLeft, p.stunFor * (ENEMIES[e.type].leak >= 5 ? CHIME_BOSS_FACTOR : 1));
+      hurt(g, e, p.dmg, false, events);
+      events.push({ e: 'thornhit', x: p.x, y: p.y });
+    }
+  }
+  g.thorns = g.thorns.filter((p) => p.left > 0 && p.hits > 0);
 
   for (const t of g.towers) {
     t.cd -= DT;

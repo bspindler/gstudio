@@ -4,7 +4,8 @@
 // Without a lane, a wave's enemies alternate across the paths. Each early level teaches one new thing.
 
 const FOUR = ['glowcap', 'frost', 'ember', 'sunspire'];
-const ALL = [...FOUR, 'moonbell']; // the Moonbell joins from night 6
+const FIVE = [...FOUR, 'moonbell']; // the Moonbell joins from night 6
+const ALL = [...FIVE, 'thornbriar']; // the Thornbriar joins from night 7
 const L = (name, intro, def) => ({ name, intro, lives: 20, hpMul: 1, ...def });
 
 export const REGIONS = [
@@ -71,7 +72,7 @@ export const LEVELS = [
 
   // ---------- Frostmere ----------
   L('The Fork', 'Two paths, one lantern. Wisps ignore frost; a Moonbell stills them. Build where the paths meet.', {
-    region: 'frost', towers: ALL, gold: 280, hpMul: 1.62,
+    region: 'frost', towers: FIVE, gold: 280, hpMul: 1.62,
     paths: [
       [[1, -1], [1, 5], [4, 5], [4, 11]],
       [[7, -1], [7, 5], [4, 5], [4, 11]],

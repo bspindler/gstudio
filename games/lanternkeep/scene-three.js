@@ -44,7 +44,7 @@ export const REGIONS = {
   },
 };
 
-const PLANT_LIGHT = { glowcap: 0x5ff5cf, frost: 0x8ec8ff, ember: 0xff7a30, sunspire: 0xffd060, moonbell: 0xaabfff };
+const PLANT_LIGHT = { glowcap: 0x5ff5cf, frost: 0x8ec8ff, ember: 0xff7a30, sunspire: 0xffd060, moonbell: 0xaabfff, thornbriar: 0xb8e07a };
 
 // ---------- shaders ----------
 const SKY = {
@@ -757,6 +757,16 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         glowP.add(p.x + Math.cos(ang) * rr, 0.06 + ((t * 0.8 + hash(i, 3)) % 1) * 0.45, p.y + Math.sin(ang) * rr, 0.22, 1.8, 0.5, 0.1, a * 0.9);
       }
       glowP.add(p.x, 0.08, p.y, p.r * 2.2, 0.6, 0.15, 0.03, a);
+    }
+
+    // thorn patches: small green barbs rising off the path tile, fewer as the patch is used up
+    for (const p of g.thorns ?? []) {
+      const a = Math.min(1, p.left / 3);
+      const n = Math.min(tierName === 'low' ? 3 : 6, Math.max(2, p.hits));
+      for (let i = 0; i < n; i++) {
+        const ang = hash(i, p.id) * TAU, rr = hash(p.id, i) * 0.3;
+        glowP.add(p.x + Math.cos(ang) * rr, 0.1 + 0.05 * Math.sin(t * 2 + i), p.y + Math.sin(ang) * rr, 0.16, 0.7, 1.2, 0.3, a * 0.9);
+      }
     }
 
     // effects

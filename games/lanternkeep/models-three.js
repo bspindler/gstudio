@@ -238,6 +238,22 @@ export function plantModel(type, form, { physical = true } = {}) {
       g.add(bell(form === 1 ? 0.6 : 0.5, form === 1 ? 0.27 : 0.22));
       if (form === 1) g.add(bell(0.32, 0.13, 0.2, 0.1));
     }
+  } else if (type === 'thornbriar') {
+    g.add(soil(0.36, 0x1f2a1c));
+    const canes = form === 'a' ? 8 : form === 'b' ? 5 : form === 1 ? 6 : 4;
+    const h = form === 'a' ? 0.5 : form === 'b' ? 0.42 : form === 1 ? 0.46 : 0.38;
+    for (let i = 0; i < canes; i++) {
+      const a = (i / canes) * TAU + hash(i, canes) * 0.5;
+      const hh = h * (0.8 + hash(canes, i) * 0.4);
+      const out = 0.22 + hash(i, 5) * 0.12;
+      const curve = new THREE.CatmullRomCurve3([V3(0, 0, 0), V3(Math.cos(a) * out * 0.5, hh * 0.55, Math.sin(a) * out * 0.5), V3(Math.cos(a) * out, hh, Math.sin(a) * out)]);
+      g.add(mesh(new THREE.TubeGeometry(curve, 10, 0.022, 6), mat(C.leaf, { rough: 0.8 }), { y: 0.02 }));
+      for (let k = 1; k <= 3; k++) {
+        const p = curve.getPoint(k / 3.4);
+        const th = mesh(new THREE.ConeGeometry(0.02, 0.1, 5), mat(form === 'b' ? C.coal : 0xb8e07a, { rough: 0.5, flat: true }), { x: p.x, y: p.y + 0.02, z: p.z, rz: Math.cos(a) * 1.2, rx: -Math.sin(a) * 1.2 });
+        g.add(th);
+      }
+    }
   }
   return g;
 }

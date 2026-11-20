@@ -121,7 +121,7 @@
   .act:disabled { opacity: .45; cursor: default; }
   .act .cost { color: var(--gold); margin-left: 6px; }
   .act.primary .cost { color: #6a4300; }
-  .tray { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+  .tray { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
   .card {
     position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px;
     padding: 4px 4px 7px; border-radius: 15px; border: 1px solid var(--line); background: var(--night-2); min-height: 88px;
@@ -379,7 +379,7 @@ import { createAudio } from './audio.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 // Keep version the same as in game.yaml and CHANGELOG.md. Under the test robot the SDK sends nothing.
-const studio = createStudio({ game: 'lanternkeep', version: '0.6.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'lanternkeep', version: '0.7.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
@@ -671,6 +671,7 @@ function describe(tw) {
   if (def.kind === 'aura') return `Slows ${Math.round(s.slow * 100)}%${s.dmg >= 10 ? `, hits for ${s.dmg}` : ''}`;
   if (def.kind === 'beam') return s.pierce ? `${s.dmg} to every creature in line` : s.ramp ? `${s.dmg}, hotter on the same target` : `${s.dmg}, through armour`;
   if (def.kind === 'splash') return s.burn ? `Bursts for ${s.dmg}, burns the ground` : `Bursts for ${s.dmg}`;
+  if (def.kind === 'thorn') return `Seeds ${s.patches} thorn patch${s.patches > 1 ? 'es' : ''}, ${s.hits} cuts of ${s.dmg} each${s.stunFor ? ', holds the creature' : ''}`;
   return s.multi ? `${s.dmg} to three at once` : s.stunEvery ? `${s.dmg}, every fourth stuns` : `Hits for ${s.dmg}`;
 }
 
