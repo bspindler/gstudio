@@ -87,6 +87,10 @@
   @keyframes peek-bob { 50% { transform: translateY(-4px); } }
   .animal.trot-in { animation: trot-in 1.1s ease-in-out var(--d, 0s) both; }
   .animal.trot-out { animation: trot-out 1.1s ease-in-out var(--d, 0s) both; }
+  .animal.parade { animation: parade 4.2s ease-in-out var(--d, 0s) both; }
+  @keyframes parade { 0% { translate: 0 0; } 12% { translate: calc(var(--px) * .25) -6px; } 24% { translate: calc(var(--px) * .5) 0; }
+    36% { translate: calc(var(--px) * .75) -6px; } 48% { translate: var(--px) 0; } 60% { translate: calc(var(--px) * .75) -6px; }
+    72% { translate: calc(var(--px) * .5) 0; } 86% { translate: calc(var(--px) * .2) -6px; } 100% { translate: 0 0; } }
   @keyframes trot-in { 0% { translate: 0 0; scale: 1; opacity: 1; } 20% { translate: calc(var(--tx) * .2) -8px; } 40% { translate: calc(var(--tx) * .4) 0; }
     60% { translate: calc(var(--tx) * .6) -8px; } 80% { translate: calc(var(--tx) * .85) calc(var(--ty) * .85); scale: .5; opacity: 1; } 100% { translate: var(--tx) var(--ty); scale: .2; opacity: 0; } }
   @keyframes trot-out { 0% { translate: var(--tx) var(--ty); scale: .2; opacity: 0; } 20% { translate: calc(var(--tx) * .85) calc(var(--ty) * .85); scale: .5; opacity: 1; }
@@ -350,6 +354,7 @@
     #peeks .peek { animation: none; }
     .animal.trot-in { animation: none; opacity: 0; }
     .animal.trot-out { animation: none; }
+    .animal.parade { animation: none; }
     .falling { animation-name: fall-calm; }
     #bale-bump.squash { animation: none; }
     .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1); }
@@ -432,7 +437,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.4.3', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.5.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1088,9 +1093,10 @@ function leaveBarn(l) {
   inside.delete(l);
   peekOut(l);
   const a = slotAnimal(l);
-  if (a) a.classList.remove('trot-in', 'trot-out');
+  if (a) a.classList.remove('trot-in', 'trot-out', 'parade');
 }
 function resetDoor() {
+  endParade();
   doorTimers.forEach(clearTimeout); doorTimers = [];
   [...inside].forEach(leaveBarn);
   peeksEl.replaceChildren();
@@ -1098,7 +1104,40 @@ function resetDoor() {
   doorOpen = false;
   doorEl.classList.remove('open');
 }
+// The barn parade: with the door open, one tap sends every animal still standing on the hay floor on a slow
+// follow-the-leader walk toward the door and back to its own block. It answers once; taps during it are ignored.
+const PARADE_MS = 4200;
+let parading = false;
+let paradeTimer = 0;
+function paradeAnimals() {
+  const out = [];
+  floor.forEach((l) => { const a = slotAnimal(l); if (a && !inside.has(l)) out.push([l, a]); });
+  return out;
+}
+function endParade() {
+  clearTimeout(paradeTimer); paradeTimer = 0;
+  parading = false;
+  slotsEl.querySelectorAll('.parade').forEach((a) => a.classList.remove('parade'));
+}
+function startParade(walkers) {
+  parading = true;
+  const door = doorEl.getBoundingClientRect();
+  walkers.forEach(([, a], i) => {
+    a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop');
+    void a.offsetWidth;
+    const r = a.getBoundingClientRect();
+    let px = (door.left + door.width / 2 - (r.left + r.width / 2)) * 0.7;
+    if (Math.abs(px) < 48) px = px < 0 ? -48 : 48;
+    a.style.setProperty('--px', `${px}px`);
+    a.style.setProperty('--d', `${i * TROT_GAP}ms`);
+    a.classList.add('parade');
+  });
+  paradeTimer = setTimeout(endParade, walkers.length * TROT_GAP + PARADE_MS + 100);
+}
 function tapDoor() {
+  // A tap on the open door also sends the animals standing on the floor on their parade (never a second one while it runs).
+  const walkers = doorOpen && !parading ? paradeAnimals() : [];
+  if (walkers.length) startParade(walkers);
   doorTimers.forEach(clearTimeout); doorTimers = [];
   doorOpen = !doorOpen;
   doorEl.classList.toggle('open', doorOpen);
@@ -1110,7 +1149,7 @@ function tapDoor() {
       if (!named.has(l) || inside.has(l)) return;
       const a = slotAnimal(l);
       if (!a) return;
-      a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop', 'trot-out');
+      a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop', 'trot-out', 'parade');
       void a.offsetWidth;
       const r = a.getBoundingClientRect();
       a.style.setProperty('--tx', `${door.left + door.width / 2 - (r.left + r.width / 2)}px`);
