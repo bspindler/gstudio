@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.14.1 (2026-11-19)
 - When a tide level opens, soft ripples now drift across the board for about 2 seconds in the direction the tide pulls.
+- Each step of a chain reaction from your swap now pops a little higher in pitch, so you can hear what your move did.
 
 ## 0.14.0 (2026-11-18)
 - Level 19 is easier to win: the litter along the bottom of the pool is thinned out so there's more room under the stranded pal.

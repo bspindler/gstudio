@@ -68,7 +68,8 @@ describe('tidepool-pals play layout', () => {
     expect(html).toContain('function glowMatched(res, then)');
     expect(html).toMatch(/glowMatched\(res, \(\) => finishMove\(res, r, c\)\)/);
     expect(html).toMatch(/glowThenFinish\(res, r2, c2\)/);
-    expect(html).toMatch(/glowMatched\(res, \(\) => \{ sfx\.pop/);
+    expect(html).toMatch(/glowMatched\(res, \(\) => \{ sfx\.chainPop\(step\)/);
+    expect(html).toContain('lvl.chainStep = 0');
     expect(html).toContain('.tile.matchglow::before');
   });
 
