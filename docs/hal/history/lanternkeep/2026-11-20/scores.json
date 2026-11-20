@@ -1,0 +1,20 @@
+{
+  "night": "2026-11-20",
+  "runs": [
+    {
+      "run": "run-2026-11-20T12-28-05-422Z",
+      "at": "2026-11-20T14:02:52.686Z",
+      "scorers": {
+        "lanternkeep": {
+          "fitness": 95.83,
+          "measures": {
+            "inBand": 100,
+            "noSpikes": 100,
+            "watch": 87.5,
+            "tension": 88.53
+          }
+        }
+      }
+    }
+  ]
+}
