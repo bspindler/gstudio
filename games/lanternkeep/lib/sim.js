@@ -105,6 +105,7 @@ export const ENEMIES = {
   toad: { name: 'Gloom Toad', hp: 650, speed: 0.5, armor: 3, reward: 75, leak: 5, r: 0.42, tip: 'A boss. Costs five lives if it reaches the lantern.' },
   mole: { name: 'Hollow Mole', hp: 70, speed: 0.95, armor: 1, reward: 10, leak: 1, r: 0.28, dive: { up: 2.4, down: 1.6 }, tip: 'Dives under the path for a stretch. Nothing can hit it down there, so cover the whole road.' },
   lampmoth: { name: 'Lampmoth', hp: 16, speed: 2.5, armor: 0, reward: 3, leak: 1, r: 0.17, lamp: { dazzle: 3.2, reach: 0.32 }, tip: 'Leaves the path and dives at your brightest plant. It dazzles that plant until it burns out, then flits for the lantern.' },
+  twinwisp: { name: 'Twin Wisp', hp: 60, speed: 1.1, armor: 0, reward: 4, leak: 1, r: 0.24, twin: true, tip: 'Splits in two the first time it is struck, each half with half the health. Bursts and beams catch both.' },
   mothmother: { name: 'Mothmother', hp: 900, speed: 0.45, armor: 2, reward: 90, leak: 5, r: 0.46, split: { type: 'moth', n: 6 }, tip: 'A boss. She bursts into moths when she falls.' },
 };
 
@@ -387,6 +388,18 @@ function hurt(g, e, dmg, ignoreArmor, events) {
   e.hp -= Math.max(1, dmg - armor);
   e.hitFlash = 0.12;
   if (e.hp <= 0) killed(g, e, events);
+  else if (ENEMIES[e.type].twin && !e.half) splitTwin(g, e, events);
+}
+
+// A Twin Wisp that is struck and survives parts in two: each half keeps half the hurt body's health and never splits again.
+function splitTwin(g, e, events) {
+  const hp = Math.max(1, Math.floor(e.hp / 2));
+  e.half = true;
+  e.hp = Math.max(1, Math.ceil(e.hp / 2));
+  const d = Math.max(0, e.d - 0.3);
+  const p = pointAt(g.paths[e.lane], d);
+  g.enemies.push({ ...e, id: g.nextId++, d, x: p.x, y: p.y, hp, hitFlash: 0 });
+  events.push({ e: 'split', x: e.x, y: e.y });
 }
 
 const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;

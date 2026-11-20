@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.8.0 (2026-11-21)
+- New night 18, Mirror Mist: Twin Wisps split in two the first time they are struck, each half with half the health.
+
 ## 0.7.1 (2026-11-21)
 - Walking creatures now leave faint pale footprints on the moonlit path that fade away in a second or two.
 - The lantern's flame now burns lower, smaller and dimmer as lives are lost, so a close finish is something you can see at a glance.

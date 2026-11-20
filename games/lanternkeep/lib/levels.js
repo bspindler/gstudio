@@ -255,4 +255,21 @@ export const LEVELS = [
       [['toad', 3, 3], ['lampmoth', 12, 0.4, 2], ['beetle', 10, 0.6, 4]],
     ],
   }),
+  L('Mirror Mist', 'Twin Wisps split in two when struck, each half with half the health. Bursts and beams catch both.', {
+    region: 'ember', towers: ALL, gold: 400, hpMul: 1.5,
+    paths: [
+      [[1, -1], [1, 5], [4, 5], [4, 11]],
+      [[7, -1], [7, 5], [4, 5], [4, 11]],
+    ],
+    waves: [
+      [['moth', 12, 0.5], ['twinwisp', 4, 1.2, 3]],
+      [['twinwisp', 10, 0.8]],
+      [['beetle', 8, 0.9], ['twinwisp', 8, 0.7, 2]],
+      [['mossback', 3, 1.5], ['twinwisp', 12, 0.55, 2], ['firefly', 14, 0.3, 3]],
+      [['toad', 2, 5], ['twinwisp', 12, 0.5, 2]],
+      [['twinwisp', 16, 0.4], ['beetle', 10, 0.7, 3]],
+      [['mothmother', 1, 1], ['twinwisp', 14, 0.45, 3], ['mossback', 3, 1.5, 3]],
+      [['toad', 3, 4], ['twinwisp', 20, 0.35, 2], ['beetle', 10, 0.6, 4]],
+    ],
+  }),
 ];

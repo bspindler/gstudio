@@ -304,9 +304,10 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
     ctx.beginPath();
     ctx.ellipse(-s * 0.08, -s * 0.06, s * 0.05, s * 0.12, 0.2, 0, TAU);
     ctx.fill();
-  } else if (e.type === 'wisp') {
+  } else if (e.type === 'wisp' || e.type === 'twinwisp') {
+    if (e.half) s *= 0.72; // each half of a split Twin Wisp is smaller
     const wob = Math.sin(t * 6 + k) * s * 0.03;
-    ctx.fillStyle = 'rgba(182,243,255,0.75)';
+    ctx.fillStyle = e.type === 'twinwisp' ? 'rgba(214,190,255,0.78)' : 'rgba(182,243,255,0.75)';
     ctx.beginPath();
     ctx.moveTo(0, -s * 0.3 + wob);
     ctx.quadraticCurveTo(s * 0.24, -s * 0.02, s * 0.12, s * 0.18);
@@ -359,7 +360,7 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
   }
 }
 
-const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, lampmoth: 0.17, mothmother: 0.46 };
+const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, twinwisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, lampmoth: 0.17, mothmother: 0.46 };
 
 // ---------- renderer ----------
 
@@ -646,7 +647,7 @@ export function createRenderer(canvas, opts = {}) {
     };
     hole(lx, ly - s * 0.2, s * (1.4 + 3.2 * life) * flick, 1);
     for (const tw of g.towers) hole(tw.x * s, tw.y * s, s * (1.1 + 0.25 * tw.tier), 0.85);
-    for (const [e, p] of drawn) if (e.type === 'firefly' || e.type === 'wisp') hole(p.x * s, p.y * s, s * 0.6, 0.5);
+    for (const [e, p] of drawn) if (e.type === 'firefly' || e.type === 'wisp' || e.type === 'twinwisp') hole(p.x * s, p.y * s, s * 0.6, 0.5);
     for (const f of fx) {
       const k = 1 - f.t / f.life;
       if (f.k === 'burst' && f.t > 0) hole(f.x * s, f.y * s, s * f.r * 1.6, 0.8 * k);
@@ -688,6 +689,7 @@ export function createRenderer(canvas, opts = {}) {
     for (const [e, p] of drawn) {
       if (e.type === 'firefly') glow(p.x * s, p.y * s, s * 0.3, '#eaff7a', 0.6);
       else if (e.type === 'wisp') glow(p.x * s, p.y * s, s * 0.4, '#b6f3ff', 0.35);
+      else if (e.type === 'twinwisp') glow(p.x * s, p.y * s, s * (e.half ? 0.3 : 0.4), '#d6beff', 0.35);
       else if (e.type === 'toad') glow(p.x * s, p.y * s - s * 0.25, s * 0.25, '#ffe066', 0.3);
     }
     // between waves, a few fireflies drift in to the lantern, then fade as the next wave nears

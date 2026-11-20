@@ -571,7 +571,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         const big = ev.type === 'toad' || ev.type === 'mothmother';
         if (ev.reward >= 5) fx.push({ k: 'coin', x: ev.x, z: ev.y, text: `+${ev.reward}`, t: 0, life: 0.95 });
         const n = tierName === 'low' ? (big ? 16 : 6) : big ? 48 : 14;
-        const c = ev.type === 'firefly' ? [2, 2.2, 0.6] : ev.type === 'wisp' ? [0.8, 1.8, 2.2] : ev.type === 'mossback' ? [0.9, 2, 0.6] : [2.2, 1.6, 0.8];
+        const c = ev.type === 'firefly' ? [2, 2.2, 0.6] : ev.type === 'wisp' || ev.type === 'twinwisp' ? [0.8, 1.8, 2.2] : ev.type === 'mossback' ? [0.9, 2, 0.6] : [2.2, 1.6, 0.8];
         for (let i = 0; i < n; i++) { const a = (i / n) * TAU + hash(i, ev.reward) * 0.6, sp = 0.8 + hash(i, n) * 1.8; fx.push({ k: 'spark', x: ev.x, y: 0.35, z: ev.y, vx: Math.cos(a) * sp, vy: 1 + hash(n, i) * 2.4, vz: Math.sin(a) * sp, t: 0, life: 0.55 + hash(n, i) * 0.45, c }); }
         fx.push({ k: 'puff', x: ev.x, z: ev.y, t: 0, life: 0.6, big });
         // moon-motes: a few soft pale specks drift up and fade (slow fade, no flashing)
@@ -731,7 +731,8 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         for (const w of P.wings) w.g.rotation.z = w.s * (0.2 + flap * 0.65);
         if (e.type === 'firefly') glowP.add(x, 0.34 * sc, z, 0.5, 0.9, 1.1, 0.2, 0.8);
         if (e.type === 'lampmoth') glowP.add(x, 0.34 * sc, z, 0.6, 1.4, 1.1, 0.5, e.mode === 'dazzle' ? 1 : 0.7);
-      } else if (e.type === 'wisp') {
+      } else if (e.type === 'wisp' || e.type === 'twinwisp') {
+        if (e.half) c.root.scale.setScalar(sc * 0.72);
         c.root.position.y = Math.sin(t * 3 + k) * 0.07;
         P.body.rotation.z = Math.sin(t * 4 + k) * 0.1;
         P.body.scale.set(1, 1 + Math.sin(t * 7 + k) * 0.06, 1);

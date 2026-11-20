@@ -346,11 +346,12 @@ export function creatureModel(type) {
       body.add(leg);
       parts.legs.push({ g: leg, s, j });
     }
-  } else if (type === 'wisp') {
+  } else if (type === 'wisp' || type === 'twinwisp') {
+    const twin = type === 'twinwisp';
     body.position.y = 0.4;
     const flame = lathe([[0, -0.2], [0.12, -0.17], [0.18, -0.06], [0.16, 0.06], [0.1, 0.18], [0.04, 0.3], [0, 0.38]], 28);
-    body.add(mesh(flame, mat(0x9ff0ff, { emissive: 0x60d8ff, ei: 1.6, rough: 0.2, opacity: 0.7, depthWrite: false }), { shadow: false }));
-    body.add(mesh(new THREE.SphereGeometry(0.08, 16, 12), glow(0xe0ffff, 3.5), { y: -0.02, shadow: false }));
+    body.add(mesh(flame, mat(twin ? 0xd6beff : 0x9ff0ff, { emissive: twin ? 0x9a70ff : 0x60d8ff, ei: 1.6, rough: 0.2, opacity: 0.7, depthWrite: false }), { shadow: false }));
+    body.add(mesh(new THREE.SphereGeometry(0.08, 16, 12), glow(twin ? 0xf0e4ff : 0xe0ffff, 3.5), { y: -0.02, shadow: false }));
     for (const s of [-1, 1]) body.add(mesh(new THREE.SphereGeometry(0.025, 10, 8), mat(0x0a0820, { rough: 0.3 }), { x: s * 0.055, y: 0.03, z: 0.15, sy: 1.4, shadow: false }));
   } else if (type === 'mossback') {
     body.position.y = 0.08;
