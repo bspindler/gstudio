@@ -16,3 +16,16 @@ Changes:
 
 Changes:
 - HAL-257 feature(hyperline): Retry sector PENDULUM BLADES: hop a blade as its swing crosses the track: **held** (0.11.0)
+
+## Run run-2026-11-20T06-00-04-377Z
+
+**Hyperline:** neon read-and-react runner. Tonight's change was dropped.
+
+- HAL-258 lengthened the twin intro's second spike cluster to 8 spikes. bites rose from 97.2 to 99.8, and the p10 window held at 142 ms.
+- The gate then found seed 50 not clearable from 0 to 4150 m, and the gain fell short of the bar, so it was discarded.
+- The held PENDULUM BLADES sector (HAL-257) was not touched.
+
+Next, retry the intro bite with every seed checked for a clear run before claiming the gain.
+
+Changes:
+- HAL-258 tuning(hyperline): Sharpen the one sector intro whose bite is out of the 3-25% band: **discarded** (0.10.1) (hyperline: hard failure: seed 50, full course: not clearable from 0m to 4150m; hyperline: no real gain: 2.58 < 5.98)

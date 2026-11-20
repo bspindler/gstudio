@@ -17,3 +17,14 @@ Changes:
 
 Changes:
 - HAL-255 feature(gearhold): Retry 'Regulator Hall' (wreck 3 steam regulators, no key) as level 8, mid-band: **held** (0.9.0)
+
+## Run run-2026-11-20T06-00-04-377Z
+
+**Gearhold:** brass-and-steam dungeon fights.
+
+- Built and held HAL-261, your N-034 ask for a level 6 that feels different: two lone crawlers in Boiler Stair become swarms of three fast, one-hit cinder mites.
+- Level 6 sits at 53% wins (52% before), with winnable, pace and feel at 100. The bot handled the mites without any change, as L-140 predicted.
+- It edits an existing level, so it doesn't collide with Regulator Hall (HAL-255), which is still held as level 8.
+
+Changes:
+- HAL-261 feature(gearhold): Boiler Stair: cinder mites, fast swarms of three that pop in one hit, replace…: **held** (0.9.0)

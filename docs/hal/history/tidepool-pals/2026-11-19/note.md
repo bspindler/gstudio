@@ -16,3 +16,16 @@ Changes:
 
 Changes:
 - HAL-253 polish(tidepool-pals): Tide direction shown as slow drifting ripples across the board at level start: **merged** (0.14.1)
+
+## Run run-2026-11-20T06-00-04-377Z
+
+**Tidepool:** calm reef match with pals to free.
+
+- Merged HAL-259: soft pentatonic pops that rise with each step of a chain started by your swap. They are WebAudio tones, so no assets were added.
+- This keeps the reef calm and answers your 'what did my swap do' complaint. It has not been heard on a phone yet.
+- The score is unchanged at 97.35.
+- The reported 0.14.1 repeats the version the tide-ripple change already used, so the version on main needs checking.
+- Level 31 (HAL-252) is still held.
+
+Changes:
+- HAL-259 polish(tidepool-pals): Each step of a swap's chain clear pops a little higher in pitch: **merged** (0.14.1)

@@ -6,3 +6,14 @@
 
 Changes:
 - HAL-254 polish(block-barn): Animal under the drifting sunbeam slowly closes its eyes, warm and content: **merged** (0.4.2)
+
+## Run run-2026-11-20T06-00-04-377Z
+
+**Block Barn:** quiet toddler barn, all gentle toys and no pressure.
+
+- Merged HAL-260: after you name an animal, the butterfly drifts slowly down to its head and back to the window. It is skipped at dusk and with reduced motion, and has no sound, text or tap zone.
+- It ties two existing toys together instead of adding a new one, which suits the barn's calm. Every score is at 100, including calm.
+- No phone screenshot was taken before merge, despite the ticket. Please glance at it on your phone.
+
+Changes:
+- HAL-260 polish(block-barn): Window butterfly drifts down to rest on the last-named animal's head a moment: **merged** (0.4.2)

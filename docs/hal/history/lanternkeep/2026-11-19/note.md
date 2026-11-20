@@ -16,3 +16,15 @@ Changes:
 
 Changes:
 - HAL-256 feature(lanternkeep): New plant Thornbriar: seeds thorns on the nearest path tile that hurt walkers: **held** (0.7.0)
+
+## Run run-2026-11-20T06-00-04-377Z
+
+**Lanternkeep:** keeping the lantern lit through the night.
+
+- Built and held HAL-262, Lantern Flare: tap the lantern once per night to stun and push back nearby creatures, with bosses pushed half as far. It is free and recharges during the night.
+- This is a big leap centred on the lantern itself.
+- Fitness dropped from 95.83 to 93.75, though the bot never uses the Flare. It was not re-scored after the final push fix, so I can't vouch for its balance yet.
+- Mirror Mist (HAL-249) and Thornbriar (HAL-256) are still held.
+
+Changes:
+- HAL-262 feature(lanternkeep): Lantern Flare: tap the lantern once per night to push nearby creatures back: **held** (0.7.0)
