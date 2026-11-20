@@ -318,19 +318,17 @@
      no text, no tap zone). Slow wing-fold only (no flashing); it rests out of sight at dusk. */
   #butterfly { position: absolute; left: 12%; top: 22%; width: 16px; height: 12px; pointer-events: none; z-index: 1; transition: opacity 3s ease-in-out;
     animation: bfly-drift 26s ease-in-out infinite alternate; }
-  .bfly-guest { position: fixed; width: 16px; height: 12px; pointer-events: none; z-index: 30; }
-  .bfly-guest::after { content: ""; position: absolute; left: 50%; top: 0; width: 2px; height: 11px; margin-left: -1px; border-radius: 1px; background: #7a4a5e; }
-  #butterfly i, .bfly-guest i { position: absolute; top: 0; width: 7px; height: 10px; background: #f5a6c8; box-shadow: inset 0 0 0 1.5px rgba(176,84,130,.55);
+  #butterfly i { position: absolute; top: 0; width: 7px; height: 10px; background: #f5a6c8; box-shadow: inset 0 0 0 1.5px rgba(176,84,130,.55);
     animation: bfly-flap 2.4s ease-in-out infinite; }
-  .bfly-guest i:first-child, #butterfly i:first-child { left: 0; border-radius: 80% 20% 60% 40%; transform-origin: 100% 50%; }
-  .bfly-guest i:last-child, #butterfly i:last-child { right: 0; border-radius: 20% 80% 40% 60%; transform-origin: 0 50%; }
+  #butterfly i:first-child { left: 0; border-radius: 80% 20% 60% 40%; transform-origin: 100% 50%; }
+  #butterfly i:last-child { right: 0; border-radius: 20% 80% 40% 60%; transform-origin: 0 50%; }
   #butterfly::after { content: ""; position: absolute; left: 50%; top: 0; width: 2px; height: 11px; margin-left: -1px; border-radius: 1px; background: #7a4a5e; }
   @keyframes bfly-drift { 0% { left: 12%; top: 26%; } 22% { left: 38%; top: 14%; } 45% { left: 62%; top: 34%; } 70% { left: 28%; top: 44%; } 100% { left: 66%; top: 20%; } }
   @keyframes bfly-flap { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.45); } }
   .dusk-on #butterfly { opacity: 0; }
 
   @media (prefers-reduced-motion: reduce) {
-    #butterfly, #butterfly i, .bfly-guest i { animation: none; }
+    #butterfly, #butterfly i { animation: none; }
     #sunbeam::before { animation: none; }
     .body.flip, .body.arrive { animation-duration: .3s; }
     .body.flip { animation-name: flip; }
@@ -434,7 +432,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.4.2', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.4.3', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -961,7 +959,6 @@ function nameBlock(k) {
   sfx.clack(); sfx.pop();
   react(l);
   lookToward(k);
-  butterflyRest(l);
   if (rng() < 0.14) hiddenFriend(k);
 }
 // A press held LONGPRESS ms or more and let go on a named animal is answered by one slow yawn instead of the tap
@@ -1191,45 +1188,11 @@ function tapVane() {
 // The spinning vane stirs the window butterfly into one slow, soft loop (once per tap, never stacked). It uses the
 // translate/rotate properties, so the butterfly's own drift keeps going; nothing shows at dusk or with reduced motion.
 let bflyLoop = null;
-// Naming an animal sends the window butterfly drifting down to rest on that animal's head a moment, then back to the
-// window (once at a time). The wall clips the pane, so a small guest copy flies out while the real one waits, paused.
-// No tap zone, sound or text; skipped at dusk, with reduced motion, or while the vane loop is running.
-let bflyBusy = false;
-function butterflyRest(l) {
-  const b = $('butterfly');
-  if (bflyBusy || dusk || !b.animate || (bflyLoop && bflyLoop.playState === 'running')) return;
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  bflyBusy = true;
-  setTimeout(() => {
-    const a = animalEl(l);
-    const from = b.getBoundingClientRect();
-    const to = a && a.getBoundingClientRect();
-    if (!to || !from.width || !to.width || dusk) { bflyBusy = false; return; }
-    const g = b.cloneNode(true);
-    g.removeAttribute('id');
-    g.className = 'bfly-guest';
-    g.style.left = `${from.left}px`;
-    g.style.top = `${from.top}px`;
-    document.body.appendChild(g);
-    b.style.animationPlayState = 'paused';
-    b.style.visibility = 'hidden';
-    const dx = to.left + to.width / 2 - 8 - from.left, dy = to.top - 8 - from.top;
-    const done = () => { g.remove(); b.style.visibility = ''; b.style.animationPlayState = ''; bflyBusy = false; };
-    const an = g.animate([
-      { translate: '0 0' },
-      { translate: `${dx * 0.5 + 18}px ${dy * 0.4}px`, offset: 0.2 },
-      { translate: `${dx}px ${dy}px`, offset: 0.45 },
-      { translate: `${dx}px ${dy - 2}px`, offset: 0.72 },
-      { translate: '0 0' },
-    ], { duration: 9000, easing: 'ease-in-out' });
-    an.onfinish = done; an.oncancel = done;
-  }, 900);
-}
 function butterflyLoop() {
   const b = $('butterfly');
-  if (dusk || !b.animate || bflyBusy || (bflyLoop && bflyLoop.playState === 'running')) return;
+  if (dusk || !b.animate || (bflyLoop && bflyLoop.playState === 'running')) return;
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  bflyLoop =b.animate([
+  bflyLoop = b.animate([
     { translate: '0 0', rotate: '0deg' },
     { translate: '14px -10px', rotate: '40deg', offset: 0.25 },
     { translate: '28px 0', rotate: '140deg', offset: 0.5 },

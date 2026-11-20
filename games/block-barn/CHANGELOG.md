@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.4.3 (2026-11-19)
+- Undone: Window butterfly drifts down to rest on the last-named animal's head a moment (HAL-260): Not helpful. Begin designing bigger upgrades
+
 ## 0.4.2 (2026-11-19)
 - A sleepy animal in the drifting morning sunbeam slowly half-closes its eyes, warm and content, and wakes as the light moves on.
 - The window butterfly now drifts down to rest on the head of the animal you just named, then flutters back to the window.
