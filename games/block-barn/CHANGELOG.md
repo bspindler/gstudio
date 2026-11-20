@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.4.2 (2026-11-19)
+- A sleepy animal in the drifting morning sunbeam slowly half-closes its eyes, warm and content, and wakes as the light moves on.
+
 ## 0.4.1 (2026-11-18)
 - The hay bale gives a slow, soft squash and settles back when tumbled blocks land on it.
 - Tap the weathervane and the butterfly in the window flutters around in one slow, gentle loop.

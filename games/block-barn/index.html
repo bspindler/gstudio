@@ -310,6 +310,9 @@
     transform: skewX(-24deg); animation: sunbeam-drift 120s ease-in-out infinite alternate; }
   @keyframes sunbeam-drift { 0% { translate: -55% 0; } 100% { translate: 85% 0; } }
   .dusk-on #sunbeam { opacity: 0; }
+  /* warm and content: the one animal the drifting sunbeam is passing over slowly half-closes its eyes (slower and softer
+     than the sky's nap: eyes only, no curl), and opens them again as the light moves on. No sound, no text, no flashing. */
+  .animal.warm .eye { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(.3); transition: transform 3.5s ease-in-out; }
 
   /* window butterfly: a small soft butterfly drifts slowly inside the window pane (drawn in code, no asset, no sound,
      no text, no tap zone). Slow wing-fold only (no flashing); it rests out of sight at dusk. */
@@ -334,6 +337,7 @@
     .animal.ghost .pic { animation: none; }
     .animal.look .art { animation: none; }
     .animal.blink .eye { animation: none; }
+    .animal.warm .eye { transition: none; }
     .animal.look.nuz .art { animation: none; }
     .animal.sway .art { animation: none; }
     .animal.yawn .art { animation: none; }
@@ -428,7 +432,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.4.1', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.4.2', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -641,6 +645,7 @@ function reseed(n) {
   hush_voice();
   renderAll(false);
   if (!blinking) { blinking = true; for (let k = 0; k < 5; k++) blinkLater(k); peekLater(); }
+  warmLater();
 }
 
 // ---------- layout ----------
@@ -885,6 +890,36 @@ function peekLater() {
     }
     peekLater();
   }, 9000 + Math.random() * 8000);
+}
+// Warm and content: every second or so, find the named animal (at most one: the nearest) that the drifting sunbeam is
+// currently over and give it class 'warm' (eyes slowly half-close, CSS transition); everyone else's is removed, so the
+// eyes reopen as the light moves on. Beam position is read from its own animation (mirrors #sunbeam::before's CSS).
+// Never under reduced motion, never at dusk (napAll owns that). Not a tap zone. No sound, no text, no score.
+let warming = false;
+function warmLater() {
+  if (warming) return;
+  warming = true;
+  setInterval(() => {
+    const els = floor.map((l, k) => slotsEl.children[k]?.querySelector('.animal'));
+    const clear = () => els.forEach((a) => a?.classList.remove('warm'));
+    if (dusk || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return clear();
+    const sb = $('sunbeam'), anim = sb.getAnimations({ subtree: true })[0];
+    const p = anim?.effect?.getComputedTiming().progress;
+    if (typeof p !== 'number') return clear();
+    const t = p * p * (3 - 2 * p), r = sb.getBoundingClientRect(), W = r.width;
+    const bx = r.left + W * (0.3 + 0.17 + (-0.55 + 1.4 * t) * 0.34);
+    let best = null, bd = W * 0.1;
+    floor.forEach((l, k) => {
+      const a = els[k];
+      if (!a || !named.has(l)) return;
+      const b = a.getBoundingClientRect();
+      if (!b.width) return;
+      const ay = b.top + b.height / 2, ax = b.left + b.width / 2;
+      const d = Math.abs(ax - (bx - Math.tan((24 * Math.PI) / 180) * (ay - (r.top + r.height / 2))));
+      if (d < bd) { bd = d; best = a; }
+    });
+    els.forEach((a) => a?.classList.toggle('warm', a === best));
+  }, 1000);
 }
 function hiddenFriend(k) {
   const el = slotsEl.children[k];
