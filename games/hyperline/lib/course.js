@@ -13,12 +13,50 @@
 //   flip  {x, w}          gravity points up; the runner rides the ceiling track at CEIL_Y
 //   gate  {x, w, y, h}    slot gate: solid below y and above h; pass through the gap between
 //   pit with c: 1         a crumbling panel: glows `glow` units ahead, drops `drop` units ahead; a plain pit to the sim
+//   blade {x, w, h, amp, k, ph}  pendulum blade: solid below h; its left edge swings x .. x + 2*amp as the runner advances
 //   rail  {x, w, per, ph} blinking floor rail: lit for half of every `per` units; lethal to the grounded runner while lit
 
 import { mulberry32 } from './rng.js';
 import { AIR, BAR_Y, CEIL_Y, GATE_HI, GATE_LO, GATE_W, GRAV, JV, PAD_AIR, PAD_V, PS, sectorAt, speedAt, STEP } from './world.js';
 
 const SW = 0.8; // spike width
+
+/** Left edge of a pendulum blade when the runner's left edge is at x0: a function of x0 alone, so a run still replays exactly. */
+export function bladeX(o, x0) {
+  return o.x + o.amp * (1 + Math.sin(o.k * x0 + o.ph));
+}
+
+/** Whether a runner with left edge x0 and base height y is inside the blade (it is solid from the track up to o.h). */
+export function bladeHit(o, x0, y) {
+  const bx = bladeX(o, x0);
+  return x0 + PS > bx + 0.06 && x0 < bx + o.w - 0.06 && y < o.h;
+}
+
+/**
+ * A jump that starts with the runner's left edge at xs: false if it is inside the blade at any frame until the blade is
+ * behind it. Steps as sim.js does (x first, then gravity), so a window found here is the window in play.
+ */
+function bladeSafe(o, xs, end) {
+  let x = xs, y = 0, vy = JV, air = true;
+  while (x < end) {
+    x += speedAt(x) * STEP;
+    if (air) { vy -= GRAV * STEP; y += vy * STEP; if (y <= 0) { y = 0; air = false; } }
+    if (bladeHit(o, x, y)) return false;
+  }
+  return true;
+}
+
+/** The longest run of jump-start frames that clear blade o, from a standing run: { n frames, first and last start x }. */
+function bladeWindow(o, sc, from = -Infinity) {
+  const end = o.x + 2 * o.amp + o.w + 1;
+  let best = { n: 0, lo: sc, hi: sc }, run = null;
+  // a runner who has not jumped is killed the first frame the blade reaches it: no start counts after that
+  for (let xs = Math.max(from, sc - speedAt(sc) * AIR - 3); xs < sc + 3 && !bladeHit(o, xs, 0); xs += speedAt(xs) * STEP) {
+    if (bladeSafe(o, xs, end)) { run = run ? { n: run.n + 1, lo: run.lo, hi: xs } : { n: 1, lo: xs, hi: xs }; if (run.n > best.n) best = run; }
+    else run = null;
+  }
+  return best;
+}
 const range = (x) => speedAt(x) * AIR;
 
 // Times when a normal jump is above a ground spike's hitbox (top 0.58 plus 0.08 slack).
@@ -310,7 +348,39 @@ export const PATTERNS = [
       }
       return { o, len: end - x + 0.5 };
     } },
+
+  // Sector 16: pendulum blades. A blade sways back and forth along the track as you advance (its left edge over 2 * BLADE_A
+  // units) and is solid from the track up to `h`: stay down and it takes you. The hop is timed to where the swing is, not
+  // to a fixed spacing. `h` is the tallest the blade can be while the take-off window (from a standing run, by the sim's
+  // own physics) stays at `want` seconds: a blade swung quickly past leaves a longer window, so it is stood taller.
+  // Windows are 112 ms (the first) and 125 ms (after) or more, the L-133 sizing. The first meeting is two blades a landing
+  // apart, so each is its own read; later ones are one or two.
+  { id: 'pendulum', sector: 16, weight: (s) => (s === 16 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const v = speedAt(x + 6), want = Math.ceil((intro ? 0.112 : 0.125) / STEP), n = intro ? 2 : 1 + (r() < 0.45 ? 1 : 0);
+      const o = [];
+      let sc = x + 4.5 + range(x) * 0.6, from = -Infinity, end = x;
+      for (let i = 0; i < n; i++) {
+        const th = intro ? (i ? -0.7 : 0.9) : (r() * 2 - 1) * 1.85; // swing phase when the blade meets the runner
+        const ph = th - BLADE_K * sc, bsc = sc;
+        const blade = (h) => ({ t: 'blade', x: bsc - BLADE_A * (1 + Math.sin(th)), w: BLADE_W, h, amp: BLADE_A, k: BLADE_K, ph });
+        let lo = 0.6, hi = 2.2, h = hi;
+        if (bladeWindow(blade(hi), bsc, from).n < want) {
+          if (bladeWindow(blade(lo), bsc, from).n < want) h = lo;
+          else { for (let k = 0; k < 9; k++) { const m = (lo + hi) / 2; if (bladeWindow(blade(m), bsc, from).n >= want) lo = m; else hi = m; } h = lo; }
+        }
+        const b = blade(h), w = bladeWindow(b, bsc, from), mid = (w.lo + w.hi) / 2;
+        o.push(b, { t: 'chip', x: mid + v * AIR / 2 + PS / 2, y: 2.9 });
+        end = Math.max(w.hi + v * AIR, bsc + 3);
+        // the next blade comes after the worst-case landing, so its take-off window starts on the ground
+        from = w.hi + v * AIR + 0.5; sc = from + v * AIR * 0.8 + 4;
+      }
+      return { o, len: end - x + 0.5 };
+    } },
 ];
+
+// Pendulum blades: half the swing, its pace (radians per unit of track), and the blade's width.
+const BLADE_A = 2, BLADE_K = 0.26, BLADE_W = 0.7;
 
 // Seconds a falling pillar has been on the track when its take-off window opens.
 const PILLAR_LEAD = 0.12;
@@ -327,7 +397,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

@@ -2,7 +2,7 @@
 // but every collision is decided here. Always stepped at STEP, so a run is deterministic.
 // No DOM; exercised by the clearability bot in hyperline-course.test.ts.
 
-import { extendCourse, lowerBound } from './course.js';
+import { bladeHit, extendCourse, lowerBound } from './course.js';
 import { BAR_H, CEIL_Y, GRAV, JV, NEAR, P, PAD_V, PS, speedAt, STEP, VOID_Y } from './world.js';
 
 export function createRunner() {
@@ -132,6 +132,8 @@ export function step(r, c, jump) {
     } else if (o.t === 'gate') {
       if (x1 - 0.08 > o.x && x0 + 0.08 < o.x + o.w && (r.y < o.y - 0.04 || r.y + PS > o.h + 0.04)) die = die || 'gate';
       if (!o.done && x0 > o.x + o.w) { o.done = true; if (!die) ev.push({ t: 'gate' }); }
+    } else if (o.t === 'blade') {
+      if (!r.flip && bladeHit(o, x0, r.y)) die = die || 'blade';
     } else if (o.t === 'chip') {
       if (!o.got && !o.miss) {
         if (Math.abs(cx - o.x) < 0.6 && Math.abs(r.y + PS / 2 - o.y) < 0.6) { o.got = true; ev.push({ t: 'chip', x: o.x, y: o.y }); }

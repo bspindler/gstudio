@@ -72,6 +72,8 @@ export const SECTORS = [
     pal: { sky: ['#02060F', '#0A1E3A', '#143E6E'], sun: ['#7CFFEA', '#22A8FF'], grid: '#22A8FF', rail: '#FFE45C', neon: '#FF2BD6', block: '#FF8A3D' } },
   { name: 'FALLING PILLARS', hint: 'A pillar drops onto the track: wait for it to land, then hop it and the spikes behind.',
     pal: { sky: ['#06020F', '#1C0838', '#3E1068'], sun: ['#22F0FF', '#B98CFF'], grid: '#B98CFF', rail: '#22F0FF', neon: '#FF2BD6', block: '#7CFFEA' } },
+  { name: 'PENDULUM BLADES', hint: 'A blade swings across the track: read the swing, then hop it as it crosses.',
+    pal: { sky: ['#030A12', '#0A2038', '#124A66'], sun: ['#FF8A3D', '#FFE45C'], grid: '#22A8FF', rail: '#FF8A3D', neon: '#FF2B5E', block: '#FFE45C' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];

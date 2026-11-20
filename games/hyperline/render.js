@@ -5,6 +5,7 @@
 
 import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
 import { blockX, moverH, railLit } from './lib/sim.js';
+import { bladeX } from './lib/course.js';
 import { BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 
 /* ---------- bloom presenter (three.js, shared core copy) ---------- */
@@ -411,6 +412,16 @@ export function drawScene(c, W, H, st) {
           if (left > 0) box(c, cam, bx, bx + o.w, 0, 0.04, -1, 1, pal.block, 0.35, 1);
           box(c, cam, bx, bx + o.w, lift, lift + o.h, -1, 1, pal.block, 1, 2);
         } else box(c, cam, bx, bx + o.w, 0, o.h, -1, 1, pal.block, 1, 2);
+      } }); break;
+      case 'blade': dr.push({ z: depth(o.x + o.amp + o.w, o.h / 2, 0), f: () => {
+        // a pendulum blade: a slab swaying along the track from a pivot rod high above, drawn where the sim has it
+        const bx = bladeX(o, st.runner.x), px = o.x + o.amp + o.w / 2, top = o.h + 4;
+        c.globalAlpha = fade;
+        box(c, cam, bx, bx + o.w, 0, o.h, -1, 1, pal.block, 1, 2);
+        c.beginPath();
+        seg(c, cam, [px, top, -1], [bx + o.w / 2, o.h, -1]); seg(c, cam, [px, top, 1], [bx + o.w / 2, o.h, 1]);
+        seg(c, cam, [px - 0.4, top, -1], [px + 0.4, top, -1]); seg(c, cam, [px - 0.4, top, 1], [px + 0.4, top, 1]);
+        c.globalAlpha = fade * 0.55; neon(c, pal.neon, 1.6);
       } }); break;
       case 'spike': dr.push({ z: depth(o.x + 0.4, o.y, 0), f: () => {
         c.globalAlpha = fade;

@@ -1,5 +1,5 @@
 export type Obj = {
-  t: 'spike' | 'block' | 'pit' | 'chip' | 'bar' | 'pad' | 'mover' | 'flip' | 'gate' | 'rail';
+  t: 'spike' | 'block' | 'pit' | 'chip' | 'bar' | 'pad' | 'mover' | 'flip' | 'gate' | 'rail' | 'blade';
   x: number; y?: number; w?: number; h?: number; inv?: boolean; per?: number;
   c?: number; glow?: number; drop?: number;
   sl?: number; m?: number; f?: number;
@@ -10,6 +10,8 @@ export type Pattern = { id: string; sector: number; weight(s: number): number; b
 export type Course = { seed: number; rng: () => number; objs: Obj[]; nextX: number; introduced: number[]; last: string; count: number };
 export const PATTERNS: Pattern[];
 export const INTRO: Record<number, string>;
+export function bladeX(o: Obj, x0: number): number;
+export function bladeHit(o: Obj, x0: number, y: number): boolean;
 export function createCourse(seed: number, startX?: number): Course;
 export function extendCourse(c: Course, untilX: number): void;
 export function lowerBound(objs: Obj[], v: number): number;

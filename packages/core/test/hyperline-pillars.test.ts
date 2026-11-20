@@ -10,9 +10,9 @@ const pattern = () => PATTERNS.find((q) => q.id === 'pillars')!;
 const bare = (objs: Course['objs']): Course => { const c = createCourse(5); c.objs.length = 0; c.nextX = 1e9; c.objs.push(...objs.sort((a, b) => a.x - b.x)); return c; };
 
 describe('hyperline FALLING PILLARS', () => {
-  it('is sector 16 for players, right before HYPERCORE, and introduces the pillars pattern', () => {
+  it('is sector 16 for players, right before PENDULUM BLADES, and introduces the pillars pattern', () => {
     expect(sectorInfo(15).name).toBe('FALLING PILLARS');
-    expect(sectorInfo(16).name).toBe('HYPERCORE');
+    expect(sectorInfo(16).name).toBe('PENDULUM BLADES');
     expect(INTRO[15]).toBe('pillars');
   });
 
