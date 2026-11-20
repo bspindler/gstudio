@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.4.2 (2026-11-19)
 - A sleepy animal in the drifting morning sunbeam slowly half-closes its eyes, warm and content, and wakes as the light moves on.
+- The window butterfly now drifts down to rest on the head of the animal you just named, then flutters back to the window.
 
 ## 0.4.1 (2026-11-18)
 - The hay bale gives a slow, soft squash and settles back when tumbled blocks land on it.
