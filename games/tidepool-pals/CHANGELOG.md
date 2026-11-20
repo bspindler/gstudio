@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.15.0 (2026-11-21)
+- New level 31: an octopus-shaped pool with rock pools at its tentacle tips and a tide that pulls up into its head.
+
 ## 0.14.3 (2026-11-21)
 - After a chain of 3 or more, a little crab scuttles along the edge of the pool the way the tide pulls, then ducks out of sight.
 - Pals on the board now give an occasional slow, soft blink, so the pool feels more alive.
