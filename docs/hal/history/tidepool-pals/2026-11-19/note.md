@@ -9,3 +9,10 @@
 
 Changes:
 - HAL-252 feature(tidepool-pals): New level 31: octopus-shaped pool with rock pools and an inward tide: **held** (0.15.0)
+
+## Run run-2026-11-20T02-14-12-960Z
+
+**Tidepool Pals 0.14.1 (merged).** At the start of a tide level, soft ripples now drift across the board for about 2 seconds in the direction the tide pulls. It answers your 'goals aren't clear' feedback without adding text, and it keeps the tides, one of Tidepool's own mechanics, central. The change is visual only and fitness stays at 97.35. It hasn't been seen on a phone yet. Level 31 is still held.
+
+Changes:
+- HAL-253 polish(tidepool-pals): Tide direction shown as slow drifting ripples across the board at level start: **merged** (0.14.1)

@@ -9,3 +9,10 @@
 
 Changes:
 - HAL-249 feature(lanternkeep): Rebuild 'Mirror Mist' (Twin Wisps split when struck) as night 18 on current main: **held** (0.7.0)
+
+## Run run-2026-11-20T02-14-12-960Z
+
+**Lanternkeep 0.7.0, Thornbriar (held).** The first plant that doesn't shoot or chime: it lays thorn patches on the path that cut creatures as they cross, with limited hits per patch. It grows into Bramble Hedge or Barbed Snare and unlocks from night 7. That's the big leap you asked for. inBand and noSpikes are 100, but only because the scorer bot never plants it, so its balance is unknown. The builder also loosened the Moonbell test's plant-count check.
+
+Changes:
+- HAL-256 feature(lanternkeep): New plant Thornbriar: seeds thorns on the nearest path tile that hurt walkers: **held** (0.7.0)
