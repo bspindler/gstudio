@@ -166,7 +166,11 @@
   .word { font-size: calc(var(--S) * .16); margin-top: calc(var(--S) * .04); opacity: .85; }
   .word mark { background: none; color: #c2410c; }
   .animal { position: absolute; left: 0; right: 0; bottom: calc(var(--L) + var(--B) + 2px);
-    height: min(100cqh - var(--L) - var(--B) - 2px, var(--S) * 1.6); pointer-events: none; }
+    height: min(100cqh - var(--L) - var(--B) - 2px, var(--S) * 1.6); pointer-events: none;
+    transform: translateX(var(--dx, 0px)); transition: transform 2.4s ease-in-out; }
+  /* a named animal dragged along the hay trots there slowly, a faint bob on the way, and settles where the finger lifted */
+  .animal.trot .art { transform-box: fill-box; transform-origin: 50% 100%; animation: trot-bob 2.4s ease-in-out; }
+  @keyframes trot-bob { 12%, 37%, 62%, 87% { transform: translateY(-3%) rotate(1.5deg); } 25%, 50%, 75% { transform: translateY(0) rotate(-1deg); } }
   .animal .pic, .tanimal .pic { position: absolute; inset: 0; width: 100%; height: 100%; }
   /* before its block is tapped, the animal peeks out from behind it: a soft silhouette in a darker hay tone,
      its lower part tucked behind the block (--peek), bobbing slowly; it is not a tap target of its own */
@@ -384,6 +388,8 @@
     .animal.sway .art { animation: none; }
     .animal.hopout { animation: none; }
     .animal.yawn .art { animation: none; }
+    .animal { transition: none; }
+    .animal.trot .art { animation: none; }
     .animal.oh .art { animation: none; }
     .animal.oh .eye { animation: none; }
     #door .leaf { transition: none; }
@@ -479,7 +485,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.8.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.9.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -779,7 +785,7 @@ function renderSlot(k, anim) {
   word.hidden = !isNamed;
   if (isNamed) word.innerHTML = wordHTML(l);
   el.classList.toggle('invite', invited === l);
-  if (animal.dataset.letter !== l) { animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
+  if (animal.dataset.letter !== l) { animal.style.removeProperty('--dx'); animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
   animal.hidden = false;
   animal.classList.remove('hopout'); animal._hopTok = (animal._hopTok || 0) + 1; // a redrawn slot never keeps a hop
   animal.classList.toggle('ghost', !isNamed); // unnamed: its silhouette peeks over the block
@@ -1019,6 +1025,22 @@ function yawnAnimal(l) {
   a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop', 'blink', 'look', 'nuz', 'sway', 'oh');
   restart(a, 'yawn');
   setTimeout(() => a.classList.remove('yawn'), 3000);
+}
+// A named animal dragged along the hay trots slowly to where the finger lifted and settles there. One answer per
+// gesture, no sound, no text. dx is clamped so the animal stays on the floor.
+function trotAnimal(l, targetX) {
+  const a = animalEl(l);
+  if (!a) return;
+  const r = a.getBoundingClientRect(), fb = applyLayout().floorBox;
+  const cur = parseFloat(a.style.getPropertyValue('--dx')) || 0;
+  const lo = fb.x + r.width / 2, hi = fb.x + fb.w - r.width / 2;
+  const want = Math.min(hi, Math.max(lo, targetX));
+  a.style.setProperty('--dx', `${cur + (want - (r.left + r.width / 2))}px`);
+  a.classList.remove('yawn', 'sway', 'oh', 'look', 'nuz');
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    restart(a, 'trot');
+    setTimeout(() => a.classList.remove('trot'), 2500);
+  }
 }
 function tapAnimal(l) {
   const n = (tapCount[l] = (tapCount[l] || 0) + 1);
@@ -1428,14 +1450,30 @@ barnEl.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   const now = performance.now();
   if (gesture && now - gesture.start < REST) { gesture.fingers.add(e.pointerId); return; }
-  gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, start: now, fired: false, fingers: new Set([e.pointerId]) };
+  gesture = { id: e.pointerId, x: e.clientX, y: e.clientY, mx: e.clientX, my: e.clientY, start: now, fired: false, fingers: new Set([e.pointerId]) };
   wakeAudio();
 });
+// A press that began on a named floor animal and is let go DRAG px or more away makes it trot there instead of the tap.
+const DRAG = 28;
+document.addEventListener('pointermove', (e) => { if (gesture && e.pointerId === gesture.id) { gesture.mx = e.clientX; gesture.my = e.clientY; } });
+function trotAt(g, x, y) {
+  if (Math.hypot(x - g.x, y - g.y) < DRAG) return false;
+  const b = hitBoxes().find((b) => b.kind === 'animal' && distTo(b, g.x, g.y) === 0);
+  if (!b) return false;
+  quietMs = 0;
+  clearInvite();
+  trotAnimal(b.letter, x);
+  return true;
+}
 function endPointer(e, cancelled) {
   if (!gesture || !gesture.fingers.has(e.pointerId)) return;
   if (e.pointerId === gesture.id && !gesture.fired) {
     gesture.fired = true;
-    if (!cancelled && !cornerOpen) { prime(); tapAt(gesture.x, gesture.y, performance.now() - gesture.start); }
+    if (!cancelled && !cornerOpen) {
+      prime();
+      const ux = e.type === 'pointerup' ? e.clientX : gesture.mx, uy = e.type === 'pointerup' ? e.clientY : gesture.my;
+      if (!trotAt(gesture, Number.isFinite(ux) ? ux : gesture.mx, Number.isFinite(uy) ? uy : gesture.my)) tapAt(gesture.x, gesture.y, performance.now() - gesture.start);
+    }
   }
   gesture.fingers.delete(e.pointerId);
   if (!gesture.fingers.size) gesture = null;
