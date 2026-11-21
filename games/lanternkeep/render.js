@@ -4,6 +4,7 @@
 import { COLS, ROWS, stats } from './lib/sim.js';
 import { createSwell } from './swell.js';
 import { createFootprints } from './footprints.js';
+import { createRouteGlow } from './routeglow.js';
 
 export const COLOR = {
   night: '#1b1530',
@@ -373,6 +374,7 @@ export function createRenderer(canvas, opts = {}) {
   let leakT = 0; // one red edge glow when creatures reach the lantern, restarted by each leak
   const prevHeading = new Map();
   const prints = createFootprints({ life: reduced ? 1.5 : 1.8 });
+  const routeGlow = createRouteGlow();
 
   function paintGround(g) {
     const c = document.createElement('canvas');
@@ -662,11 +664,13 @@ export function createRenderer(canvas, opts = {}) {
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     };
     // the creature path glows faintly, like moonlit stone, with a slow breath
+    // when a wave starts it swells a little for a couple of seconds, showing the route ahead
     const pathGlow = () => {
+      const route = routeGlow.update(g, t);
       ctx.save();
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.strokeStyle = rgba('#a89cff', 0.07 + 0.025 * Math.sin(t * 1.2));
+      ctx.strokeStyle = rgba('#a89cff', 0.07 + 0.025 * Math.sin(t * 1.2) + 0.09 * route);
       ctx.lineWidth = s * 0.6;
       for (const p of g.paths) {
         ctx.beginPath();

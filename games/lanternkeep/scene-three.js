@@ -6,6 +6,7 @@ import * as THREE from '../sdk/vendor/three.module.js';
 import { COLS, ROWS, FLARE_RADIUS, TOWERS, flareCharge, stats } from './lib/sim.js';
 import { createSwell } from './swell.js';
 import { createFootprints } from './footprints.js';
+import { createRouteGlow } from './routeglow.js';
 import { creatureModel, glow, hash, lanternModel, mat, plantModel, rockGeometry, treeModel } from './models-three.js';
 
 const TAU = Math.PI * 2;
@@ -209,6 +210,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
   const creatures = new Map(); // enemy id -> { root, parts, seen }
   const creatureTemplates = new Map();
   const prints = createFootprints({ life: reduced ? 1.5 : 1.8 });
+  const routeGlow = createRouteGlow();
 
   // decals: selection, hint, range rings, effect rings
   const addMat = (c, o = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
@@ -632,7 +634,9 @@ export function createRendererThree(canvas, overlay, opts = {}) {
     const flick = reduced ? 1 : 0.92 + 0.08 * Math.sin(t * 9) * Math.sin(t * 5.3) + (life < 0.35 ? 0.14 * Math.sin(t * 31) : 0);
     glowP.begin(); smokeP.begin();
     // the creature path glows faintly like moonlit stone, with a slow breath (steady if reduced motion)
-    if (pathStoneMat) pathStoneMat.emissiveIntensity = reduced ? 0.14 : 0.14 + 0.05 * Math.sin(t * 1.2);
+    // and swells a little for a couple of seconds when a wave starts, showing the route ahead
+    const routeK = routeGlow.update(g, t);
+    if (pathStoneMat) pathStoneMat.emissiveIntensity = (reduced ? 0.14 : 0.14 + 0.05 * Math.sin(t * 1.2)) + 0.16 * routeK;
 
     // lantern
     const lx = g.lantern.x, lz = g.lantern.y;

@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.7.1 (2026-11-21)
 - Walking creatures now leave faint pale footprints on the moonlit path that fade away in a second or two.
 - The lantern's flame now burns lower, smaller and dimmer as lives are lost, so a close finish is something you can see at a glance.
+- The path glows softly for a moment at the start of each wave, showing the route the creatures will walk.
 
 ## 0.7.0 (2026-11-19)
 - New plant: the Thornbriar seeds thorn patches on the path that cut creatures as they cross, grows into the Bramble Hedge or the Barbed Snare, and is available from night 7 and in Night Watch.
