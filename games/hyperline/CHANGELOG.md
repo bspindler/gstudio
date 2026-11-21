@@ -7,6 +7,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - The neon grid and rail glow now drift gently in hue for a second as each new sector begins.
 - The runner now leaves a short neon light trail that fades out within a beat, making each jump's arc easier to read.
 - When the runner crashes it now shatters into a few neon shards that fade out in under half a second.
+- Faint neon ticks on the track now show the best take-off point for each upcoming block, spike and pit, fading as you pass.
 
 ## 0.11.0 (2026-11-19)
 - New sector PENDULUM BLADES: a blade swings back and forth along the track; read the swing and hop it as it crosses. It comes before HYPERCORE, which is now sector 18.

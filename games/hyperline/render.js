@@ -6,7 +6,7 @@
 import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
 import { blockX, moverH, railLit } from './lib/sim.js';
 import { bladeX } from './lib/course.js';
-import { BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt } from './lib/world.js';
+import { AIR, BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 
 /* ---------- bloom presenter (three.js, shared core copy) ---------- */
 /** Shows the finished Canvas2D frame through three.js with a neon bloom pass. The scene and camera are
@@ -387,6 +387,28 @@ function drawShards(c, cam, shards, sk, t) {
   c.globalCompositeOperation = op;
 }
 
+/** Visual-only take-off ticks: a faint neon mark on the track where a jump peaks over the middle of a
+ *  block, spike or pit. x is where the runner's centre should leave the ground. Strength is 0 once the
+ *  runner has passed, rises to full by TICK.fadeIn metres ahead and softens again over the last stretch. */
+export const TICK = { max: 0.4, reach: 32, fadeIn: 10, fadeOut: 2.5 };
+export function tickAlpha(ahead) {
+  if (!(ahead > 0) || ahead > TICK.reach) return 0;
+  const far = Math.min(1, (TICK.reach - ahead) / TICK.fadeIn), near = Math.min(1, ahead / TICK.fadeOut);
+  return TICK.max * far * near;
+}
+export function takeoffTicks(objs, rcx) {
+  const out = [];
+  for (const o of objs) {
+    if (o.x > rcx + TICK.reach + 20) break;
+    if (o.t !== 'block' && o.t !== 'spike' && o.t !== 'pit') continue;
+    if (o.t === 'spike' && o.inv) continue;
+    const mid = o.t === 'spike' ? o.x + 0.4 : o.x + (o.w || 0) / 2;
+    const x = mid - (AIR * speedAt(mid)) / 2, a = tickAlpha(x - rcx);
+    if (a > 0) out.push({ x, a });
+  }
+  return out;
+}
+
 /* ---------- scene ---------- */
 const STARS = Array.from({ length: 80 }, (_, i) => {
   const h = (k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
@@ -494,6 +516,13 @@ export function drawScene(c, W, H, st) {
     c.globalAlpha = fade * 0.35; neon(c, pal.rail, 1, false);
     c.beginPath(); seg(c, cam, [x0, 0, TZ], [x1, 0, TZ]); seg(c, cam, [x0, 0, -TZ], [x1, 0, -TZ]);
     c.globalAlpha = fade; neon(c, pal.rail, 2.2);
+  }
+  c.globalAlpha = 1;
+
+  // faint take-off ticks on the track, fading as the runner passes (visual only)
+  if (!st.runner.flip) for (const k of takeoffTicks(objs, rcx)) {
+    c.beginPath(); seg(c, cam, [k.x, 0.004, -TZ * 0.8], [k.x, 0.004, TZ * 0.8]);
+    c.globalAlpha = k.a; neon(c, pal.neon, 1.6);
   }
   c.globalAlpha = 1;
 

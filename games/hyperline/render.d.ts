@@ -16,6 +16,9 @@ export function lightTrailAlpha(age: number): number;
 export interface Shard { x: number; y: number; z: number; vx: number; vy: number; vz: number; rot: number; spin: number; len: number; age: number }
 export const SHARD_LIFE: number;
 export function shardAlpha(age: number): number;
+export const TICK: { max: number; reach: number; fadeIn: number; fadeOut: number };
+export function tickAlpha(ahead: number): number;
+export function takeoffTicks(objs: any[], rcx: number): { x: number; a: number }[];
 export function makeShards(x: number, y: number, n: number, rand: () => number): Shard[];
 
 export function cameraFor(
