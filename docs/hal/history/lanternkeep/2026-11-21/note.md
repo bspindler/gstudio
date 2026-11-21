@@ -10,3 +10,12 @@ Mirror Mist (night 18, HAL-264) still waits on you.
 
 Changes:
 - HAL-275 feature(lanternkeep): Night Watch late waves bring the Gloam Stag, a heavy creature that charges: **held** (0.8.0)
+
+## Run run-2026-11-21T15-53-40-903Z
+
+**Lanternkeep** is a calm moonlit night garden.
+- **Footprints (HAL-281, merged 0.7.1):** pale prints fade behind walkers. They are capped at 90, drawn in both the 3D and 2D renderers, and shortened under reduced motion. They are on-identity, with no balance change.
+- Mirror Mist (HAL-264) and Gloam Stag (HAL-275) are still held.
+
+Changes:
+- HAL-281 polish(lanternkeep): Creatures leave faint pale footprints on the moonlit path that slowly fade: **merged** (0.7.1)

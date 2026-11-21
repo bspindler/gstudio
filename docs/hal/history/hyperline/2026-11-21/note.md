@@ -10,3 +10,13 @@ It gives each run a personal target without adding any pressure. SPRING SPIKES (
 
 Changes:
 - HAL-277 feature(hyperline): Faint ghost gate marks where your best run ended on the track: **held** (0.12.0)
+
+## Run run-2026-11-21T15-53-40-903Z
+
+**Hyperline** is a neon chase run on your 0.4.1 camera.
+- **Squash-and-stretch (HAL-282, merged 0.11.1):** it makes each jump read crisply and is purely visual. Fitness holds at 99.49.
+- Spring Spikes (HAL-271) and the ghost gate (HAL-277) are still held.
+- Two sandbox timeouts in Hal's own suite need a look.
+
+Changes:
+- HAL-282 polish(hyperline): Runner squashes on landing and stretches at take-off, a quick neon snap: **merged** (0.11.1)

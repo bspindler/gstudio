@@ -10,3 +10,15 @@ The octopus level 31 rebuild still waits on your card (HAL-267).
 
 Changes:
 - HAL-274 polish(tidepool-pals): A little crab scuttles along the pool's rim after a chain of 3 or more: **merged** (0.14.3)
+
+## Run run-2026-11-21T15-53-40-903Z
+
+**Tidepool** is the reef, its pals and the tides.
+- **HAL-280 (dropped):** level 25's moves went from 22 to 18.
+  - Win rate went from 70% to 65%, which is fine.
+  - Tension barely moved.
+  - At 17 moves it broke the level 21-30 ramp test.
+- No game change tonight. Tension, at 82.8, stays its weakest measure, and the next attempt should change how a level ends, not its budget.
+
+Changes:
+- HAL-280 tuning(tidepool-pals): Tighten the last stretch of the loosest-won level past 15 for closer finishes: **discarded** (0.14.3) (tidepool-pals: no real gain: 0.54 < 6.66)
