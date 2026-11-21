@@ -557,7 +557,10 @@ export function drawScene(c, W, H, st) {
       } }); break;
       case 'spike': dr.push({ z: depth(o.x + 0.4, o.y, 0), f: () => {
         c.globalAlpha = fade;
-        for (const zz of [-0.52, 0.52]) mesh(c, cam, MESHES.pyramid, [o.x + 0.4, o.inv ? o.y - 0.4 : o.y + 0.4, zz], [0.76, 0.8, 0.92], [o.inv ? Math.PI : 0, 0, 0], mixHex(pal.neon, '#12051F', 0.55), mixHex(pal.neon, '#12051F', 0.85), 1, false, pal.neon);
+        // a spring spike (o.f: the runner position where it is up): a flush panel that rises over the last 1.6 units before o.f
+        const rise = o.f === undefined ? 1 : Math.max(0.02, Math.min(1, 1 - (o.f - st.runner.x) / 1.6));
+        if (rise < 1) box(c, cam, o.x + 0.04, o.x + 0.76, 0, 0.04, -1, 1, pal.neon, 0.35, 1);
+        for (const zz of [-0.52, 0.52]) mesh(c, cam, MESHES.pyramid, [o.x + 0.4, o.inv ? o.y - 0.4 * rise : o.y + 0.4 * rise, zz], [0.76, 0.8 * rise, 0.92], [o.inv ? Math.PI : 0, 0, 0], mixHex(pal.neon, '#12051F', 0.55), mixHex(pal.neon, '#12051F', 0.85), 1, false, pal.neon);
       } }); break;
       case 'bar': dr.push({ z: depth(o.x + o.w, o.y + 0.6, 0), f: () => {
         c.globalAlpha = fade;

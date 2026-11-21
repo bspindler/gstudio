@@ -110,6 +110,7 @@ export function step(r, c, jump) {
   for (let i = i0; i < iEnd; i++) {
     const o = objs[i];
     if (o.t === 'spike') {
+      if (o.f !== undefined && x0 < o.f) continue; // a spring spike is flush with the track until the runner reaches o.f
       if (x1 - 0.16 > o.x + 0.2 && x0 + 0.16 < o.x + 0.6) {
         const clear = o.inv ? (o.y - 0.58) - (r.y + PS - 0.08) : (r.y + 0.08) - (o.y + 0.58);
         if (clear < 0) die = die || 'spike';

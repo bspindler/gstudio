@@ -377,7 +377,33 @@ export const PATTERNS = [
       }
       return { o, len: end - x + 0.5 };
     } },
+
+  // Sector 17: spring spikes. A strip of spikes lies flush in the track (o.f: the runner position where it springs up). It
+  // is up SPRING_LEAD seconds before the take-off window opens, so the read is the rise: jump on it, not on sight and not
+  // before. The strip is the longest that keeps the window at `want` seconds (112-125 ms, the L-133 sizing). The first
+  // meeting is one strip; later ones are one or two.
+  { id: 'springs', sector: 17, weight: (s) => (s === 17 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const v = speedAt(x + 8), want = intro ? 0.1 : 0.11, units = intro ? 1 : 1 + (r() < 0.45 ? 1 : 0);
+      // the strip's first-to-last spike span that leaves a jump-start window exactly `want` wide, spread over the fewest
+      // spikes that keep them no more than SW apart
+      const span = (T2 - T1 - want) * v - 0.88, n = Math.max(2, Math.ceil(span / SW) + 1), sp = span / (n - 1);
+      const o = [];
+      let lo = x - 1, end = x; // the strip starts about 4 units after its window opens, so no object is before x
+      for (let i = 0; i < units; i++) {
+        const sx = lo + 0.16 + T2 * v - span - 0.6, wl = lo, wh = sx + 0.2 - 0.64 - T1 * v;
+        const f = wl - v * SPRING_LEAD;
+        for (let k = 0; k < n; k++) o.push({ t: 'spike', x: sx + k * sp, y: 0, inv: false, f });
+        o.push({ t: 'chip', x: sx + span / 2 + 0.4, y: 2.7 });
+        end = sx + span + SW;
+        lo = wh + v * AIR + 2.5;
+      }
+      return { o, len: end - x + 0.5 };
+    } },
 ];
+
+// Seconds a spring spike has been up when the take-off window opens.
+const SPRING_LEAD = 0.1;
 
 // Pendulum blades: half the swing, its pace (radians per unit of track), and the blade's width.
 const BLADE_A = 2, BLADE_K = 0.26, BLADE_W = 0.7;
@@ -397,7 +423,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

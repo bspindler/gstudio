@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.12.0 (2026-11-21)
+- New sector SPRING SPIKES: a flush panel springs spikes up out of the track just before you arrive, so jump on the rise, not on sight.
+
 ## 0.11.1 (2026-11-21)
 - The runner now squashes on landing and stretches at take-off, a quick neon snap that makes each jump read crisply.
 - The neon grid and rail glow now drift gently in hue for a second as each new sector begins.

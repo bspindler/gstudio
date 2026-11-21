@@ -10,9 +10,9 @@ const pattern = () => PATTERNS.find((q) => q.id === 'pendulum')!;
 const bare = (objs: Course['objs']): Course => { const c = createCourse(5); c.objs.length = 0; c.nextX = 1e9; c.objs.push(...objs.sort((a, b) => a.x - b.x)); return c; };
 
 describe('hyperline PENDULUM BLADES', () => {
-  it('is sector 17 for players, right before HYPERCORE, and introduces the pendulum pattern', () => {
+  it('is sector 17 for players, right before SPRING SPIKES, and introduces the pendulum pattern', () => {
     expect(sectorInfo(16).name).toBe('PENDULUM BLADES');
-    expect(sectorInfo(17).name).toBe('HYPERCORE');
+    expect(sectorInfo(17).name).toBe('SPRING SPIKES');
     expect(INTRO[16]).toBe('pendulum');
   });
 
