@@ -43,3 +43,10 @@ Changes:
 Changes:
 - HAL-289 fix(gearhold): Terrace of Dials: guard its final crossing with one kilnwarden, re-scored as a…: **discarded** (implementer timed out)
 - HAL-293 polish(gearhold): Enemies flash a brief brass glint just before they attack: **merged** (0.10.1)
+
+## Run run-2026-11-21T19-57-50-284Z
+
+**Gearhold:** brass-and-steam halls, machine foes and a key-or-goal route through each level. Tonight a kilnwarden was added to the final crossing of Terrace of Dials (level 1), so the level no longer wins itself. Wins went from 99% to 82%, tension from 39.4 to 45.6, and fitness from 96.3 to 97.6. The layout and the look are unchanged. Bellworks, Press Gallery's fission drones and Boiler Stair's cinder mites are still held.
+
+Changes:
+- HAL-294 fix(gearhold): Terrace of Dials: one kilnwarden guards the final crossing, re-scored: **merged** (0.10.1)

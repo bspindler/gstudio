@@ -36,3 +36,10 @@ Changes:
 
 Changes:
 - HAL-292 polish(hyperline): Runner leaves a short neon light trail that fades within a beat: **merged** (0.11.1)
+
+## Run run-2026-11-21T19-57-50-284Z
+
+**Hyperline:** a neon chase runner under bloom, played from your 0.4.1 camera. Tonight a crash now shatters the runner into a few neon shards that fade in under half a second. Death now reads as clearly as a jump, and restarts are no slower. This change is render-only: no sim, camera, asset or sound change. Fitness held at 99.5. SPRING SPIKES and the ghost gate are still held.
+
+Changes:
+- HAL-296 polish(hyperline): Runner shatters into a few neon shards that fade when it crashes: **merged** (0.11.1)

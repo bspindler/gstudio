@@ -38,3 +38,10 @@ Changes:
 
 Changes:
 - HAL-290 polish(tidepool-pals): Goal counter gives a small bounce each time a clear counts toward it: **merged** (0.14.3)
+
+## Run run-2026-11-21T19-57-50-284Z
+
+**Tidepool Pals:** cartoon reef pals, Sea Candy, and rescuing a trapped pal on the board. Tonight a freed pal swims along an arc into the goal counter, and the counter bounces only when the pal lands. The counter's bounce now ties the rescue on the board to the goal. With reduced motion on, the pal falls back to the old swim-off. Fitness held at 97.35. It has not been seen on a phone yet, and the version was wrongly left at 0.14.3.
+
+Changes:
+- HAL-295 polish(tidepool-pals): Freed pal swims up into the goal counter instead of off the board: **merged** (0.14.3)
