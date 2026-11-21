@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.7.0 (2026-11-21)
+- Tap the hay bale and a different barnyard animal peeks out from behind it, wiggles softly, then ducks back.
+
 ## 0.6.0 (2026-11-20)
 - A little loft window on the barn wall: tap it and the view outside slowly drifts through blossom, green, amber leaves and soft snow.
 
