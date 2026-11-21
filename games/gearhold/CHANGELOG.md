@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.10.1 (2026-11-21)
+- Gearhold's machines now flash a brief brass glint just before they bite or fire, so attacks are easier to read in the dim halls.
+
 ## 0.10.0 (2026-11-20)
 - New Gearhold level 9, 'Turret Gallery': brass turrets sweep the halls and fire three-shot volleys along a locked line, so read the glow, step out, then cross.
 
