@@ -622,6 +622,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
 
   let frameTimes = [], downgradeAt = 0;
   const lanternWorld = new THREE.Vector3();
+  let flameLife = 1;
   const swell = createSwell();
   function draw(g, view) {
     const t = view.time;
@@ -647,6 +648,10 @@ export function createRendererThree(canvas, overlay, opts = {}) {
     lanternLight.intensity = (2 + 9 * life) * flick * (1 + 0.35 * sw);
     lanternLight.distance = (3 + 6 * life) * (1 + 0.12 * sw);
     glowP.add(lanternWorld.x, lanternWorld.y, lanternWorld.z, (1.6 + 1.4 * life) * flick * (1 + 0.4 * sw), 0.7, 0.32, 0.08, 0.8);
+    // the flame itself: a small warm core that settles lower, smaller and dimmer as lives are lost (eased, never flashing)
+    flameLife += (life - flameLife) * (reduced ? 1 : 0.06);
+    const fl = Math.max(0.05, flameLife), flameDim = 0.35 + 0.65 * fl;
+    glowP.add(lanternWorld.x, lanternWorld.y - 0.09 * (1 - fl) * 1.6, lanternWorld.z, (0.35 + 0.5 * fl) * (0.97 + 0.03 * flick), 1 * flameDim, 0.62 * flameDim, 0.25 * flameDim, 0.55 * flameDim + 0.25);
     const charge = flareCharge(g);
     flareRing.visible = g.phase === 'wave' || g.phase === 'ready';
     flareRing.position.set(lx, 0.04, lz);

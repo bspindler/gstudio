@@ -369,6 +369,7 @@ export function createRenderer(canvas, opts = {}) {
   let tile = 40, dpr = 1, W = 0, H = 0;
   let ground = null, dark = null, dctx = null;
   let fx = [];
+  let flameLife = 1; // eased copy of lives/maxLives for the lantern flame
   let leakT = 0; // one red edge glow when creatures reach the lantern, restarted by each leak
   const prevHeading = new Map();
   const prints = createFootprints({ life: reduced ? 1.5 : 1.8 });
@@ -557,6 +558,13 @@ export function createRenderer(canvas, opts = {}) {
     ctx.fillStyle = rgba(COLOR.lantern, 0.6 + 0.4 * life * flick);
     ctx.beginPath();
     ctx.ellipse(lx, ly - s * 0.2, s * 0.17, s * 0.22, 0, 0, TAU);
+    ctx.fill();
+    // the flame inside: lower, smaller and dimmer as lives are lost (eased, never flashing)
+    flameLife += (life - flameLife) * (reduced ? 1 : 0.06);
+    const fl = Math.max(0.05, flameLife);
+    ctx.fillStyle = rgba('#ffe2a0', 0.35 + 0.55 * fl);
+    ctx.beginPath();
+    ctx.ellipse(lx, ly - s * (0.14 + 0.06 * fl), s * (0.03 + 0.04 * fl), s * (0.04 + 0.09 * fl), 0, 0, TAU);
     ctx.fill();
     ctx.strokeStyle = '#6b4f2a';
     ctx.lineWidth = 1;
