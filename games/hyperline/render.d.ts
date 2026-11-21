@@ -6,6 +6,8 @@ export function createBloom(
   src: HTMLCanvasElement,
 ): Promise<{ onLost(fn: () => void): void; resize(w: number, h: number): void; present(): void; dispose(): void } | null>;
 
+export function squashScale(q: number): { sx: number; sy: number };
+
 export function cameraFor(
   st: { rx: number; lift: number; flipT: number; shakeX: number; shakeY: number },
   W: number,

@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.11.1 (2026-11-21)
+- The runner now squashes on landing and stretches at take-off, a quick neon snap that makes each jump read crisply.
+
 ## 0.11.0 (2026-11-19)
 - New sector PENDULUM BLADES: a blade swings back and forth along the track; read the swing and hop it as it crosses. It comes before HYPERCORE, which is now sector 18.
 

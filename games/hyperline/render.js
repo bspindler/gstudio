@@ -195,14 +195,26 @@ function sphere(c, cam, pos, r, rot, a, b, alpha = 1, wire = false) {
   c.globalAlpha /= alpha;
 }
 
-/** The runner shape for a skin, centred at pos with roll rz. */
-function runnerShape(c, cam, sk, pos, rz, t, alpha = 1, wire = false) {
+/** Visual-only squash/stretch factors for q in [-1 (take-off stretch), 1 (landing squash)]. */
+export function squashScale(q) {
+  const k = Math.max(-1, Math.min(1, q || 0));
+  return { sx: 1 + 0.2 * k, sy: 1 - 0.28 * k };
+}
+
+/** The runner shape for a skin, centred at pos with roll rz. squash (-1..1) deforms it about its feet. */
+function runnerShape(c, cam, sk, pos, rz, t, alpha = 1, wire = false, squash = 0, flip = false) {
   const [a, b] = skinColors(sk, t);
   const s = PS * 1.02;
   const rot = [0, sk.shape === 'diamond' ? t * 1.6 : 0.0, -rz];
+  const { sx, sy } = squashScale(squash);
+  if (squash) pos = [pos[0], pos[1] + (flip ? 1 : -1) * (PS / 2) * (sy - 1) * -1, pos[2]];
   const draw = (ca, cb, al, w) => {
-    if (sk.shape === 'circle') sphere(c, cam, pos, s * 0.55, rz, ca, cb, al, w);
-    else mesh(c, cam, MESHES[SHAPE_MESH[sk.shape] || 'cube'], pos, [s, s, s], rot, ca, cb, al, w);
+    if (sk.shape === 'circle') {
+      const p = squash ? project(cam, pos[0], pos[1], pos[2]) : null;
+      if (p) { c.save(); c.translate(p.x, p.y); c.scale(sx, sy); c.translate(-p.x, -p.y); }
+      sphere(c, cam, pos, s * 0.55, rz, ca, cb, al, w);
+      if (p) c.restore();
+    } else mesh(c, cam, MESHES[SHAPE_MESH[sk.shape] || 'cube'], pos, [s * sx, s * sy, s * sx], rot, ca, cb, al, w);
   };
   if (sk.fx === 'glitch' && !wire) {
     const j = 0.06 * Math.sin(t * 37);
@@ -532,7 +544,7 @@ export function drawScene(c, W, H, st) {
         c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.ellipse(sp.x, sp.y, PS * sp.s * 0.6, PS * sp.s * 0.18, 0, 0, Math.PI * 2); c.fill();
       }
     }
-    runnerShape(c, cam, st.skin, rpos, r.rot, t, st.blink ? 0.35 : 1);
+    runnerShape(c, cam, st.skin, rpos, r.rot, t, st.blink ? 0.35 : 1, false, st.squash || 0, r.flip);
   } });
   dr.sort((p, q) => q.z - p.z);
   for (const d of dr) d.f();

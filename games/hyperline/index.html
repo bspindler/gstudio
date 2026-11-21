@@ -245,7 +245,7 @@ import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } fr
 import { createBloom, drawScene, drawSkinThumb, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.11.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.11.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -462,8 +462,9 @@ function simStep() {
   const cxw = r.x + PS / 2, cyw = r.y + PS / 2, sk = SK[S.eq];
   for (const e of ev) {
     switch (e.t) {
-      case 'jump': G.buf = 0; audio.jump(); spawn(cxw, r.flip ? r.y + PS : r.y, 5, '#FFFFFF', 3, 0.25, 0.08); break;
+      case 'jump': G.buf = 0; G.squash = -1; audio.jump(); spawn(cxw, r.flip ? r.y + PS : r.y, 5, '#FFFFFF', 3, 0.25, 0.08); break;
       case 'land':
+        G.squash = 1;
         spawn(cxw, r.flip ? r.y + PS : r.y, 7, sk.a, 4, 0.3, 0.1);
         G.ripples.push({ x: cxw, flip: r.flip, age: 0 }); if (G.ripples.length > 4) G.ripples.shift();
         if (e.spikes >= 3) pop(`${e.spikes} IN ONE JUMP`, cxw, cyw + 0.8, '#7CFF6B', 16);
@@ -653,6 +654,7 @@ function update(dt) {
   if (G.parts.length > 400) G.parts.splice(0, G.parts.length - 400);
   for (const p of G.pops) p.age += dt;
   G.pops = G.pops.filter((p) => p.age < p.life);
+  G.squash = (G.squash || 0) * Math.exp(-dt * 16); if (Math.abs(G.squash) < 0.01) G.squash = 0;
   for (const rp of G.ripples) rp.age += dt;
   G.ripples = G.ripples.filter((rp) => rp.age < 0.45);
   G.shake = Math.max(0, G.shake - dt); G.flash = Math.max(0, G.flash - dt * 2); G.nearFlash = Math.max(0, (G.nearFlash || 0) - dt * 3.5); G.blink = Math.max(0, G.blink - dt);
@@ -675,7 +677,7 @@ function draw() {
   const gp = G.ghost && G.state !== 'ready' ? ghostAt(G.ghost, G.simT) : null;
   drawScene(cx, W, H, {
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
-    ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, t: G.t, lift: G.lift, flipT: G.flipT,
+    ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
     reduced, speed: speedAt(r.x), showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   });
