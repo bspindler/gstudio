@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.8.0 (2026-11-21)
+- Tap a named animal and, after its name, it hops out of its block onto the hay, wiggles, and hops back home.
+
 ## 0.7.0 (2026-11-21)
 - Tap the hay bale and a different barnyard animal peeks out from behind it, wiggles softly, then ducks back.
 

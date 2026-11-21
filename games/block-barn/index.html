@@ -265,6 +265,20 @@
   .animal.sway .art { transform-box: fill-box; transform-origin: 50% 100%; animation: happy-sway 3s ease-in-out; }
   @keyframes happy-sway { 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
 
+  /* after its name, the tapped animal slowly hops from its block down onto the hay beside it, wiggles, and hops back home
+     (drawn in code on the animal's own box; no tap zone of its own, no flashing) */
+  .animal.hopout { transform-origin: 50% 100%; animation: hop-out 3.8s ease-in-out; }
+  @keyframes hop-out {
+    0%, 100% { transform: none; }
+    12% { transform: translate(calc(var(--hdir) * var(--S) * .28), calc(var(--S) * -.3)); }
+    26%, 70% { transform: translate(calc(var(--hdir) * var(--S) * .55), calc(var(--B) * .9)); }
+    29% { transform: translate(calc(var(--hdir) * var(--S) * .55), calc(var(--B) * .9)) scale(1.06, .94); }
+    40%, 56% { transform: translate(calc(var(--hdir) * var(--S) * .55), calc(var(--B) * .9)) rotate(-5deg); }
+    48%, 63% { transform: translate(calc(var(--hdir) * var(--S) * .55), calc(var(--B) * .9)) rotate(5deg); }
+    82% { transform: translate(calc(var(--hdir) * var(--S) * .28), calc(var(--B) * .45 - var(--S) * .3)); }
+    94% { transform: scale(1.05, .95); }
+  }
+
   /* when the tower tumbles, the nearest named animals give one slow, wide-eyed "oh!" look toward it, then settle */
   .animal.oh .art { transform-box: fill-box; transform-origin: 50% 100%; animation: oh-lean 2.4s ease-in-out; }
   .animal.oh .eye { transform-box: fill-box; transform-origin: 50% 50%; animation: oh-eyes 2.4s ease-in-out; }
@@ -368,6 +382,7 @@
     .animal.warm .eye { transition: none; }
     .animal.look.nuz .art { animation: none; }
     .animal.sway .art { animation: none; }
+    .animal.hopout { animation: none; }
     .animal.yawn .art { animation: none; }
     .animal.oh .art { animation: none; }
     .animal.oh .eye { animation: none; }
@@ -464,7 +479,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.7.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.8.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -766,6 +781,7 @@ function renderSlot(k, anim) {
   el.classList.toggle('invite', invited === l);
   if (animal.dataset.letter !== l) { animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
   animal.hidden = false;
+  animal.classList.remove('hopout'); animal._hopTok = (animal._hopTok || 0) + 1; // a redrawn slot never keeps a hop
   animal.classList.toggle('ghost', !isNamed); // unnamed: its silhouette peeks over the block
   animal.classList.toggle('nap', dusk && isNamed); // at dusk the named animals nap
   if (anim) restart(body, anim);
@@ -1009,6 +1025,23 @@ function tapAnimal(l) {
   moveAnimal(l, n % 4);
   talk(nameLines(l));
   react(l);
+  hopOut(l);
+}
+// After its name, the tapped animal hops out of its block onto the hay, wiggles and hops back (CSS only; never under
+// reduced motion or at dusk). Adds no tap zone and no sound; a tap meanwhile just answers as usual and the hop is not
+// restarted, so nothing is left stuck: the class is always removed on a timer and whenever the slot is redrawn.
+function hopOut(l) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || dusk) return;
+  const k = floor.indexOf(l);
+  const a = animalEl(l);
+  if (!a || a.classList.contains('hopout')) return;
+  a.style.setProperty('--hdir', k < 2 ? '1' : '-1');
+  const tok = (a._hopTok = (a._hopTok || 0) + 1);
+  setTimeout(() => {
+    if (a._hopTok !== tok || floor[k] !== l || !named.has(l) || a.classList.contains('hopout')) return;
+    a.classList.add('hopout');
+    setTimeout(() => { if (a._hopTok === tok) a.classList.remove('hopout'); }, 3900);
+  }, 1300);
 }
 function stackBlock(k) {
   const l = floor[k];
