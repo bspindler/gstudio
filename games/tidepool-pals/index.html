@@ -130,6 +130,9 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 @keyframes ptfly{to{transform:translate(var(--dx),var(--dy)) scale(.15);opacity:0}}
 .ring{position:absolute;width:calc(300% / 7);aspect-ratio:1;border-radius:50%;border:5px solid #F4E9FF;box-shadow:0 0 24px #C9A6FF,inset 0 0 24px #C9A6FF;transform:translate(-50%,-50%) scale(.2);animation:ring .45s ease-out forwards}
 .ring.big{width:calc(500% / 7)}
+.splash{position:absolute;width:calc(300% / 7);aspect-ratio:1;border-radius:50%;border:4px solid var(--sp,#fff);box-shadow:0 0 18px var(--sp,#fff),inset 0 0 14px var(--sp,#fff);transform:translate(-50%,-50%) scale(.25);opacity:.85;pointer-events:none;animation:splash .5s cubic-bezier(.2,.7,.3,1) forwards}
+.splash.s2{width:calc(220% / 7);border-width:2px;animation-delay:.07s;opacity:0}
+@keyframes splash{to{transform:translate(-50%,-50%) scale(1.2);opacity:0}}
 @keyframes ring{to{transform:translate(-50%,-50%) scale(1.25);opacity:0}}
 .beam{position:absolute;background:linear-gradient(var(--bd,180deg),transparent,rgba(200,255,250,.9) 35%,#fff 50%,rgba(200,255,250,.9) 65%,transparent);border-radius:999px;box-shadow:0 0 22px rgba(61,220,203,.9);animation:beamh .5s ease-out forwards}
 .beam.h{left:-4%;width:108%;height:calc(100% / 8)}
@@ -617,7 +620,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, 
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.14.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.14.2', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -847,6 +850,8 @@ const sfx = (() => {
     pop(n) { const step = PENTA[Math.min(PENTA.length - 1, Math.max(0, n - 2))], f = 440 * 2 ** (step / 12); tone(f, .14, { type: 'triangle', vol: .22, to: f * 1.5 }); tone(f * 2, .08, { vol: .06, at: .02 }); },
     /** Soft rising pop for the nth chain clear of one swap: a pentatonic step up each time, sine only, quiet. */
     chainPop(step) { const f = 440 * 2 ** (PENTA[Math.min(PENTA.length - 1, Math.max(1, step) + 1)] / 12); tone(f, .16, { vol: .13, to: f * 1.25 }); tone(f * 2, .08, { vol: .03, at: .02 }); },
+    /** Match of 4+: the usual pop plus a round, low sine "bloop" and a soft watery hiss; grows a little with size. */
+    bigPop(n) { const f = 196 * 2 ** (Math.min(3, n - 4) / 12 * 2); tone(f, .28, { vol: .2, to: f * .7 }); tone(f * 2, .18, { vol: .06, at: .03, to: f * 2.6 }); noise(.22, { vol: .05, f: 1800, to: 500, type: 'bandpass', q: .8 }); },
     bad() { tone(160, .12, { type: 'square', vol: .05, to: 120 }); },
     boom() { noise(.5, { vol: .5, f: 900, to: 80 }); tone(120, .45, { vol: .4, to: 40 }); },
     wave() { noise(.55, { vol: .35, f: 400, to: 4000, type: 'bandpass', q: 1.5 }); tone(330, .35, { type: 'triangle', vol: .1, to: 880 }); },
@@ -1256,6 +1261,17 @@ function glowMatched(res, then) {
   }
   if (any) setTimeout(then, GLOW_MS); else then();
 }
+const BIG_MATCH = 4;
+/** Feedback only: a match of 4+ pals adds a splash ring (in the pal's colour) and a deeper pop. Touches no board state. */
+function bigMatchFx(res) {
+  const pals = res.cleared.filter(({ cell }) => cell.k === 'pal');
+  if (pals.length < BIG_MATCH) return;
+  sfx.bigPop(pals.length);
+  if (!motion()) return;
+  const r = pals.reduce((a, p) => a + p.r, 0) / pals.length, c = pals.reduce((a, p) => a + p.c, 0) / pals.length;
+  const col = TC[pals[0].cell.c][0], pos = `left:${cx(c)};top:${cy(r)};--sp:${col}`;
+  fxNode('splash', pos, 520); fxNode('splash s2', pos, 620);
+}
 function glowThenFinish(res, r, c) {
   glowMatched(res, () => finishMove(res, r, c));
 }
@@ -1272,7 +1288,7 @@ function finishMove(res, r, c) {
   // effects first, then pops
   const big = res.kind !== 'group';
   for (const e of res.effects) fxFor(e);
-  if (res.kind === 'group') { sfx.pop(res.cleared.length); buzz(12); }
+  if (res.kind === 'group') { sfx.pop(res.cleared.length); buzz(12); bigMatchFx(res); }
   else if (res.kind === 'combo') { sfx.combo(); buzz([30, 30, 60]); shake('l'); }
   else { const k = res.effects[0].kind; k === 'bomb' ? sfx.boom() : k === 'whirl' ? sfx.whirl() : sfx.wave(); buzz(35); shake(res.effects.length > 1 ? 'l' : 's'); }
   animateResult(res);
@@ -1351,7 +1367,7 @@ function cascade(res) {
   chargeHelper(res.counts);
   lvl.chains = (lvl.chains || 0) + 1;
   const step = lvl.chainStep = (lvl.chainStep || 0) + 1; // nth chain clear of this swap: each pops a little higher
-  glowMatched(res, () => { sfx.chainPop(step); buzz(10); animateResult(res); });
+  glowMatched(res, () => { sfx.chainPop(step); buzz(10); bigMatchFx(res); animateResult(res); });
   if (res.spawned) lvl.specials++;
   const first = res.cleared[0];
   const gained = goalStatus(lvl.def, lvl.prog).reduce((a, g, i) => a + (g.got - before[i]), 0);

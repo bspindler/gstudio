@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.14.2 (2026-11-20)
+- Matches of 4 or more pals now make a bigger splash ring in the pals' colour and a deeper, rounder pop.
+
 ## 0.14.1 (2026-11-19)
 - When a tide level opens, soft ripples now drift across the board for about 2 seconds in the direction the tide pulls.
 - Each step of a chain reaction from your swap now pops a little higher in pitch, so you can hear what your move did.
