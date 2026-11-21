@@ -69,7 +69,10 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .gchip b{font-family:var(--display);font-weight:400;font-size:22px;line-height:1;font-variant-numeric:tabular-nums}
 .gchip .gw{font-size:11px;font-weight:900;color:var(--mist);line-height:1.1;max-width:62px}
 .gchip.done b{color:var(--aqua)}
-.gchip.bump .gi{animation:bump .35s}
+.gchip.bump .gi{animation:goalbounce .45s ease-out}
+.gchip.bump b{animation:goalbounce .45s ease-out}
+@keyframes goalbounce{30%{transform:translateY(-4px) scale(1.22);filter:drop-shadow(0 0 6px var(--gc,#3DDCCB))}60%{transform:translateY(1px) scale(.96)}}
+@media (prefers-reduced-motion:reduce){.gchip.bump .gi,.gchip.bump b{animation:none}}
 .moves{flex:none;min-width:70px;text-align:center;background:var(--panel);box-shadow:var(--rim);border-radius:18px;padding:6px 10px}
 .label{font-size:10.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--mist)}
 .moves b{display:block;font-family:var(--display);font-size:30px;line-height:1;font-weight:400;font-variant-numeric:tabular-nums}
@@ -1643,7 +1646,7 @@ function hud(reset = false) {
   if (!lvl) return;
   const gs = goalStatus(lvl.def, lvl.prog);
   if (reset) lastGot = [];
-  $('goals').innerHTML = gs.map((g, i) => `<div class="gchip${g.done ? ' done' : ''}${lastGot[i] !== undefined && lastGot[i] !== g.got ? ' bump' : ''}" aria-label="${goalText(g)}: ${g.done ? 'done' : (g.need - g.got) + ' to go'}"><span class="gi">${goalIcon(g)}</span><b>${g.done ? '✓' : g.need - g.got}</b>${gs.length <= 2 && !g.done ? `<span class="gw">${goalWord(g)}</span>` : ''}</div>`).join('');
+  $('goals').innerHTML = gs.map((g, i) => `<div class="gchip${g.done ? ' done' : ''}${lastGot[i] !== undefined && lastGot[i] < g.got ? ' bump' : ''}"${g.t === 'collect' && TC[g.c] ? ` style="--gc:${TC[g.c][0]}"` : ''} aria-label="${goalText(g)}: ${g.done ? 'done' : (g.need - g.got) + ' to go'}"><span class="gi">${goalIcon(g)}</span><b>${g.done ? '✓' : g.need - g.got}</b>${gs.length <= 2 && !g.done ? `<span class="gw">${goalWord(g)}</span>` : ''}</div>`).join('');
   lastGot = gs.map((g) => g.got);
   $('movesCount').textContent = lvl.moves;
   $('movesBox').classList.toggle('low', lvl.moves <= 3);
