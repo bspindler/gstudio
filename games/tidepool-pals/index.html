@@ -111,6 +111,9 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .tile.hintme .tl{animation:nudge 2.4s ease-in-out infinite}
 @keyframes nudge{0%,100%{transform:translate(0,0)}50%{transform:translate(calc(var(--hx,0) * 7px),calc(var(--hy,0) * 7px))}}
 @media (prefers-reduced-motion:reduce){.tile.hintme .tl{animation:none}}
+.tile.blink .eyes{transform-box:fill-box;transform-origin:50% 50%;animation:blink .9s ease-in-out}
+@keyframes blink{0%,100%{transform:scaleY(1)}35%,60%{transform:scaleY(.08)}}
+@media (prefers-reduced-motion:reduce){.tile.blink .eyes{animation:none}}
 @keyframes wiggle{0%,60%,100%{transform:rotate(0) scale(1)}15%{transform:rotate(-9deg) scale(1.06)}30%{transform:rotate(9deg) scale(1.06)}45%{transform:rotate(-4deg)}}
 .tile.shake .tl{animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-12%)}75%{transform:translateX(12%)}}
@@ -672,7 +675,7 @@ const SPEC = [[13, 14], [14.5, 14], [11.5, 14.5], [13.5, 10], [13, 10]];
 const face = (cx, y) => {
   const L = cx - 5.4, R = cx + 5.4;
   const eye = (x) => `<circle cx="${x}" cy="${y}" r="3.9" fill="#fff" stroke="#14202B" stroke-width=".7"/><circle cx="${x + .3}" cy="${y + .4}" r="2.6" fill="#14202B"/><circle cx="${x + 1.2}" cy="${y - .7}" r="1.1" fill="#fff"/><circle cx="${x - .7}" cy="${y + 1.3}" r=".55" fill="#fff"/>`;
-  return `<ellipse cx="${L - 2.6}" cy="${y + 4.6}" rx="2.4" ry="1.5" fill="#FF8FA3" opacity=".6"/><ellipse cx="${R + 2.6}" cy="${y + 4.6}" rx="2.4" ry="1.5" fill="#FF8FA3" opacity=".6"/>${eye(L)}${eye(R)}<path d="M${cx - 2.6} ${y + 5}q2.6 2.8 5.2 0" fill="none" stroke="#14202B" stroke-width="1.4" stroke-linecap="round"/>`;
+  return `<ellipse cx="${L - 2.6}" cy="${y + 4.6}" rx="2.4" ry="1.5" fill="#FF8FA3" opacity=".6"/><ellipse cx="${R + 2.6}" cy="${y + 4.6}" rx="2.4" ry="1.5" fill="#FF8FA3" opacity=".6"/><g class="eyes">${eye(L)}${eye(R)}</g><path d="M${cx - 2.6} ${y + 5}q2.6 2.8 5.2 0" fill="none" stroke="#14202B" stroke-width="1.4" stroke-linecap="round"/>`;
 };
 const SHADOW = '<ellipse cx="20" cy="37" rx="13" ry="3.2" fill="url(#tsh)"/>';
 function tileSVG(i) {
@@ -929,7 +932,7 @@ const newId = counter();
 const rng = Math.random; // board colours only; shells use studio.odds.roll so the odds can be shown
 let grid = [], mask = [], lvl = null, busy = false, ctx = 'win', view = 'map';
 const els = new Map(); // cell id -> tile element
-let idleT = 0;
+let idleT = 0, pressing = false;
 
 // A pal trapped in a bubble: a shiny shell over the stranded pal; a crack line shows once it has been hit.
 const bubbleSVG = (cracked) => `<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="#BFF1FF" fill-opacity=".28" stroke="#E6FBFF" stroke-width="2"/><ellipse cx="13" cy="12" rx="4.5" ry="2.6" fill="#fff" fill-opacity=".8" transform="rotate(-35 13 12)"/>${cracked ? '<path d="M24 5 L20 14 L26 19 L19 27 L23 35" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' : ''}</svg>`;
@@ -1607,6 +1610,19 @@ function armIdle() {
   }, teach ? 900 : 5000);
 }
 
+/* ---------- idle blink: now and then one resting pal squashes its eyes shut and opens them (cosmetic only) ---------- */
+function blinkOne() {
+  if (!motion() || !lvl || lvl.over || busy || aiming || pressing || view !== 'play' || !modal.hidden) return;
+  if (tilesEl.querySelector('.hintme, .now, .pop, .crumble, .shake, .matchglow, .spawn, .land, .blink')) return;
+  const pals = [...tilesEl.querySelectorAll('.tile')].filter((t) => t.querySelector('.eyes') && !t._dying);
+  if (!pals.length) return;
+  const el = pals[Math.floor(Math.random() * pals.length)];
+  el.classList.add('blink');
+  setTimeout(() => el.classList.remove('blink'), 950);
+}
+function blinkLoop() { setTimeout(() => { blinkOne(); blinkLoop(); }, 3500 + Math.random() * 3500); }
+blinkLoop();
+
 /* ---------- parallax tilt (pointer) ---------- */
 {
   const wrap = $('boardwrap'); let raf = 0, px = 0, py = 0;
@@ -2226,6 +2242,7 @@ function goNext() { closeModal(); const n = lvl ? lvl.n + 1 : S.level; if (!cele
     if (lvl && !lvl.over) armIdle(); // any touch ends the nudge hint and restarts the idle wait
     const t = e.target.closest('.tile');
     if (!t || t.disabled || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    pressing = true;
     drag = { el: t, x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
     try { tilesEl.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
   });
@@ -2267,7 +2284,7 @@ function goNext() { closeModal(); const n = lvl ? lvl.n + 1 : S.level; if (!cele
   });
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
-    const d = drag; drag = null;
+    const d = drag; drag = null; pressing = false;
     rest(d);
     if (!d.moved && e.type === 'pointerup') onTileTap(d.el);
   };

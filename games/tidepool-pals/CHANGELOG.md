@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.14.3 (2026-11-21)
 - After a chain of 3 or more, a little crab scuttles along the edge of the pool the way the tide pulls, then ducks out of sight.
+- Pals on the board now give an occasional slow, soft blink, so the pool feels more alive.
 
 ## 0.14.2 (2026-11-20)
 - Matches of 4 or more pals now make a bigger splash ring in the pals' colour and a deeper, rounder pop.
