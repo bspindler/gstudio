@@ -22,3 +22,12 @@ Changes:
 
 Changes:
 - HAL-280 tuning(tidepool-pals): Tighten the last stretch of the loosest-won level past 15 for closer finishes: **discarded** (0.14.3) (tidepool-pals: no real gain: 0.54 < 6.66)
+
+## Run run-2026-11-21T17-52-16-045Z
+
+**Tidepool Pals**: cartoon reef pals, sea candy and tides.
+
+0.14.3 adds an occasional slow blink to one resting pal every few seconds. It is cosmetic only and skipped during drags, clears, hints and reduced motion. Fitness held at 97.35. It adds charm without blurring the matching, in line with your N-011 ask. Level 31's rebuild is still held.
+
+Changes:
+- HAL-286 polish(tidepool-pals): Board pals give an occasional slow, soft blink so the pool feels alive: **merged** (0.14.3)

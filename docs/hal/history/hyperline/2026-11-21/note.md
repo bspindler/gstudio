@@ -20,3 +20,12 @@ Changes:
 
 Changes:
 - HAL-282 polish(hyperline): Runner squashes on landing and stretches at take-off, a quick neon snap: **merged** (0.11.1)
+
+## Run run-2026-11-21T17-52-16-045Z
+
+**Hyperline**: neon timing runner on your 0.4.1 camera.
+
+0.11.1 drifts the grid and rail glow up to 38° in hue over one second at each new sector start. There is no flash, it is off in sector 0 and under reduced motion, and it works in both the bloom and 2D renderers. Fitness held at 99.49. It is polish rather than a new sector, because SPRING SPIKES and the ghost gate are still held.
+
+Changes:
+- HAL-287 polish(hyperline): Neon grid shifts hue over a second as each new sector begins: **merged** (0.11.1)

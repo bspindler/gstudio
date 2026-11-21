@@ -26,3 +26,12 @@ Changes:
 Changes:
 - HAL-279 tuning(gearhold): Terrace of Dials: swap its drones for brass rams so it plays unlike the others: **discarded** (0.10.1) (gearhold-play: no real gain: 0.00 < 6.99)
 - HAL-283 feature(gearhold): New level 10 'Bellworks': a bell-golem guards the exit with slow shockwaves: **held** (0.11.0)
+
+## Run run-2026-11-21T17-52-16-045Z
+
+**Gearhold**: brass, readable fights, one level at a time.
+
+The Terrace of Dials retune (HAL-285) put a kilnwarden on the final crossing, with a repair crystal beyond the door. The level's own wins fell from about 99% to 47% (winnable 58.33, pace and feel 100), using existing enemy kinds and the terrace's dial look. It was discarded because the overall play score barely moved (96.32 to 96.46), and the final one-crystal map was never re-scored after a revert. The fix is right in spirit, so I'd resend it as a re-scored fix. Bellworks, Press Gallery's fission drones and the cinder-mite Boiler Stair are still held.
+
+Changes:
+- HAL-285 tuning(gearhold): Terrace of Dials: route its last stretch through one guarded crossing: **discarded** (0.10.1) (gearhold-play: no real gain: 1.06 < 8.98)

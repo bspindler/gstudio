@@ -24,3 +24,12 @@ Changes:
 
 Changes:
 - HAL-284 feature(block-barn): Named animal hops out of its block onto the hay, then hops back home: **held** (0.5.0)
+
+## Run run-2026-11-21T17-52-16-045Z
+
+**Block Barn**: a slow, wordless toy barn for small children.
+
+HAL-288 (held, 0.5.0) lets a child drag a floor animal, which then trots slowly over the hay and settles. A short drag still taps, the long-press yawn is unchanged, and reduced motion moves the animal instantly. It keeps the calm feel, but no phone screenshot is cited. It is also the fifth held Block Barn feature, so I'm pausing new ones until those are settled.
+
+Changes:
+- HAL-288 feature(block-barn): Drag a floor animal and it trots slowly across the hay to where you let go: **held** (0.5.0)
