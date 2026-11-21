@@ -328,7 +328,7 @@ function loadLevel(i) {
     if (c === 'u') presses.push({ x, y, was: 'open', hit: false });
     else if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
-      enemies.push({ kind: c, ...STATS[c], ...(c === 'b' && i === 1 ? { hp: 230 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false, ...(c === 't' ? { tm: 'scan', sl: 0, fa: 0, rt: 0.3 + Math.random() * 1.2, strafe: Math.random() < 0.5 ? 1 : -1 } : null) });
+      enemies.push({ kind: c, ...STATS[c], ...(c === 'b' && i === 1 ? { hp: 230 } : null), ...(c === 'b' && i === 0 ? { hp: 190 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false, ...(c === 't' ? { tm: 'scan', sl: 0, fa: 0, rt: 0.3 + Math.random() * 1.2, strafe: Math.random() < 0.5 ? 1 : -1 } : null) });
     } else if (ITEM_KINDS.includes(c)) items.push({ id: items.length, kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
   }
   foes = enemies.filter((e) => !e.prop).length;
