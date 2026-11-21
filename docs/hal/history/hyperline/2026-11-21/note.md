@@ -43,3 +43,14 @@ Changes:
 
 Changes:
 - HAL-296 polish(hyperline): Runner shatters into a few neon shards that fade when it crashes: **merged** (0.11.1)
+
+## Run run-2026-11-21T21-59-13-038Z
+
+**Hyperline:** a neon runner where timing is everything.
+
+- **Merged (HAL-300, 0.11.1):** render-only take-off ticks on the track for blocks, spikes and pits. Your 0.4.1 camera and the sim are untouched.
+- **Scores:** fair and inBand at 100, bites at 97.4, fitness unchanged at 99.49.
+- **Not yet seen:** the ticks haven't been checked on a phone.
+
+Changes:
+- HAL-300 polish(hyperline): Faint neon ground tick marks each obstacle's jump point ahead: **merged** (0.11.1)

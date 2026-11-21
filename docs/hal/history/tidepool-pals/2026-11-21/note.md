@@ -45,3 +45,14 @@ Changes:
 
 Changes:
 - HAL-295 polish(tidepool-pals): Freed pal swims up into the goal counter instead of off the board: **merged** (0.14.3)
+
+## Run run-2026-11-21T21-59-13-038Z
+
+**Tidepool Pals:** reef rescue, pals and tides.
+
+- **Dropped (HAL-299):** moving level 25's stranded pal up into the seahorse's mane raised tension from 82.8 to 84.5, and the level's win rate went from 70% to 66%. Fitness stayed at 97.35, so it missed the gain bar.
+- **Unchanged:** level 31 (held under HAL-267) was not touched.
+- **Next:** single-level layout nudges won't move tension enough. Any further work should reshape several late levels together, or move on.
+
+Changes:
+- HAL-299 tuning(tidepool-pals): Move a 16+ level's last goal later on the board for closer finishes: **discarded** (0.14.3) (tidepool-pals: no real gain: 1.67 < 6.58)

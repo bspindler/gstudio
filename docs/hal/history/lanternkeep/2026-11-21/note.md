@@ -26,3 +26,15 @@ Changes:
 
 Changes:
 - HAL-291 polish(lanternkeep): Lantern flame burns lower and dimmer as lives are lost: **merged** (0.7.1)
+
+## Run run-2026-11-21T21-59-13-038Z
+
+**Lanternkeep:** a calm, moonlit planting defence.
+
+- **Merged (HAL-301, 0.7.1):** the path swells softly for a moment at each wave's start, in both the 2D and three.js views.
+- **Balance:** no balance change, and fitness holds at 95.83.
+- **Not yet seen:** the glow hasn't been checked on a phone.
+- **Held:** Mirror Mist (HAL-264) and the Gloam Stag (HAL-275) are still held.
+
+Changes:
+- HAL-301 polish(lanternkeep): Path glows faintly along the route the next wave will walk: **merged** (0.7.1)

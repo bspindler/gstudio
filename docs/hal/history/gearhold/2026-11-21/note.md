@@ -50,3 +50,17 @@ Changes:
 
 Changes:
 - HAL-294 fix(gearhold): Terrace of Dials: one kilnwarden guards the final crossing, re-scored: **merged** (0.10.1)
+
+## Run run-2026-11-21T21-59-13-038Z
+
+**Gearhold:** brass-machine halls with deliberate aim-and-fire.
+
+- **Merged (HAL-298):** one Turret Gallery turret moved from (21,2) to (19,4), in the doorway row, with the door left clear. Turret Gallery feel is now 100.
+- **Score dip:** overall gearhold-play fell from 97.63 to 96.95 and is unexplained, so it needs a look.
+- **Version:** labelled 0.10.1 again, so the version bump was missed.
+- **Dropped (HAL-297):** the only out-of-band level is Press Gallery (winnable 53.33, hit ratio 0.24), which is held under HAL-276, so nothing could be retuned.
+- **Identity:** kept. No layout changes.
+
+Changes:
+- HAL-297 fix(gearhold): Retune one foe's health on the level furthest outside its winnable band: **discarded** (implementer blocked: The only level outside its winnable band is Press Gallery (level 3, winnable 53.33, winRate 0.95), which the ticket forbids touching (HAL-276). All other levels score winnable 100, so no permitted level can be retuned.)
+- HAL-298 fix(gearhold): Lift feel on the merged level with the lowest hit ratio: **merged** (0.10.1)
