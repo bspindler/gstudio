@@ -1,0 +1,22 @@
+{
+  "night": "2026-11-21",
+  "runs": [
+    {
+      "run": "run-2026-11-21T14-05-02-181Z",
+      "at": "2026-11-21T15:50:57.095Z",
+      "scorers": {
+        "block-barn": {
+          "fitness": 100,
+          "measures": {
+            "responsive": 100,
+            "noDeadEnds": 100,
+            "bigTargets": 100,
+            "alphabet": 100,
+            "calm": 100,
+            "variety": 100
+          }
+        }
+      }
+    }
+  ]
+}
