@@ -6,6 +6,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 - After a chain of 3 or more, a little crab scuttles along the edge of the pool the way the tide pulls, then ducks out of sight.
 - Pals on the board now give an occasional slow, soft blink, so the pool feels more alive.
 - The goal counter in the top bar now gives a soft bounce with a glow in the pal's colour each time a clear counts toward it.
+- Rescued pals now swim up into the goal counter at the top, which then bounces, so you can see the pal you saved land in the goal.
 
 ## 0.14.2 (2026-11-20)
 - Matches of 4 or more pals now make a bigger splash ring in the pals' colour and a deeper, rounder pop.

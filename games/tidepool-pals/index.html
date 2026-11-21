@@ -309,6 +309,8 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 .swimmer{position:absolute;width:calc(100% / 7);height:calc(100% / 8);pointer-events:none;animation:swimoff 1.1s cubic-bezier(.4,0,.6,1) forwards}
 .swimmer svg{width:100%;height:100%;display:block;animation:paddle .25s ease-in-out infinite alternate}
 @keyframes swimoff{20%{transform:scale(1.25)}100%{transform:translate(var(--wx),var(--wy)) scale(1);opacity:0}}
+.swimmer.togoal{animation:swimgoal .62s cubic-bezier(.4,0,.6,1) forwards;z-index:5}
+@keyframes swimgoal{0%{transform:translate(0,0) scale(1);opacity:1}45%{transform:translate(var(--mx),var(--my)) scale(1.2);opacity:1}100%{transform:translate(var(--wx),var(--wy)) scale(.3);opacity:.9}}
 @keyframes paddle{to{transform:rotate(8deg)}}
 .hopper{position:absolute;width:calc(100% / 7);height:calc(100% / 8);pointer-events:none;perspective:300px;animation:hopfade .9s ease-in forwards}
 .hopper img{width:100%;height:100%;display:block;object-fit:contain;transform-origin:50% 90%;animation:hop3d .9s ease-in-out forwards}
@@ -1403,17 +1405,21 @@ function settle(done) {
   render(fromOf(spawned));
   setTimeout(() => {
     const saved = rescueLost(grid, active(), lvl.exit);
-    if (saved.length) {
-      for (const s of saved) swimOff(s);
-      addProgress(lvl.prog, { rescue: saved.length });
-      hud();
-      ev('pal_rescued', { level: lvl.n, rescued: lvl.prog.rescue, moves_left: lvl.moves, tide: lvl.phase });
-    }
-    // chains: new pals that fell into line pop on their own, and count toward the goals
-    const chain = resolveMatches(grid, newId);
-    if (chain.ok) cascade(chain);
-    if (!saved.length && !chain.ok) { done(); return; }
-    setTimeout(() => settle(done), chain.ok ? 420 + (motion() ? GLOW_MS : 0) : motion() ? 520 : 60);
+    // the counter only ticks (and bounces) once the pal has swum up into it
+    const wait = saved.length && motion() ? GOAL_SWIM_MS : 0;
+    if (saved.length) for (const s of saved) swimOff(s);
+    setTimeout(() => {
+      if (saved.length) {
+        addProgress(lvl.prog, { rescue: saved.length });
+        hud();
+        ev('pal_rescued', { level: lvl.n, rescued: lvl.prog.rescue, moves_left: lvl.moves, tide: lvl.phase });
+      }
+      // chains: new pals that fell into line pop on their own, and count toward the goals
+      const chain = resolveMatches(grid, newId);
+      if (chain.ok) cascade(chain);
+      if (!saved.length && !chain.ok) { done(); return; }
+      setTimeout(() => settle(done), chain.ok ? 420 + (motion() ? GLOW_MS : 0) : motion() ? 520 : 60);
+    }, wait);
   }, 340);
 }
 
@@ -1497,11 +1503,27 @@ function swimOff({ r, c, cell }) {
   const [dr, dc] = GRAVITY[lvl.exit];
   const d = document.createElement('div');
   d.className = 'swimmer';
-  d.style.cssText = `left:${c / COLS * 100}%;top:${r / ROWS * 100}%;--wx:${dc * 420}%;--wy:${dr * 420}%`;
   d.innerHTML = LOST;
+  // swim along an arc up into the rescue counter in the top bar; fall back to the exit edge if it isn't there
+  const gi = rescueChipIndex(), chip = gi >= 0 ? $('goals').children[gi]?.querySelector('.gi') : null;
+  const fr = fxEl.getBoundingClientRect(), tr = chip && chip.getBoundingClientRect();
+  if (tr && fr.width > 0) {
+    const w = fr.width / COLS, h = fr.height / ROWS;
+    const sx = fr.left + (c + .5) * w, sy = fr.top + (r + .5) * h;
+    const wx = tr.left + tr.width / 2 - sx, wy = tr.top + tr.height / 2 - sy;
+    const mx = wx * .35 + (wx >= 0 ? -1 : 1) * Math.abs(wy) * .25, my = wy * .6; // bow the path sideways
+    d.className = 'swimmer togoal';
+    d.style.cssText = `left:${c / COLS * 100}%;top:${r / ROWS * 100}%;--wx:${wx.toFixed(0)}px;--wy:${wy.toFixed(0)}px;--mx:${mx.toFixed(0)}px;--my:${my.toFixed(0)}px`;
+    fxEl.appendChild(d); setTimeout(() => d.remove(), GOAL_SWIM_MS + 30);
+    for (let i = 0; i < 3; i++) setTimeout(() => burst(r - (i + 1) * .5, c, '#E6FFFB', 4), i * 120);
+    return;
+  }
+  d.style.cssText = `left:${c / COLS * 100}%;top:${r / ROWS * 100}%;--wx:${dc * 420}%;--wy:${dr * 420}%`;
   fxEl.appendChild(d); setTimeout(() => d.remove(), 1150);
   for (let i = 0; i < 3; i++) setTimeout(() => burst(r + dr * (i + 1) * .6, c + dc * (i + 1) * .6, '#E6FFFB', 4), i * 120);
 }
+const GOAL_SWIM_MS = 620;
+function rescueChipIndex() { return goalStatus(lvl.def, lvl.prog).findIndex((g) => g.t === 'rescue'); }
 
 /* ---------- helper: your pal in play ---------- */
 function chargeHelper(counts) {
