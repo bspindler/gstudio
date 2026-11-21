@@ -78,6 +78,17 @@
   #vane .arrow { position: absolute; left: 50%; top: 40%; width: 38px; height: 26px; margin: -13px 0 0 -19px; background: linear-gradient(180deg, #e8b43a, #c98a1b); clip-path: polygon(0 0, 30% 30%, 62% 30%, 62% 0, 100% 50%, 62% 100%, 62% 70%, 30% 70%, 0 100%, 12% 50%);
     transform: rotate(var(--vr, 0deg)); transition: transform 3.2s cubic-bezier(.15, .6, .25, 1); }
   #vane .hub { position: absolute; left: 50%; top: 40%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; background: #c98a1b; box-shadow: 0 0 0 1.5px #f6e3b0; }
+  /* the little loft window: tap it and the view outside drifts slowly (about 3s, no flashing) through blossom, green,
+     amber leaves and soft snow, then round again. Code-drawn, no sound, no text. */
+  #loft { position: absolute; bottom: 0; height: calc(100% - 34px); aspect-ratio: 1 / 1; z-index: 3; display: none; box-sizing: border-box; overflow: hidden;
+    border: 6px solid #f4e6c8; border-bottom: 0; border-radius: 999px 999px 0 0; box-shadow: inset 0 0 0 3px rgba(0,0,0,.08); pointer-events: none; }
+  #loft .sv { position: absolute; inset: 0; opacity: 0; transition: opacity 3s ease-in-out; }
+  #loft .sv0 { opacity: 1; background: radial-gradient(circle at 25% 28%, #fff 0 5px, transparent 6px), radial-gradient(circle at 72% 38%, #ffd6e4 0 6px, transparent 7px), radial-gradient(circle at 48% 15%, #ffc2d6 0 5px, transparent 6px), linear-gradient(180deg, #cfe9ff, #eaf6ff 68%, #a8d98f 68%); }
+  #loft .sv1 { background: radial-gradient(circle at 70% 22%, #fff7c8 0 7px, transparent 8px), radial-gradient(ellipse at 30% 62%, #5faa55 0 12px, transparent 13px), linear-gradient(180deg, #9fd4ff, #d2edff 68%, #6fbf5e 68%); }
+  #loft .sv2 { background: radial-gradient(circle at 28% 30%, #e0932f 0 5px, transparent 6px), radial-gradient(circle at 66% 22%, #c8681f 0 5px, transparent 6px), radial-gradient(circle at 50% 50%, #f0b24a 0 5px, transparent 6px), linear-gradient(180deg, #f3d9b0, #fbe9cc 68%, #c99a52 68%); }
+  #loft .sv3 { background: radial-gradient(circle at 30% 25%, #fff 0 3px, transparent 4px), radial-gradient(circle at 70% 40%, #fff 0 3px, transparent 4px), radial-gradient(circle at 50% 58%, #fff 0 3px, transparent 4px), linear-gradient(180deg, #dfe8f4, #f1f5fb 68%, #fdfdff 68%); }
+  #loft.s1 .sv1, #loft.s2 .sv1, #loft.s3 .sv1, #loft.s2 .sv2, #loft.s3 .sv2, #loft.s3 .sv3 { opacity: 1; }
+  #loft::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 5px; margin-left: -2.5px; background: #f4e6c8; z-index: 1; }
   .animal.nap .eye { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(.12); transition: transform 1.6s ease-in-out; }
   .animal.nap .art { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(1, .94); transition: transform 1.6s ease-in-out; }
   #peeks { position: absolute; inset: 0; overflow: hidden; border-radius: 999px 999px 0 0; pointer-events: none; display: flex; justify-content: center; align-items: flex-end; gap: 2%; }
@@ -349,6 +360,7 @@
     .animal.oh .eye { animation: none; }
     #door .leaf { transition: none; }
     #dusk, #dusk-sky { transition: none; }
+    #loft .sv { transition: none; }
     #vane .arrow { transition: none; }
     .animal.nap .eye, .animal.nap .art { transition: none; }
     #peeks .peek { animation: none; }
@@ -383,7 +395,7 @@
 </head>
 <body>
 <main id="barn" aria-label="Block Barn">
-  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div><div id="butterfly" aria-hidden="true"><i></i><i></i></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
+  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div><div id="butterfly" aria-hidden="true"><i></i><i></i></div></div><div id="loft" aria-hidden="true"><div class="sv sv0"></div><div class="sv sv1"></div><div class="sv sv2"></div><div class="sv sv3"></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
   <div id="play">
     <div id="floor"></div>
     <div id="sunbeam" aria-hidden="true"></div>
@@ -437,7 +449,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.5.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.6.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1204,20 +1216,44 @@ function resetSky() {
 // Tap the vane on the roof wall: the arrow turns slowly and settles. Its zone is the widest strip of wall left free by
 // the sky and door zones, so it never overlaps them; it is left out when less than 44px is free. No sound, text or count.
 let vaneAngle = 0;
-function vaneBox() {
-  const w = $('wall').getBoundingClientRect(), v = $('vane');
-  const d = doorBox(), sk = skyBox();
-  const taken = [d, ...(sk ? [sk] : [])].sort((a, b) => a.x - b.x);
-  // the free strips of the wall: before, between and after the door and sky zones; the widest one holds the vane
+/** The widest strip of the wall left free by the given zones (before, between and after them), or null. */
+function widestFree(taken) {
+  const w = $('wall').getBoundingClientRect();
   let best = null, at = w.left;
-  for (const t of [...taken, { x: w.right, w: 0 }]) {
+  for (const t of [...taken].sort((a, b) => a.x - b.x).concat([{ x: w.right, w: 0 }])) {
     if (!best || t.x - at > best.w) best = { x: at, w: t.x - at };
     at = Math.max(at, t.x + t.w);
   }
+  return best;
+}
+function vaneBox() {
+  const w = $('wall').getBoundingClientRect(), v = $('vane');
+  const d = doorBox(), sk = skyBox(), lf = loftBox();
+  // the free strips of the wall left by the door, sky and loft-window zones; the widest one holds the vane
+  const best = widestFree([d, ...(sk ? [sk] : []), ...(lf ? [lf] : [])]);
   if (!best || best.w < 44) { v.style.display = 'none'; return null; }
   v.style.display = 'block';
   v.style.left = `${best.x - w.left + best.w / 2 - 20}px`;
   return { x: best.x, y: w.top, w: best.w, h: w.height };
+}
+
+// ---------- the loft window: slow seasons ----------
+// Tap the little window: the view outside cross-fades over about 3s to the next season (blossom, green, amber leaves,
+// soft snow, round again). Its zone is the widest free strip beside the door and sky zones, so it overlaps neither
+// (the vane takes the widest strip left after it); left out when under 64px is free. No sound, text, flash or count.
+let season = 0;
+function loftBox() {
+  const w = $('wall').getBoundingClientRect(), el = $('loft');
+  const d = doorBox(), sk = skyBox();
+  const best = widestFree([d, ...(sk ? [sk] : [])]);
+  if (!best || best.w < 64 || w.height < 76) { el.style.display = 'none'; return null; }
+  el.style.display = 'block';
+  el.style.left = `${best.x - w.left + best.w / 2 - el.getBoundingClientRect().width / 2}px`;
+  return { x: best.x, y: w.top, w: best.w, h: w.height };
+}
+function tapLoft() {
+  season = (season + 1) % 4;
+  $('loft').className = `s${season}`;
 }
 function tapVane() {
   vaneAngle += 300;
@@ -1266,6 +1302,7 @@ function tapZones() {
     ...hitBoxes().map((b) => (b.letter ? { kind: b.kind, letter: b.letter, ...box(b) } : { kind: b.kind, ...box(b) })),
     { kind: 'door', ...box(doorBox()) },
     ...(sk ? [{ kind: 'sky', ...box(sk) }] : []),
+    ...(loftBox() ? [{ kind: 'loft', ...box(loftBox()) }] : []),
     ...(vaneBox() ? [{ kind: 'vane', ...box(vaneBox()) }] : []),
     { kind: 'floor', ...box(applyLayout().floorBox) },
     { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
@@ -1284,6 +1321,8 @@ function tapAt(x, y, heldMs = 0) {
   if (x >= dr.x && x <= dr.x + dr.w && y >= dr.y && y <= dr.y + dr.h) { tapDoor(); return; }
   const sk = skyBox();
   if (sk && x >= sk.x && x <= sk.x + sk.w && y >= sk.y && y <= sk.y + sk.h) { tapSky(); return; }
+  const lb = loftBox();
+  if (lb && x >= lb.x && x <= lb.x + lb.w && y >= lb.y && y <= lb.y + lb.h) { tapLoft(); return; }
   const vb = vaneBox();
   if (vb && x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h) { tapVane(); return; }
   let best = null, bestD = Infinity, bestC = Infinity;
