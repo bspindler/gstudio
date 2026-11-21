@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.10.1 (2026-11-21)
 - Gearhold's machines now flash a brief brass glint just before they bite or fire, so attacks are easier to read in the dim halls.
 - Terrace of Dials: a kilnwarden now guards the final crossing before the exit arch, so the last stretch is a real fight.
+- Turret Gallery: a turret now guards the corridor from a straighter spot, so aimed shots land more often.
 
 ## 0.10.0 (2026-11-20)
 - New Gearhold level 9, 'Turret Gallery': brass turrets sweep the halls and fire three-shot volleys along a locked line, so read the glow, step out, then cross.
