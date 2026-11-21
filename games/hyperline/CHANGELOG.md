@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.11.1 (2026-11-21)
 - The runner now squashes on landing and stretches at take-off, a quick neon snap that makes each jump read crisply.
+- The neon grid and rail glow now drift gently in hue for a second as each new sector begins.
 
 ## 0.11.0 (2026-11-19)
 - New sector PENDULUM BLADES: a blade swings back and forth along the track; read the swing and hop it as it crosses. It comes before HYPERCORE, which is now sector 18.

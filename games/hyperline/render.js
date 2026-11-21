@@ -76,6 +76,28 @@ export function paletteAt(x) {
     grid: m(prev.grid, cur.grid), rail: m(prev.rail, cur.rail), neon: m(prev.neon, cur.neon), block: m(prev.block, cur.block) };
 }
 
+/** Rotates a hex colour's hue by deg, keeping saturation and lightness. */
+export function hueShiftHex(hex, deg) {
+  const [r, g, b] = rgb(hex).map((v) => v / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  const l = (mx + mn) / 2;
+  if (d === 0) return hex;
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = (h * 60 + deg + 360) % 360;
+  return hsl(h, s * 100, l * 100);
+}
+
+/** Hue drift (degrees) for the grid and rail glow as a sector begins: 0 at the boundary, a gentle swell
+ *  through the first second, back to 0 so the sector's own palette lands with no pop. Never in sector 0. */
+export const SECTOR_HUE = { deg: 38, secs: 1 };
+export function sectorHueShift(x) {
+  const i = sectorAt(x);
+  if (i <= 0) return 0;
+  const secs = (x - i * SECTOR_LEN) / speedAt(x), k = secs / SECTOR_HUE.secs;
+  if (k <= 0 || k >= 1) return 0;
+  return SECTOR_HUE.deg * Math.sin(Math.PI * k);
+}
+
 /* ---------- skins ---------- */
 export function skinColors(sk, t) {
   if (sk.fx === 'rainbow') return [hsl((t * 80) % 360, 100, 72), hsl((t * 80 + 140) % 360, 100, 58)];
@@ -319,7 +341,11 @@ export function cameraFor(st, W, H) {
  *       shakeX, shakeY, flash, reduced, speed, showRunner }
  */
 export function drawScene(c, W, H, st) {
-  const pal = paletteAt(st.rx), cam = cameraFor(st, W, H), t = st.t, rx = st.rx;
+  let pal = paletteAt(st.rx);
+  const hs = st.reduced ? 0 : sectorHueShift(st.rx);
+  // grid and rail glow only; obstacle colours keep their contrast
+  if (hs) pal = { ...pal, grid: hueShiftHex(pal.grid, hs), rail: hueShiftHex(pal.rail, hs) };
+  const cam = cameraFor(st, W, H), t = st.t, rx = st.rx;
 
   // horizon: where the flat floor meets the sky
   const dh = [cam.f[0], 0, cam.f[2]], dl = Math.hypot(dh[0], dh[2]);

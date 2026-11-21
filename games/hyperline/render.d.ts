@@ -6,6 +6,10 @@ export function createBloom(
   src: HTMLCanvasElement,
 ): Promise<{ onLost(fn: () => void): void; resize(w: number, h: number): void; present(): void; dispose(): void } | null>;
 
+export const SECTOR_HUE: { deg: number; secs: number };
+export function hueShiftHex(hex: string, deg: number): string;
+export function sectorHueShift(x: number): number;
+
 export function squashScale(q: number): { sx: number; sy: number };
 
 export function cameraFor(
