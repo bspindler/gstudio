@@ -13,6 +13,10 @@ export function sectorHueShift(x: number): number;
 export function squashScale(q: number): { sx: number; sy: number };
 export const LIGHT_TRAIL_LIFE: number;
 export function lightTrailAlpha(age: number): number;
+export interface Shard { x: number; y: number; z: number; vx: number; vy: number; vz: number; rot: number; spin: number; len: number; age: number }
+export const SHARD_LIFE: number;
+export function shardAlpha(age: number): number;
+export function makeShards(x: number, y: number, n: number, rand: () => number): Shard[];
 
 export function cameraFor(
   st: { rx: number; lift: number; flipT: number; shakeX: number; shakeY: number },

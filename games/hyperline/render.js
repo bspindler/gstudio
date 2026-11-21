@@ -350,6 +350,43 @@ function drawLightTrail(c, cam, pts, sk, t) {
   c.globalCompositeOperation = op;
 }
 
+/** Crash shards: a few bright neon slivers thrown outward that fade in well under half a second. */
+export const SHARD_LIFE = 0.42;
+export function shardAlpha(age) {
+  const k = 1 - (age || 0) / SHARD_LIFE;
+  return k <= 0 ? 0 : k;
+}
+export function makeShards(x, y, n, rand) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = ((i + rand() * 0.8) / n) * Math.PI * 2, v = 4 + rand() * 4;
+    out.push({ x, y, z: 0, vx: Math.cos(a) * v, vy: Math.sin(a) * v + 1.5, vz: (rand() - 0.5) * 3,
+      rot: rand() * Math.PI, spin: (rand() - 0.5) * 18, len: 0.3 + rand() * 0.3, age: 0 });
+  }
+  return out;
+}
+function drawShards(c, cam, shards, sk, t) {
+  if (!shards || !shards.length) return;
+  const [a] = skinColors(sk, t);
+  const op = c.globalCompositeOperation;
+  c.globalCompositeOperation = 'lighter';
+  c.lineCap = 'round';
+  c.strokeStyle = a;
+  for (const s of shards) {
+    const al = shardAlpha(s.age);
+    if (al <= 0) continue;
+    const p = project(cam, s.x, s.y, s.z);
+    if (!p) continue;
+    const ang = s.rot + s.spin * s.age, h = s.len * p.s * 0.5, dx = Math.cos(ang) * h, dy = Math.sin(ang) * h;
+    c.globalAlpha = al;
+    c.lineWidth = Math.max(1.5, PS * p.s * 0.14);
+    c.beginPath(); c.moveTo(p.x - dx, p.y - dy); c.lineTo(p.x + dx, p.y + dy); c.stroke();
+  }
+  c.lineCap = 'butt';
+  c.globalAlpha = 1;
+  c.globalCompositeOperation = op;
+}
+
 /* ---------- scene ---------- */
 const STARS = Array.from({ length: 80 }, (_, i) => {
   const h = (k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
@@ -627,6 +664,7 @@ export function drawScene(c, W, H, st) {
     c.fillStyle = p.col; c.fillRect(q.x - sz / 2, q.y - sz / 2, sz, sz);
   }
   c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+  drawShards(c, cam, st.shards, st.skin, t);
 
   // floating text pops
   for (const pp of st.pops) {

@@ -242,7 +242,7 @@ import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
 import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, sectorFromSearch, migrateSave, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
-import { createBloom, drawScene, drawSkinThumb, skinColors } from './render.js';
+import { createBloom, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
 const studio = createStudio({ game: 'hyperline', version: '0.11.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
@@ -414,7 +414,7 @@ function runnerAt(start) { const r = createRunner(); r.x += sectorStart(start); 
 function reset() {
   const start = startFor(S.mode);
   G = { state: 'ready', mode: S.mode, start, course: makeCourse(S.mode, start), runner: runnerAt(start), stats: newRunStats(S.mode, start), simT: 0, acc: 0,
-    t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], ripples: [], lightTrail: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
+    t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], ripples: [], lightTrail: [], shards: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
     blink: 0, lift: 0, flipT: 0, doneM: [], ghost: null, rec: null, day: today(), trailTick: 0 };
   $('ready').hidden = false; $('paused').hidden = true; $('pauseBtn').hidden = true;
   renderReady(); hud();
@@ -521,6 +521,7 @@ function die() {
   const r = G.runner, sk = SK[S.eq];
   G.state = 'dead'; G.shake = reduced ? 0 : 0.5; G.flash = 0.5;
   spawn(r.x + PS / 2, r.y + PS / 2, 46, sk.a, 9, 0.9, 0.16, 2); spawn(r.x + PS / 2, r.y + PS / 2, 20, '#FF2BD6', 7, 0.7, 0.12, 2);
+  G.shards = makeShards(r.x + PS / 2, r.y + PS / 2, 9, Math.random);
   audio.death(); audio.stopBeat(); buzz(70);
   $('pauseBtn').hidden = true;
   setTimeout(showDeath, 750);
@@ -656,6 +657,8 @@ function update(dt) {
   for (const p of G.pops) p.age += dt;
   G.pops = G.pops.filter((p) => p.age < p.life);
   G.squash = (G.squash || 0) * Math.exp(-dt * 16); if (Math.abs(G.squash) < 0.01) G.squash = 0;
+  for (const sh of G.shards) { sh.x += sh.vx * dt; sh.y += sh.vy * dt; sh.z += sh.vz * dt; sh.vy -= 9 * dt; sh.age += dt; }
+  G.shards = G.shards.filter((sh) => sh.age < SHARD_LIFE);
   for (const lp of G.lightTrail) lp.age += dt;
   G.lightTrail = G.lightTrail.filter((lp) => lp.age < 0.3);
   for (const rp of G.ripples) rp.age += dt;
@@ -680,7 +683,7 @@ function draw() {
   const gp = G.ghost && G.state !== 'ready' ? ghostAt(G.ghost, G.simT) : null;
   drawScene(cx, W, H, {
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
-    ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
+    ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, shards: reduced ? [] : G.shards, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
     reduced, speed: speedAt(r.x), showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   });
