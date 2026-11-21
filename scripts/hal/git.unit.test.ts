@@ -374,6 +374,77 @@ describe('Hal worktrees (temp git repo)', () => {
       expect(head(r, HAL_MAIN)).toBe(before);
       expect((await listHeld(r)).map((h) => h.pass)).toEqual(['HAL-1']);
     });
+
+    // A game with Hal's release files, at 0.1.0; each pass bumps them the way candidate.ts does (applyRelease).
+    const RELEASE = {
+      yaml: (v: string) => `slug: g\nversion: ${v}\n`,
+      html: (v: string) => `<script type="module">\nconst studio = createStudio({ game: 'g', version: '${v}', endpoint: '' });\n</script>\n`,
+    };
+    const tr = (pass: string, kind: string, v: string) => `Hal-Pass: ${pass}\nHal-Game: g\nHal-Kind: ${kind}\nHal-Why: w\nHal-Score-Before: 1\nHal-Score-After: 2\nHal-Version: ${v}\nHal-Run: run-2026-11-20T06-00-00-000Z`;
+    const releaseRepo = () => {
+      const r = fresh();
+      put(r, 'games/g/game.yaml', RELEASE.yaml('0.1.0'));
+      put(r, 'games/g/index.html', RELEASE.html('0.1.0'));
+      put(r, 'games/g/CHANGELOG.md', '# g\n\n## 0.1.0 (2026-11-01)\n- First.\n');
+      gitIn(r, 'add', '-A');
+      gitIn(r, 'commit', '-q', '-m', 'release files');
+      return r;
+    };
+    /** A pass that edits `file` and releases `v` with `bullet` on top of the CHANGELOG it starts from. */
+    const released = async (r: string, pass: string, v: string, date: string, bullet: string, file: string, text: string) => {
+      const wt = await newCandidateWorktree(r, pass);
+      const log = readFileSync(join(wt.dir, 'games/g/CHANGELOG.md'), 'utf8');
+      put(wt.dir, 'games/g/game.yaml', RELEASE.yaml(v));
+      put(wt.dir, 'games/g/index.html', RELEASE.html(v));
+      put(wt.dir, 'games/g/CHANGELOG.md', log.replace('## ', `## ${v} (${date})\n- ${bullet}\n\n## `));
+      put(wt.dir, file, text);
+      const tree = await snapshotTree(wt.dir, wt.base, { prune: true });
+      return { commit: await commitTree(r, tree, wt.base, `wip ${pass}`), tree };
+    };
+    it('a held feature that clashes with main only on the release lines ships re-versioned on top of main', async () => {
+      const r = releaseRepo();
+      await ensureMainWorktree(r);
+      const f = await released(r, 'HAL-1', '0.2.0', '2026-11-20', 'A new level.', 'games/g/a.js', 'let a = 100;\n');
+      expect((await holdCandidate(r, 'HAL-1', `feature(g): level\n\nw\n\n${tr('HAL-1', 'feature', '0.2.0')}`, f)).ok).toBe(true);
+      const t = await released(r, 'HAL-2', '0.1.1', '2026-11-21', 'A fix.', 'games/g/b.js', 'let b = 5;\n');
+      expect((await squashMerge(r, 'HAL-2', `fix(g): b\n\nw\n\n${tr('HAL-2', 'fix', '0.1.1')}`, t)).ok).toBe(true);
+      const s = await adoptHeld(r, 'HAL-1');
+      if (!s.ok) throw new Error(s.error);
+      expect(s.version).toBe('0.2.0');
+      const show = (p: string) => gitIn(r, 'show', `${HAL_MAIN}:${p}`);
+      expect(show('games/g/game.yaml')).toBe('slug: g\nversion: 0.2.0');
+      expect(show('games/g/index.html')).toContain("version: '0.2.0'");
+      expect(show('games/g/CHANGELOG.md')).toBe('# g\n\n## 0.2.0 (2026-11-21)\n- A new level.\n\n## 0.1.1 (2026-11-21)\n- A fix.\n\n## 0.1.0 (2026-11-01)\n- First.');
+      expect(show('games/g/a.js')).toBe('let a = 100;');
+      expect(show('games/g/b.js')).toBe('let b = 5;');
+      expect(gitIn(r, 'log', '-1', '--format=%B', HAL_MAIN)).toContain('Hal-Version: 0.2.0');
+      expect(await listHeld(r)).toEqual([]);
+    });
+    it('two held features on one game ship one after the other, each with its own version', async () => {
+      const r = releaseRepo();
+      await ensureMainWorktree(r);
+      const a = await released(r, 'HAL-1', '0.2.0', '2026-11-20', 'Level A.', 'games/g/a.js', 'let a = 7;\n');
+      const b = await released(r, 'HAL-2', '0.2.0', '2026-11-20', 'Level B.', 'games/g/b.js', 'let b = 7;\n');
+      expect((await holdCandidate(r, 'HAL-1', `feature(g): a\n\nw\n\n${tr('HAL-1', 'feature', '0.2.0')}`, a)).ok).toBe(true);
+      expect((await holdCandidate(r, 'HAL-2', `feature(g): b\n\nw\n\n${tr('HAL-2', 'feature', '0.2.0')}`, b)).ok).toBe(true);
+      const s1 = await adoptHeld(r, 'HAL-1');
+      expect(s1).toMatchObject({ ok: true });
+      const s2 = await adoptHeld(r, 'HAL-2');
+      if (!s2.ok) throw new Error(s2.error);
+      expect(s2.version).toBe('0.3.0');
+      expect(gitIn(r, 'show', `${HAL_MAIN}:games/g/CHANGELOG.md`)).toContain('## 0.3.0 (2026-11-20)\n- Level B.\n\n## 0.2.0 (2026-11-20)\n- Level A.\n\n## 0.1.0');
+    });
+    it('a real clash beyond the release lines is still a conflict, and nothing moves', async () => {
+      const r = releaseRepo();
+      await ensureMainWorktree(r);
+      const f = await released(r, 'HAL-1', '0.2.0', '2026-11-20', 'A.', 'games/g/a.js', 'let a = 100;\n');
+      expect((await holdCandidate(r, 'HAL-1', `feature(g): a\n\nw\n\n${tr('HAL-1', 'feature', '0.2.0')}`, f)).ok).toBe(true);
+      const t = await released(r, 'HAL-2', '0.1.1', '2026-11-21', 'B.', 'games/g/a.js', 'let a = 5;\n');
+      expect((await squashMerge(r, 'HAL-2', `fix(g): a\n\nw\n\n${tr('HAL-2', 'fix', '0.1.1')}`, t)).ok).toBe(true);
+      const before = head(r, HAL_MAIN);
+      expect(await adoptHeld(r, 'HAL-1')).toMatchObject({ ok: false, conflict: true });
+      expect(head(r, HAL_MAIN)).toBe(before);
+    });
   });
 
   describe('replayHalOnto', () => {

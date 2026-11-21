@@ -44,7 +44,14 @@ export type UndoStatus = 'pending' | 'done' | 'failed' | 'rejected';
  */
 export type Undo = { run: string; reason: string; at: string; pass?: string; status?: UndoStatus; commit?: string; error?: string; undoRun?: string; version?: string };
 /** Brian's decision on a held feature: ship it onto main, or drop it. Applied at once, or by the next run if Hal is busy. */
-export type HeldDecision = { pass: string; run: string; decision: 'ship' | 'drop'; status: 'pending' | 'done' | 'failed'; at: string; commit?: string; error?: string; version?: string };
+/**
+ * Brian's decision on a held feature. A done ship with an `error` did not apply to main any more: Hal dropped it and
+ * rebuilds it (`game`, `title`, the original change `heldCommit`), and the rebuild that merges in its place is `rebuiltAs` (Brian approved it already).
+ */
+export type HeldDecision = {
+  pass: string; run: string; decision: 'ship' | 'drop'; status: 'pending' | 'done' | 'failed'; at: string; commit?: string; error?: string; version?: string;
+  game?: string; title?: string; heldCommit?: string; rebuiltAs?: string;
+};
 export type Feedback = { votes: Vote[]; undos: Undo[]; held?: HeldDecision[] };
 export type Store = ReturnType<typeof createStore>;
 
@@ -272,9 +279,27 @@ export function createStore({ halDir = defaultHalDir(), now = () => new Date() }
         let i = -1;
         for (let j = list.length - 1; j >= 0; j--) if (list[j]!.pass === h.pass && list[j]!.status !== 'done') { i = j; break; }
         const next: HeldDecision = { ...(i >= 0 ? list[i]! : {}), ...h, at: now().toISOString() };
-        if (h.status === 'done') delete next.error;
+        if (h.status === 'done' && h.error === undefined) delete next.error;
         if (i >= 0) list[i] = next; else list.push(next);
         await writeJsonAtomic(p('feedback.json'), { ...f, held: list });
+      });
+    },
+    /** Features Brian said ship that no longer applied, with no rebuild merged yet: a rebuild of one ships without asking again. */
+    async approvedRebuilds(): Promise<Array<{ pass: string; game: string; title?: string; heldCommit?: string }>> {
+      return ((await readFeedback()).held ?? [])
+        .filter((h) => h.decision === 'ship' && h.status === 'done' && !!h.error && !!h.game && !h.rebuiltAs)
+        .map((h) => ({ pass: h.pass, game: h.game!, ...(h.title ? { title: h.title } : {}), ...(h.heldCommit ? { heldCommit: h.heldCommit } : {}) }));
+    },
+    /** `pass`'s rebuild merged as `as`; false when it was not an open approved rebuild (each approval is used once). */
+    async markRebuilt(pass: string, as: string): Promise<boolean> {
+      return locked('feedback.json', async () => {
+        const f = await readFeedback();
+        const list = [...(f.held ?? [])];
+        const i = list.findLastIndex((h) => h.pass === pass && h.decision === 'ship' && h.status === 'done' && !!h.error && !h.rebuiltAs);
+        if (i < 0) return false;
+        list[i] = { ...list[i]!, rebuiltAs: as };
+        await writeJsonAtomic(p('feedback.json'), { ...f, held: list });
+        return true;
       });
     },
     /** Decisions on held features still to apply (pending, or failed last time), newest per pass. */

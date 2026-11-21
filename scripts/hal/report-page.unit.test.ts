@@ -92,6 +92,39 @@ function section(html: string, title: string): string {
 }
 
 describe('renderReport', () => {
+  describe('Ship all', () => {
+    const heldR = () => {
+      const r = fullReport();
+      r.changes.push(change('HAL-010', ticket('T9', 'gearhold', 'feature', 'A boss'), 'held'), change('HAL-011', ticket('T10', 'gearhold', 'feature', 'A second boss'), 'held'));
+      return r;
+    };
+    it('one form ships every undecided feature; the other ships them and keeps every change not kept or undone yet', () => {
+      const html = renderReport(view({ feedback: { votes: [{ run: RUN, item: 'HAL-004', vote: 'up', at: 'x' }], undos: [] } }, heldR()));
+      const f = forms(section(html, 'Ship all')).filter((x) => x.action === '/ship-all');
+      expect(f.map((x) => x.fields)).toEqual([{ run: RUN }, { run: RUN, keep: '1' }]);
+      expect(f[0]!.body).toContain('Ship all 2 features');
+      expect(f[1]!.body).toContain('Ship 2 + keep 1 change'); // HAL-003 (HAL-004 kept already; a fix is not a card)
+    });
+    it('a decided feature is not counted; with nothing to ship, only Keep all; with neither, no section', () => {
+      const decided = { votes: [], undos: [], held: [{ pass: 'HAL-010', run: RUN, decision: 'drop' as const, status: 'pending' as const, at: 'x' }] };
+      expect(section(renderReport(view({ feedback: decided }, heldR())), 'Ship all')).toContain('Ship all 1 feature<');
+      const keepOnly = forms(section(renderReport(view()), 'Ship all')).filter((x) => x.action === '/ship-all');
+      expect(keepOnly.map((x) => x.fields)).toEqual([{ run: RUN, keep: '1' }]);
+      expect(keepOnly[0]!.body).toContain('Keep all 2 changes');
+      const none = { votes: [{ run: RUN, item: 'HAL-003', vote: 'up' as const, at: 'x' }, { run: RUN, item: 'HAL-004', vote: 'up' as const, at: 'x' }], undos: [] };
+      expect(renderReport(view({ feedback: none }))).not.toContain('Ship all');
+    });
+    it('a merged rebuild says it was the feature Brian approved', () => {
+      const r = fullReport();
+      r.changes.push(change('HAL-020', ticket('T9', 'gearhold', 'feature', 'Bellworks', { rebuildOf: 'HAL-283' }), 'merged'));
+      expect(card(renderReport(view({}, r)), 'HAL-020')).toContain('rebuild of HAL-283, which you approved');
+    });
+    it('a ship that no longer applied says Hal rebuilds it, not Shipped', () => {
+      const fb = { votes: [], undos: [], held: [{ pass: 'HAL-010', run: RUN, decision: 'ship' as const, status: 'done' as const, at: 'x', error: 'no longer applies' }] };
+      expect(card(renderReport(view({ feedback: fb }, heldR())), 'HAL-010')).toContain('rebuilds it and ships it');
+    });
+  });
+
   it('has no referrer meta: no-referrer makes browsers send "Origin: null" on form POSTs, which the server 403s', () => {
     const html = renderReport(view());
     expect(html).not.toContain('no-referrer');
@@ -107,7 +140,7 @@ describe('renderReport', () => {
     r.planned = [ticket('T7', 'gearhold', 'feature', 'A boss rush mode')];
     const html = renderReport(view({}, r));
     // The header, then the panel (Run Hal first, so it leads on a phone), then the report.
-    const order = ['Good morning. Here&#39;s what changed.', 'Run Hal', 'Tell Hal', 'Earlier reports', 'Needs you', 'Director&#39;s note', 'Play', 'Changes',
+    const order = ['Good morning. Here&#39;s what changed.', 'Run Hal', 'Tell Hal', 'Earlier reports', 'Director&#39;s note', 'Ship all', 'Needs you', 'Changes', 'Play',
       'Where each game stands', 'What got fixed (1)', 'Tried and dropped (1)', 'Planned, not built (1)', 'Warnings'];
     const body = html.slice(html.indexOf('<body'));
     const at = order.map((t) => body.indexOf(t));

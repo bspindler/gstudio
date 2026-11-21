@@ -300,10 +300,21 @@ async function applyHeld(d: RunDeps, c: Pick<Common, 'store' | 'raw' | 'R'>, h: 
     return { ok: true, message: `shipped ${h.pass} onto ${HAL_MAIN} (${r.commit.slice(0, 12)})` };
   }
   if (r.conflict) {
+    // What the rebuild needs: the game (an approved rebuild must be for the same game), the title, the original change.
+    const heldCommit = (await c.raw(['rev-parse', '--verify', '--quiet', `refs/hal/held/${h.pass}^{commit}`], d.repo).catch(() => '')).trim();
+    const message = heldCommit ? await c.raw(['log', '-1', '--format=%B', heldCommit], d.repo).catch(() => '') : '';
+    const game = parseTrailers(message)?.game;
+    const title = /^\w+\([^)]*\):\s*(.+)$/.exec(message.split('\n')[0] ?? '')?.[1]?.trim();
     await dropHeld(d.repo, h.pass, { git: c.raw });
-    await c.store.recordHeld({ pass: h.pass, run: h.run, decision: 'ship', status: 'done', error: r.error });
-    await c.store.addVote({ run: h.run, item: h.pass, vote: 'up', comment: c.R.str(`Brian wants ${h.pass} shipped, but it no longer applies to main (the game changed since it was built): rebuild it on the current game.`) });
-    return { ok: false, message: `${r.error}; dropped it, and the planner is asked to rebuild it` };
+    await c.store.recordHeld({
+      pass: h.pass, run: h.run, decision: 'ship', status: 'done', error: r.error,
+      ...(game ? { game } : {}), ...(title ? { title: c.R.str(title) } : {}), ...(heldCommit ? { heldCommit } : {}),
+    });
+    await c.store.addVote({
+      run: h.run, item: h.pass, vote: 'up',
+      comment: c.R.str(`Brian wants ${h.pass} shipped, but it no longer applies to main (the game changed since it was built): rebuild it on the current game as a feature ticket with "rebuildOf": "${h.pass}". Brian already approved it, so the rebuild ships when it passes every check.`),
+    });
+    return { ok: false, message: `${r.error}; dropped it, and the planner is asked to rebuild it (already approved)` };
   }
   await c.store.recordHeld({ pass: h.pass, run: h.run, decision: 'ship', status: 'failed', error: c.R.str(r.error) });
   void runId;
@@ -348,6 +359,52 @@ export async function heldCommand(decision: 'ship' | 'drop', pass: string, o: { 
     return r.ok ? 0 : 1;
   } catch (e) {
     c.log(`${decision} ${pass} failed: ${errMsg(e)}`);
+    return 1;
+  } finally {
+    unguard();
+    lock.release();
+  }
+}
+
+/**
+ * `hal ship --pending`: every decision on a held feature saved but not applied yet (the report's Ship all, or taps made
+ * while Hal was busy), in the order Brian made them, under one lock; then one ci:local and one push. Busy: the next run
+ * applies them. 1 when any of them did not ship (it says why; a feature that no longer applies is rebuilt, approved).
+ */
+export async function shipPendingCommand(o: { push: boolean }, d: RunDeps): Promise<number> {
+  const c = common(d);
+  const startedAt = d.now();
+  const runId = `ship-${stamp(startedAt)}`;
+  const lock = acquireLock(d.halDir, { pid: d.pid ?? process.pid, runId, startedAt: startedAt.toISOString(), phase: 'ship pending', trigger: 'manual' }, d.isAlive, d.startTimeOf);
+  if ('busy' in lock) {
+    c.log(`busy: run ${lock.busy.runId} is running; the decisions are saved and the next run applies them`);
+    return 2;
+  }
+  const unguard = guard(d.proc ?? process, lock, c.log);
+  try {
+    const pending = await c.store.pendingHeld();
+    if (!pending.length) { c.log('nothing pending'); return 0; }
+    await assertNoRepoFilters(d.repo, existsSync(mainWorktreeDir(d.repo)) ? mainWorktreeDir(d.repo) : d.repo, c.git);
+    const main = await ensureMainWorktree(d.repo, { git: c.raw });
+    let shipped = 0, failed = 0;
+    for (const h of pending) {
+      const r = await applyHeld(d, c, h, runId);
+      c.log(r.message);
+      if (!r.ok) failed++;
+      else if (h.decision === 'ship') shipped++;
+    }
+    if (shipped) {
+      if (!o.push) c.log('not pushed (--no-push)');
+      else if (main.diverged) c.log(`not pushed: ${HAL_MAIN} and origin/main have diverged; the next run replays and pushes it`);
+      else {
+        const p = await pushStep(d, c, runId, { triage: false });
+        for (const w of p.warnings) c.log(`warning: ${w}`);
+        c.log(p.pushed ? 'pushed to origin main' : `not pushed: ${p.reason}`);
+      }
+    }
+    return failed ? 1 : 0;
+  } catch (e) {
+    c.log(`ship --pending failed: ${errMsg(e)}`);
     return 1;
   } finally {
     unguard();
@@ -716,8 +773,16 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
       // New features are built last and held for Brian (refs/hal/held/<pass>), so every fix, tuning and polish of the
       // night is already on refs/hal/main when they are built, and a held feature never sits under a merged change.
       const ordered = [...build.filter((t) => t.kind !== 'feature'), ...build.filter((t) => t.kind === 'feature')];
+      // A rebuild of a feature Brian already said ship (it no longer applied to main) is not held again: it merges when
+      // it passes every check, like a fix. Same game only, and each approval is used by one merged rebuild.
+      const rebuilds = new Map((await store.approvedRebuilds()).map((x) => [x.pass, x]));
       try {
-        for (const [i, t] of ordered.entries()) {
+        for (const [i, planned] of ordered.entries()) {
+          const approved = planned.kind === 'feature' && planned.rebuildOf ? rebuilds.get(planned.rebuildOf) : undefined;
+          const preApproved = !!approved && approved.game === planned.game;
+          const t: Ticket = preApproved && approved!.heldCommit
+            ? { ...planned, why: `${planned.why} (Rebuild of ${planned.rebuildOf}, which Brian approved; its original change: npm run hal -- git show ${approved!.heldCommit})` }
+            : planned;
           const skip = (why: string) => { changes.push({ pass: '', ticket: t, verdict: 'skipped', reasons: [why], scoresBefore: {}, scoresAfter: {}, costUsd: 0 }); };
           if (st.trustRoot) { skip('stopped: trust root modified'); continue; }
           if (existsSync(stopPath)) { skip('stopped'); continue; }
@@ -728,7 +793,7 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
           const ctx: CandidateCtx = {
             repo, pass, run: runId, now: d.now, tzOffsetMinutes: tz, model: d.implementerModel ?? d.model, billing: st.billing, secrets: [...d.secrets],
             budget: { slice: () => budget.slice('implementer'), record: (_r, b, u) => budget.record('implementer', b, u) },
-            claude, mainDir, baseline, ...(d.git ? { git: d.git } : {}), ...(t.kind === 'feature' ? { hold: true } : {}),
+            claude, mainDir, baseline, ...(d.git ? { git: d.git } : {}), ...(t.kind === 'feature' && !preApproved ? { hold: true } : {}),
             ...(d.appendSystemPromptFile ? { appendSystemPromptFile: d.appendSystemPromptFile } : {}), ...(d.candidateCtx ?? {}),
           };
           const r = R.deep(await (d.candidate ?? runCandidate)(t, ctx));
@@ -757,6 +822,10 @@ async function execute(o: RunOptions, d: RunDeps, c: Common, lock: HeldLock, run
             ...(r.verdict === 'discarded' && isHalFault(r.reasons) ? { halFault: true } : {}),
           }, pass);
           await writeJsonAtomic(ledgerPath, R.deep(ledger));
+          if (r.verdict === 'merged' && preApproved && await store.markRebuilt(t.rebuildOf!, pass)) {
+            rebuilds.delete(t.rebuildOf!);
+            log(`${pass} rebuilt ${t.rebuildOf} (approved by Brian): merged without holding`);
+          }
           if (r.verdict === 'merged') {
             const next = await afterMerge(r, baseline);
             baseline = next.baseline;

@@ -10,6 +10,8 @@ export type Ticket = {
   liability?: string;
   /** The id of the note of Brian's this ticket acts on. */
   fromNote?: string;
+  /** A feature only: the held pass Brian said ship that no longer applied to main, which this ticket builds again. */
+  rebuildOf?: string;
 };
 export type Approval = { item: string; at: string; by: 'brian' };
 /** One ticket the planner proposed that was not kept, with why. `index` is 1-based. */
@@ -100,6 +102,7 @@ export function validateTickets(json: unknown, games: string[], measures: Record
     for (const f of ['id', 'game', 'title', 'why']) if (!str(f)) errors.push(`${f} must be a non-empty string`);
     for (const f of ['target', 'liability', 'fromNote']) if (k[f] !== undefined && !str(f)) errors.push(`${f} must be a non-empty string when present`);
     if (typeof k.kind !== 'string' || !KINDS.includes(k.kind)) errors.push(`kind must be one of ${KINDS.join(', ')}`);
+    if (k.rebuildOf !== undefined && (typeof k.rebuildOf !== 'string' || !/^HAL-\d+$/.test(k.rebuildOf) || k.kind !== 'feature')) errors.push('rebuildOf must be a pass id (HAL-0xx) on a feature ticket');
     // A duplicate of a ticket already kept is rejected; the first one stays.
     if (str('id') && ids.has(k.id as string)) errors.push(`duplicate id ${k.id}`);
     if (str('title') && titles.has(norm(k.title as string))) errors.push(`duplicate title "${k.title}"`);

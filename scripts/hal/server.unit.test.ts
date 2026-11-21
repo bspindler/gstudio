@@ -745,6 +745,42 @@ describe('held features (ship it / drop it, and try it first)', () => {
     await post(app, '/undo', form({ run: RUN, pass: 'HAL-010' }));
     expect(spawned).toHaveLength(1); // already decided
   });
+  const seedTwoHeld = async () => {
+    await seedHeld();
+    const p = join(halDir, 'runs', RUN, 'report.json');
+    const r = JSON.parse(await readFile(p, 'utf8'));
+    r.changes.push(change('HAL-011', ticket('T10', 'gearhold', 'feature', 'A second boss'), 'held', { commit: HELD_SHA }));
+    await writeFile(p, JSON.stringify(r));
+  };
+  it('Ship all: every undecided held feature is a 👍 and a pending ship, started as one `hal ship --pending`', async () => {
+    await seedTwoHeld();
+    const app = mk();
+    await post(app, '/undo', form({ run: RUN, pass: 'HAL-011', reason: 'no' })); // already decided: left alone
+    spawned = [];
+    const res = await post(app, '/ship-all', form({ run: RUN }));
+    expect(res.status).toBe(303);
+    expect(spawned.map((s) => s.args)).toEqual([['ship', '--pending']]);
+    const f = JSON.parse(await readFile(join(halDir, 'feedback.json'), 'utf8'));
+    expect(f.held.map((h: Record<string, unknown>) => [h.pass, h.decision, h.status])).toEqual([['HAL-011', 'drop', 'pending'], ['HAL-010', 'ship', 'pending']]);
+    expect(f.votes.filter((v: Record<string, unknown>) => v.vote === 'up').map((v: Record<string, unknown>) => v.item)).toEqual(['HAL-010']); // no Keeps without `keep`
+  });
+  it('Ship all + keep: also a 👍 Keep on every change on the page not kept or undone yet', async () => {
+    await seedTwoHeld();
+    const app = mk();
+    await post(app, '/vote', form({ run: RUN, pass: 'HAL-004' })); // kept already
+    spawned = [];
+    await post(app, '/ship-all', form({ run: RUN, keep: '1' }));
+    const f = JSON.parse(await readFile(join(halDir, 'feedback.json'), 'utf8'));
+    expect(f.votes.map((v: Record<string, unknown>) => v.item)).toEqual(['HAL-004', 'HAL-010', 'HAL-011', 'HAL-003']);
+    expect(spawned.map((s) => s.args)).toEqual([['ship', '--pending']]);
+  });
+  it('Ship all while Hal runs: saved for the next run, nothing spawned', async () => {
+    await seedTwoHeld();
+    await lock();
+    await post(mk(), '/ship-all', form({ run: RUN }));
+    expect(spawned).toEqual([]);
+    expect(JSON.parse(await readFile(join(halDir, 'feedback.json'), 'utf8')).held).toHaveLength(2);
+  });
   it('while Hal runs, the decision is queued for the next run instead of spawned', async () => {
     await seedHeld();
     await lock();

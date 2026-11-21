@@ -380,7 +380,7 @@ export async function runCandidate(ticket: Ticket, ctx: CandidateCtx): Promise<C
 
     // 2. Implementer. The ticket is data: rendered into the template, never anything from the env.
     const ticketData: Record<string, string> = { id: ticket.id, game, kind: ticket.kind, title: ticket.title, why: ticket.why };
-    for (const k of ['target', 'liability', 'fromNote'] as const) if (ticket[k] !== undefined) ticketData[k] = ticket[k]!;
+    for (const k of ['target', 'liability', 'fromNote', 'rebuildOf'] as const) if (ticket[k] !== undefined) ticketData[k] = ticket[k]!;
     const prompt = renderPrompt(loadPrompt('implementer'), { game, scorers: scorersFor(game).map((x) => `\`${x}\``).join(', '), ticket: JSON.stringify(ticketData, null, 2) });
     // The score broker (scripts/hal/score-broker.ts): the implementer's `npm run hal -- score` asks Hal, which scores a
     // snapshot of the worktree as it is at that moment, with the same isolated check the gate runs in step 6. The

@@ -17,7 +17,7 @@ import { runClaude, type ClaudeDeps } from './claude.js';
 import type { ControlCheck } from './controls.js';
 import { loadHalEnv } from './env.js';
 import { runSeries, seriesStopReason, takeTimes } from './series.js';
-import { runNight, STOP_FILE, heldCommand, undoCommand, type CiLocal, type PlayPort, type RunDeps, type RunOptions } from './run.js';
+import { runNight, STOP_FILE, heldCommand, shipPendingCommand, undoCommand, type CiLocal, type PlayPort, type RunDeps, type RunOptions } from './run.js';
 import { entryCheck } from './run-util.js';
 import type { ScreensResult } from './screens.js';
 
@@ -102,9 +102,13 @@ export async function runRunCommand(c: RunCommand, rest: string[], d: RunCmdDeps
     return runSeries(times, (series) => runNight(series ? { ...o, series } : o, deps()), () => seriesStopReason(d.halDir, STOP_FILE), (s) => console.log(s));
   }
   if (c === 'ship' || c === 'drop') {
-    const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { 'no-push': { type: 'boolean' } } });
+    const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { 'no-push': { type: 'boolean' }, pending: { type: 'boolean' } } });
+    if (c === 'ship' && values.pending) {
+      if (positionals.length) throw new Error('usage: hal ship --pending [--no-push]');
+      return shipPendingCommand({ push: values['no-push'] !== true }, (d.makeDeps ?? (() => realRunDeps(repo, d.halDir)))());
+    }
     const pass = positionals[0];
-    if (!pass || positionals.length > 1 || !/^HAL-\d+$/.test(pass)) throw new Error(`usage: hal ${c} HAL-0xx${c === 'ship' ? ' [--no-push]' : ''}`);
+    if (!pass || positionals.length > 1 || !/^HAL-\d+$/.test(pass)) throw new Error(`usage: hal ${c} HAL-0xx${c === 'ship' ? ' [--no-push]  (or: hal ship --pending)' : ''}`);
     return heldCommand(c, pass, { push: values['no-push'] !== true }, (d.makeDeps ?? (() => realRunDeps(repo, d.halDir)))());
   }
   const { values, positionals } = parseArgs({ args: rest, allowPositionals: true, options: { reason: { type: 'string' }, 'no-push': { type: 'boolean' } } });

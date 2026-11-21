@@ -143,3 +143,11 @@ describe('splitLiability', () => {
     expect(splitLiability([lib], [{ item: 'something else', at: 'x', by: 'brian' }]).calls).toEqual([lib]);
   });
 });
+
+describe('rebuildOf: a feature Brian approved that no longer applied', () => {
+  it('is a pass id on a feature ticket', () => {
+    expect(why([t({ kind: 'feature', rebuildOf: 'HAL-276' })])).toEqual([]);
+    expect(why([t({ kind: 'feature', rebuildOf: 'level 4' })])).toEqual([expect.stringContaining('rebuildOf')]);
+    expect(why([t({ kind: 'tuning', rebuildOf: 'HAL-276' })])).toEqual([expect.stringContaining('rebuildOf')]);
+  });
+});

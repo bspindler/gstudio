@@ -5,7 +5,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, realpath, rm, symli
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
-import { parseTrailers, type Diff, type FileChange } from '@studio/core/hal';
+import { bumpKind, parseTrailers, reRelease, stripRelease, yamlVersion, type Diff, type FileChange, type ReleaseFiles } from '@studio/core/hal';
 
 const exec = promisify(execFile);
 
@@ -536,7 +536,8 @@ export async function listHeld(repo: string, deps: GitDeps = {}): Promise<Held[]
     .filter((h) => /^HAL-\d+$/.test(h.pass)).sort((a, b) => Number(a.pass.slice(4)) - Number(b.pass.slice(4)));
 }
 
-export type AdoptResult = { ok: true; commit: string; held: string } | { ok: false; error: string; conflict?: boolean };
+/** `version`: the game version it shipped as, when Hal re-versioned it on top of main (see adoptHeld). */
+export type AdoptResult = { ok: true; commit: string; held: string; version?: string } | { ok: false; error: string; conflict?: boolean };
 /**
  * Ships a held feature: replays its commit onto refs/hal/main (merge-tree against its own base, then commit-tree with
  * its message and author), moves refs/hal/main by CAS and deletes the held ref. A conflict (main changed the same
@@ -552,20 +553,73 @@ export async function adoptHeld(repo: string, passId: string, deps: GitDeps = {}
   try {
     const head = await rev(git, HAL_MAIN, root);
     const base = (await git(['rev-parse', `${held}^`], root)).trim();
-    let tree: string;
-    try { tree = (await git(['merge-tree', '--write-tree', '--no-messages', '--merge-base', base, head, held], root)).trim().split('\n')[0]!; }
-    catch { return { ok: false, conflict: true, error: `${passId} no longer applies cleanly: ${HAL_MAIN} changed the same lines since it was built` }; }
+    let message = await git(['log', '-1', '--format=%B', held], root);
+    const merge = async (theirs: string) => {
+      try { return (await git(['merge-tree', '--write-tree', '--no-messages', '--merge-base', base, head, theirs], root)).trim().split('\n')[0]!; }
+      catch { return null; }
+    };
+    const conflict = { ok: false as const, conflict: true, error: `${passId} no longer applies cleanly: ${HAL_MAIN} changed the same lines since it was built` };
+    let tree = await merge(held);
+    let version: string | undefined;
+    if (!tree) {
+      // Main released the game since (a version line and a CHANGELOG heading of its own): undo the feature's release
+      // edits, merge the rest, and release it again as the next version on top of main. Any other clash is real.
+      const re = await rereleased(git, root, { base, head, held, message });
+      if (!re) return conflict;
+      ({ tree, version, message } = re);
+    }
     const [name, email, date] = (await git(['log', '-1', '--format=%an%x00%ae%x00%aI', held], root)).trim().split('\0');
-    const message = await git(['log', '-1', '--format=%B', held], root);
     const commit = (await git(['commit-tree', '--no-gpg-sign', tree, '-p', head, '-F', '-'], root, {
       input: message.endsWith('\n') ? message : `${message}\n`, env: { GIT_AUTHOR_NAME: name!, GIT_AUTHOR_EMAIL: email!, GIT_AUTHOR_DATE: date! },
     })).trim();
     await git(['update-ref', '-m', `hal: ship held ${passId}`, HAL_MAIN, commit, head], root);
     await git(['update-ref', '-d', ref, held], root);
-    return { ok: true, commit, held };
+    return { ok: true, commit, held, ...(version ? { version } : {}) };
   } catch (e) {
     return { ok: false, error: errText(e) };
   }
+}
+
+const releasePaths = (game: string) => ({ yaml: `games/${game}/game.yaml`, html: `games/${game}/index.html`, changelog: `games/${game}/CHANGELOG.md` });
+/**
+ * adoptHeld's second try: the held commit with its release edits undone (release.ts stripRelease) merged onto `head`,
+ * then released again at the next version after head's (the feature's own CHANGELOG section, Hal-Version updated).
+ * null when the commit is not a Hal release, its edits can't be undone exactly, or the rest still clashes.
+ */
+async function rereleased(git: GitRunner, root: string, c: { base: string; head: string; held: string; message: string }): Promise<{ tree: string; version: string; message: string } | null> {
+  const t = parseTrailers(c.message);
+  if (!t || t.undo || !/^[a-z0-9-]+$/.test(t.game)) return null;
+  const paths = releasePaths(t.game);
+  const read = async (rev: string): Promise<ReleaseFiles | null> => {
+    try {
+      return { yaml: await blobText(root, rev, paths.yaml, { git }), html: await blobText(root, rev, paths.html, { git }), changelog: await blobText(root, rev, paths.changelog, { git }) };
+    } catch { return null; }
+  };
+  const [heldFiles, baseFiles] = await Promise.all([read(c.held), read(c.base)]);
+  if (!heldFiles || !baseFiles) return null;
+  const stripped = stripRelease(heldFiles, baseFiles, t.game);
+  if (!stripped) return null;
+  const withFiles = async (tree: string, f: ReleaseFiles) => {
+    const entries = new Map<string, TreeEntry>();
+    for (const k of ['yaml', 'html', 'changelog'] as const) {
+      entries.set(paths[k], { mode: '100644', sha: (await git(['hash-object', '-w', '--no-filters', '--stdin'], root, { input: f[k] })).trim() });
+    }
+    return writeTree(git, root, entries, tree, undefined);
+  };
+  const strippedTree = await withFiles(`${c.held}^{tree}`, stripped.files);
+  const strippedCommit = (await git(['commit-tree', '--no-gpg-sign', strippedTree, '-p', c.base, '-m', 'stripped'], root)).trim();
+  let merged: string;
+  try { merged = (await git(['merge-tree', '--write-tree', '--no-messages', '--merge-base', c.base, c.head, strippedCommit], root)).trim().split('\n')[0]!; }
+  catch { return null; }
+  const now = await read(merged);
+  const current = now && yamlVersion(now.yaml);
+  if (!now || !current) return null;
+  const [a, b, p] = current.split('.').map(Number) as [number, number, number];
+  const version = bumpKind(t.kind) === 'minor' ? `${a}.${b + 1}.0` : `${a}.${b}.${p + 1}`;
+  let files: ReleaseFiles;
+  try { files = reRelease(now, { slug: t.game, version, section: stripped.section }); } catch { return null; }
+  const message = c.message.replace(/^Hal-Version:[ \t]*\S+[ \t]*$/m, `Hal-Version: ${version}`);
+  return { tree: await withFiles(merged, files), version, message };
 }
 
 /** Drops a held feature (its commit object stays for the report). False if it was not held. */

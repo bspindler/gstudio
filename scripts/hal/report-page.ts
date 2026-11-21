@@ -212,7 +212,7 @@ function changeCard(v: ReportView, c: CandidateResult): string {
 <form method="post" action="/undo" class="stack">${hidden('run', run)}${hidden('pass', c.pass)}<input type="text" name="reason" maxlength="500" placeholder="Why? (optional)" aria-label="Reason to undo ${esc(t.title)}"><button type="submit" class="warn">👎 Undo</button></form>
 </div>`;
   return `<article class="card change">
-<div class="label">${esc(cap(t.kind))} · ${esc(gameName(t.game))}${c.version ? ` ${esc(c.version)}` : ''} · ${esc(c.pass)}</div>
+<div class="label">${esc(cap(t.kind))} · ${esc(gameName(t.game))}${c.version ? ` ${esc(c.version)}` : ''} · ${esc(c.pass)}${t.rebuildOf ? ` · rebuild of ${esc(t.rebuildOf)}, which you approved` : ''}</div>
 <h3>${esc(t.title)}</h3>
 ${lead ? `<p class="lead">${esc(clip(lead, 700))}</p>` : ''}
 ${more ? `<details class="how"><summary class="small">How Hal did it</summary><p class="small muted">${esc(clip(more, 1500))}</p></details>` : ''}
@@ -230,7 +230,10 @@ function heldState(pass: string, fb: ReportView['feedback']): State | null {
   if (h.status === 'pending') return { text: h.decision === 'ship' ? 'Shipping…' : 'Dropping…', tone: 'accent' };
   if (h.status === 'failed') return { text: `Not shipped yet: ${clip(h.error ?? 'unknown error', 200)} (retried next run)`, tone: 'warn' };
   if (h.decision === 'drop') return { text: 'Dropped', tone: 'accent' };
-  return h.error ? { text: 'It no longer applied to the game, so Hal will rebuild it', tone: 'warn' } : { text: h.version ? `Shipped in v${h.version}` : 'Shipped', tone: 'good' };
+  if (h.error) return h.rebuiltAs
+    ? { text: `It no longer applied to the game, so Hal rebuilt it as ${h.rebuiltAs} and shipped it`, tone: 'good' }
+    : { text: 'It no longer applied to the game, so Hal rebuilds it and ships it (you approved it already)', tone: 'warn' };
+  return { text: h.version ? `Shipped in v${h.version}` : 'Shipped', tone: 'good' };
 }
 
 /**
@@ -276,6 +279,29 @@ ${withState(heldState(c.pass, v.feedback), forms)}
 function changes(v: ReportView, cards: CandidateResult[]): string {
   if (!cards.length) return '';
   return `<section><h2>Changes</h2><div class="changes-grid">${cards.map((c) => changeCard(v, c)).join('\n')}</div></section>`;
+}
+
+/**
+ * Ship all, in one tap: every held feature still waiting with no decision (Needs you), and optionally every change
+ * card not kept or undone yet (Changes) gets its 👍 too. Hidden when there is neither.
+ */
+function shipAll(v: ReportView, cards: CandidateResult[]): string {
+  const decided = new Set((v.feedback.held ?? []).map((h) => h.pass));
+  const ship = waitingList(v).filter((w) => !decided.has(w.change.pass)).length;
+  const keep = cards.filter((c) => changeState(c.pass, v.feedback) === null).length;
+  if (!ship && !keep) return '';
+  const run = v.report.runId;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const btn = (label: string, cls: string, keepToo: boolean) =>
+    `<form method="post" action="/ship-all">${hidden('run', run)}${keepToo ? hidden('keep', '1') : ''}<button type="submit" class="${cls}">${esc(label)}</button></form>`;
+  const buttons = [
+    ship ? btn(`👍 Ship all ${plural(ship, 'feature')}`, 'good', false) : '',
+    keep ? btn(ship ? `👍 Ship ${ship} + keep ${plural(keep, 'change')}` : `👍 Keep all ${plural(keep, 'change')}`, ship ? 'tonal' : 'good', true) : '',
+  ].filter(Boolean).join('');
+  const hint = ship
+    ? 'Ships every feature waiting below in one go: one ci:local, one push. One that no longer applies to the game is rebuilt and ships without asking you again.'
+    : 'A 👍 Keep on every change below you have not kept or undone.';
+  return `<section class="ship-all"><h2>Ship all</h2><div class="card stack"><div class="ship-all-row">${buttons}</div><p class="small muted">${esc(hint)}</p></div></section>`;
 }
 
 /** Brian tapped "Leave it" on this call in this run: the newest vote on the item is down. */
@@ -641,6 +667,9 @@ button.text{border-color:transparent;background:none;color:var(--accent);padding
 .tell .hint{margin:8px 2px 0}
 .warnings{background:var(--warn-soft);border-color:transparent}
 .warnings .rows>li{border-color:color-mix(in srgb,var(--warn) 25%,transparent)}
+.ship-all-row{display:flex;flex-wrap:wrap;gap:8px}
+.ship-all-row form{flex:1 1 200px}
+.ship-all-row button{width:100%}
 .runs>li{padding:0;border-top:1px solid var(--line)}
 .run-link{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px;text-decoration:none}
 `;
@@ -653,7 +682,7 @@ export function renderReport(v: ReportView): string {
   const fixed = merged.filter((c) => c.ticket.kind === 'fix');
   const gone = r.changes.filter((c) => c.verdict !== 'merged' && c.verdict !== 'held');
   const plan = r.planned ?? [];
-  const main = [needsYou(v), director(v), play(v), changes(v, cards), standings(v), lessons(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
+  const main = [director(v), shipAll(v, cards), needsYou(v), changes(v, cards), play(v), standings(v), lessons(v), fixes(v, fixed), dropped(gone), planned(plan, merged.length === 0), warnings(r)].join('\n');
   const side = `${runHal(v, r.runId)}\n<div class="side-rest">${tell(v)}\n${recent(v, r.runId)}</div>`;
   return shell(`Hal · ${r.night}`, header(v, merged.length, gone.length, needCount(v)), main, side, v.flash);
 }

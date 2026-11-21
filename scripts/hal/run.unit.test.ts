@@ -12,9 +12,10 @@ import { secretReadPaths } from './env.js';
 import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
-import { acquireLock, CI_UNDO_REASON, defaultStartTime, heldCommand, lockLive, runAlert, runNight, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
+import { acquireLock, CI_UNDO_REASON, defaultStartTime, heldCommand, lockLive, runAlert, runNight, shipPendingCommand, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
 import { parseRunArgs, realRunDeps, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
+import { createStore } from './store.js';
 import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
 
 const KEY = 'sk-ant-test-FAKE0123456789';
@@ -416,6 +417,40 @@ describe('new features wait for Brian', () => {
     expect(ci).toHaveBeenCalledWith(halHead());
     expect(feedback().held).toEqual([expect.objectContaining({ pass, decision: 'ship', status: 'done', commit: halHead() })]);
     expect(await heldCommand('drop', pass, { push: true }, deps())).toBe(0); // already shipped: nothing held, recorded
+  }, 120_000);
+  it('a rebuild of a feature Brian said ship (it no longer applied) merges and ships; the approval is used once', async () => {
+    const approved = { pass: 'HAL-050', run: 'r0', decision: 'ship', status: 'done', at: '2026-11-21T00:00:00Z', error: 'no longer applies', game: 'hyperline', title: 'Brighter trail', heldCommit: 'abc123' };
+    mkdirSync(halDir, { recursive: true });
+    writeFileSync(join(halDir, 'feedback.json'), J({ votes: [], undos: [], held: [approved] }));
+    const rebuild = { ...FEATURE, rebuildOf: 'HAL-050' };
+    calls.length = 0;
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [rebuild] }) }));
+    const r = readReport();
+    expect(r.changes.map((c) => c.verdict)).toEqual(['merged']);
+    expect(heldRefs()).toEqual([]);
+    expect(showOrigin('games/hyperline/game.js')).toContain('trail');
+    expect(calls.find((c) => c.role === 'implementer')!.prompt).toContain('npm run hal -- git show abc123');
+    expect(feedback().held![0]).toMatchObject({ pass: 'HAL-050', rebuiltAs: r.changes[0]!.pass });
+    expect(await createStore({ halDir }).approvedRebuilds()).toEqual([]); // used
+  }, 180_000);
+  it('a rebuildOf that names no approval, or another game\'s, is held like any feature', async () => {
+    mkdirSync(halDir, { recursive: true });
+    writeFileSync(join(halDir, 'feedback.json'), J({ votes: [], undos: [], held: [{ pass: 'HAL-050', run: 'r0', decision: 'ship', status: 'done', at: 'x', error: 'e', game: 'gearhold' }] }));
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [{ ...FEATURE, rebuildOf: 'HAL-050' }] }) }));
+    expect(readReport().changes.map((c) => c.verdict)).toEqual(['held']);
+  }, 120_000);
+  it('hal ship --pending applies every saved decision under one lock, then runs ci:local and pushes once', async () => {
+    await runNight(opts(), deps({ claude: fakeClaude({ tickets: [FEATURE] }) }));
+    const pass = readReport().changes[0]!.pass;
+    const st = createStore({ halDir });
+    await st.recordHeld({ pass, run: 'r', decision: 'ship', status: 'pending' });
+    const ci = vi.fn(async () => ({ ok: true, detail: 'passed' }));
+    expect(await shipPendingCommand({ push: true }, deps({ ciLocal: ci }))).toBe(0);
+    expect(heldRefs()).toEqual([]);
+    expect(showOrigin('games/hyperline/game.js')).toContain('trail');
+    expect(ci).toHaveBeenCalledTimes(1);
+    expect(await shipPendingCommand({ push: true }, deps({ ciLocal: ci }))).toBe(0); // nothing pending: nothing to do
+    expect(ci).toHaveBeenCalledTimes(1);
   }, 120_000);
   it('a decision made while Hal is busy is saved, and the next run applies it before building', async () => {
     await runNight(opts(), deps({ claude: fakeClaude({ tickets: [FEATURE] }) }));

@@ -156,6 +156,53 @@ function apply(files: ReleaseFiles, r: ReleaseInput, forceNewHeading: boolean): 
   return { yaml, html, changelog };
 }
 
+/** A release's CHANGELOG section: its heading's date and the lines under it. */
+export type ReleaseSection = { date: string; body: string };
+const yamlVersionRe = /^version:[ \t]*(\S+)[ \t]*$/m;
+const htmlVersionRe = (slug: string) => new RegExp(`(createStudio\\(\\{[^}]*game: '${escapeRe(slug)}', version: ')[^']+(')`);
+/** The version in a game.yaml, or null. */
+export const yamlVersion = (yaml: string): string | null => yamlVersionRe.exec(yaml)?.[1] ?? null;
+/** game.yaml and index.html set to `version` (the CHANGELOG untouched); throws if either lacks the expected shape. */
+function setVersion(files: ReleaseFiles, slug: string, version: string): ReleaseFiles {
+  if (!yamlVersionRe.test(files.yaml)) throw new Error('release: game.yaml has no version: line');
+  const re = htmlVersionRe(slug);
+  if (!re.test(files.html)) throw new Error(`release: index.html has no createStudio({ game: '${slug}', version: '...' })`);
+  return { ...files, yaml: files.yaml.replace(yamlVersionRe, () => `version: ${version}`), html: files.html.replace(re, (_m, a: string, b: string) => `${a}${version}${b}`) };
+}
+
+/**
+ * A held feature's own release edits undone against the main it was built on (`base`): game.yaml and index.html back
+ * at base's version (every other edit kept) and its new CHANGELOG section cut out and returned. null unless the
+ * CHANGELOG is exactly one new section on top of base's (a shared heading, or any other CHANGELOG edit, is not undone).
+ */
+export function stripRelease(held: ReleaseFiles, base: ReleaseFiles, slug: string): { files: ReleaseFiles; section: ReleaseSection } | null {
+  const baseVersion = yamlVersion(base.yaml);
+  const top = HEADING.exec(held.changelog);
+  const baseTop = HEADING.exec(base.changelog);
+  if (!baseVersion || !top || !baseTop || top[1] === baseTop[1]) return null;
+  const after = top.index + top[0].length;
+  const next = held.changelog.slice(after).search(/^## /m);
+  const end = next === -1 ? held.changelog.length : after + next;
+  if (held.changelog.slice(0, top.index) + held.changelog.slice(end) !== base.changelog) return null;
+  const body = held.changelog.slice(after, end).trim();
+  if (!body) return null;
+  try {
+    return { files: { ...setVersion(held, slug, baseVersion), changelog: base.changelog }, section: { date: top[2]!, body } };
+  } catch { return null; }
+}
+
+/** A stripped section released again on top of `files` at `version` (newer than its top heading), dated no earlier than that heading. */
+export function reRelease(files: ReleaseFiles, r: { slug: string; version: string; section: ReleaseSection }): ReleaseFiles {
+  const top = HEADING.exec(files.changelog);
+  if (!top) throw new Error('release: CHANGELOG.md has no "## x.y.z (date)" heading');
+  const [ca, cb, cc] = parseSemver(top[1]!);
+  const [na, nb, nc] = parseSemver(r.version);
+  if (na * 1e12 + nb * 1e6 + nc <= ca * 1e12 + cb * 1e6 + cc) throw new Error(`release: version ${r.version} is not newer than ${top[1]}`);
+  const date = r.section.date > top[2]! ? r.section.date : top[2]!;
+  const changelog = `${files.changelog.slice(0, top.index)}## ${r.version} (${date})\n${r.section.body.trim()}\n\n${files.changelog.slice(top.index)}`;
+  return { ...setVersion(files, r.slug, r.version), changelog };
+}
+
 export interface UndoInput {
   slug: string;
   /** Version in game.yaml now. */

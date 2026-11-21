@@ -411,6 +411,45 @@ export function createServerApp(d: ServerDeps) {
     });
   });
 
+  /**
+   * Ship all: a 👍 and a pending ship for every held feature still waiting with no decision, from any run; with `keep`,
+   * also a 👍 Keep for every change card on this page not kept or undone yet. Then one `hal ship --pending` (one
+   * ci:local, one push), or the next run when Hal is busy.
+   */
+  app.post('/ship-all', async (c) => {
+    const b = await form(c);
+    if (!b) return bad(c);
+    return serial(async () => {
+      const r = await loadRun(b.run);
+      if (!r) return bad(c);
+      const all = await store.readFeedback();
+      const decided = new Set((all.held ?? []).map((h) => h.pass));
+      const ship = (await waitingOf(r)).filter((w) => !decided.has(w.change.pass));
+      for (const w of ship) {
+        await store.addVote({ run: w.run, item: w.change.pass, game: w.change.ticket.game, vote: 'up' });
+        await store.recordHeld({ pass: w.change.pass, run: w.run, decision: 'ship', status: 'pending' });
+      }
+      let kept = 0;
+      if (b.keep === '1') {
+        const own = (await store.feedbackFor(r.runId)).votes;
+        for (const ch of r.changes.filter((x) => x.verdict === 'merged' && x.ticket.kind !== 'fix')) {
+          if (all.undos.some((u) => u.pass === ch.pass) || own.filter((v) => v.item === ch.pass).at(-1)?.vote === 'up') continue;
+          await store.addVote({ run: r.runId, item: ch.pass, game: ch.ticket.game, vote: 'up' });
+          kept++;
+        }
+      }
+      const keptText = kept ? `, kept ${kept} change${kept === 1 ? '' : 's'}` : '';
+      if (!ship.length) return back(c, r.runId, kept ? `Kept ${kept} change${kept === 1 ? '' : 's'}` : 'Nothing waiting to ship');
+      const n = `${ship.length} feature${ship.length === 1 ? '' : 's'}`;
+      if (running()) return back(c, r.runId, `Ship all queued (${n}${keptText}): Hal is busy, so the next run applies it`);
+      try {
+        if (!spawnRun) throw new Error('no spawn');
+        spawnRun({ args: ['ship', '--pending'], logPath: join(d.halDir, 'logs', `ship-${stamp(now())}.log`) });
+      } catch { return back(c, r.runId, `Ship all queued (${n}${keptText}): the next run applies it`); }
+      return back(c, r.runId, `Shipping ${n}${keptText}: Hal puts them on main, runs ci:local once and pushes`);
+    });
+  });
+
   const callItem = (r: RunReport, item: unknown) => (typeof item === 'string' && item ? r.calls.find((t) => t.liability === item) ?? null : null);
   app.post('/approve', async (c) => {
     const b = await form(c);

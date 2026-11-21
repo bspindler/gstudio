@@ -53,6 +53,7 @@ npm run hal -- tell "more juice on Hyperline coins" --game hyperline   # a note 
 npm run hal -- notes               # your notes, with Hal's status and reply
 npm run hal -- notes --clear N-003 # only this removes a note; until then Hal keeps seeing it
 npm run hal -- approve "<item exactly as the report names it>"   # say yes to a liability item
+npm run hal -- ship --pending      # apply every saved Ship/Drop (the report's Ship all), then one ci:local and one push
 npm run hal -- spend               # API spend today and the last 7 days
 npm run hal -- serve               # the morning report on this Mac (--lan for your phone)
 ```
@@ -135,6 +136,18 @@ but stays off `main`, under "Waiting for your OK" at the top of the report. **�
 feature built it, in a new tab. **👍 Ship it** puts it on `main`, runs ci:local and pushes. **👎 Drop it** throws it
 away (the planner reads your reason). The same from the terminal: `npm run hal -- ship HAL-0xx` or
 `npm run hal -- drop HAL-0xx`. If Hal is busy, your decision is saved and the next run applies it.
+
+**Ship all.** The report opens with the Director's note, then Ship all, Needs you and Changes. **👍 Ship all N
+features** ships every feature still waiting (from any report) in one go: one `ci:local`, one push. **👍 Ship N + keep M
+changes** does that and also records a 👍 Keep on every change card you haven't kept or undone. With nothing waiting,
+the button is **👍 Keep all M changes**. If Hal is busy, the decisions are saved and the next run applies them.
+
+**When a feature no longer applies.** A held feature is built on the main of its night. By the time you ship it, other
+changes may have landed. If the only clash is the game's version and changelog (main released the game since), Hal
+re-versions the feature on top of main: its CHANGELOG section moves to the top as the next version. Any other clash
+drops it, and the planner rebuilds it on the current game as a ticket with `rebuildOf`. Because you already said ship,
+that rebuild merges and pushes when it passes every check, like a fix; it does not come back to Needs you. Each
+approval covers one rebuild, for the same game; a "Hal asks" change is always held.
 
 **Hal asks to change its judge.** Sometimes a build needs one of Hal's own judge files changed: a protected test or
 scorer that hard-codes a level count, or a `// ---- hal hook` block that lists the tap targets a new tappable thing

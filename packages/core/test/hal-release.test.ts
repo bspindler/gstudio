@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { applyRelease, bumpKind, formatTrailers, halReleasedTonight, nightOf, parseTrailers, planVersion, bumpedTonight, runIdDate, undoEntry, type HalTrailers, type ReleaseFiles } from '../src/hal/release.js';
+import { applyRelease, bumpKind, formatTrailers, halReleasedTonight, nightOf, parseTrailers, planVersion, bumpedTonight, reRelease, runIdDate, stripRelease, undoEntry, type HalTrailers, type ReleaseFiles } from '../src/hal/release.js';
 
 const gamesDir = fileURLToPath(new URL('../../../games/', import.meta.url));
 const slugs = readdirSync(gamesDir).filter((d) => existsSync(join(gamesDir, d, 'game.yaml')));
@@ -238,5 +238,41 @@ describe('nightOf', () => {
     expect(nightOf(new Date('2026-11-11T12:00:00Z'), cst)).toBe('2026-11-11'); // 06:00
     expect(nightOf(new Date('2026-11-12T05:00:00Z'), cst)).toBe('2026-11-11'); // 23:00
     expect(nightOf(new Date('2026-11-11T02:00:00Z'), 0)).toBe('2026-11-10');
+  });
+});
+
+describe.each(slugs)('stripRelease / reRelease on %s (shipping a held feature onto a newer main)', (slug) => {
+  const base = load(slug);
+  const cur = ver(base);
+  // The held feature's release edits, made on `base`; meanwhile main released a fix of its own.
+  const featV = planVersion({ current: cur, kind: 'feature', alreadyBumpedTonight: null });
+  const held = applyRelease(base, { slug, version: featV, night: '2026-11-20', entry: { kind: 'feature', text: 'A new level.' } });
+  const fixV = planVersion({ current: cur, kind: 'fix', alreadyBumpedTonight: null });
+  const main = applyRelease(base, { slug, version: fixV, night: '2026-11-21', entry: { kind: 'fix', text: 'A fix.' } });
+
+  it('stripRelease undoes exactly the release edits and keeps the section', () => {
+    const s = stripRelease(held, base, slug)!;
+    expect(s.files).toEqual(base);
+    expect(s.section).toEqual({ date: '2026-11-20', body: '- A new level.' });
+  });
+  it('reRelease puts the section on top of main with the next version, never an older date', () => {
+    const s = stripRelease(held, base, slug)!;
+    const v = planVersion({ current: fixV, kind: 'feature', alreadyBumpedTonight: null });
+    const out = reRelease(main, { slug, version: v, section: s.section });
+    check(slug, out);
+    expect(out.changelog).toContain(`## ${v} (2026-11-21)\n- A new level.\n\n## ${fixV} (2026-11-21)\n- A fix.\n\n## ${cur}`);
+  });
+  it('keeps the feature\'s own edits elsewhere in game.yaml and index.html', () => {
+    const edited = { ...held, yaml: `${held.yaml}\n# extra\n`, html: `${held.html}<!-- x -->\n` };
+    const s = stripRelease(edited, base, slug)!;
+    expect(s.files.yaml).toBe(`${base.yaml}\n# extra\n`);
+    expect(s.files.html).toContain('<!-- x -->');
+    expect(ver(s.files)).toBe(cur);
+  });
+  it('null when the changelog is not one new section on top (a shared heading, or other edits)', () => {
+    const shared = applyRelease(main, { slug, version: fixV, night: '2026-11-21', entry: { kind: 'fix', text: 'Two.' }, shareTonight: true });
+    expect(stripRelease(shared, main, slug)).toBeNull();
+    expect(stripRelease({ ...held, changelog: `${held.changelog}\nmore\n` }, base, slug)).toBeNull();
+    expect(stripRelease(base, base, slug)).toBeNull();
   });
 });

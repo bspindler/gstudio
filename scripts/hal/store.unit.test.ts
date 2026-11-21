@@ -206,3 +206,26 @@ describe('lessons', () => {
     expect(all.some((l) => l.text === 'B')).toBe(false);
   });
 });
+
+describe('held decisions: a ship that no longer applied is an approved rebuild', () => {
+  const s = async () => createStore({ halDir: await mkdtemp(join(tmpdir(), 'hal-store-held-')), now: () => new Date('2026-11-21T23:00:00Z') });
+  it('keeps the error on a done ship (the report says it will be rebuilt), and lists it until a rebuild merges', async () => {
+    const st = await s();
+    await st.recordHeld({ pass: 'HAL-7', run: 'r1', decision: 'ship', status: 'pending' });
+    await st.recordHeld({ pass: 'HAL-7', run: 'r1', decision: 'ship', status: 'done', error: 'no longer applies', game: 'gearhold', title: 'Bellworks' });
+    await st.recordHeld({ pass: 'HAL-8', run: 'r1', decision: 'ship', status: 'done', commit: 'abc' });
+    await st.recordHeld({ pass: 'HAL-9', run: 'r1', decision: 'drop', status: 'done' });
+    expect((await st.readFeedback()).held![0]).toMatchObject({ pass: 'HAL-7', status: 'done', error: 'no longer applies' });
+    expect(await st.approvedRebuilds()).toEqual([{ pass: 'HAL-7', game: 'gearhold', title: 'Bellworks' }]);
+    expect(await st.markRebuilt('HAL-7', 'HAL-30')).toBe(true);
+    expect(await st.markRebuilt('HAL-7', 'HAL-31')).toBe(false); // once
+    expect(await st.approvedRebuilds()).toEqual([]);
+    expect((await st.readFeedback()).held![0]).toMatchObject({ rebuiltAs: 'HAL-30' });
+  });
+  it('a pending or failed ship drops its old error once it succeeds', async () => {
+    const st = await s();
+    await st.recordHeld({ pass: 'HAL-7', run: 'r1', decision: 'ship', status: 'failed', error: 'ci' });
+    await st.recordHeld({ pass: 'HAL-7', run: 'r1', decision: 'ship', status: 'done', commit: 'abc' });
+    expect((await st.readFeedback()).held![0]!.error).toBeUndefined();
+  });
+});
