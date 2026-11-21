@@ -379,7 +379,7 @@ import { createAudio } from './audio.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 // Keep version the same as in game.yaml and CHANGELOG.md. Under the test robot the SDK sends nothing.
-const studio = createStudio({ game: 'lanternkeep', version: '0.7.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'lanternkeep', version: '0.7.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');

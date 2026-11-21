@@ -5,6 +5,7 @@
 import * as THREE from '../sdk/vendor/three.module.js';
 import { COLS, ROWS, FLARE_RADIUS, TOWERS, flareCharge, stats } from './lib/sim.js';
 import { createSwell } from './swell.js';
+import { createFootprints } from './footprints.js';
 import { creatureModel, glow, hash, lanternModel, mat, plantModel, rockGeometry, treeModel } from './models-three.js';
 
 const TAU = Math.PI * 2;
@@ -207,6 +208,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
   const plants = new Map(); // tower id -> { obj, key }
   const creatures = new Map(); // enemy id -> { root, parts, seen }
   const creatureTemplates = new Map();
+  const prints = createFootprints({ life: reduced ? 1.5 : 1.8 });
 
   // decals: selection, hint, range rings, effect rings
   const addMat = (c, o = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
@@ -590,7 +592,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
     }
     fx = fx.filter((f) => f.t < f.life);
   }
-  function clearFx() { fx = []; fired = new Map(); leakT = 0; shakeT = 0; for (const [, c] of creatures) creatureRoot.remove(c.root); creatures.clear(); }
+  function clearFx() { fx = []; fired = new Map(); leakT = 0; shakeT = 0; prints.clear(); for (const [, c] of creatures) creatureRoot.remove(c.root); creatures.clear(); }
 
   // ---------- frame ----------
   const formOf = (t) => (t.tier < 2 ? t.tier : t.branch);
@@ -745,8 +747,12 @@ export function createRendererThree(canvas, overlay, opts = {}) {
       if (e.slow > 0) for (let i = 0; i < 4; i++) { const a = t * 2 + (i / 4) * TAU + k; glowP.add(x + Math.cos(a) * 0.32, 0.25 + (i % 2) * 0.3, z + Math.sin(a) * 0.32, 0.1, 0.6, 1, 1.6, 0.9); }
       if (e.healed > 0) glowP.add(x, 0.5, z, 0.7, 0.3, 1, 0.3, e.healed);
       if (e.hitFlash > 0) glowP.add(x, 0.4, z, 0.9, 1.6, 1.6, 1.6, Math.min(1, e.hitFlash * 6));
+      prints.step(e, x, z, t);
       drawn.push([e, x, z]);
     }
+    // faint pale footprints on the path, fading in a second or two (a few small additive points, capped)
+    prints.prune(t);
+    for (const f of prints.prints) { const a = 0.5 * prints.fade(f, t); glowP.add(f.x, 0.02, f.y, 0.13, 0.55, 0.55, 0.8, a); }
     for (const [id, c] of creatures) if (!alive.has(id)) { creatureRoot.remove(c.root); creatures.delete(id); }
 
     // burning ground

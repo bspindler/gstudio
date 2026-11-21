@@ -3,6 +3,7 @@
 // Towers and the lantern cut holes in a darkness layer; the lantern's light shrinks as lives drop.
 import { COLS, ROWS, stats } from './lib/sim.js';
 import { createSwell } from './swell.js';
+import { createFootprints } from './footprints.js';
 
 export const COLOR = {
   night: '#1b1530',
@@ -370,6 +371,7 @@ export function createRenderer(canvas, opts = {}) {
   let fx = [];
   let leakT = 0; // one red edge glow when creatures reach the lantern, restarted by each leak
   const prevHeading = new Map();
+  const prints = createFootprints({ life: reduced ? 1.5 : 1.8 });
 
   function paintGround(g) {
     const c = document.createElement('canvas');
@@ -503,7 +505,7 @@ export function createRenderer(canvas, opts = {}) {
     fx = fx.filter((f) => f.t < f.life);
   }
 
-  function clearFx() { fx = []; leakT = 0; prevHeading.clear(); }
+  function clearFx() { fx = []; leakT = 0; prevHeading.clear(); prints.clear(); }
 
   // view: { alpha, prev: Map<id,{x,y}>, time, sel: {c,r}|null, selTower, hint: {c,r}|null, ghost: tower type | null }
   function draw(g, view) {
@@ -577,6 +579,7 @@ export function createRenderer(canvas, opts = {}) {
     const drawn = [];
     for (const e of g.enemies) {
       const p = lerp(e);
+      prints.step(e, p.x, p.y, t);
       const prev = view.prev.get(e.id);
       let h = prevHeading.get(e.id) ?? Math.PI / 2;
       if (prev && (Math.abs(e.x - prev.x) + Math.abs(e.y - prev.y) > 1e-4)) h = Math.atan2(e.y - prev.y, e.x - prev.x);
@@ -585,6 +588,16 @@ export function createRenderer(canvas, opts = {}) {
       drawn.push([e, p]);
     }
     if (prevHeading.size > 400) prevHeading.clear();
+    // faint pale footprints on the path, fading in a second or two (flat fills, a handful at most)
+    prints.prune(t);
+    ctx.fillStyle = '#e6e0ff';
+    for (const f of prints.prints) {
+      ctx.globalAlpha = 0.4 * prints.fade(f, t);
+      ctx.beginPath();
+      ctx.ellipse(f.x * s, f.y * s, s * 0.05, s * 0.032, f.h, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
     for (const p of g.patches) {
       ctx.fillStyle = `rgba(255,110,40,${0.25 * Math.min(1, p.left)})`;

@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.7.1 (2026-11-21)
+- Walking creatures now leave faint pale footprints on the moonlit path that fade away in a second or two.
+
 ## 0.7.0 (2026-11-19)
 - New plant: the Thornbriar seeds thorn patches on the path that cut creatures as they cross, grows into the Bramble Hedge or the Barbed Snare, and is available from night 7 and in Night Watch.
 
