@@ -11,6 +11,8 @@ export function hueShiftHex(hex: string, deg: number): string;
 export function sectorHueShift(x: number): number;
 
 export function squashScale(q: number): { sx: number; sy: number };
+export const LIGHT_TRAIL_LIFE: number;
+export function lightTrailAlpha(age: number): number;
 
 export function cameraFor(
   st: { rx: number; lift: number; flipT: number; shakeX: number; shakeY: number },

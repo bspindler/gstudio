@@ -322,6 +322,34 @@ function drawTrail(c, cam, id, pts, sk, t) {
   c.globalCompositeOperation = op;
 }
 
+/** A short neon streak behind the runner: points live this many seconds (less than a beat). */
+export const LIGHT_TRAIL_LIFE = 0.3;
+export function lightTrailAlpha(age) {
+  const k = 1 - (age || 0) / LIGHT_TRAIL_LIFE;
+  return k <= 0 ? 0 : 0.7 * k * k;
+}
+function drawLightTrail(c, cam, pts, sk, t) {
+  if (!pts || pts.length < 2) return;
+  const [a] = skinColors(sk, t);
+  const op = c.globalCompositeOperation;
+  c.globalCompositeOperation = 'lighter';
+  c.lineCap = 'round';
+  c.strokeStyle = a;
+  for (let i = 1; i < pts.length; i++) {
+    const q0 = pts[i - 1], q1 = pts[i];
+    const al = lightTrailAlpha(q1.age);
+    if (al <= 0) continue;
+    const p0 = project(cam, q0.x, q0.y, 0), p1 = project(cam, q1.x, q1.y, 0);
+    if (!p0 || !p1) continue;
+    c.globalAlpha = al;
+    c.lineWidth = Math.max(1, PS * p1.s * 0.5 * (al / 0.7));
+    c.beginPath(); c.moveTo(p0.x, p0.y); c.lineTo(p1.x, p1.y); c.stroke();
+  }
+  c.lineCap = 'butt';
+  c.globalAlpha = 1;
+  c.globalCompositeOperation = op;
+}
+
 /* ---------- scene ---------- */
 const STARS = Array.from({ length: 80 }, (_, i) => {
   const h = (k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
@@ -556,6 +584,7 @@ export function drawScene(c, W, H, st) {
   dr.push({ z: depth(...rpos), f: () => {
     c.globalAlpha = 1;
     drawTrail(c, cam, st.trailId, st.trailPts, st.skin, t);
+    if (st.showRunner) drawLightTrail(c, cam, st.lightTrail, st.skin, t);
     if (!st.showRunner) return;
     const p = project(cam, ...rpos);
     if (p) {

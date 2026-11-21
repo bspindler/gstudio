@@ -414,7 +414,7 @@ function runnerAt(start) { const r = createRunner(); r.x += sectorStart(start); 
 function reset() {
   const start = startFor(S.mode);
   G = { state: 'ready', mode: S.mode, start, course: makeCourse(S.mode, start), runner: runnerAt(start), stats: newRunStats(S.mode, start), simT: 0, acc: 0,
-    t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], ripples: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
+    t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], ripples: [], lightTrail: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
     blink: 0, lift: 0, flipT: 0, doneM: [], ghost: null, rec: null, day: today(), trailTick: 0 };
   $('ready').hidden = false; $('paused').hidden = true; $('pauseBtn').hidden = true;
   renderReady(); hud();
@@ -509,6 +509,7 @@ function simStep() {
     toast(`Mission complete · +${m.reward} credits`);
     studio.track('custom', { event: 'mission_complete', id, reward: m.reward, mode: G.mode, run: G.run });
   }
+  G.lightTrail.push({ x: cxw, y: cyw, age: 0 });
   if (++G.trailTick % 2 === 0) {
     G.trail.push({ x: cxw, y: cyw, k: Math.random() }); if (G.trail.length > 26) G.trail.shift();
     if (S.trail === 'sparks' && !reduced && Math.random() < 0.5) G.parts.push({ x: cxw - 0.3, y: cyw + (Math.random() - 0.5) * 0.5, z: (Math.random() - 0.5) * 0.5, vx: -2, vy: Math.random() * 2, vz: 0, life: 0.4, max: 0.4, col: '#FFE45C', size: 0.07 });
@@ -655,6 +656,8 @@ function update(dt) {
   for (const p of G.pops) p.age += dt;
   G.pops = G.pops.filter((p) => p.age < p.life);
   G.squash = (G.squash || 0) * Math.exp(-dt * 16); if (Math.abs(G.squash) < 0.01) G.squash = 0;
+  for (const lp of G.lightTrail) lp.age += dt;
+  G.lightTrail = G.lightTrail.filter((lp) => lp.age < 0.3);
   for (const rp of G.ripples) rp.age += dt;
   G.ripples = G.ripples.filter((rp) => rp.age < 0.45);
   G.shake = Math.max(0, G.shake - dt); G.flash = Math.max(0, G.flash - dt * 2); G.nearFlash = Math.max(0, (G.nearFlash || 0) - dt * 3.5); G.blink = Math.max(0, G.blink - dt);
@@ -677,7 +680,7 @@ function draw() {
   const gp = G.ghost && G.state !== 'ready' ? ghostAt(G.ghost, G.simT) : null;
   drawScene(cx, W, H, {
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
-    ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
+    ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
     reduced, speed: speedAt(r.x), showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   });
