@@ -29,3 +29,10 @@ Changes:
 
 Changes:
 - HAL-287 polish(hyperline): Neon grid shifts hue over a second as each new sector begins: **merged** (0.11.1)
+
+## Run run-2026-11-21T18-50-33-301Z
+
+**Hyperline:** a crisp neon run behind your restored 0.4.1 camera. The runner leaves a short tapering light trail that fades in 0.3s (HAL-292, 0.11.1, merged). It is render-only and separate from cosmetic trails, and it leaves the camera and sim untouched. Fitness held at 99.5, without a before-change baseline. Spring Spikes (HAL-271) and the ghost gate (HAL-277) are still held.
+
+Changes:
+- HAL-292 polish(hyperline): Runner leaves a short neon light trail that fades within a beat: **merged** (0.11.1)

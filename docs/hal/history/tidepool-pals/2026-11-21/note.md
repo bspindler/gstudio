@@ -31,3 +31,10 @@ Changes:
 
 Changes:
 - HAL-286 polish(tidepool-pals): Board pals give an occasional slow, soft blink so the pool feels alive: **merged** (0.14.3)
+
+## Run run-2026-11-21T18-50-33-301Z
+
+**Tidepool Pals:** a calm reef swap-match with the pals at the centre. The goal counter now bounces with a glow in the matching pal's colour each time a clear counts toward it (HAL-290, merged). It ties the board to the mission without new text and leaves tile colours and level data alone. Fitness held at 97.3. No before-change baseline was taken, and it hasn't been seen on a phone. It shipped as 0.14.3, a version already used twice, so the numbering is wrong. Level 31 (HAL-267) is still held.
+
+Changes:
+- HAL-290 polish(tidepool-pals): Goal counter gives a small bounce each time a clear counts toward it: **merged** (0.14.3)

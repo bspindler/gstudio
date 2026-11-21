@@ -35,3 +35,11 @@ The Terrace of Dials retune (HAL-285) put a kilnwarden on the final crossing, wi
 
 Changes:
 - HAL-285 tuning(gearhold): Terrace of Dials: route its last stretch through one guarded crossing: **discarded** (0.10.1) (gearhold-play: no real gain: 1.06 < 8.98)
+
+## Run run-2026-11-21T18-50-33-301Z
+
+**Gearhold:** dim brass halls and clockwork foes. Machines now show a brief brass glint in the last 0.28s before they bite or fire (HAL-293, 0.10.1, merged). It is rendering only; rams and turrets are excluded, and glow stays where it belongs. Gearhold-play held at 96.3. The Terrace of Dials kilnwarden fix (HAL-289) timed out before building and goes again next run, smaller. Bellworks, Press Gallery and Boiler Stair (HAL-283, HAL-276, HAL-265) are still held.
+
+Changes:
+- HAL-289 fix(gearhold): Terrace of Dials: guard its final crossing with one kilnwarden, re-scored as a…: **discarded** (implementer timed out)
+- HAL-293 polish(gearhold): Enemies flash a brief brass glint just before they attack: **merged** (0.10.1)

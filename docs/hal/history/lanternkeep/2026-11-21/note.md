@@ -19,3 +19,10 @@ Changes:
 
 Changes:
 - HAL-281 polish(lanternkeep): Creatures leave faint pale footprints on the moonlit path that slowly fade: **merged** (0.7.1)
+
+## Run run-2026-11-21T18-50-33-301Z
+
+**Lanternkeep:** quiet moonlit defence, with the lantern as its heart. The flame now burns lower and dimmer as lives fall (HAL-291, 0.7.1, merged), so a close night is something you can see, without timers or flashing. It is steady under reduced motion. Fitness held at 95.8. Mirror Mist (HAL-264) and the Gloam Stag (HAL-275) are still held, so no new nights were planned.
+
+Changes:
+- HAL-291 polish(lanternkeep): Lantern flame burns lower and dimmer as lives are lost: **merged** (0.7.1)
