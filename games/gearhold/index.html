@@ -173,7 +173,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.9.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.10.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -269,6 +269,7 @@ const STATS = {
   r: { hp: 60, speed: 1.6, radius: 0.4 },
   o: { hp: 18, speed: 0, radius: 0.26, prop: true },
   g: { hp: 40, speed: 0, radius: 0.4, reg: true },
+  t: { hp: 30, speed: 0, radius: 0.34 },
 };
 const ITEM_KINDS = 'hakw';
 // Hit volumes: spheres [forward offset, height, radius] fitted to each machine's model.
@@ -278,6 +279,7 @@ function volumes(e) {
   if (e.kind === 'b') return [[0, 0.3, 0.24], [0, 0.8, 0.4], [0, 1.27, 0.17]];
   if (e.kind === 'r') return [[-0.05, 0.42, 0.32], [0.45, 0.44, 0.2]];
   if (e.kind === 'g') return [[0, 0.4, 0.36], [0, 0.9, 0.3]];
+  if (e.kind === 't') return [[0, 0.28, 0.4], [0, 0.68, 0.36]];
   return [[0, 0.28, 0.21]];
 }
 
@@ -325,7 +327,7 @@ function loadLevel(i) {
     if (c === 'u') presses.push({ x, y, was: 'open', hit: false });
     else if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
-      enemies.push({ kind: c, ...STATS[c], ...(c === 'b' && i === 1 ? { hp: 230 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false });
+      enemies.push({ kind: c, ...STATS[c], ...(c === 'b' && i === 1 ? { hp: 230 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false, ...(c === 't' ? { tm: 'scan', sl: 0, fa: 0, rt: 0.3 + Math.random() * 1.2, strafe: Math.random() < 0.5 ? 1 : -1 } : null) });
     } else if (ITEM_KINDS.includes(c)) items.push({ id: items.length, kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
   }
   foes = enemies.filter((e) => !e.prop).length;
@@ -545,7 +547,7 @@ function machineDraws(e, t, out) {
   } else if (e.kind === 'r') {
     const bob = e.rm === 'charge' ? Math.sin(t * 40) * 0.025 : e.rm === 'wind' ? Math.sin(t * 30) * 0.015 : 0;
     put(mesh.body, M4.trs(e.x, bob, e.y, yaw));
-  } else if (e.kind === 'g') {
+  } else if (e.kind === 'g' || e.kind === 't') {
     put(mesh.body, M4.trs(e.x, 0, e.y, yaw));
   } else if (e.kind === 'b') {
     const root = M4.trs(e.x, 0, e.y, yaw), walk = Math.sin(t * 6) * 0.45 * e.moving;
@@ -895,6 +897,35 @@ function enemyShot(e, ang, dmg, sees) {
   sfx.orb();
 }
 
+// Brass turret: fixed in place. It sweeps slowly while it sees nothing; once it sees you it swings round to
+// face you, glows for a beat (the warning), then fires three shots down the line it locked, and rests.
+// Stepping out of the locked line is the whole answer; nothing about it is hidden or random.
+function updateTurret(e, dt) {
+  e.flash -= dt; e.rt -= dt;
+  const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy);
+  const sees = d < 16 && lineOfSight(e.x, e.y, P.x, P.y);
+  const want = Math.atan2(dy, dx);
+  const gap = () => Math.atan2(Math.sin(want - e.face), Math.cos(want - e.face));
+  const swing = (rate) => { e.face += Math.max(-rate * dt, Math.min(rate * dt, gap())); };
+  e.awake = sees || e.tm !== 'scan';
+  e.atk = e.tm === 'charge' ? 0.1 : 0;
+  if (e.tm === 'scan') {
+    if (!sees) { e.face += 0.7 * dt * e.strafe; return; }
+    swing(1.5);
+    if (e.rt <= 0 && Math.abs(gap()) < 0.15) { e.tm = 'charge'; e.rt = 0.6; sfx.locked(); }
+  } else if (e.tm === 'charge') {
+    if (sees) swing(0.5);
+    if (e.rt <= 0) { e.fa = e.face; e.tm = 'fire'; e.sl = 3; e.rt = 0; }
+  } else if (e.tm === 'fire') {
+    e.atk = 0.15;
+    if (e.rt <= 0 && e.sl > 0) { enemyShot(e, e.fa, 5, true); e.sl -= 1; e.rt = 0.14; }
+    if (e.sl === 0 && e.rt <= 0) { e.tm = 'rest'; e.rt = 2.4 + Math.random() * 1; }
+  } else {
+    if (sees) swing(0.8);
+    if (e.rt <= 0) { e.tm = 'scan'; e.rt = 0; }
+  }
+}
+
 function updateEnemies(dt) {
   for (const e of enemies) {
     if (e.dead) {
@@ -907,6 +938,7 @@ function updateEnemies(dt) {
     }
     if (e.prop) continue;
     if (e.reg) { e.flash -= dt; continue; } // a steam regulator just stands there, venting
+    if (e.kind === 't') { updateTurret(e, dt); continue; }
     e.flash -= dt; e.cd -= dt; e.atk -= dt;
     const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy);
     const sees = d < 18 && lineOfSight(e.x, e.y, P.x, P.y);

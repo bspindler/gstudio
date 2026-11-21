@@ -8,7 +8,7 @@ export type Walk = {
   problems: string[];
 };
 
-export const THREAT: Record<'d' | 'c' | 'b', number> = { d: 2, c: 1, b: 5 };
+export const THREAT: Record<'d' | 'c' | 'b' | 't', number> = { d: 2, c: 1, b: 5, t: 2 };
 export const SIGHT = 5, DETOUR = 4, SAFE = 4;
 
 const DOORS = 'DK';
@@ -64,7 +64,7 @@ function within(map: string[], sources: Cell[], steps: number): Map<string, numb
 function threatNear(map: string[], sources: Cell[], steps: number): number {
   const seen = within(map, sources, steps);
   let sum = 0;
-  for (const ch of Object.keys(THREAT) as ('d' | 'c' | 'b')[])
+  for (const ch of Object.keys(THREAT) as ('d' | 'c' | 'b' | 't')[])
     for (const [x, y] of find(map, ch)) if (seen.has(`${x},${y}`)) sum += THREAT[ch];
   return sum;
 }

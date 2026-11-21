@@ -314,6 +314,22 @@ export function buildMachines() {
   gb.obox([0, 0.5, 0.375], I, [0.012, 0.09, 0.006], PAL.eye, 1);
   for (const s of [-1, 1]) gb.cyl([s * 0.34, 0.4, 0], [s * 0.5, 0.4, 0], 0.05, 0.05, 8, PAL.bronze);
   M.g = { body: gb.data() };
+
+  // Brass turret: a round plinth, a short column and a swivel head with a three-barrel cluster. Faces +z; the
+  // ember slots at the muzzles flare while it charges a volley.
+  const tb = builder();
+  tb.cyl([0, 0, 0], [0, 0.1, 0], 0.36, 0.34, 14, PAL.ceramicDark);
+  tb.cyl([0, 0.1, 0], [0, 0.5, 0], 0.2, 0.18, 12, PAL.brass);
+  tb.cyl([0, 0.3, 0], [0, 0.34, 0], 0.225, 0.225, 12, PAL.brassDark);
+  tb.sphere([0, 0.68, 0], 0.3, 0.22, 0.3, 14, 8, PAL.brass);
+  tb.obox([0, 0.68, -0.02], I, [0.31, 0.02, 0.2], PAL.brassDark);
+  for (const x of [-0.1, 0, 0.1]) {
+    tb.cyl([x, 0.68, 0.18], [x, 0.68, 0.66], 0.05, 0.045, 8, PAL.brassDark);
+    tb.obox([x, 0.68, 0.665], I, [0.04, 0.04, 0.008], PAL.ember, 1);
+  }
+  for (const s of [-1, 1]) tb.cyl([s * 0.3, 0.68, 0], [s * 0.42, 0.68, 0], 0.06, 0.06, 8, PAL.bronze);
+  tb.crystal([0, 0.96, -0.05], 0.05, 0.09, 4, PAL.teal, 1);
+  M.t = { body: tb.data() };
   return M;
 }
 

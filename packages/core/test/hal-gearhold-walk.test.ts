@@ -21,7 +21,7 @@ const locked = [
 
 describe('walkLevel', () => {
   it('pins constants', () => {
-    expect(THREAT).toEqual({ d: 2, c: 1, b: 5 });
+    expect(THREAT).toEqual({ d: 2, c: 1, b: 5, t: 2 });
     expect([SIGHT, DETOUR, SAFE]).toEqual([5, 4, 4]);
   });
 

@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.10.0 (2026-11-20)
+- New Gearhold level 9, 'Turret Gallery': brass turrets sweep the halls and fire three-shot volleys along a locked line, so read the glow, step out, then cross.
+
 ## 0.9.0 (2026-11-19)
 - The Orrery: the kilnwarden in the exit hall now stands by the exit arch and is a little less tough, so the walk home is a fair fight.
 - New level 8, Regulator Hall: wreck three steam regulators on a long, winding route past a guarded kilnwarden crossing to unseal the exit. No key this time.

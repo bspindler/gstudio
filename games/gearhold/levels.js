@@ -10,10 +10,11 @@
 //           d wisp drone (shoots)   c tick crawler (bites up close)   b kilnwarden (tough, shoots spreads)
 //           r brass ram (rears up, then charges in a straight line; stunned after hitting a wall)
 //           g steam regulator (a brass drum: wreck every one to unseal the exit; it never moves or shoots)
+//           t brass turret (fixed; sweeps its hall, glows, then fires a three-shot volley along a locked line; shootable)
 // packages/core/test/gearhold-levels.test.ts checks that every level is sealed and finishable.
 
 export const WALLS = '#MPX';
-export const FLOOR_THINGS = 'khawdcbourg';
+export const FLOOR_THINGS = 'khawdcbourgt';
 
 export const LEVELS = [
   {
@@ -200,6 +201,27 @@ export const LEVELS = [
       '#.w...c..#........#...#......b.....X',
       '#.h......#........#...#..a.........#',
       '####################################',
+    ],
+  },
+  {
+    name: 'Turret Gallery',
+    hint: 'Brass turrets sweep these halls. A hot glow means a three-shot volley is coming down a locked line: step out of it, then cross. Shoot a turret to scrap it.',
+    mood: {
+      skyTop: [0.18, 0.14, 0.34], skyHorizon: [0.96, 0.62, 0.4], cloud: [0.8, 0.62, 0.6],
+      sunDir: [-0.25, 0.32, 0.5], sunColor: [1.55, 0.95, 0.6],
+      ambient: [0.4, 0.38, 0.58], ground: [0.34, 0.26, 0.22], lamp: [1.0, 0.7, 0.4], crystal: [0.75, 0.55, 1.0],
+      fog: 0.019, stars: 0,
+    },
+    map: [
+      '##############################################',
+      '#.....#.......t......#............t.#........#',
+      '#..w..#...P.........t#..P...t.......#........#',
+      '#.....#.h............#.........P....#..h.....#',
+      '#S....D..............D...c..........D........X',
+      '#.a...#.a.P..........#.h.......P....#........#',
+      '#.....#...P..........#..P...t.......#.....h..#',
+      '#.....#.......t......#..............#........#',
+      '##############################################',
     ],
   },
 ];
