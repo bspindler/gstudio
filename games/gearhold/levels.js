@@ -8,13 +8,14 @@
 //           o volatile energy cell (shoot it; chains)
 //           u gear press (floor plate that thumps on a fixed beat; see press.js)
 //           d wisp drone (shoots)   c tick crawler (bites up close)   b kilnwarden (tough, shoots spreads)
+//           m cinder mite (small, fast, one-hit; comes in swarms of three)
 //           r brass ram (rears up, then charges in a straight line; stunned after hitting a wall)
 //           g steam regulator (a brass drum: wreck every one to unseal the exit; it never moves or shoots)
 //           t brass turret (fixed; sweeps its hall, glows, then fires a three-shot volley along a locked line; shootable)
 // packages/core/test/gearhold-levels.test.ts checks that every level is sealed and finishable.
 
 export const WALLS = '#MPX';
-export const FLOOR_THINGS = 'khawdcbourgt';
+export const FLOOR_THINGS = 'khawdcbourgtm';
 
 export const LEVELS = [
   {
@@ -147,9 +148,9 @@ export const LEVELS = [
     },
     map: [
       '##############################',
-      '#S...D...d...D.....c.......k.#',
+      '#S...D...d...D.....mmm.....k.#',
       '#....#.......#...............#',
-      '#.a..#...c...#...h...d.......#',
+      '#.a..#..mmm..#...h...d.......#',
       '############################D#',
       '#.....#..cd....#.............#',
       'X.....K....c...D..c..h.......#',

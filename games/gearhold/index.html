@@ -174,7 +174,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.10.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.11.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -267,6 +267,7 @@ const STATS = {
   d: { hp: 30, speed: 1.7, radius: 0.3 },
   c: { hp: 20, speed: 3.0, radius: 0.3 },
   b: { hp: 260, speed: 1.05, radius: 0.5 },
+  m: { kind: 'c', mite: true, hp: 1, speed: 3.8, radius: 0.2 }, // cinder mite: a small fast crawler that dies to any hit
   r: { hp: 60, speed: 1.6, radius: 0.4 },
   o: { hp: 18, speed: 0, radius: 0.26, prop: true },
   g: { hp: 40, speed: 0, radius: 0.4, reg: true },
@@ -276,7 +277,7 @@ const ITEM_KINDS = 'hakw';
 // Hit volumes: spheres [forward offset, height, radius] fitted to each machine's model.
 function volumes(e) {
   if (e.kind === 'd') return [[0, e.hz, 0.25]];
-  if (e.kind === 'c') return [[0, 0.17, 0.26], [0.26, 0.15, 0.11]];
+  if (e.kind === 'c') return e.mite ? [[0, 0.1, 0.17], [0.16, 0.09, 0.08]] : [[0, 0.17, 0.26], [0.26, 0.15, 0.11]];
   if (e.kind === 'b') return [[0, 0.3, 0.24], [0, 0.8, 0.4], [0, 1.27, 0.17]];
   if (e.kind === 'r') return [[-0.05, 0.42, 0.32], [0.45, 0.44, 0.2]];
   if (e.kind === 'g') return [[0, 0.4, 0.36], [0, 0.9, 0.3]];
@@ -523,7 +524,7 @@ function machineDraws(e, t, out) {
   const put = (m, model) => out.push({ mesh: m, model, ...look });
   if (dead) {
     // wreck: squashed, tipped and turned
-    const root = M4.trs(e.x, 0.02, e.y, yaw + e.spin, 0.25, 0.18, 1.05, 0.32, 1.05);
+    const root = M4.trs(e.x, 0.02, e.y, yaw + e.spin, 0.25, 0.18, 1.05 * (e.mite ? 0.6 : 1), 0.32 * (e.mite ? 0.6 : 1), 1.05 * (e.mite ? 0.6 : 1));
     const lift = e.kind === 'd' ? M4.trs(0, 0.25, 0) : I4;
     for (const k in mesh) {
       if (k === 'leg') for (let i = 0; i < (e.kind === 'c' ? 6 : 2); i++) put(mesh.leg, M4.mul(root, M4.trs((i % 2 ? 1 : -1) * 0.2, 0.05, -0.15 + (i >> 1) * 0.15, i * 1.3)));
@@ -537,7 +538,8 @@ function machineDraws(e, t, out) {
     put(mesh.body, root);
     put(mesh.ring, M4.mul(root, M4.trs(0, 0, 0, t * 2.4, 0.32)));
   } else if (e.kind === 'c') {
-    const root = M4.trs(e.x, 0, e.y, yaw);
+    const ms = e.mite ? 0.6 : 1; // cinder mites are small crawlers
+    const root = M4.trs(e.x, 0, e.y, yaw, 0, 0, ms);
     put(mesh.body, root);
     for (let i = 0; i < 6; i++) {
       const side = i < 3 ? 1 : -1, k = i % 3;
@@ -969,7 +971,7 @@ function updateEnemies(dt) {
       if (sees && e.cd <= 0 && d < 15) { enemyShot(e, Math.atan2(dy, dx) + (Math.random() - 0.5) * 0.08, 8, sees); e.cd = 1.6 + Math.random(); e.atk = 0.25; }
     } else if (e.kind === 'c') {
       if (d > 0.85) { mx = ux; my = uy; }
-      else if (e.cd <= 0) { hurt(10, !sees, e.x, e.y); sfx.bite(); e.cd = 0.8; e.atk = 0.25; }
+      else if (e.cd <= 0) { hurt(e.mite ? 5 : 10, !sees, e.x, e.y); sfx.bite(); e.cd = 0.8; e.atk = 0.25; }
     } else if (e.kind === 'r') {
       // Brass ram: closes in, rears up (glowing, tracks you for a moment, then locks its line), charges
       // straight along that line until it hits a wall, then sits stunned and shootable.
