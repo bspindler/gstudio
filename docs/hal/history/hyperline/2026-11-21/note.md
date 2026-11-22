@@ -61,3 +61,10 @@ Changes:
 
 Changes:
 - HAL-306 feature(hyperline): Rebuild the faint ghost gate where your best run ended, on current main: **merged** (0.12.0)
+
+## Run run-2026-11-22T06-00-05-822Z
+
+**Hyperline**: a neon one-tap runner. STEPPING STONES adds a two-tap pit-island-pit bite as sector 18, with HYPERCORE moved to 19. It is in band: 10% intro kills, 75 ms p10 window and fitness 99.55. Only the new and updated test files were run.
+
+Changes:
+- HAL-311 feature(hyperline): New sector STEPPING STONES: two pits with a narrow island between them: **held** (0.12.0)

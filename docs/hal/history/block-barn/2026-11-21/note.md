@@ -33,3 +33,11 @@ HAL-288 (held, 0.5.0) lets a child drag a floor animal, which then trots slowly 
 
 Changes:
 - HAL-288 feature(block-barn): Drag a floor animal and it trots slowly across the hay to where you let go: **held** (0.5.0)
+
+## Run run-2026-11-22T06-00-05-822Z
+
+**Block Barn**: a calm, wordless barn of animal friends for toddlers. The weathervane is easier to tap, with no visual change (bigTargets 100). The piggyback ride (HAL-309) is the kind of bigger upgrade you asked for in your HAL-260 vote: it builds on drag-to-trot and adds no new tap zone. It is held without a phone screenshot.
+
+Changes:
+- HAL-307 tuning(block-barn): Enlarge the smallest tap zone flagged by bigTargets: **merged** (0.9.0)
+- HAL-309 feature(block-barn): Drop a dragged animal on another and it rides piggyback, then hops off: **held** (0.9.0)

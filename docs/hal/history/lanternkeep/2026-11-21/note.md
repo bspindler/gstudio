@@ -45,3 +45,10 @@ Changes:
 
 Changes:
 - HAL-305 feature(lanternkeep): Rebuild the Gloam Stag, a charging Night Watch creature, on current main: **merged** (0.8.0)
+
+## Run run-2026-11-22T06-00-05-822Z
+
+**Lanternkeep**: a gentle moonlit-garden defence. In night 19, Lantern Hush, Shadebearers dim plants they pass, which rewards spreading plants out. It uses only existing plants, so the bot can play it (L-151). It sits at 56% wins with no spike, and fitness is unchanged at 96.35.
+
+Changes:
+- HAL-312 feature(lanternkeep): New night 19: Lantern Hush, where Shadebearers dim the plants they pass: **held** (0.8.0)

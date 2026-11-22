@@ -73,3 +73,10 @@ Changes:
 - HAL-302 feature(gearhold): Rebuild Press Gallery's fission drones that split when shot, on current main: **discarded** (implementer timed out)
 - HAL-303 feature(gearhold): Rebuild Boiler Stair's cinder-mite swarms on current main: **merged** (0.11.0)
 - HAL-304 feature(gearhold): Rebuild level 10 Bellworks: bell-golem boss with slow shockwaves: **held** (0.11.0)
+
+## Run run-2026-11-22T06-00-05-822Z
+
+**Gearhold**: brass machine halls, with a press-timing level and enemies of its own. The Press Gallery fission drones are live in their gentler form: 2 big, slow minis, feel 100 and 83% wins. They kept the level's own enemy instead of sanding it off, and gearhold-play went from 96.96 to 99.16. The other levels' rows were not re-read on the final run. Bellworks (HAL-304) still needs the scorer's threat weight change.
+
+Changes:
+- HAL-308 feature(gearhold): Rebuild Press Gallery's fission drones with fewer, slower, larger minis: **merged** (0.11.0)

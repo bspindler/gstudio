@@ -56,3 +56,10 @@ Changes:
 
 Changes:
 - HAL-299 tuning(tidepool-pals): Move a 16+ level's last goal later on the board for closer finishes: **discarded** (0.14.3) (tidepool-pals: no real gain: 1.67 < 6.58)
+
+## Run run-2026-11-22T06-00-05-822Z
+
+**Tidepool Pals**: a hand-made cartoon reef where you rescue the pal. Level 32 is a jellyfish pool with a bubbled pal and sand trails, and no rock pools (L-150). Its win rate is unmeasured because the scorer only covers levels 1-31, so its moves may still need trimming.
+
+Changes:
+- HAL-310 feature(tidepool-pals): New level 32: a jellyfish-shaped pool with sand trails and a bubbled pal: **held** (0.15.0)
