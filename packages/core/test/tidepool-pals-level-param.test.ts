@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error plain JS module
 import { levelFromSearch } from '../../../games/tidepool-pals/levels.js';
 
-const COUNT = 31; // the highest hand-built level, the second octopus pool
+const COUNT = 32; // the highest hand-built level, the jellyfish pool
 describe('tidepool ?level=N', () => {
   it('accepts whole numbers from 1 to the level count', () => {
     expect(levelFromSearch('?level=24')).toBe(24);

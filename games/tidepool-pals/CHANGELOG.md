@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.15.0 (2026-11-21)
 - New level 31: an octopus-shaped pool with rock pools at its tentacle tips and a tide that pulls up into its head.
+- New level 32: a jellyfish-shaped pool with a bubbled pal in its bell and sand in its long tentacle trails.
 
 ## 0.14.3 (2026-11-21)
 - After a chain of 3 or more, a little crab scuttles along the edge of the pool the way the tide pulls, then ducks out of sight.
