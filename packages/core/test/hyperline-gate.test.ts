@@ -26,7 +26,7 @@ describe('hyperline slot gates', () => {
     expect(INTRO[6]).toBe('gate');
     expect(sectorInfo(6).name).toBe('SLOT GATES');
     expect(sectorInfo(7).name).toBe('SWEEP COLUMNS');
-    expect(sectorInfo(18).name).toBe('HYPERCORE');
+    expect(sectorInfo(19).name).toBe('HYPERCORE');
   });
 
   it('SWEEP COLUMNS opens with a row of gates, first seen in sector 8, and the bot clears it', () => {

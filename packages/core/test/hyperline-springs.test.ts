@@ -10,9 +10,9 @@ const pattern = () => PATTERNS.find((q) => q.id === 'springs')!;
 const bare = (objs: Course['objs']): Course => { const c = createCourse(5); c.objs.length = 0; c.nextX = 1e9; c.objs.push(...objs.sort((a, b) => a.x - b.x)); return c; };
 
 describe('hyperline SPRING SPIKES', () => {
-  it('is sector 18 for players, right before HYPERCORE, and introduces the springs pattern', () => {
+  it('is sector 18 for players, right before STEPPING STONES, and introduces the springs pattern', () => {
     expect(sectorInfo(17).name).toBe('SPRING SPIKES');
-    expect(sectorInfo(18).name).toBe('HYPERCORE');
+    expect(sectorInfo(18).name).toBe('STEPPING STONES');
     expect(INTRO[17]).toBe('springs');
   });
 

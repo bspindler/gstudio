@@ -76,6 +76,8 @@ export const SECTORS = [
     pal: { sky: ['#030A12', '#0A2038', '#124A66'], sun: ['#FF8A3D', '#FFE45C'], grid: '#22A8FF', rail: '#FF8A3D', neon: '#FF2B5E', block: '#FFE45C' } },
   { name: 'SPRING SPIKES', hint: 'Spikes spring up out of the track: jump as they rise, not before.',
     pal: { sky: ['#0A0306', '#2E0A1C', '#5C1430'], sun: ['#FFE45C', '#FF3D6E'], grid: '#FF3D6E', rail: '#FFE45C', neon: '#7CFFEA', block: '#FF8A3D' } },
+  { name: 'STEPPING STONES', hint: 'Two pits, a short island between: land, then tap again at once.',
+    pal: { sky: ['#020A10', '#062A34', '#0C5560'], sun: ['#E6FF6B', '#22F0FF'], grid: '#7CFFEA', rail: '#FF2BD6', neon: '#FFE45C', block: '#22F0FF' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];

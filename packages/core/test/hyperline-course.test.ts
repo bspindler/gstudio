@@ -51,9 +51,9 @@ describe('hyperline sectors', () => {
 
   it('introduces each new obstacle in its own sector, in order, never earlier', () => {
     const order = Object.entries(INTRO).map(([s, id]) => [Number(s), id] as const).sort((a, b) => a[0] - b[0]);
-    expect(order.map(([, id]) => id)).toEqual(['bar', 'padPit', 'twin', 'mover', 'flip', 'gate', 'sweep', 'pulse', 'crumble', 'boost', 'riser', 'stagger', 'drop', 'shuttle', 'pillars', 'pendulum', 'springs']);
+    expect(order.map(([, id]) => id)).toEqual(['bar', 'padPit', 'twin', 'mover', 'flip', 'gate', 'sweep', 'pulse', 'crumble', 'boost', 'riser', 'stagger', 'drop', 'shuttle', 'pillars', 'pendulum', 'springs', 'stones']);
     for (const seed of [1, 2, 3, 99, dailySeed('2026-11-07')]) {
-      const objs = course(seed, 4300).objs;
+      const objs = course(seed, 4800).objs;
       for (const [sector, id] of order) {
         const first = objs.find((o) => sectorOf(o.p) === sector);
         expect(first, `${id} in seed ${seed}`).toBeDefined();

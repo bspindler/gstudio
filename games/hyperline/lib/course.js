@@ -400,6 +400,24 @@ export const PATTERNS = [
       }
       return { o, len: end - x + 0.5 };
     } },
+
+  // Sector 18: stepping stones. Two pits with a short island of track between them: jump the first pit, land on the
+  // island, and tap again before its far edge. The first pit is wide enough to leave a roomy take-off window; the island
+  // is a little over a tenth of a second of running, so the second tap follows the landing at once; the second pit is as
+  // wide as it can be while its take-off window stays at `want` seconds. Single-lane, jump-only.
+  { id: 'stones', sector: 18, weight: (s) => (s === 18 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const v1 = speedAt(x + 1), want = intro ? 0.08 : 0.095, first = 0.19 + r() * 0.03;
+      const w1 = v1 * (AIR - first), ix = x + 1 + w1, isl = v1 * (0.15 + r() * 0.04), px = ix + isl;
+      const w2 = speedAt(px) * (AIR - want);
+      const o = [
+        { t: 'pit', x: x + 1, w: w1 },
+        { t: 'pit', x: px, w: w2 },
+        { t: 'chip', x: x + 1 + w1 / 2, y: 2.3 },
+        { t: 'chip', x: px + w2 / 2, y: 2.3 },
+      ];
+      return { o, len: 1 + w1 + isl + w2 + 0.5 };
+    } },
 ];
 
 // Seconds a spring spike has been up when the take-off window opens.
@@ -423,7 +441,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs', 18: 'stones' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {
