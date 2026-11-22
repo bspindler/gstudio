@@ -785,7 +785,7 @@ function renderSlot(k, anim) {
   word.hidden = !isNamed;
   if (isNamed) word.innerHTML = wordHTML(l);
   el.classList.toggle('invite', invited === l);
-  if (animal.dataset.letter !== l) { animal.style.removeProperty('--dx'); animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
+  if (animal.dataset.letter !== l) { if (animal._ride) animal._ride.cancel(); animal.style.removeProperty('--dx'); animal.innerHTML = animalSVG(l); animal.dataset.letter = l; animal.dataset.move = BY[l].move; }
   animal.hidden = false;
   animal.classList.remove('hopout'); animal._hopTok = (animal._hopTok || 0) + 1; // a redrawn slot never keeps a hop
   animal.classList.toggle('ghost', !isNamed); // unnamed: its silhouette peeks over the block
@@ -1042,8 +1042,47 @@ function trotAnimal(l, targetX) {
     setTimeout(() => a.classList.remove('trot'), 2500);
   }
 }
+// A dragged animal let go on top of another one climbs onto its back; the pair takes a slow little walk, then the rider
+// hops down and trots home. Both come back exactly where they started, so nothing is left moved. It uses the
+// `translate` property (the trot's --dx transform is untouched), no sound, no text, no flashing, and nothing at all
+// under reduced motion. Returns false (so the ordinary trot answers) only when either animal is still busy riding.
+const RIDE_MS = 7000;
+function rideAnimal(rl, hl) {
+  const r = animalEl(rl), h = animalEl(hl);
+  if (!r || !h || !r.animate || !h.animate) return false;
+  if ((r._ride && r._ride.playState === 'running') || (h._ride && h._ride.playState === 'running')) return false;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+  const rr = r.getBoundingClientRect(), hr = h.getBoundingClientRect(), fb = applyLayout().floorBox;
+  const dx = (hr.left + hr.width / 2) - (rr.left + rr.width / 2);
+  const up = Math.min(hr.height, rr.height) * 0.4;
+  const walk = (hr.left + hr.width / 2 < fb.x + fb.w / 2 ? 1 : -1) * Math.min(hr.width, 90) * 0.5;
+  const P = (x, y) => `${x}px ${y}px`;
+  const ease = 'ease-in-out';
+  const slot = r.parentElement, prevZ = slot.style.zIndex;
+  slot.style.zIndex = '5';
+  r._ride = r.animate([
+    { translate: P(0, 0), easing: ease },
+    { translate: P(dx * 0.5, -up * 1.9), offset: 0.1, easing: ease },
+    { translate: P(dx, -up), offset: 0.18, easing: ease },
+    { translate: P(dx + walk * 0.25, -up * 1.08), offset: 0.3, easing: ease },
+    { translate: P(dx + walk * 0.5, -up), offset: 0.4, easing: ease },
+    { translate: P(dx + walk * 0.75, -up * 1.08), offset: 0.52, easing: ease },
+    { translate: P(dx + walk, -up), offset: 0.64, easing: ease },
+    { translate: P(dx + walk * 1.15, -up * 1.9), offset: 0.72, easing: ease },
+    { translate: P(dx + walk * 1.3, 0), offset: 0.78, easing: ease },
+    { translate: P(0, 0) },
+  ], { duration: RIDE_MS });
+  h._ride = h.animate([
+    { translate: P(0, 0), offset: 0.18, easing: ease },
+    { translate: P(walk, 0), offset: 0.64, easing: ease },
+    { translate: P(walk, 0), offset: 0.78, easing: ease },
+    { translate: P(0, 0) },
+  ], { duration: RIDE_MS });
+  r._ride.finished.then(() => { slot.style.zIndex = prevZ; }, () => { slot.style.zIndex = prevZ; });
+  return true;
+}
 function tapAnimal(l) {
-  const n = (tapCount[l] = (tapCount[l] || 0) + 1);
+  const n =(tapCount[l] = (tapCount[l] || 0) + 1);
   moveAnimal(l, n % 4);
   talk(nameLines(l));
   react(l);
@@ -1464,6 +1503,8 @@ function trotAt(g, x, y) {
   if (Math.hypot(x - g.x, y - g.y) < DRAG) return false;
   const b = hitBoxes().find((b) => b.kind === 'animal' && distTo(b, g.x, g.y) === 0);
   if (!b) return false;
+  const host = hitBoxes().find((o) => o.kind === 'animal' && o.letter !== b.letter && distTo(o, x, y) === 0);
+  if (host && rideAnimal(b.letter, host.letter)) { quietMs = 0; clearInvite(); return true; }
   quietMs = 0;
   clearInvite();
   trotAnimal(b.letter, x);
