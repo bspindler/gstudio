@@ -376,6 +376,18 @@ export function creatureModel(type) {
       claw.add(mesh(new THREE.CapsuleGeometry(0.05, 0.08, 4, 10), mat(0xd8a8b0, { rough: 0.6 }), { rz: s * 0.9, shadow: false }));
       body.add(claw); parts.legs.push({ g: claw, s, j: 1 });
     }
+  } else if (type === 'stag') {
+    body.position.y = 0.3;
+    body.add(mesh(blob(0.3, 0.06, 2, 9, 28, 18, 0.8), mat(0x3e3858, { rough: 0.6, sheen: 1, sheenColor: 0xb8a8e8 }), { sz: 1.5, sy: 0.8 }));
+    body.add(mesh(new THREE.SphereGeometry(0.12, 18, 12), mat(0xc8bce0, { rough: 0.5 }), { y: 0.14, z: 0.48, sz: 1.3 }));
+    addEyes(body, 0.05, 0.18, 0.57, 0.018, 0xa8e6ff, 2.4);
+    for (const s of [-1, 1]) {
+      const c = new THREE.CatmullRomCurve3([V3(s * 0.05, 0.24, 0.46), V3(s * 0.14, 0.42, 0.44), V3(s * 0.2, 0.56, 0.5), V3(s * 0.15, 0.7, 0.56)]);
+      body.add(mesh(new THREE.TubeGeometry(c, 10, 0.016, 6), glow(0xe8e0f8, 1.4), { shadow: false }));
+      const tine = new THREE.CatmullRomCurve3([V3(s * 0.14, 0.42, 0.44), V3(s * 0.26, 0.5, 0.42), V3(s * 0.3, 0.62, 0.44)]);
+      body.add(mesh(new THREE.TubeGeometry(tine, 8, 0.012, 6), glow(0xe8e0f8, 1.4), { shadow: false }));
+    }
+    for (const s of [-1, 1]) for (const j of [-1, 1]) { const leg = new THREE.Group(); leg.position.set(s * 0.16, -0.08, j * 0.3); leg.add(mesh(new THREE.CapsuleGeometry(0.035, 0.2, 4, 8), mat(0x2a2440, { rough: 0.7 }), { y: -0.14 })); body.add(leg); parts.legs.push({ g: leg, s, j }); }
   } else if (type === 'toad') {
     body.position.y = 0.3;
     body.add(mesh(blob(0.42, 0.06, 2.5, 11, 36, 24, 0.75), mat(0x3a2c4c, { rough: 0.35, clearcoat: 0.7, ccRough: 0.25 })));

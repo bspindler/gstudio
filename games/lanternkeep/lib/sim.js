@@ -104,6 +104,7 @@ export const ENEMIES = {
   mossback: { name: 'Mossback', hp: 120, speed: 0.7, armor: 1, reward: 14, leak: 1, r: 0.32, heal: { r: 1.4, pct: 0.06 }, tip: 'Heals creatures near it. Take it out first.' },
   toad: { name: 'Gloom Toad', hp: 650, speed: 0.5, armor: 3, reward: 75, leak: 5, r: 0.42, tip: 'A boss. Costs five lives if it reaches the lantern.' },
   mole: { name: 'Hollow Mole', hp: 70, speed: 0.95, armor: 1, reward: 10, leak: 1, r: 0.28, dive: { up: 2.4, down: 1.6 }, tip: 'Dives under the path for a stretch. Nothing can hit it down there, so cover the whole road.' },
+  stag: { name: 'Gloam Stag', hp: 380, speed: 0.55, armor: 2, reward: 40, leak: 3, r: 0.4, charge: { speed: 2.1, minRun: 3, margin: 0.5 }, tip: 'Walks slowly, then charges down the long straights of the path. Slow it before the road runs straight.' },
   lampmoth: { name: 'Lampmoth', hp: 16, speed: 2.5, armor: 0, reward: 3, leak: 1, r: 0.17, lamp: { dazzle: 3.2, reach: 0.32 }, tip: 'Leaves the path and dives at your brightest plant. It dazzles that plant until it burns out, then flits for the lantern.' },
   twinwisp: { name: 'Twin Wisp', hp: 60, speed: 1.1, armor: 0, reward: 4, leak: 1, r: 0.24, twin: true, tip: 'Splits in two the first time it is struck, each half with half the health. Bursts and beams catch both.' },
   mothmother: { name: 'Mothmother', hp: 900, speed: 0.45, armor: 2, reward: 90, leak: 5, r: 0.46, split: { type: 'moth', n: 6 }, tip: 'A boss. She bursts into moths when she falls.' },
@@ -371,6 +372,18 @@ function moveLamp(g, e, def, events) {
   return toward(g.lantern.x, g.lantern.y) <= 0.15;
 }
 
+// A charger rushes while it is inside a straight stretch at least minRun long, clear of the corners by margin.
+function charging(path, d, c) {
+  const { cum } = path;
+  for (let i = 1; i < cum.length; i++) {
+    if (d < cum[i]) {
+      const len = cum[i] - cum[i - 1], into = d - cum[i - 1];
+      return len >= c.minRun && into >= c.margin && into <= len - c.margin;
+    }
+  }
+  return false;
+}
+
 function killed(g, e, events) {
   const def = ENEMIES[e.type];
   g.gold += def.reward;
@@ -544,8 +557,10 @@ export function step(g) {
       }
       continue;
     }
-    e.d += def.speed * (1 - e.slow) * DT;
     const path = g.paths[e.lane];
+    let speed = def.speed;
+    if (def.charge) { e.charging = charging(path, e.d, def.charge); if (e.charging) speed = def.charge.speed; }
+    e.d += speed * (1 - e.slow) * DT;
     if (e.d >= path.len) {
       e.hp = 0;
       e.leaked = true;

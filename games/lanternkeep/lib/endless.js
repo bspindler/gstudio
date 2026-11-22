@@ -3,6 +3,7 @@
 const WAVES = 60;
 const RAMP_FROM = 14; // waves up to here (0-based) are unchanged
 const RAMP = 1.045; // extra growth per wave after that
+const STAG_FROM = 15; // the Gloam Stag walks in after the 15th night, and a herd charges every other night
 
 function lcg(seed) {
   let s = seed >>> 0;
@@ -12,6 +13,7 @@ function lcg(seed) {
 // The creatures that can appear from a given wave (0-based) onward.
 const POOL = [
   ['moth', 0, 28], ['firefly', 1, 12], ['beetle', 3, 85], ['wisp', 5, 45], ['mossback', 8, 120],
+  ['stag', STAG_FROM, 380],
 ];
 
 export function endlessLevel() {
@@ -24,6 +26,7 @@ export function endlessLevel() {
     const wave = [];
     if (i > 0 && i % 10 === 9) { wave.push(['mothmother', 1 + Math.floor(i / 20), 4, 2]); budget *= 0.5; }
     else if (i > 0 && i % 5 === 4) { wave.push(['toad', 1 + Math.floor(i / 10), 3.5, 2]); budget *= 0.6; }
+    else if (i >= STAG_FROM && (i - STAG_FROM) % 2 === 0) { wave.push(['stag', Math.max(2, Math.round((budget * 0.5) / 380)), 1.2, 1]); budget *= 0.5; }
     const kinds = Math.min(pool.length, 1 + Math.floor(rnd() * 3));
     let at = 0;
     for (let k = 0; k < kinds; k++) {

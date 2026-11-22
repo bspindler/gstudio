@@ -233,6 +233,20 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
     if (!e.under) { ctx.fillStyle = '#d8a8b0'; ctx.beginPath(); ctx.arc(x + Math.cos(heading) * s * 0.2, y + Math.sin(heading) * s * 0.2, s * 0.05, 0, TAU); ctx.fill(); }
     return;
   }
+  if (e.type === 'stag') {
+    // 2D fallback: a broad dark body, a pale head and two antler prongs; lighter while charging
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(heading);
+    ctx.fillStyle = e.charging ? '#6a5a8a' : '#4a4060';
+    ctx.beginPath(); ctx.ellipse(0, 0, s * 0.34, s * 0.2, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#c8bce0';
+    ctx.beginPath(); ctx.arc(s * 0.34, 0, s * 0.11, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#e8e0f8'; ctx.lineWidth = Math.max(1, s * 0.03);
+    for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * 0.36, d * s * 0.06); ctx.lineTo(s * 0.5, d * s * 0.2); ctx.lineTo(s * 0.56, d * s * 0.14); ctx.stroke(); }
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.translate(x, y);
   if (e.type === 'moth') {
@@ -360,7 +374,7 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
   }
 }
 
-const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, twinwisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, lampmoth: 0.17, mothmother: 0.46 };
+const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, twinwisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, stag: 0.4, lampmoth: 0.17, mothmother: 0.46 };
 
 // ---------- renderer ----------
 
