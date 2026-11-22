@@ -272,4 +272,18 @@ export const LEVELS = [
       [['toad', 3, 4], ['twinwisp', 20, 0.35, 2], ['beetle', 10, 0.6, 4]],
     ],
   }),
+  L('Lantern Hush', 'Shadebearers dim the plants they pass, so they fire slower for a moment. Spread your plants out along the road.', {
+    region: 'ember', towers: ALL, gold: 460, hpMul: 1.15,
+    paths: [[[4, -1], [4, 1], [1, 1], [1, 4], [7, 4], [7, 7], [1, 7], [1, 10], [4, 10], [4, 11]]],
+    waves: [
+      [['moth', 12, 0.5], ['shadebearer', 3, 1.6, 3]],
+      [['shadebearer', 8, 0.9]],
+      [['beetle', 8, 0.9], ['shadebearer', 6, 0.9, 2]],
+      [['mossback', 3, 1.5], ['shadebearer', 8, 0.8, 2], ['firefly', 14, 0.3, 3]],
+      [['toad', 2, 5], ['shadebearer', 8, 0.8, 2]],
+      [['shadebearer', 10, 0.6], ['beetle', 10, 0.7, 3]],
+      [['mothmother', 1, 1], ['shadebearer', 10, 0.7, 3], ['mossback', 3, 1.5, 3]],
+      [['toad', 3, 4], ['shadebearer', 12, 0.6, 2], ['beetle', 10, 0.6, 4]],
+    ],
+  }),
 ];

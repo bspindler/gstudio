@@ -628,8 +628,8 @@ function onCard(type) {
 }
 
 // ---------- context bar ----------
-const PLURAL = { lampmoth: 'lampmoths', moth: 'moths', firefly: 'fireflies', beetle: 'shell beetles', wisp: 'wisps', twinwisp: 'twin wisps', mossback: 'mossbacks', toad: 'gloom toads', mothmother: 'Mothmothers' };
-const SINGULAR = { lampmoth: 'lampmoth', moth: 'moth', firefly: 'firefly', beetle: 'shell beetle', wisp: 'wisp', twinwisp: 'twin wisp', mossback: 'mossback', toad: 'gloom toad', mothmother: 'Mothmother' };
+const PLURAL = { lampmoth: 'lampmoths', moth: 'moths', firefly: 'fireflies', beetle: 'shell beetles', wisp: 'wisps', twinwisp: 'twin wisps', shadebearer: 'shadebearers', mossback: 'mossbacks', toad: 'gloom toads', mothmother: 'Mothmothers' };
+const SINGULAR = { lampmoth: 'lampmoth', moth: 'moth', firefly: 'firefly', beetle: 'shell beetle', wisp: 'wisp', twinwisp: 'twin wisp', shadebearer: 'shadebearer', mossback: 'mossback', toad: 'gloom toad', mothmother: 'Mothmother' };
 function enemyList(wave) {
   const n = {};
   for (const [type, count] of wave) n[type] = (n[type] ?? 0) + count;

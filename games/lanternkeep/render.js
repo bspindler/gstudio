@@ -233,6 +233,16 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
     if (!e.under) { ctx.fillStyle = '#d8a8b0'; ctx.beginPath(); ctx.arc(x + Math.cos(heading) * s * 0.2, y + Math.sin(heading) * s * 0.2, s * 0.05, 0, TAU); ctx.fill(); }
     return;
   }
+  if (e.type === 'shadebearer') {
+    // 2D fallback: a dark hooded flame with a faint ring of hush around it
+    ctx.fillStyle = 'rgba(40,30,70,0.18)';
+    ctx.beginPath(); ctx.arc(x, y, s * 0.4, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#2c2250';
+    ctx.beginPath(); ctx.ellipse(x, y, s * 0.16, s * 0.2, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#b8a8ff';
+    for (const d of [-1, 1]) { ctx.beginPath(); ctx.arc(x + d * s * 0.06, y - s * 0.02, s * 0.025, 0, TAU); ctx.fill(); }
+    return;
+  }
   if (e.type === 'stag') {
     // 2D fallback: a broad dark body, a pale head and two antler prongs; lighter while charging
     ctx.save();
@@ -374,7 +384,7 @@ function drawEnemy(ctx, e, x, y, s, t, heading) {
   }
 }
 
-const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, twinwisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, stag: 0.4, lampmoth: 0.17, mothmother: 0.46 };
+const ENEMY_R = { moth: 0.24, firefly: 0.16, beetle: 0.3, wisp: 0.26, twinwisp: 0.26, toad: 0.42, mossback: 0.32, mole: 0.28, stag: 0.4, shadebearer: 0.27, lampmoth: 0.17, mothmother: 0.46 };
 
 // ---------- renderer ----------
 

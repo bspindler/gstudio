@@ -5,6 +5,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 ## 0.8.0 (2026-11-21)
 - New night 18, Mirror Mist: Twin Wisps split in two the first time they are struck, each half with half the health.
 - Night Watch from night 16 brings the Gloam Stag, a big moonlit creature that walks slowly, then charges down the long straights of the path.
+- New night 19, Lantern Hush: Shadebearers drift past and dim nearby plants so they fire slower for a moment, so spread your plants out along the road.
 
 ## 0.7.1 (2026-11-21)
 - Walking creatures now leave faint pale footprints on the moonlit path that fade away in a second or two.

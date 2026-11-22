@@ -107,6 +107,7 @@ export const ENEMIES = {
   stag: { name: 'Gloam Stag', hp: 380, speed: 0.55, armor: 2, reward: 40, leak: 3, r: 0.4, charge: { speed: 2.1, minRun: 3, margin: 0.5 }, tip: 'Walks slowly, then charges down the long straights of the path. Slow it before the road runs straight.' },
   lampmoth: { name: 'Lampmoth', hp: 16, speed: 2.5, armor: 0, reward: 3, leak: 1, r: 0.17, lamp: { dazzle: 3.2, reach: 0.32 }, tip: 'Leaves the path and dives at your brightest plant. It dazzles that plant until it burns out, then flits for the lantern.' },
   twinwisp: { name: 'Twin Wisp', hp: 60, speed: 1.1, armor: 0, reward: 4, leak: 1, r: 0.24, twin: true, tip: 'Splits in two the first time it is struck, each half with half the health. Bursts and beams catch both.' },
+  shadebearer: { name: 'Shadebearer', hp: 100, speed: 0.85, armor: 1, reward: 9, leak: 1, r: 0.27, shade: { r: 1.35, slow: 0.45, for: 2 }, tip: 'Carries a hush of shadow. Plants beside its path fire slower for a moment, so spread your plants out instead of stacking them.' },
   mothmother: { name: 'Mothmother', hp: 900, speed: 0.45, armor: 2, reward: 90, leak: 5, r: 0.46, split: { type: 'moth', n: 6 }, tip: 'A boss. She bursts into moths when she falls.' },
 };
 
@@ -615,11 +616,20 @@ export function step(g) {
   }
   g.thorns = g.thorns.filter((p) => p.left > 0 && p.hits > 0);
 
+  // a Shadebearer dims every plant it passes: for a moment after, the plant fires slower
+  for (const t of g.towers) {
+    if (t.dimLeft > 0) t.dimLeft = Math.max(0, t.dimLeft - DT);
+    for (const e of g.enemies) {
+      const sh = ENEMIES[e.type].shade;
+      if (sh && e.hp > 0 && dist2(e, t) <= sh.r * sh.r) { t.dimLeft = sh.for; t.dimBy = sh.slow; }
+    }
+  }
+
   for (const t of g.towers) {
     t.cd -= DT;
     if (t.cd < 0) t.cd = 0;
     if (t.dazzled) continue; // a plant a Lampmoth is dazzling can't fire
-    if (t.cd <= 0 && fire(g, t, events)) t.cd = 1 / stats(t).rate;
+    if (t.cd <= 0 && fire(g, t, events)) t.cd = 1 / (stats(t).rate * (t.dimLeft > 0 ? 1 - t.dimBy : 1));
   }
 
   g.enemies = g.enemies.filter((e) => e.hp > 0);

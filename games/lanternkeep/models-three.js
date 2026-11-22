@@ -353,6 +353,11 @@ export function creatureModel(type) {
     body.add(mesh(flame, mat(twin ? 0xd6beff : 0x9ff0ff, { emissive: twin ? 0x9a70ff : 0x60d8ff, ei: 1.6, rough: 0.2, opacity: 0.7, depthWrite: false }), { shadow: false }));
     body.add(mesh(new THREE.SphereGeometry(0.08, 16, 12), glow(twin ? 0xf0e4ff : 0xe0ffff, 3.5), { y: -0.02, shadow: false }));
     for (const s of [-1, 1]) body.add(mesh(new THREE.SphereGeometry(0.025, 10, 8), mat(0x0a0820, { rough: 0.3 }), { x: s * 0.055, y: 0.03, z: 0.15, sy: 1.4, shadow: false }));
+  } else if (type === 'shadebearer') {
+    body.position.y = 0.4;
+    const hood = lathe([[0, -0.22], [0.14, -0.18], [0.2, -0.04], [0.15, 0.1], [0.06, 0.24], [0, 0.32]], 28);
+    body.add(mesh(hood, mat(0x2c2250, { emissive: 0x16102c, ei: 0.8, rough: 0.5, opacity: 0.88, depthWrite: false }), { shadow: false }));
+    for (const s of [-1, 1]) body.add(mesh(new THREE.SphereGeometry(0.03, 10, 8), glow(0xb8a8ff, 3), { x: s * 0.06, y: 0.02, z: 0.13, shadow: false }));
   } else if (type === 'mossback') {
     body.position.y = 0.08;
     body.add(mesh(blob(0.3, 0.08, 2, 7, 28, 16, 0.75), mat(0x4a3c2c, { rough: 0.85 }), { y: 0.02, sz: 1.15 }));
