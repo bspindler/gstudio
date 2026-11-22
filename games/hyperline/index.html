@@ -241,7 +241,7 @@ import { createRunner, step } from './lib/sim.js';
 import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
 import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, sectorFromSearch, migrateSave, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
-import { createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
+import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
 import { createBloom, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
@@ -682,6 +682,7 @@ function draw() {
   const r = G.runner, sh = G.shake * 0.9;
   const gp = G.ghost && G.state !== 'ready' ? ghostAt(G.ghost, G.simT) : null;
   drawScene(cx, W, H, {
+    bestMark: G.state !== 'ready' && G.start <= 1 ? bestMarkX(G.mode === 'daily' ? (G.day === S.daily.day ? S.daily.best : 0) : S.best, G.start) : null,
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
     ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, shards: reduced ? [] : G.shards, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,

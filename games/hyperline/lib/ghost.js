@@ -1,6 +1,8 @@
 // Ghost runs: sample the runner at a fixed rate, store compactly, replay with interpolation.
 // No DOM; tested in packages/core/test/hyperline-meta.test.ts.
 
+import { P } from './world.js';
+
 export const GHOST_HZ = 20;
 /** About five minutes of running. */
 export const GHOST_MAX = 6000;
@@ -52,6 +54,18 @@ export function ghostAt(g, t) {
   const { x, flip } = decoded(g);
   const i = Math.min(g.n - 1, Math.floor(f)), j = Math.min(g.n - 1, i + 1), a = f - i;
   return { x: x[i] + (x[j] - x[i]) * a, y: (g.ys[i] + (g.ys[j] - g.ys[i]) * a) / 100, flip: flip[i] === 1 };
+}
+
+/** Track x of the thin gate that marks where the saved best run ended; null with no best or on a practice start. */
+export function bestMarkX(best, start) {
+  if (!(start <= 1) || !Number.isFinite(best) || best <= 0) return null;
+  return P + best;
+}
+
+/** 1 right as the runner passes the mark, fading to 0 over a few metres. */
+export function bestMarkShimmer(rx, markX) {
+  const d = rx - markX;
+  return d < 0 || d >= 8 ? 0 : 1 - d / 8;
 }
 
 /** Does this look like a ghost we wrote? Guards against damaged storage. */

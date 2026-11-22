@@ -6,4 +6,6 @@ export function createGhostRecorder(): GhostRecorder;
 export function recordGhost(g: GhostRecorder, t: number, x: number, y: number, flip: boolean): void;
 export function finishGhost(g: GhostRecorder): Ghost;
 export function ghostAt(g: Ghost, t: number): { x: number; y: number; flip: boolean } | null;
+export function bestMarkX(best: number, start: number): number | null;
+export function bestMarkShimmer(rx: number, markX: number): number;
 export function validGhost(g: unknown): g is Ghost;

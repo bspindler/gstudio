@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.12.0 (2026-11-21)
 - New sector SPRING SPIKES: a flush panel springs spikes up out of the track just before you arrive, so jump on the rise, not on sight.
+- A faint neon gate now stands across the track where your best run ended, and gives a quiet cyan shimmer when you pass it.
 
 ## 0.11.1 (2026-11-21)
 - The runner now squashes on landing and stretches at take-off, a quick neon snap that makes each jump read crisply.

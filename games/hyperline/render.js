@@ -6,6 +6,7 @@
 import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
 import { blockX, moverH, railLit } from './lib/sim.js';
 import { bladeX } from './lib/course.js';
+import { bestMarkShimmer } from './lib/ghost.js';
 import { AIR, BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 
 /* ---------- bloom presenter (three.js, shared core copy) ---------- */
@@ -646,6 +647,18 @@ export function drawScene(c, W, H, st) {
   }
   const r = st.runner;
   const rpos = [r.x + PS / 2, r.y + PS / 2, 0];
+  if (st.bestMark != null && st.bestMark > rx - 6 && st.bestMark < far) {
+    // a thin, dim gate across the track where the saved best run ended; a quiet cyan shimmer once passed
+    const bm = st.bestMark, sh = bestMarkShimmer(rx, bm), bf = Math.max(0, Math.min(1, 1 - (bm - rx - 38) / 36));
+    if (bf > 0) dr.push({ z: depth(bm, 1.5, 0), f: () => {
+      c.beginPath();
+      for (const zz of [-1.2, 1.2]) seg(c, cam, [bm, 0, zz], [bm, 3, zz]);
+      seg(c, cam, [bm, 3, -1.2], [bm, 3, 1.2]);
+      c.globalAlpha = bf * 0.3; neon(c, '#7CFFEA', 1, false);
+      if (sh > 0) { c.globalAlpha = bf * sh * (st.reduced ? 0.5 : 0.45 + 0.15 * Math.sin(t * 14)); neon(c, '#22F0FF', 2); }
+      c.globalAlpha = 1;
+    } });
+  }
   if (st.ghost) {
     const gp = [st.ghost.x + PS / 2, st.ghost.y + PS / 2, 0];
     dr.push({ z: depth(...gp) + 0.01, f: () => { c.globalAlpha = 1; runnerShape(c, cam, st.skin, gp, 0, t, 0.5, true); } });
