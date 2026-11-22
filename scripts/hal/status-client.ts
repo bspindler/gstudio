@@ -45,6 +45,35 @@ export function spendLine(s: Pick<StatusJson, 'spendToday' | 'capUsd' | 'subscri
 
 export const STATUS_JS = `(() => {
   'use strict';
+  // Keep your place: every button is a form POST that redirects back here, which would land at the top. On submit,
+  // remember the tapped card (by its pass or item) and where it sat on screen; after the reload, put it back there, or
+  // return to the same scroll position when the card is gone. Used once, only within two minutes.
+  const PLACE = 'hal-place';
+  const keyOf = (form) => {
+    const f = form.querySelector('input[name="pass"], input[name="item"], input[name="id"]');
+    return f ? f.name + '=' + f.value : 'action=' + (form.getAttribute('action') || '');
+  };
+  const cardOf = (n) => n.closest('article, .card, li, section') || n;
+  try {
+    const raw = sessionStorage.getItem(PLACE);
+    if (raw) {
+      sessionStorage.removeItem(PLACE);
+      const p = JSON.parse(raw);
+      if (p && Date.now() - p.at < 120000) {
+        let target = null;
+        if (p.key) for (const f of document.querySelectorAll('form')) if (keyOf(f) === p.key) { target = cardOf(f); break; }
+        if (target) window.scrollTo(0, Math.max(0, window.scrollY + target.getBoundingClientRect().top - p.top));
+        else if (p.path === location.pathname) window.scrollTo(0, p.y);
+      }
+    }
+  } catch (e) { /* storage blocked: the page still works, from the top */ }
+  document.addEventListener('submit', (ev) => {
+    const form = ev.target;
+    if (!form || !form.closest || (form.method || '').toLowerCase() !== 'post') return;
+    try {
+      sessionStorage.setItem(PLACE, JSON.stringify({ y: window.scrollY, key: keyOf(form), top: cardOf(form).getBoundingClientRect().top, path: location.pathname, at: Date.now() }));
+    } catch (e) { /* no storage: nothing to remember */ }
+  });
   const el = document.querySelector('[data-hal-status]');
   if (!el || !window.fetch) return;
   const q = (s) => el.querySelector(s);
