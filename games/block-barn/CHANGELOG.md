@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.9.0 (2026-11-21)
 - Drag a floor animal and it trots slowly across the hay to where you let go.
+- Block Barn: the weathervane is easier to tap on phones.
 
 ## 0.8.0 (2026-11-21)
 - Tap a named animal and, after its name, it hops out of its block onto the hay, wiggles, and hops back home.

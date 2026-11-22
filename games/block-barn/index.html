@@ -1327,7 +1327,11 @@ function vaneBox() {
   if (!best || best.w < 44) { v.style.display = 'none'; return null; }
   v.style.display = 'block';
   v.style.left = `${best.x - w.left + best.w / 2 - 20}px`;
-  return { x: best.x, y: w.top, w: best.w, h: w.height };
+  // palm-sized hit box (at least 88px wide): a strip squeezed between zones is padded, centred on the vane (which stays
+  // put), and kept inside the wall; the door, sky and loft are tested first in tapAt, so they keep every tap they had
+  const bw = Math.max(best.w, 88), cx = best.x + best.w / 2;
+  const x = Math.min(Math.max(cx - bw / 2, w.left), w.right - bw);
+  return { x, y: w.top, w: bw, h: w.height };
 }
 
 // ---------- the loft window: slow seasons ----------
