@@ -174,7 +174,7 @@ import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.11.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.12.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -273,11 +273,17 @@ const STATS = {
   g: { hp: 40, speed: 0, radius: 0.4, reg: true },
   t: { hp: 30, speed: 0, radius: 0.34 },
 };
+// Bellworks' bell-golem sits on a 'b' tile (a threat kind the scorers already know) of level 10 and swaps in these stats: a stationary
+// exit seal that stays kind 'b' for the sim, like the cinder mites stay kind 'c'. Wrecking it unseals the exit, like the last regulator.
+const GOLEM = { kind: 'b', golem: true, hp: 700, speed: 0, radius: 0.6, reg: true };
+const GOLEM_LEVEL = 9;
+const WAVE = { speed: 3, arc: 0.32, dmg: 16, reach: 16 }; // golem shockwave: slow, a narrow arc, sidestep it
 const ITEM_KINDS = 'hakw';
 // Hit volumes: spheres [forward offset, height, radius] fitted to each machine's model.
 function volumes(e) {
   if (e.kind === 'd') return [[0, e.hz, 0.25 * (e.sc || 1)]];
   if (e.kind === 'c') return e.mite ? [[0, 0.1, 0.17], [0.16, 0.09, 0.08]] : [[0, 0.17, 0.26], [0.26, 0.15, 0.11]];
+  if (e.golem) return [[0, 0.3, 0.55], [0, 0.95, 0.5], [0, 1.5, 0.38]];
   if (e.kind === 'b') return [[0, 0.3, 0.24], [0, 0.8, 0.4], [0, 1.27, 0.17]];
   if (e.kind === 'r') return [[-0.05, 0.42, 0.32], [0.45, 0.44, 0.2]];
   if (e.kind === 'g') return [[0, 0.4, 0.36], [0, 0.9, 0.3]];
@@ -297,7 +303,7 @@ try { sens = Math.max(0.3, Math.min(3, Number(localStorage.getItem('gearhold.sen
 const viewLook = () => P.look + P.kick;
 
 let level = 0, mw = 0, mh = 0, grid = [], doorOpen = new Float32Array(0), doorMoving = new Uint8Array(0);
-let enemies = [], items = [], shots = [], fx = [], foes = 0, presses = [];
+let enemies = [], items = [], shots = [], fx = [], foes = 0, presses = [], waves = [];
 let hitFx = 0, hitDeg = 0;
 let kills = 0, levelTime = 0, noiseRadius = 0, msgTime = 0, lockedNag = 0, hurtFx = 0, glowFx = 0, keyFx = 0, shake = 0;
 let mode = 'title';
@@ -321,7 +327,7 @@ function loadLevel(i) {
   grid = new Array(mw * mh);
   doorOpen = new Float32Array(mw * mh);
   doorMoving = new Uint8Array(mw * mh);
-  enemies = []; items = []; shots = []; fx = []; presses = [];
+  enemies = []; items = []; shots = []; fx = []; presses = []; waves = [];
   Object.assign(P, { hp: 100, shells: 0, scatter: false, weapon: 0, key: false, cd: 0, recoil: 0, flash: 0, vx: 0, vy: 0, av: 0, look: 0, kick: 0, hitMark: 0, tracer: 0 });
   for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
     const c = map[y][x];
@@ -329,7 +335,7 @@ function loadLevel(i) {
     if (c === 'u') presses.push({ x, y, was: 'open', hit: false });
     else if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
-      enemies.push({ kind: c, ...STATS[c], ...(c === 'b' && i === 1 ? { hp: 230 } : null), ...(c === 'b' && i === 0 ? { hp: 190 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false, ...(c === 'd' && LEVELS[i].fission ? { split: true } : null), ...(c === 't' ? { tm: 'scan', sl: 0, fa: 0, rt: 0.3 + Math.random() * 1.2, strafe: Math.random() < 0.5 ? 1 : -1 } : null) });
+      enemies.push({ kind: c, ...(c === 'b' && i === GOLEM_LEVEL ? GOLEM : STATS[c]), ...(c === 'b' && i === 1 ? { hp: 230 } : null), ...(c === 'b' && i === 0 ? { hp: 190 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false, ...(c === 'd' && LEVELS[i].fission ? { split: true } : null), ...(c === 't' ? { tm: 'scan', sl: 0, fa: 0, rt: 0.3 + Math.random() * 1.2, strafe: Math.random() < 0.5 ? 1 : -1 } : null), ...(c === 'b' && i === GOLEM_LEVEL ? { tm: 'scan', fa: 0, rt: 0.8 } : null) });
     } else if (ITEM_KINDS.includes(c)) items.push({ id: items.length, kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
   }
   foes = enemies.filter((e) => !e.prop).length;
@@ -519,7 +525,7 @@ function overheadCamera() {
 const OVERLAY_IDS = ['hands', 'hud', 'vignette', 'hurt', 'glow', 'msg', 'touchui'];
 function machineDraws(e, t, out) {
   const yaw = Math.PI / 2 - e.face;
-  const dead = !!e.dead, mesh = MESH[e.kind];
+  const dead = !!e.dead, mesh = MESH[e.golem ? 'n' : e.kind];
   const look = { tint: dead ? [0.3, 0.29, 0.32] : [1, 1, 1], flash: !dead && e.flash > 0 ? 1 : 0, emi: dead ? 0 : e.atk > 0 ? 1.9 : 1 };
   const put = (m, model) => out.push({ mesh: m, model, ...look });
   if (dead) {
@@ -533,7 +539,9 @@ function machineDraws(e, t, out) {
     }
     return;
   }
-  if (e.kind === 'd') {
+  if (e.golem) {
+    put(mesh.body, M4.trs(e.x, 0, e.y, yaw));
+  } else if (e.kind === 'd') {
     const root = M4.trs(e.x, e.hz, e.y, yaw, 0, 0, e.sc || 1);
     put(mesh.body, root);
     put(mesh.ring, M4.mul(root, M4.trs(0, 0, 0, t * 2.4, 0.32)));
@@ -629,6 +637,22 @@ function render(now) {
     // placement change reads at a glance from above. Never drawn in play.
     for (const e of enemies) if (!e.dead && !e.prop) bb.push({ p: [e.x, 3, e.y], size: 1.6, c: [4, 0.35, 0.25], a: 1, add: 1 });
     for (const it of items) if (it.kind === 'h' || it.kind === 'k') bb.push({ p: [it.x, 3, it.y], size: 1.3, c: it.kind === 'h' ? [0.4, 4, 0.8] : [4, 3, 0.3], a: 1, add: 1 });
+  }
+  // Bell-golem: a lane of faint dots along its aim and a hot glow on the bell while it charges; glowing arcs for each shockwave.
+  for (const e of enemies) {
+    if (!e.golem || e.dead || e.tm !== 'charge') continue;
+    const pulse = 0.7 + Math.sin(t * 14) * 0.3;
+    bb.push({ p: [e.x, 1.0, e.y], size: 1.6, c: [2.8, 1.1, 0.3], a: 0.7 * pulse, add: 1 });
+    for (let k = 1; k <= 10; k++) bb.push({ p: [e.x + Math.cos(e.face) * k * 1.2, 0.08, e.y + Math.sin(e.face) * k * 1.2], size: 0.3, c: [2.2, 0.9, 0.3], a: 0.35, add: 1 });
+  }
+  for (const w of waves) {
+    const fade = 1 - (w.r / WAVE.reach) * 0.5;
+    for (let j = 0; j <= 10; j++) {
+      const ang = w.a + (j / 10 - 0.5) * 2 * WAVE.arc, px = w.x + Math.cos(ang) * w.r, py = w.y + Math.sin(ang) * w.r;
+      if (solid(Math.floor(px), Math.floor(py))) continue;
+      bb.push({ p: [px, 0.1, py], size: 0.55, c: [2.6, 1.5, 0.5], a: 0.85 * fade, add: 1 });
+      bb.push({ p: [px, 0.3, py], size: 0.3, c: [3, 2.2, 1.1], a: 0.6 * fade, add: 1 });
+    }
   }
   for (const s of shots) {
     bb.push({ p: [s.x, 0.55, s.y], size: 0.1, c: [3, 1.8, 0.8], add: 1 });
@@ -835,7 +859,8 @@ function damageEnemy(e, n) {
   if (e.split) splitDrone(e);
   if (e.reg) {
     const left = regsLeft();
-    say(left > 0 ? `Regulator wrecked. ${left} left.` : 'All regulators wrecked. The exit is open.');
+    if (e.golem) say('The bell-golem falls. The exit is open.');
+    else say(left > 0 ? `Regulator wrecked. ${left} left.` : 'All regulators wrecked. The exit is open.');
   }
   if (e.prop) {
     for (const o of enemies) {
@@ -950,6 +975,48 @@ function updateTurret(e, dt) {
   }
 }
 
+// Bell-golem: never moves. It turns to face you once it sees you, its eye and crown glow for a beat (the warning,
+// with a bell chime), then it tolls: a slow arc of shockwave rolls out along the line it locked. Sidestep the arc.
+// Below half health it tolls faster and adds two flanking arcs, each still slow and telegraphed. Nothing is hidden.
+function updateGolem(e, dt) {
+  e.flash -= dt; e.rt -= dt;
+  const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy);
+  const sees = d < 12 && lineOfSight(e.x, e.y, P.x, P.y);
+  const want = Math.atan2(dy, dx);
+  const gap = () => Math.atan2(Math.sin(want - e.face), Math.cos(want - e.face));
+  const swing = (rate) => { e.face += Math.max(-rate * dt, Math.min(rate * dt, gap())); };
+  const angry = e.hp < GOLEM.hp / 2;
+  e.awake = sees || e.tm !== 'scan';
+  e.atk = e.tm === 'charge' ? 0.1 : 0;
+  if (e.tm === 'scan') {
+    if (!sees) return;
+    swing(1.2);
+    if (e.rt <= 0 && Math.abs(gap()) < 0.2) { e.tm = 'charge'; e.rt = 1.1; sfx.locked(); steamPuff(e.x, e.y); }
+  } else if (e.tm === 'charge') {
+    if (sees && e.rt > 0.35) swing(0.6);
+    if (e.rt <= 0) {
+      e.fa = e.face;
+      for (const off of angry ? [0, -0.5, 0.5] : [0]) waves.push({ x: e.x, y: e.y, a: e.fa + off, r: 0.7, hit: false });
+      sfx.thump(); shake = Math.max(shake, 0.2);
+      e.tm = 'rest'; e.rt = angry ? 1.8 : 2.6;
+    }
+  } else {
+    if (sees) swing(0.8);
+    if (e.rt <= 0) { e.tm = 'scan'; e.rt = 0; }
+  }
+}
+function updateWaves(dt) {
+  for (let i = waves.length - 1; i >= 0; i--) {
+    const w = waves[i];
+    w.r += WAVE.speed * dt;
+    if (w.r > WAVE.reach) { waves.splice(i, 1); continue; }
+    const dx = P.x - w.x, dy = P.y - w.y;
+    if (w.hit || Math.abs(Math.hypot(dx, dy) - w.r) > 0.45) continue;
+    const off = Math.atan2(Math.sin(Math.atan2(dy, dx) - w.a), Math.cos(Math.atan2(dy, dx) - w.a));
+    if (Math.abs(off) < WAVE.arc && lineOfSight(w.x, w.y, P.x, P.y)) { w.hit = true; shake = Math.max(shake, 0.3); hurt(WAVE.dmg, false, w.x, w.y); }
+  }
+}
+
 function updateEnemies(dt) {
   for (const e of enemies) {
     if (e.dead) {
@@ -961,6 +1028,7 @@ function updateEnemies(dt) {
       continue;
     }
     if (e.prop) continue;
+    if (e.golem) { updateGolem(e, dt); continue; }
     if (e.reg) { e.flash -= dt; continue; } // a steam regulator just stands there, venting
     if (e.kind === 't') { updateTurret(e, dt); continue; }
     e.flash -= dt; e.cd -= dt; e.atk -= dt;
@@ -1084,7 +1152,10 @@ function updateWorld(dt) {
   for (let y = py0 - 1; y <= py0 + 1; y++) for (let x = px0 - 1; x <= px0 + 1; x++) {
     if (cell(x, y) === 'X' && Math.hypot(P.x - x - 0.5, P.y - y - 0.5) < 0.95) {
       const left = regsLeft();
-      if (left > 0) { if (lockedNag <= 0) { say(`Exit sealed. Wreck the steam regulators: ${left} left.`); sfx.locked(); lockedNag = 2.5; } continue; }
+      if (left > 0) {
+        if (lockedNag <= 0) { say(enemies.some((e) => e.golem && !e.dead) ? 'Exit sealed. Topple the bell-golem.' : `Exit sealed. Wreck the steam regulators: ${left} left.`); sfx.locked(); lockedNag = 2.5; }
+        continue;
+      }
       endLevel('win'); return;
     }
   }
@@ -1245,6 +1316,7 @@ function update(dt) {
   if (mode !== 'play') return;
   updateEnemies(dt);
   updateShots(dt);
+  updateWaves(dt);
   noiseRadius = Math.max(0, noiseRadius - dt * 30);
   lockedNag -= dt;
   msgTime -= dt; if (msgTime <= 0) $('msg').hidden = true;

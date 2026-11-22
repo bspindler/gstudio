@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.12.0 (2026-11-22)
+- New level 10, Bellworks: a bell-golem guards the exit hall and sends slow, glowing shockwaves across the floor; sidestep them, shoot it down, and the exit opens.
+
 ## 0.11.0 (2026-11-21)
 - Gearhold's machines now flash a brief brass glint just before they bite or fire, so attacks are easier to read in the dim halls.
 - Terrace of Dials: a kilnwarden now guards the final crossing before the exit arch, so the last stretch is a real fight.

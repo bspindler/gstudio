@@ -330,6 +330,25 @@ export function buildMachines() {
   for (const s of [-1, 1]) tb.cyl([s * 0.3, 0.68, 0], [s * 0.42, 0.68, 0], 0.06, 0.06, 8, PAL.bronze);
   tb.crystal([0, 0.96, -0.05], 0.05, 0.09, 4, PAL.teal, 1);
   M.t = { body: tb.data() };
+
+  // Bell-golem: a great brass bell on two stout stone-and-iron legs, hammer fists, a glowing eye slit and a teal crown
+  // crystal. Faces +z. Built under its own mesh key 'n'; the game draws it for the 'b' tile on Bellworks.
+  const nb = builder();
+  for (const s of [-1, 1]) {
+    nb.cyl([s * 0.3, 0, 0], [s * 0.3, 0.52, 0], 0.17, 0.14, 10, PAL.ceramicDark);
+    nb.cyl([s * 0.3, 0, 0.04], [s * 0.3, 0.07, 0.04], 0.22, 0.2, 10, PAL.plinth);
+  }
+  nb.cyl([0, 0.5, 0], [0, 1.32, 0], 0.66, 0.4, 16, PAL.brass);
+  for (const y of [0.56, 0.92]) nb.cyl([0, y - 0.035, 0], [0, y + 0.035, 0], y < 0.7 ? 0.67 : 0.54, y < 0.7 ? 0.67 : 0.54, 16, PAL.brassDark);
+  nb.sphere([0, 1.32, 0], 0.4, 0.26, 0.4, 16, 7, PAL.bronze);
+  nb.cyl([0, 1.5, 0], [0, 1.66, 0], 0.07, 0.07, 8, PAL.brassDark);
+  nb.crystal([0, 1.78, 0], 0.1, 0.16, 4, PAL.teal, 1);
+  nb.obox([0, 1.02, 0.5], I, [0.2, 0.035, 0.03], PAL.eye, 1);
+  for (const s of [-1, 1]) {
+    nb.cyl([s * 0.62, 1.1, 0], [s * 0.82, 0.62, 0.1], 0.1, 0.09, 8, PAL.bronze);
+    nb.sphere([s * 0.84, 0.5, 0.12], 0.17, 0.17, 0.17, 10, 6, PAL.brassDark);
+  }
+  M.n = { body: nb.data() };
   return M;
 }
 

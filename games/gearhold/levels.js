@@ -11,6 +11,7 @@
 //           m cinder mite (small, fast, one-hit; comes in swarms of three)
 //           r brass ram (rears up, then charges in a straight line; stunned after hitting a wall)
 //           g steam regulator (a brass drum: wreck every one to unseal the exit; it never moves or shoots)
+//           (on level 10, Bellworks, the one b is a bell-golem instead: its eye glows, then a slow shockwave arc rolls out; wreck it to unseal the exit)
 //           t brass turret (fixed; sweeps its hall, glows, then fires a three-shot volley along a locked line; shootable)
 // packages/core/test/gearhold-levels.test.ts checks that every level is sealed and finishable.
 
@@ -223,6 +224,29 @@ export const LEVELS = [
       '#.a...#.a.P..........#.h.......P....#........#',
       '#.....#...P..........#..P...t.......#.....h..#',
       '#.....#.......t......#..............#........#',
+      '##############################################',
+    ],
+  },
+  {
+    name: 'Bellworks',
+    hint: 'A bell-golem guards the exit hall. Its eye glows, then a slow shockwave rolls toward you: sidestep it, keep shooting, and the exit unseals when the golem falls.',
+    mood: {
+      skyTop: [0.1, 0.2, 0.3], skyHorizon: [0.88, 0.76, 0.5], cloud: [0.84, 0.8, 0.7],
+      sunDir: [0.1, 0.38, -0.55], sunColor: [1.5, 1.2, 0.8],
+      ambient: [0.4, 0.46, 0.58], ground: [0.34, 0.28, 0.2], lamp: [1.0, 0.76, 0.4], crystal: [0.45, 0.9, 0.85],
+      fog: 0.018, stars: 0,
+    },
+    map: [
+      '##############################################',
+      '#.....#............#.........................#',
+      '#.w...#...h........#..h........P.............#',
+      '#.....#............#.......P........b........#',
+      '#.....#....P.......#.........................#',
+      '#S....D............D.........................X',
+      '#.....#....P.......#.........................#',
+      '#.....#............#.......P.................#',
+      '#.a...#.......a....#..h........P.............#',
+      '#.....#............#...a.....................#',
       '##############################################',
     ],
   },
