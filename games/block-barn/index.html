@@ -94,6 +94,9 @@
   #peeks { position: absolute; inset: 0; overflow: hidden; border-radius: 999px 999px 0 0; pointer-events: none; display: flex; justify-content: center; align-items: flex-end; gap: 2%; }
   #peeks .peek { position: relative; flex: 0 0 44%; height: 66%; animation: peek-in .6s ease-out both, peek-bob 3.4s ease-in-out .6s infinite; }
   #peeks .peek svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  #loft .face { position: absolute; left: 20%; width: 60%; bottom: 0; height: 70%; z-index: 2; pointer-events: none; animation: peek-in .6s ease-out both; }
+  #loft .face svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 100%; animation: face-wiggle 3.6s ease-in-out .6s both; }
+  @keyframes face-wiggle { 0%, 100% { rotate: 0deg; } 25% { rotate: -7deg; } 50% { rotate: 0deg; } 75% { rotate: 7deg; } }
   @keyframes peek-in { 0% { transform: translateY(100%); } 100% { transform: none; } }
   @keyframes peek-bob { 50% { transform: translateY(-4px); } }
   .animal.trot-in { animation: trot-in 1.1s ease-in-out var(--d, 0s) both; }
@@ -403,6 +406,7 @@
     #vane .arrow { transition: none; }
     .animal.nap .eye, .animal.nap .art { transition: none; }
     #peeks .peek { animation: none; }
+    #loft .face, #loft .face svg { animation: none; }
     .animal.trot-in { animation: none; opacity: 0; }
     .animal.trot-out { animation: none; }
     .animal.parade { animation: none; }
@@ -490,7 +494,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.9.1', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.10.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1241,10 +1245,58 @@ function peekIn(l) {
   peeksEl.append(p);
 }
 function peekOut(l) { peeksEl.querySelector(`[data-letter="${l}"]`)?.remove(); }
+// A dragged floor animal let go on the OPEN door trots inside, waves its face from the loft window with a slow wiggle,
+// then comes back out and trots to its own block. Not a tap, so the door still opens/closes on every tap. It reuses the
+// door's trot-in/trot-out and moves no toy for good; no sound, no text, no flashing; ordinary trot under reduced motion.
+// Returns false (so the ordinary trot answers) when it cannot run.
+const loftVisit = new Map(); // letter -> token while visiting
+function loftFaceOut(l) { $('loft').querySelectorAll(`.face[data-letter="${l}"]`).forEach((f) => f.remove()); }
+function visitLoft(l) {
+  const a = slotAnimal(l);
+  if (!a || !doorOpen || inside.has(l) || loftVisit.has(l) || !named.has(l) || !loftBox()) return false;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+  const door = doorEl.getBoundingClientRect(), r = a.getBoundingClientRect();
+  const dx = parseFloat(a.style.getPropertyValue('--dx')) || 0;
+  const tx = door.left + door.width / 2 - (r.left + r.width / 2);
+  const tok = {};
+  loftVisit.set(l, tok);
+  const live = () => loftVisit.get(l) === tok;
+  a.classList.remove('mv', 'alt1', 'alt2', 'alt3', 'dance', 'pop', 'trot', 'trot-out', 'parade', 'yawn', 'sway', 'oh', 'look', 'nuz');
+  void a.offsetWidth;
+  a.style.setProperty('--tx', `${tx}px`);
+  a.style.setProperty('--ty', `${door.bottom - 8 - r.bottom}px`);
+  a.style.setProperty('--d', '0ms');
+  a.classList.add('trot-in');
+  inside.add(l);
+  setTimeout(() => {
+    if (!live() || !inside.has(l)) { loftFaceOut(l); if (live()) loftVisit.delete(l); return; }
+    const f = document.createElement('div');
+    f.className = 'face';
+    f.dataset.letter = l;
+    f.innerHTML = animalSVG(l);
+    $('loft').append(f);
+    setTimeout(() => {
+      loftFaceOut(l);
+      if (!live()) return;
+      loftVisit.delete(l);
+      if (!inside.has(l)) return;
+      inside.delete(l);
+      a.style.removeProperty('--dx'); // it comes out at, and settles on, its own block
+      a.style.setProperty('--tx', `${tx + dx}px`);
+      a.classList.remove('trot-in');
+      void a.offsetWidth;
+      a.classList.add('trot-out');
+      setTimeout(() => a.classList.remove('trot-out'), 1200);
+    }, 4300);
+  }, 1100);
+  return true;
+}
 /** An animal that is inside goes back to normal at once (its block was stacked, or the barn was reseeded). */
 function leaveBarn(l) {
   inside.delete(l);
   peekOut(l);
+  loftVisit.delete(l);
+  loftFaceOut(l);
   const a = slotAnimal(l);
   if (a) a.classList.remove('trot-in', 'trot-out', 'parade');
 }
@@ -1317,6 +1369,8 @@ function tapDoor() {
     [...inside].forEach((l) => {
       const a = slotAnimal(l);
       peekOut(l);
+      loftVisit.delete(l);
+      loftFaceOut(l);
       inside.delete(l);
       if (!a) return;
       a.style.setProperty('--d', `${i * TROT_GAP}ms`);
@@ -1512,6 +1566,8 @@ function trotAt(g, x, y) {
   if (Math.hypot(x - g.x, y - g.y) < DRAG) return false;
   const b = hitBoxes().find((b) => b.kind === 'animal' && distTo(b, g.x, g.y) === 0);
   if (!b) return false;
+  const dr = doorBox();
+  if (x >= dr.x && x <= dr.x + dr.w && y >= dr.y && y <= dr.y + dr.h && visitLoft(b.letter)) { quietMs = 0; clearInvite(); return true; }
   const host = hitBoxes().find((o) => o.kind === 'animal' && o.letter !== b.letter && distTo(o, x, y) === 0);
   if (host && rideAnimal(b.letter, host.letter)) { quietMs = 0; clearInvite(); return true; }
   quietMs = 0;

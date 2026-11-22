@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.10.0 (2026-11-23)
+- Drag an animal onto the open barn door: it trots in, waves from the loft window with a slow wiggle, then trots back out to its own block.
+
 ## 0.9.1 (2026-11-23)
 - When you name an animal, its nearest neighbour now glances over to watch it for a moment, then looks back.
 
