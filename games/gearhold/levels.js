@@ -102,7 +102,8 @@ export const LEVELS = [
   },
   {
     name: 'Press Gallery',
-    hint: 'Brass presses thump in a steady wave. Cross while one rests; a hot glow means it is about to slam.',
+    hint: 'Brass presses thump in a steady wave. Cross while one rests; a hot glow means it is about to slam. Fission drones split in two when shot.',
+    fission: true, // every wisp drone (d) in this level splits into two bigger, slower biters when scrapped
     mood: {
       skyTop: [0.12, 0.2, 0.42], skyHorizon: [0.92, 0.7, 0.42], cloud: [0.95, 0.82, 0.7],
       sunDir: [-0.4, 0.3, 0.55], sunColor: [1.6, 1.15, 0.7],

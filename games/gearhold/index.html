@@ -276,7 +276,7 @@ const STATS = {
 const ITEM_KINDS = 'hakw';
 // Hit volumes: spheres [forward offset, height, radius] fitted to each machine's model.
 function volumes(e) {
-  if (e.kind === 'd') return [[0, e.hz, 0.25]];
+  if (e.kind === 'd') return [[0, e.hz, 0.25 * (e.sc || 1)]];
   if (e.kind === 'c') return e.mite ? [[0, 0.1, 0.17], [0.16, 0.09, 0.08]] : [[0, 0.17, 0.26], [0.26, 0.15, 0.11]];
   if (e.kind === 'b') return [[0, 0.3, 0.24], [0, 0.8, 0.4], [0, 1.27, 0.17]];
   if (e.kind === 'r') return [[-0.05, 0.42, 0.32], [0.45, 0.44, 0.2]];
@@ -329,7 +329,7 @@ function loadLevel(i) {
     if (c === 'u') presses.push({ x, y, was: 'open', hit: false });
     else if (c === 'S') { P.x = x + 0.5; P.y = y + 0.5; }
     else if (STATS[c]) {
-      enemies.push({ kind: c, ...STATS[c], ...(c === 'b' && i === 1 ? { hp: 230 } : null), ...(c === 'b' && i === 0 ? { hp: 190 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false, ...(c === 't' ? { tm: 'scan', sl: 0, fa: 0, rt: 0.3 + Math.random() * 1.2, strafe: Math.random() < 0.5 ? 1 : -1 } : null) });
+      enemies.push({ kind: c, ...STATS[c], ...(c === 'b' && i === 1 ? { hp: 230 } : null), ...(c === 'b' && i === 0 ? { hp: 190 } : null), x: x + 0.5, y: y + 0.5, awake: false, cd: 0, atk: 0, flash: 0, anim: Math.random() * 3, strafe: 1, strafeT: 0, dead: false, smokeT: 0, puffT: 0, face: Math.random() * 6, hz: 0.62, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false, ...(c === 'd' && LEVELS[i].fission ? { split: true } : null), ...(c === 't' ? { tm: 'scan', sl: 0, fa: 0, rt: 0.3 + Math.random() * 1.2, strafe: Math.random() < 0.5 ? 1 : -1 } : null) });
     } else if (ITEM_KINDS.includes(c)) items.push({ id: items.length, kind: c, x: x + 0.5, y: y + 0.5, phase: Math.random() * 6 });
   }
   foes = enemies.filter((e) => !e.prop).length;
@@ -534,7 +534,7 @@ function machineDraws(e, t, out) {
     return;
   }
   if (e.kind === 'd') {
-    const root = M4.trs(e.x, e.hz, e.y, yaw);
+    const root = M4.trs(e.x, e.hz, e.y, yaw, 0, 0, e.sc || 1);
     put(mesh.body, root);
     put(mesh.ring, M4.mul(root, M4.trs(0, 0, 0, t * 2.4, 0.32)));
   } else if (e.kind === 'c') {
@@ -808,6 +808,19 @@ function updateFx(dt) {
 
 // ---------- combat ----------
 const regsLeft = () => enemies.filter((e) => e.reg && !e.dead).length;
+// Fission drone: when scrapped it splits into two bigger, slower drones that drift in and bite.
+const MINI = { hp: 28, speed: 1.5, radius: 0.4, mini: true, sc: 2 };
+const MINI_BITE = 22;
+function splitDrone(p) {
+  const px = -Math.sin(p.face), py = Math.cos(p.face);
+  for (const s of [-1, 1]) {
+    const x = p.x + px * s * 0.4, y = p.y + py * s * 0.4;
+    const ok = !solid(Math.floor(x), Math.floor(y));
+    enemies.push({ kind: 'd', ...MINI, x: ok ? x : p.x, y: ok ? y : p.y, awake: true, cd: 0.8, atk: 0, flash: 0, anim: Math.random() * 3, strafe: s, strafeT: 1, dead: false, smokeT: 0, puffT: 0, face: p.face, hz: 0.55, moving: 0, spin: 0, rm: 'seek', rt: 0, rdx: 1, rdy: 0, hitP: false });
+    foes += 1;
+  }
+  if (mode === 'play') say('The drone splits in two!');
+}
 function damageEnemy(e, n) {
   if (e.dead) return;
   e.hp -= n; e.flash = 0.08; e.awake = true;
@@ -819,6 +832,7 @@ function damageEnemy(e, n) {
   sfx.boom();
   explosion(e.x, e.y, e.prop || e.kind === 'b');
   if (!e.prop) steamPuff(e.x, e.y);
+  if (e.split) splitDrone(e);
   if (e.reg) {
     const left = regsLeft();
     say(left > 0 ? `Regulator wrecked. ${left} left.` : 'All regulators wrecked. The exit is open.');
@@ -963,7 +977,10 @@ function updateEnemies(dt) {
     else if (e.rm === 'wind' && e.rt > 0.4) e.face += Math.atan2(Math.sin(Math.atan2(e.rdy, e.rdx) - e.face), Math.cos(Math.atan2(e.rdy, e.rdx) - e.face)) * Math.min(1, dt * 8);
     const ux = dx / (d || 1), uy = dy / (d || 1);
     let mx = 0, my = 0;
-    if (e.kind === 'd') {
+    if (e.mini) {
+      mx = ux - uy * e.strafe * 0.25; my = uy + ux * e.strafe * 0.25;
+      if (d < 0.9 && e.cd <= 0) { hurt(MINI_BITE, !sees, e.x, e.y); sfx.bite(); e.cd = 1; e.atk = 0.25; }
+    } else if (e.kind === 'd') {
       e.strafeT -= dt;
       if (e.strafeT <= 0) { e.strafe = -e.strafe; e.strafeT = 1.2 + Math.random() * 1.8; }
       const want = d > 5.5 ? 1 : d < 3 ? -1 : 0;
