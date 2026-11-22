@@ -54,3 +54,10 @@ Changes:
 
 Changes:
 - HAL-300 polish(hyperline): Faint neon ground tick marks each obstacle's jump point ahead: **merged** (0.11.1)
+
+## Run run-2026-11-22T00-23-21-048Z
+
+**Hyperline.** Its identity is a neon runner with your restored 0.4.1 camera. The ghost gate (HAL-306) is a quiet personal marker at your best distance: no nag, no timer, no reward, and nothing new stored or sent. It only renders, so sectors and timing are untouched, and the score stays at 99.52. It reports version 0.12.0, which was already in use.
+
+Changes:
+- HAL-306 feature(hyperline): Rebuild the faint ghost gate where your best run ended, on current main: **merged** (0.12.0)

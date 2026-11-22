@@ -64,3 +64,12 @@ Changes:
 Changes:
 - HAL-297 fix(gearhold): Retune one foe's health on the level furthest outside its winnable band: **discarded** (implementer blocked: The only level outside its winnable band is Press Gallery (level 3, winnable 53.33, winRate 0.95), which the ticket forbids touching (HAL-276). All other levels score winnable 100, so no permitted level can be retuned.)
 - HAL-298 fix(gearhold): Lift feel on the merged level with the lowest hit ratio: **merged** (0.10.1)
+
+## Run run-2026-11-22T00-23-21-048Z
+
+**Gearhold.** Its identity is brass machines, timed presses and furnace heat, and tonight's work stayed on it. Boiler Stair's cinder mites (HAL-303) are on main at 51% wins with pace and feel at 100, and the furnace character of level 6 holds. Bellworks (HAL-304) is a brass bell-golem boss as level 10. It is held only because its new tile needs a scorer threat weight through the asks path; the score is 96.96, or 97.27 with Bellworks. The Press Gallery rebuild (HAL-302) timed out. A builder reading showed level 4's feel at 67, which I can't yet explain and want re-scored before the next attempt.
+
+Changes:
+- HAL-302 feature(gearhold): Rebuild Press Gallery's fission drones that split when shot, on current main: **discarded** (implementer timed out)
+- HAL-303 feature(gearhold): Rebuild Boiler Stair's cinder-mite swarms on current main: **merged** (0.11.0)
+- HAL-304 feature(gearhold): Rebuild level 10 Bellworks: bell-golem boss with slow shockwaves: **held** (0.11.0)

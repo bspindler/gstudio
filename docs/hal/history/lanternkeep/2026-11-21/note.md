@@ -38,3 +38,10 @@ Changes:
 
 Changes:
 - HAL-301 polish(lanternkeep): Path glows faintly along the route the next wave will walk: **merged** (0.7.1)
+
+## Run run-2026-11-22T00-23-21-048Z
+
+**Lanternkeep.** Its identity is a soft, moonlit tower defence with story nights and an endless Night Watch. The Gloam Stag (HAL-305) adds a big antlered creature that charges on long straights, with no new assets and the story nights unchanged. Watch went from 87.5 to 89.1 and fitness from 95.83 to 96.35. inBand and noSpikes stayed at 100. It reports version 0.8.0, which Mirror Mist already used.
+
+Changes:
+- HAL-305 feature(lanternkeep): Rebuild the Gloam Stag, a charging Night Watch creature, on current main: **merged** (0.8.0)
