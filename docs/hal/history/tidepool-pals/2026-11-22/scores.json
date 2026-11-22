@@ -1,0 +1,21 @@
+{
+  "night": "2026-11-22",
+  "runs": [
+    {
+      "run": "run-2026-11-22T12-39-23-095Z",
+      "at": "2026-11-22T13:50:51.284Z",
+      "scorers": {
+        "tidepool-pals": {
+          "fitness": 97.35,
+          "measures": {
+            "inBand": 98.06,
+            "noWalls": 96.67,
+            "goalReach": 96.31,
+            "variety": 98.35,
+            "tension": 82.84
+          }
+        }
+      }
+    }
+  ]
+}
