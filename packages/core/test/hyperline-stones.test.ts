@@ -10,9 +10,9 @@ const pattern = () => PATTERNS.find((q) => q.id === 'stones')!;
 const bare = (objs: Course['objs']): Course => { const c = createCourse(5); c.objs.length = 0; c.nextX = 1e9; c.objs.push(...objs.sort((a, b) => a.x - b.x)); return c; };
 
 describe('hyperline STEPPING STONES', () => {
-  it('is sector 19 for players, right before HYPERCORE, and introduces the stones pattern', () => {
+  it('is sector 19 for players, right before SLIDING LEDGE, and introduces the stones pattern', () => {
     expect(sectorInfo(18).name).toBe('STEPPING STONES');
-    expect(sectorInfo(19).name).toBe('HYPERCORE');
+    expect(sectorInfo(19).name).toBe('SLIDING LEDGE');
     expect(INTRO[18]).toBe('stones');
   });
 

@@ -5,7 +5,7 @@
 
 import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView } from './lib/proj.js';
 import { blockX, moverH, railLit } from './lib/sim.js';
-import { bladeX } from './lib/course.js';
+import { bladeX, pitEnd } from './lib/course.js';
 import { bestMarkShimmer } from './lib/ghost.js';
 import { AIR, BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 
@@ -403,6 +403,7 @@ export function takeoffTicks(objs, rcx) {
     if (o.x > rcx + TICK.reach + 20) break;
     if (o.t !== 'block' && o.t !== 'spike' && o.t !== 'pit') continue;
     if (o.t === 'spike' && o.inv) continue;
+    if (o.sa) continue; // a sliding ledge has no fixed middle to mark
     const mid = o.t === 'spike' ? o.x + 0.4 : o.x + (o.w || 0) / 2;
     const x = mid - (AIR * speedAt(mid)) / 2, a = tickAlpha(x - rcx);
     if (a > 0) out.push({ x, a });
@@ -500,10 +501,10 @@ export function drawScene(c, W, H, st) {
   const pits = [];
   const rcx = st.runner.x + PS / 2;
   // a crumble panel still holds the floor up until it drops, `drop` units before the runner reaches it
-  for (const o of objs) { if (o.x > far) break; if (o.t === 'pit' && o.x + o.w > near && !(o.c && rcx < o.x - o.drop)) pits.push(o); }
+  for (const o of objs) { if (o.x > far) break; if (o.t === 'pit' && pitEnd(o, st.runner.x) > near && !(o.c && rcx < o.x - o.drop)) pits.push(o); }
   const segs = [];
   let a = near;
-  for (const p of pits) { if (p.x > a) segs.push([a, p.x]); a = Math.max(a, p.x + p.w); }
+  for (const p of pits) { if (p.x > a) segs.push([a, p.x]); a = Math.max(a, pitEnd(p, st.runner.x)); }
   if (a < far) segs.push([a, far]);
   const TZ = 1.15;
   for (let i = segs.length - 1; i >= 0; i--) {

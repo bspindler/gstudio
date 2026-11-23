@@ -26,6 +26,14 @@ export function bladeX(o, x0) {
   return o.x + o.amp * (1 + Math.sin(o.k * x0 + o.ph));
 }
 
+/**
+ * Far edge of a pit when the runner's left edge is at x0. A sliding ledge (o.sa > 0) has its landing edge drift between
+ * x + w and x + w + 2 * sa as the runner advances; any other pit ends at x + w. A function of x0 alone, so a run still replays exactly.
+ */
+export function pitEnd(o, x0) {
+  return o.sa ? o.x + o.w + o.sa * (1 + Math.sin(o.sk * x0 + o.sph)) : o.x + o.w;
+}
+
 /** Whether a runner with left edge x0 and base height y is inside the blade (it is solid from the track up to o.h). */
 export function bladeHit(o, x0, y) {
   const bx = bladeX(o, x0);
@@ -418,7 +426,25 @@ export const PATTERNS = [
       ];
       return { o, len: 1 + w1 + isl + w2 + 0.5 };
     } },
+
+  // Sector 19: sliding ledge. One pit whose far edge slides slowly in and out as you advance (LEDGE_A each way, a gentle
+  // swing, LEDGE_K per unit of track). The take-off window is how much of the jump is left once the pit's far edge is
+  // cleared, so it opens and closes as the ledge slides: the pit is as wide as it can be while the narrowest window
+  // (ledge furthest out) stays at `want` seconds, and the widest is about 0.04 s more. Single-lane, jump-only.
+  { id: 'ledge', sector: 19, weight: (s) => (s === 19 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const px = x + 1, v = speedAt(px + 4), want = intro ? 0.12 : 0.135, ph = r() * Math.PI * 2;
+      const w = v * (AIR - want), far = w + 2 * LEDGE_A;
+      const o = [
+        { t: 'pit', x: px, w, sa: LEDGE_A, sk: LEDGE_K, sph: ph },
+        { t: 'chip', x: px + w / 2 + LEDGE_A, y: 2.3 },
+      ];
+      return { o, len: 1 + far + 0.5 };
+    } },
 ];
+
+// Sliding ledge: half the slide (units) and its pace (radians per unit of track).
+const LEDGE_A = 0.4, LEDGE_K = 0.42;
 
 // Seconds a spring spike has been up when the take-off window opens.
 const SPRING_LEAD = 0.1;
@@ -441,7 +467,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs', 18: 'stones' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs', 18: 'stones', 19: 'ledge' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

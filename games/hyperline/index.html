@@ -245,7 +245,7 @@ import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, vali
 import { createBloom, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.12.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.13.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');

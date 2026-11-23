@@ -4,12 +4,14 @@ export type Obj = {
   c?: number; glow?: number; drop?: number;
   sl?: number; m?: number; f?: number;
   base?: number; amp?: number; k?: number; ph?: number;
+  sa?: number; sk?: number; sph?: number;
   p?: string; g?: number; got?: boolean; miss?: boolean; done?: boolean; mc?: number;
 };
 export type Pattern = { id: string; sector: number; weight(s: number): number; build(x: number, d: number, r: () => number, intro?: boolean): { o: Obj[]; len: number } };
 export type Course = { seed: number; rng: () => number; objs: Obj[]; nextX: number; introduced: number[]; last: string; count: number };
 export const PATTERNS: Pattern[];
 export const INTRO: Record<number, string>;
+export function pitEnd(o: Obj, x0: number): number;
 export function bladeX(o: Obj, x0: number): number;
 export function bladeHit(o: Obj, x0: number, y: number): boolean;
 export function createCourse(seed: number, startX?: number): Course;

@@ -2,7 +2,7 @@
 // but every collision is decided here. Always stepped at STEP, so a run is deterministic.
 // No DOM; exercised by the clearability bot in hyperline-course.test.ts.
 
-import { bladeHit, extendCourse, lowerBound } from './course.js';
+import { bladeHit, extendCourse, lowerBound, pitEnd } from './course.js';
 import { BAR_H, CEIL_Y, GRAV, JV, NEAR, P, PAD_V, PS, speedAt, STEP, VOID_Y } from './world.js';
 
 export function createRunner() {
@@ -47,7 +47,7 @@ export function step(r, c, jump) {
   for (let i = i0; i < iEnd; i++) {
     const o = objs[i];
     if (o.t === 'flip' && cx >= o.x && cx < o.x + o.w) fz = true;
-    else if (o.t === 'pit' && cx > o.x && cx < o.x + o.w) pit = true;
+    else if (o.t === 'pit' && cx > o.x && cx < pitEnd(o, x0)) pit = true;
   }
   if (fz !== r.flip) { r.flip = fz; r.grounded = false; ev.push({ t: fz ? 'flipIn' : 'flipOut' }); }
 
