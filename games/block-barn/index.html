@@ -89,6 +89,17 @@
   #loft .sv3 { background: radial-gradient(circle at 30% 25%, #fff 0 3px, transparent 4px), radial-gradient(circle at 70% 40%, #fff 0 3px, transparent 4px), radial-gradient(circle at 50% 58%, #fff 0 3px, transparent 4px), linear-gradient(180deg, #dfe8f4, #f1f5fb 68%, #fdfdff 68%); }
   #loft.s1 .sv1, #loft.s2 .sv1, #loft.s3 .sv1, #loft.s2 .sv2, #loft.s3 .sv2, #loft.s3 .sv3 { opacity: 1; }
   #loft::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 5px; margin-left: -2.5px; background: #f4e6c8; z-index: 1; }
+  /* tap the little sun in the free part of the sky: the sky and barn drift to a starry dusk over about 3s (steady stars,
+     no twinkle, no flash) and the named animals drowsily half-close their eyes; tap again for morning. No sound or text. */
+  #sun { position: absolute; display: none; z-index: 3; pointer-events: none; border-radius: 50%; opacity: 1; transition: opacity 3s ease-in-out;
+    background: radial-gradient(circle at 40% 38%, #fff6b8, #ffd24a 70%); box-shadow: 0 0 0 3px rgba(255, 214, 90, .35); }
+  .sun-on #sun { opacity: .35; }
+  #dusk-sky::before { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity 3s ease-in-out;
+    background: radial-gradient(circle at 20% 22%, #fff 0 1.5px, transparent 2px), radial-gradient(circle at 44% 12%, #fff 0 1.5px, transparent 2px), radial-gradient(circle at 34% 44%, #fff 0 1.2px, transparent 1.8px), radial-gradient(circle at 82% 52%, #fff 0 1.2px, transparent 1.8px), radial-gradient(circle at 16% 58%, #fff 0 1.2px, transparent 1.8px); }
+  .sun-on #dusk-sky, .sun-on #dusk { opacity: 1; }
+  .sun-on #dusk-sky::before, .dusk-on #dusk-sky::before { opacity: 1; }
+  .sun-on #sunbeam, .sun-on #butterfly { opacity: 0; }
+  .animal.drowse .eye { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(.45); transition: transform 2.4s ease-in-out; }
   .animal.nap .eye { transform-box: fill-box; transform-origin: 50% 50%; transform: scaleY(.12); transition: transform 1.6s ease-in-out; }
   .animal.nap .art { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(1, .94); transition: transform 1.6s ease-in-out; }
   #peeks { position: absolute; inset: 0; overflow: hidden; border-radius: 999px 999px 0 0; pointer-events: none; display: flex; justify-content: center; align-items: flex-end; gap: 2%; }
@@ -405,6 +416,7 @@
     #loft .sv { transition: none; }
     #vane .arrow { transition: none; }
     .animal.nap .eye, .animal.nap .art { transition: none; }
+    .animal.drowse .eye, #sun, #dusk-sky::before { transition: none; }
     #peeks .peek { animation: none; }
     #loft .face, #loft .face svg { animation: none; }
     .animal.trot-in { animation: none; opacity: 0; }
@@ -440,7 +452,7 @@
 </head>
 <body>
 <main id="barn" aria-label="Block Barn">
-  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div><div id="butterfly" aria-hidden="true"><i></i><i></i></div></div><div id="loft" aria-hidden="true"><div class="sv sv0"></div><div class="sv sv1"></div><div class="sv sv2"></div><div class="sv sv3"></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
+  <div id="wall"><div id="rafter"></div><div id="door" aria-hidden="true"><div class="leaf l"></div><div class="leaf r"></div></div><div id="window"><div id="dusk-sky" aria-hidden="true"><div id="moon"></div></div><div id="peeks"></div><div id="butterfly" aria-hidden="true"><i></i><i></i></div></div><div id="sun" aria-hidden="true"></div><div id="loft" aria-hidden="true"><div class="sv sv0"></div><div class="sv sv1"></div><div class="sv sv2"></div><div class="sv sv3"></div></div><div id="vane" aria-hidden="true"><div class="pole"></div><div class="arrow"></div><div class="hub"></div></div></div>
   <div id="play">
     <div id="floor"></div>
     <div id="sunbeam" aria-hidden="true"></div>
@@ -494,7 +506,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.10.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.11.0', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -697,6 +709,7 @@ function reseed(n) {
   rng = seeded(seedNow ^ 0x9e3779b9);
   if (typeof resetDoor === 'function' && doorEl) resetDoor();
   if (typeof resetSky === 'function') resetSky();
+  if (typeof resetSun === 'function') resetSun();
   if (typeof resetBale === 'function') resetBale();
   floor = [];
   picks = 0;
@@ -799,6 +812,7 @@ function renderSlot(k, anim) {
   animal.classList.remove('hopout'); animal._hopTok = (animal._hopTok || 0) + 1; // a redrawn slot never keeps a hop
   animal.classList.toggle('ghost', !isNamed); // unnamed: its silhouette peeks over the block
   animal.classList.toggle('nap', dusk && isNamed); // at dusk the named animals nap
+  animal.classList.toggle('drowse', sunDusk && isNamed); // at the sun's dusk they half-close their eyes
   if (anim) restart(body, anim);
 }
 function renderTower(popTop) {
@@ -923,7 +937,7 @@ function blinkLater(k) {
   setTimeout(() => {
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const a = slotsEl.children[k]?.querySelector('.animal');
-    if (!reduced && a && named.has(floor[k]) && !dusk && !document.hidden) {
+    if (!reduced && a && named.has(floor[k]) && !dusk && !sunDusk && !document.hidden) {
       restart(a, 'blink');
       setTimeout(() => a.classList.remove('blink'), 1200);
     }
@@ -970,7 +984,7 @@ function warmLater() {
   setInterval(() => {
     const els = floor.map((l, k) => slotsEl.children[k]?.querySelector('.animal'));
     const clear = () => els.forEach((a) => a?.classList.remove('warm'));
-    if (dusk || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return clear();
+    if (dusk || sunDusk || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return clear();
     const sb = $('sunbeam'), anim = sb.getAnimations({ subtree: true })[0];
     const p = anim?.effect?.getComputedTiming().progress;
     if (typeof p !== 'number') return clear();
@@ -1454,6 +1468,36 @@ function tapLoft() {
   season = (season + 1) % 4;
   $('loft').className = `s${season}`;
 }
+// ---------- the sun: a starry dusk ----------
+// Tap the little sun in the strip of wall left free by the door, sky, loft window and vane zones (so it overlaps none of
+// them, and moves none of them): the sky drifts to dusk over about 3s with steady stars, the named animals half-close
+// their eyes; tap again for morning. Left out when under 32px is free. No sound, text, flash or count.
+let sunDusk = false;
+function sunBox() {
+  const w = $('wall').getBoundingClientRect(), el = $('sun');
+  const taken = [doorBox(), skyBox(), loftBox(), vaneBox()].filter(Boolean);
+  const best = widestFree(taken);
+  if (!best || best.w < 32 || w.height < 76) { el.style.display = 'none'; return null; }
+  const d = Math.min(30, best.w - 2);
+  el.style.display = 'block';
+  el.style.width = el.style.height = `${d}px`;
+  el.style.left = `${best.x - w.left + best.w / 2 - d / 2}px`;
+  el.style.top = `${34 + (w.height - 34 - d) / 2}px`;
+  return { x: best.x, y: w.top, w: best.w, h: w.height };
+}
+function drowseAll() {
+  floor.forEach((l, k) => slotsEl.children[k]?.querySelector('.animal')?.classList.toggle('drowse', sunDusk && named.has(l)));
+}
+function tapSun() {
+  sunDusk = !sunDusk;
+  barnEl.classList.toggle('sun-on', sunDusk);
+  drowseAll();
+}
+function resetSun() {
+  sunDusk = false;
+  barnEl.classList.remove('sun-on');
+  slotsEl.querySelectorAll('.drowse').forEach((a) => a.classList.remove('drowse'));
+}
 function tapVane() {
   vaneAngle += 300;
   $('vane').querySelector('.arrow').style.setProperty('--vr', `${vaneAngle}deg`);
@@ -1503,6 +1547,7 @@ function tapZones() {
     ...(sk ? [{ kind: 'sky', ...box(sk) }] : []),
     ...(loftBox() ? [{ kind: 'loft', ...box(loftBox()) }] : []),
     ...(vaneBox() ? [{ kind: 'vane', ...box(vaneBox()) }] : []),
+    ...(sunBox() ? [{ kind: 'sun', ...box(sunBox()) }] : []),
     ...(baleBox() ? [{ kind: 'bale', ...box(baleBox()) }] : []),
     { kind: 'floor', ...box(applyLayout().floorBox) },
     { kind: 'corner', x: c.left, y: c.top, w: c.width, h: c.height },
@@ -1525,6 +1570,8 @@ function tapAt(x, y, heldMs = 0) {
   if (lb && x >= lb.x && x <= lb.x + lb.w && y >= lb.y && y <= lb.y + lb.h) { tapLoft(); return; }
   const vb = vaneBox();
   if (vb && x >= vb.x && x <= vb.x + vb.w && y >= vb.y && y <= vb.y + vb.h) { tapVane(); return; }
+  const sb = sunBox();
+  if (sb && x >= sb.x && x <= sb.x + sb.w && y >= sb.y && y <= sb.y + sb.h) { tapSun(); return; }
   const bb = baleBox();
   if (bb && !tower.blocks().length && x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h) { tapBale(); return; }
   let best = null, bestD = Infinity, bestC = Infinity;
