@@ -15,3 +15,13 @@ The tests only check the code statically. It has not been played in a browser an
 
 Changes:
 - HAL-315 feature(block-barn): Drag an animal into the open barn door: it waves from the loft window, then…: **held** (0.10.0)
+
+## Run run-2026-11-23T06-00-06-222Z
+
+**Block Barn**: a calm toddler barn, big targets, no flashing.
+- **Held** (HAL-321): the dusk sun is the bigger change you asked for. The whole barn fades to steady stars and the animals look drowsy; there is no sound or text, and calm stays at 100.
+- **Risk:** on a phone the sun is only about 30 px, and its hit zone is below the 44 px palm size.
+- **Pending:** HAL-315, the barn door wave, is still held too.
+
+Changes:
+- HAL-321 feature(block-barn): Tap a soft sun in the sky and the barn drifts to a starry dusk, then back: **held** (0.10.0)

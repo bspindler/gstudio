@@ -15,3 +15,14 @@ gearhold-play went from 99.16 to 99.24. This keeps Gearhold's identity: big bras
 
 Changes:
 - HAL-314 feature(gearhold): Rebuild level 10 Bellworks: bell-golem boss with slow shockwaves, on current…: **merged** (0.12.0)
+
+## Run run-2026-11-23T06-00-06-222Z
+
+**Gearhold**: dim brass workshop, few deliberate machines, glow only on lamps.
+- **Merged** (HAL-316): Turret Gallery's turrets are sturdier, 30 to 60 hp, and the level went from 93% to 71% wins. winnable is 100, fitness 99.9, and placement is unchanged.
+- **Dropped** (HAL-320): Spindle Loft. Its idea fits the game: you see the spider hanging, then you deal with it. The doubled bite, though, put the level's fairDamage at 97.2, under its 98.9 bar.
+- **Next:** retry the Loft with a gentler bite and spider count as the lever.
+
+Changes:
+- HAL-316 fix(gearhold): Retune one foe's health on the level furthest outside its winnable band: **merged** (0.12.0)
+- HAL-320 feature(gearhold): New level 11, Spindle Loft: spindle-spiders drop from the rafters as you pass: **discarded** (0.12.0) (gearhold-play: new levels[10] fairDamage 97.19 is out of its band (needs >= 98.92))
