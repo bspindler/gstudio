@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.12.0 (2026-11-22)
 - New level 10, Bellworks: a bell-golem guards the exit hall and sends slow, glowing shockwaves across the floor; sidestep them, shoot it down, and the exit opens.
+- Turret Gallery: brass turrets are sturdier, so the hall takes a little more work to clear.
 
 ## 0.11.0 (2026-11-21)
 - Gearhold's machines now flash a brief brass glint just before they bite or fire, so attacks are easier to read in the dim halls.
