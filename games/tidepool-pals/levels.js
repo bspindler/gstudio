@@ -52,7 +52,7 @@ const RAW = [
     ['.......', '.......', '.......', '.i...i.', '.......', '.i...i.', '.......', '.......'],
     { tide: T(5, 3, 'up'), intro: 'Pals tangled in nets! Clear pals next to a net to untangle them. Tangled pals stay put, whatever the tide does, until they are free.' }),
   L(11, 45, 5, [RESCUE(1), C(0, 12)],
-    ['.......', '.P.....', '.......', '.......', '.......', '.......', '.......', '.......'],
+    ['.......', '...P...', '.......', '.......', '.......', '.......', '.......', '.......'],
     { tide: T(3, 3, 'right'), exit: 'right', intro: 'This pal needs the low tide: it drifts right as the water drains. Clear its row to let it reach the open water on the right.' }),
   L(12, 17, 5, [C(1, 24)],
     ['o.....o', 'o.....o', '.......', '.......', '.......', '.......', '.......', '.......'],

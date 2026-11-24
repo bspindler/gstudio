@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.15.1 (2026-11-23)
+- Tidepool Pals level 11: the stranded pal now starts nearer the open water on the right, so the rescue no longer stalls.
+
 ## 0.15.0 (2026-11-21)
 - New level 31: an octopus-shaped pool with rock pools at its tentacle tips and a tide that pulls up into its head.
 - New level 32: a jellyfish-shaped pool with a bubbled pal in its bell and sand in its long tentacle trails.
