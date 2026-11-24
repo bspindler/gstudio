@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.9.1 (2026-11-23)
+- When you name an animal, its nearest neighbour now glances over to watch it for a moment, then looks back.
+
 ## 0.9.0 (2026-11-21)
 - Drag a floor animal and it trots slowly across the hay to where you let go.
 - Block Barn: the weathervane is easier to tap on phones.
