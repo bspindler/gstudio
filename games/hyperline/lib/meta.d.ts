@@ -9,7 +9,7 @@ export type Save = {
   v: 3; credits: number; owned: Record<string, number>; eq: string; trails: Record<string, number>; trail: string;
   best: number; runs: number; crates: number; opened: number; top: { run: number; d: number; at: number }[];
   daily: { day: string; best: number }; missions: string[]; missionSeq: number;
-  settings: { sound: boolean; music: boolean; haptics: boolean }; mode: Mode; far: number;
+  settings: { sound: boolean; music: boolean; haptics: boolean }; mode: Mode; far: number; playS: number;
 };
 export const CHIP_CR: number;
 export const NEAR_CR: number;
@@ -27,5 +27,8 @@ export function missionById(id: string): Mission | undefined;
 export function missionProgress(m: Mission, s: RunStats): number;
 export function checkMissions(active: string[], s: RunStats): string[];
 export function rollMission(seq: number, active: string[]): { id: string; seq: number };
+export const PAID_MIN_RUNS: number;
+export const PAID_MIN_PLAY_S: number;
+export function paidOffersOpen(s: { runs: number; playS: number }): boolean;
 export function freshSave(): Save;
 export function migrateSave(raw: unknown): Save;

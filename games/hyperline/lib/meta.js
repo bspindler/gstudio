@@ -105,13 +105,21 @@ export function rollMission(seq, active) {
   return { id: MISSIONS[seq % n].id, seq: seq + 1 };
 }
 
+/* ---------- paid offers ---------- */
+
+/** Nothing paid is offered before run PAID_MIN_RUNS and PAID_MIN_PLAY_S seconds of total play. */
+export const PAID_MIN_RUNS = 4, PAID_MIN_PLAY_S = 120;
+export function paidOffersOpen(s) {
+  return (s.runs | 0) >= PAID_MIN_RUNS && (Number(s.playS) || 0) >= PAID_MIN_PLAY_S;
+}
+
 /* ---------- save ---------- */
 
 export function freshSave() {
   return { v: 3, credits: 150, owned: { volt: 1 }, eq: 'volt', trails: { classic: 1 }, trail: 'classic',
     best: 0, runs: 0, crates: 0, opened: 0, top: [], daily: { day: '', best: 0 },
     missions: ['chips25', 'dist300', 'near3'], missionSeq: 3,
-    settings: { sound: true, music: true, haptics: true }, mode: 'endless', far: 1 };
+    settings: { sound: true, music: true, haptics: true }, mode: 'endless', far: 1, playS: 0 };
 }
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -156,5 +164,7 @@ export function migrateSave(raw) {
     mode: s.mode === 'daily' ? 'daily' : 'endless',
     // Furthest sector reached; older saves infer it from their best endless distance.
     far: Math.max(1, count(s.far), Math.floor(count(s.best) / SECTOR_LEN) + 1),
+    // Seconds of run time ever played; gates paid offers.
+    playS: count(s.playS),
   };
 }

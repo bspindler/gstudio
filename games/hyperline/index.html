@@ -116,6 +116,10 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 .panel{background:var(--night);border:1px solid var(--edge);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .btn{border:0;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px;letter-spacing:.04em;cursor:pointer;background:var(--cyan);color:var(--void);box-shadow:0 0 16px rgba(34,240,255,.45);white-space:nowrap}
 .btn.buy{background:var(--pink);color:var(--void);box-shadow:0 0 16px rgba(255,43,214,.5)}
+.btn.retry{width:100%;padding:18px 16px;font-size:20px;letter-spacing:.08em}
+.runsum{width:100%;text-align:left}
+.runsum summary{cursor:pointer;color:var(--dim);font-size:13px;font-weight:600;padding:6px 0}
+.runsum[open] summary{margin-bottom:8px}
 .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--edge);box-shadow:none}
 .btn[disabled]{opacity:.4;cursor:not-allowed;box-shadow:none}
 .btn:active{transform:translateY(1px)}
@@ -240,12 +244,12 @@ import { createCourse, extendCourse, pruneCourse } from './lib/course.js';
 import { createRunner, step } from './lib/sim.js';
 import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
-import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, sectorFromSearch, migrateSave, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
+import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, sectorFromSearch, migrateSave, paidOffersOpen, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
 import { createBloom, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
 import { createAudio } from './audio.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.14.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.15.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -457,7 +461,7 @@ function simStep() {
   const r = G.runner, jump = pressed || G.buf > 0;
   if (G.buf > 0) G.buf -= STEP;
   const ev = step(r, G.course, jump);
-  G.simT += STEP;
+  G.simT += STEP; S.playS += STEP;
   recordGhost(G.rec, G.simT, r.x, r.y, r.flip);
   const cxw = r.x + PS / 2, cyw = r.y + PS / 2, sk = SK[S.eq];
   for (const e of ev) {
@@ -517,14 +521,16 @@ function simStep() {
   if (G.trailTick % 240 === 0) pruneCourse(G.course, r.x);
 }
 
+/* Hit-stop: the world holds still for HITSTOP seconds on a crash, so the hit lands before the shatter plays. */
+const HITSTOP = 0.07;
 function die() {
   const r = G.runner, sk = SK[S.eq];
-  G.state = 'dead'; G.shake = reduced ? 0 : 0.5; G.flash = 0.5;
+  G.state = 'dead'; G.hitstop = HITSTOP; G.shake = reduced ? 0 : 0.5; G.flash = 0.5;
   spawn(r.x + PS / 2, r.y + PS / 2, 46, sk.a, 9, 0.9, 0.16, 2); spawn(r.x + PS / 2, r.y + PS / 2, 20, '#FF2BD6', 7, 0.7, 0.12, 2);
   G.shards = makeShards(r.x + PS / 2, r.y + PS / 2, 9, Math.random);
   audio.death(); audio.stopBeat(); buzz(70);
   $('pauseBtn').hidden = true;
-  setTimeout(showDeath, 750);
+  setTimeout(showDeath, 520); // short, so Run again is under a second away
 }
 
 let lastDeath = null;
@@ -575,27 +581,33 @@ function deathScreen(d) {
   const st = G.stats, daily = G.mode === 'daily', gap = d.prevBest - d.dist, toNext = CRATE_EVERY - (S.runs % CRATE_EVERY);
   const secName = sectorInfo(st.sector - 1).name;
   const practice = isPractice(st), distCr = Math.floor(Math.max(0, st.dist - st.from) / 5);
+  const credRevive = G.cont ? '' : `<button class="btn ghost" data-act="revive-cr" ${S.credits < REVIVE_CR ? 'disabled' : ''}>Revive · ${REVIVE_CR} credits</button>`;
+  // Paid revive only for engaged players (run 4+, 2+ minutes played), never before the credits one, never after a pass.
+  const paidRevive = G.cont || passed.has('revive') || !paidOffersOpen(S) ? '' : `<button class="btn buy" data-act="revive-buy">Revive · ${price(CATALOG.revive)}</button>`;
   showModal(`<div class="wreck">WRECKED</div><div class="big">${fmt(d.dist)}m</div>
     <p class="muted">Sector ${st.sector} · ${secName}${daily ? ' · Daily run' : ''}</p>
     ${practice ? `<p class="muted">Practice from sector ${G.start} · BEST ${fmt(d.prevBest)}m counts runs from sector 1</p>` : d.newBest ? `<div class="newbest">${daily ? 'NEW DAILY BEST' : 'NEW BEST'}</div>`
       : `<p class="muted">${daily ? 'Daily best' : 'Best'} ${fmt(d.prevBest)}m${gap > 0 && gap <= 80 ? ` · ${gap}m short` : ''}</p>`}
+    <button class="btn retry" data-act="retry">Run again</button>
+    ${d.done.map((m) => `<div class="mis done"><span>✓ ${m.text}</span><span class="rw"><span class="dia"></span>${m.reward}</span></div>`).join('')}
+    ${d.crate ? '<div class="newbest">NEON CRATE EARNED</div>' : ''}
+    ${d.apex ? '<div class="newbest">APEX UNLOCKED</div>' : ''}
+    <div class="col">
+      ${credRevive}
+      ${paidRevive}
+      <button class="btn ghost" data-act="menu">Main Menu</button>
+    </div>
+    ${G.cont ? '<p class="fine">One revive per run.</p>' : ''}
+    <details class="runsum"><summary>Run details · <b>+${d.delta + d.done.reduce((a, m) => a + m.reward, 0)}</b> credits</summary>
     <div class="brk"><span>Distance${practice ? ` · ${fmt(st.dist - st.from)}m run` : ''}</span><b>+${distCr}</b>
       <span>Chips ${st.chips} · best streak ${st.maxStreak}</span><b>+${st.chipPts}</b>
       <span>Near misses ${st.near}</span><b>+${st.near * NEAR_CR}</b>
       ${d.done.length ? `<span>Missions ${d.done.length}</span><b>+${d.done.reduce((a, m) => a + m.reward, 0)}</b>` : ''}
       <span class="tot">${G.cont ? 'Earned since revive' : 'Run total'}</span><b class="tot">+${d.delta + d.done.reduce((a, m) => a + m.reward, 0)}</b></div>
-    ${d.done.map((m) => `<div class="mis done"><span>✓ ${m.text}</span><span class="rw"><span class="dia"></span>${m.reward}</span></div>`).join('')}
     <div class="mlist" style="margin:0;width:100%"><h4>Missions${practice ? ' · run from sector 1 to progress' : ''}</h4>${missionRows(practice ? null : st, d.fresh)}</div>
-    ${d.crate ? '<div class="newbest">NEON CRATE EARNED</div>' : `<p class="fine">${toNext} more run${toNext > 1 ? 's' : ''} to your next free Neon Crate</p>`}
-    ${d.apex ? '<div class="newbest">APEX UNLOCKED</div>' : ''}
+    ${d.crate ? '' : `<p class="fine">${toNext} more run${toNext > 1 ? 's' : ''} to your next free Neon Crate</p>`}
     ${daily ? `<p class="fine">Same course for everyone today. A new one starts at 00:00 UTC (in ${untilReset()}).</p>` : ''}
-    <div class="col">
-      ${G.cont || passed.has('revive') ? '' : `<button class="btn buy" data-act="revive-buy">Revive · ${price(CATALOG.revive)}</button>`}
-      ${G.cont ? '' : `<button class="btn" data-act="revive-cr" ${S.credits < REVIVE_CR ? 'disabled' : ''}>Revive · ${REVIVE_CR} credits</button>`}
-      <button class="btn ghost" data-act="again">Run again</button>
-      <button class="btn ghost" data-act="menu">Main Menu</button>
-    </div>
-    ${G.cont ? '<p class="fine">One revive per run.</p>' : ''}`);
+    </details>`);
 }
 function untilReset() { const ms = msToNextUtcDay(Date.now()), h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000); return `${h}h ${m}m`; }
 
@@ -605,7 +617,7 @@ function revive() {
   // Remove every pattern that touches the restart zone, whole, so nothing is left half-built.
   const gone = new Set(G.course.objs.filter((o) => o.t !== 'chip' && o.x < b && o.x + (o.w || 0.8) > a).map((o) => o.g));
   G.course.objs = G.course.objs.filter((o) => !gone.has(o.g));
-  Object.assign(r, { y: 0, vy: 0, grounded: true, flip: false, dead: '', rot: 0, air: 0 });
+  Object.assign(r, { y: 0, vy: 0, grounded: true, flip: false, dead: '', rot: 0, air: 0, coy: 0 });
   G.state = 'run'; G.blink = 1.4; G.acc = 0; pressed = false;
   $('pauseBtn').hidden = false;
   closeModal(); audio.startBeat(G.stats.sector - 1);
@@ -650,6 +662,7 @@ function renderReady() {
 
 function update(dt) {
   G.t += dt;
+  if (G.hitstop > 0) { G.hitstop -= dt; return; }
   const k = 1 - Math.exp(-dt * 6);
   for (const p of G.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 9 * dt; p.life -= dt; }
   G.parts = G.parts.filter((p) => p.life > 0);
@@ -835,8 +848,8 @@ document.addEventListener('click', async (e) => {
       else b.remove(); /* declined or suppressed: drop the paid option, no re-prompt */
       break;
     case 'revive-cr': if (S.credits < REVIVE_CR) break; S.credits -= REVIVE_CR; save(); cred(); revive(); break;
-    case 'again': closeModal(); reset(); studio.feedback.maybePrompt(); break;
-    case 'menu': closeModal(); reset(); break;
+    case 'retry': closeModal(); reset(); startRun(); break; // straight into a run: one tap from wreck to running
+    case 'menu': closeModal(); reset(); studio.feedback.maybePrompt(); break;
     case 'close': closeModal(); break;
     case 'mode': if (G.state !== 'ready') break; S.mode = b.dataset.mode === 'daily' ? 'daily' : 'endless'; save(); audio.click(); reset(); break;
     case 'start': if (G.state !== 'ready' || S.mode !== 'endless') break;

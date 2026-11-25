@@ -14,6 +14,7 @@ export const VOID_Y: number;
 export const AIR: number;
 export const PAD_AIR: number;
 export const NEAR: number;
+export const COYOTE: number;
 export const SECTOR_LEN: number;
 export type Palette = { sky: [string, string, string]; sun: [string, string]; grid: string; rail: string; neon: string; block: string };
 export type SectorInfo = { name: string; hint: string; pal: Palette };

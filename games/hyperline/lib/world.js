@@ -17,6 +17,8 @@ export const BAR_Y = 1.05, BAR_H = 3;
  * gap fits the runner on the rise or the fall of a jump, but a jump's apex is too tall for it.
  */
 export const GATE_LO = 0.75, GATE_HI = 3.15, GATE_W = 0.5;
+/** Coyote time: a jump still fires this long (seconds) after the runner leaves an edge without jumping. */
+export const COYOTE = 0.08;
 /** Fall below this and the run ends. */
 export const VOID_Y = -2.5;
 /** Time in the air for a normal jump and for a pad launch. */

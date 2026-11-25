@@ -3,6 +3,8 @@ import type { Course, Obj } from './course.js';
 export type Runner = {
   x: number; y: number; vy: number; grounded: boolean; flip: boolean; rot: number;
   air: number; steps: number; dead: string; landed: boolean;
+  /** Seconds of coyote time left after leaving an edge without jumping. */
+  coy: number;
 };
 export type SimEvent =
   | { t: 'jump' | 'clear' | 'pad' | 'bar' | 'rail' | 'chipMiss' | 'flipIn' | 'flipOut' }

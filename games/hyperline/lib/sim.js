@@ -3,10 +3,10 @@
 // No DOM; exercised by the clearability bot in hyperline-course.test.ts.
 
 import { bladeHit, extendCourse, lowerBound, pitEnd } from './course.js';
-import { BAR_H, CEIL_Y, GRAV, JV, NEAR, P, PAD_V, PS, speedAt, STEP, VOID_Y } from './world.js';
+import { BAR_H, CEIL_Y, COYOTE, GRAV, JV, NEAR, P, PAD_V, PS, speedAt, STEP, VOID_Y } from './world.js';
 
 export function createRunner() {
-  return { x: P, y: 0, vy: 0, grounded: true, flip: false, rot: 0, air: 0, steps: 0, dead: '', landed: false };
+  return { x: P, y: 0, vy: 0, grounded: true, flip: false, rot: 0, air: 0, steps: 0, dead: '', landed: false, coy: 0 };
 }
 
 /** Height of a moving platform; it moves with the runner's progress, so it is deterministic. */
@@ -49,10 +49,11 @@ export function step(r, c, jump) {
     if (o.t === 'flip' && cx >= o.x && cx < o.x + o.w) fz = true;
     else if (o.t === 'pit' && cx > o.x && cx < pitEnd(o, x0)) pit = true;
   }
-  if (fz !== r.flip) { r.flip = fz; r.grounded = false; ev.push({ t: fz ? 'flipIn' : 'flipOut' }); }
+  if (fz !== r.flip) { r.flip = fz; r.grounded = false; r.coy = 0; ev.push({ t: fz ? 'flipIn' : 'flipOut' }); }
 
-  if (jump && r.grounded) {
-    r.vy = r.flip ? -JV : JV; r.grounded = false; r.air = 0;
+  // Coyote time: just after running off an edge (r.coy > 0) a tap still counts as a jump from it.
+  if (jump && (r.grounded || r.coy > 0)) {
+    r.vy = r.flip ? -JV : JV; r.grounded = false; r.air = 0; r.coy = 0;
     ev.push({ t: 'jump' });
   }
   const prevY = r.y;
@@ -90,7 +91,7 @@ export function step(r, c, jump) {
         for (let i = i0; i < iEnd; i++) {
           const o = objs[i];
           if (o.t === 'pad' && cx >= o.x && cx < o.x + o.w) {
-            r.vy = PAD_V; r.grounded = false; r.air = 0; ev.push({ t: 'pad' });
+            r.vy = PAD_V; r.grounded = false; r.air = 0; r.coy = 0; ev.push({ t: 'pad' });
             break;
           }
         }
@@ -106,6 +107,7 @@ export function step(r, c, jump) {
     } else if (r.y < top - 0.001) r.grounded = false;
   }
   if (!r.grounded) r.rot += STEP * 5.6 * (r.flip ? -1 : 1);
+  r.coy = r.grounded ? COYOTE : Math.max(0, (r.coy || 0) - STEP);
 
   for (let i = i0; i < iEnd; i++) {
     const o = objs[i];

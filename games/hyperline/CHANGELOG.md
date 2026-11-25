@@ -2,6 +2,12 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.15.0 (2026-11-25)
+- Run again is now the big first button on the wreck screen and drops you straight into a new run: one tap, no ready screen. The full breakdown and missions sit under "Run details".
+- Coyote time: a tap up to 80 ms after you run off an edge still jumps.
+- Hit-stop: a crash freezes the world for a split second before the runner shatters, so the hit lands.
+- Paid revive waits until you've played 4 runs and 2 minutes, and the credits revive is always offered first.
+
 ## 0.14.0 (2026-11-24)
 - New sector DRIFT BLOCKS: a raised block drifts toward you over a spike strip, so hop it as it arrives.
 - DRIFT BLOCKS is a little more forgiving: the hop over the drifting block has a roomier take-off window.

@@ -10,6 +10,6 @@ describe('hyperline game-over Main Menu button', () => {
   });
 
   it('returns to the ready screen without saving anything', () => {
-    expect(html).toMatch(/case 'menu': closeModal\(\); reset\(\); break;/);
+    expect(html).toMatch(/case 'menu': closeModal\(\); reset\(\);( studio\.feedback\.maybePrompt\(\);)? break;/);
   });
 });
