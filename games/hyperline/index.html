@@ -259,8 +259,8 @@ import { SKIN_TONES } from './gear3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const VERSION = '0.23.3'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
-const studio = createStudio({ game: 'hyperline', version: '0.23.3', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const VERSION = '0.23.4'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
+const studio = createStudio({ game: 'hyperline', version: '0.23.4', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio({ phone: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches });
 // The music follows course time at the runner's centre (where take-offs are measured), so its beats are the track's.
@@ -588,6 +588,7 @@ function showDeath() {
   const fresh = G.doneM.length ? S.missions.filter((id) => !lastActive.includes(id)) : [];
   G.doneM = [];
   save(); cred(); hud();
+  perfReport();
   studio.track('level_end', { level: 1, result: 'lose', score: dist, run: G.run || 0, revived: G.cont, mode: G.mode, start: G.start || 1,
     sector: st.sector, chips: st.chips, maxStreak: st.maxStreak, nearMisses: st.near });
   if (G.mode === 'daily') studio.track('custom', { event: 'daily_run_end', score: dist, day: G.day, best: S.daily.best, newBest, revived: G.cont });
@@ -962,12 +963,24 @@ function loop(now) {
 const perfBox = new URLSearchParams(location.search).has('perf') ? Object.assign(document.createElement('div'), { id: 'perf' }) : null;
 let perfFrames = [], perfAt = 0;
 if (perfBox) { perfBox.style.cssText = 'position:fixed;left:6px;bottom:calc(6px + env(safe-area-inset-bottom,0px));z-index:99;font:11px/1.35 ui-monospace,monospace;color:#7CFFEA;background:rgba(7,3,15,.75);padding:4px 6px;border-radius:6px;pointer-events:none;white-space:pre'; document.body.appendChild(perfBox); }
+let perfRun = [], perfMax = { tris: 0, calls: 0 };
 function perfTick(dt) {
   perfFrames.push(dt * 1000); perfAt += dt;
+  if (G.state === 'run') perfRun.push(dt * 1000);
   if (perfAt < 1) return;
   const f = perfFrames.slice().sort((a, b) => a - b), p95 = f[Math.floor(f.length * 0.95)] || 0, info = r3d ? r3d.info() : null;
   perfBox.textContent = `${(f.length / perfAt).toFixed(0)} fps  p95 ${p95.toFixed(1)} ms  max ${f[f.length - 1].toFixed(0)} ms\nDPR ${DPR}  tier ${r3d ? r3d.tier() : '2d'}  ${info ? (info.triangles / 1000).toFixed(0) + 'k tris  ' + info.calls + ' calls' : ''}`;
+  if (info) { perfMax.tris = Math.max(perfMax.tris, info.triangles); perfMax.calls = Math.max(perfMax.calls, info.calls); }
   perfFrames = []; perfAt = 0;
+}
+/** With ?perf only: the run's frame times as one anonymous event (no device id, nothing personal), for device tests. */
+function perfReport() {
+  if (!perfBox || perfRun.length < 30) { perfRun = []; return; }
+  const f = perfRun.slice().sort((a, b) => a - b), q = (k) => +f[Math.min(f.length - 1, Math.floor(f.length * k))].toFixed(1);
+  studio.track('custom', { event: 'perf_run', frames: f.length, fps: +(1000 / (f.reduce((a, b) => a + b, 0) / f.length)).toFixed(1),
+    p50: q(0.5), p95: q(0.95), p99: q(0.99), max: q(1), over33: f.filter((x) => x > 33).length, dpr: DPR, tier: r3d ? r3d.tier() : -1,
+    tris: perfMax.tris, calls: perfMax.calls, phone: PHONE, w: Math.round(W), h: Math.round(H), sector: G.stats.sector, large: S.settings.bigRunner });
+  perfRun = []; perfMax = { tris: 0, calls: 0 };
 }
 
 // ---- hal hook (test only; inert without ?hal) ----

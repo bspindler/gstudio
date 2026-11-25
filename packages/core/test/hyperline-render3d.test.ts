@@ -157,3 +157,11 @@ describe('hyperline draw calls (Brian, 2026-11-25: still a bit laggy on iPhone)'
     expect(html).toMatch(/if \(frames >= 60\) \{\n[^\n]*\n      if \(slow > 15\) \{ if \(r3d/);
   });
 });
+
+describe('hyperline ?perf reports each run (Brian, 2026-11-25: "do you get the stats")', () => {
+  it('only with ?perf: one anonymous perf_run event per run with frame-time percentiles, tier and DPR', () => {
+    expect(html).toMatch(/if \(!perfBox \|\| perfRun\.length < 30\)/);
+    expect(html).toMatch(/studio\.track\('custom', \{ event: 'perf_run', frames:/);
+    expect(html).toMatch(/perfReport\(\);\n  studio\.track\('level_end'/);
+  });
+});
