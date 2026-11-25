@@ -506,7 +506,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.11.0', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.11.1', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1483,7 +1483,11 @@ function sunBox() {
   el.style.width = el.style.height = `${d}px`;
   el.style.left = `${best.x - w.left + best.w / 2 - d / 2}px`;
   el.style.top = `${34 + (w.height - 34 - d) / 2}px`;
-  return { x: best.x, y: w.top, w: best.w, h: w.height };
+  // palm-sized hit box (at least 88px wide, like the vane's): a thin free strip is padded around the sun (which stays put)
+  // and kept inside the wall; the door, sky, loft and vane are tested first in tapAt, so they keep every tap they had
+  const bw = Math.max(best.w, 88), cx = best.x + best.w / 2;
+  const x = Math.min(Math.max(cx - bw / 2, w.left), w.right - bw);
+  return { x, y: w.top, w: bw, h: w.height };
 }
 function drowseAll() {
   floor.forEach((l, k) => slotsEl.children[k]?.querySelector('.animal')?.classList.toggle('drowse', sunDusk && named.has(l)));
