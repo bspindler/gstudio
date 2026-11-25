@@ -18,7 +18,7 @@
 //   rail  {x, w, per, ph} blinking floor rail: lit for half of every `per` units; lethal to the grounded runner while lit
 
 import { mulberry32 } from './rng.js';
-import { AIR, BAR_Y, CEIL_Y, GATE_HI, GATE_LO, GATE_W, GRAV, JV, PAD_AIR, PAD_V, PS, sectorAt, speedAt, STEP } from './world.js';
+import { AIR, BAR_Y, BEAT, CEIL_Y, GATE_HI, GATE_LO, GATE_W, GRAV, JV, PAD_AIR, PAD_V, PS, sectorAt, speedAt, STEP, tauAt, xAtTau } from './world.js';
 
 const SW = 0.8; // spike width
 
@@ -455,7 +455,68 @@ export const PATTERNS = [
       o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
       return { o, len: sx + n * SW - x + 0.5 };
     } },
+
+  // Sector 21 (ON THE BEAT): the music's clock is course time (world.js tauAt), so a take-off placed on a beat is a
+  // jump on the kick drum. Spikes whose ideal take-off falls on every other beat, a chip at each apex; between them a
+  // low ceiling that ends just before the take-off point, so a jump must wait for the beat: early hits the slab, late
+  // hits the spike.
+  { id: 'beat', sector: 21, weight: (s) => (s === 21 ? 3.4 : s === 22 ? 1.2 : 0.7),
+    build(x, d, r) {
+      const o = [], n = 3 + Math.floor(r() * 2);
+      let b = Math.ceil(tauAt(x + 2) / BEAT); if (b % 2) b++; // a strong beat
+      let end = x;
+      for (let k = 0; k < n; k++) {
+        const t = (b + 2 * k) * BEAT, mid = beatMid(t);
+        if (k > 0) beatBar(o, t - 2 * BEAT, t);
+        o.push({ t: 'spike', x: mid - 0.4, y: 0, inv: false }, { t: 'chip', x: mid, y: 2.7 });
+        end = mid + 0.4;
+      }
+      return { o, len: end - x + beatTail(end) };
+    } },
+  // Sector 22 (BACKBEAT): the same lock, in an uneven count. Take-offs fall 3, 2, 3 beats apart (a tresillo), over
+  // spikes and short pits in turn.
+  { id: 'backbeat', sector: 22, weight: (s) => (s === 22 ? 3.4 : 0.7),
+    build(x, d, r) {
+      const o = [], gaps = [0, 3, 2, 3];
+      let b = Math.ceil(tauAt(x) / BEAT), end = x;
+      gaps.forEach((g, k) => {
+        b += g;
+        const t = b * BEAT, xt = xAtTau(t);
+        if (k > 0) beatBar(o, t - g * BEAT, t); // a low ceiling holds you down until the count comes round
+        if (k % 2) {
+          // a pit centred on the jump from the beat
+          const w = range(xt) * 0.55, px = xt + (range(xt) - w) / 2; // wide: only a take-off near the beat clears it
+          o.push({ t: 'pit', x: px, w }, { t: 'chip', x: px + w / 2, y: 2.3 });
+          end = px + w;
+        } else {
+          const mid = beatMid(t);
+          o.push({ t: 'spike', x: mid - 0.4, y: 0, inv: false }, { t: 'chip', x: mid, y: 2.7 });
+          end = mid + 0.4;
+        }
+      });
+      return { o, len: end - x + beatTail(end) };
+    } },
 ];
+
+/**
+ * Room after a beat pattern's last obstacle: its jump is pinned to the beat, so the next pattern starts only after the
+ * runner has landed (half a jump past the obstacle) and had a moment of ground.
+ */
+const beatTail = (end) => range(end) / 2 + 1;
+
+/** Seconds before a beat take-off that its low ceiling ends: jump earlier than this and you hit the slab. */
+export const BEAT_EARLY = 0.11;
+/** A low ceiling over the ground between a landing (a jump taken at course time t0) and the next take-off at t1. */
+function beatBar(o, t0, t1) {
+  const land = xAtTau(t0 + AIR) + 0.8, xt = xAtTau(t1), bx1 = xt - BEAT_EARLY * speedAt(xt) + PS;
+  if (bx1 - land > 2) o.push({ t: 'bar', x: land, w: bx1 - land, y: BAR_Y });
+}
+
+/** The middle of an obstacle whose ideal take-off is at course time t: half a jump's length past the take-off point. */
+function beatMid(t) {
+  const xt = xAtTau(t);
+  return xt + (AIR * speedAt(xt)) / 2;
+}
 
 // Sliding ledge: half the slide (units) and its pace (radians per unit of track).
 const LEDGE_A = 0.4, LEDGE_K = 0.42;
@@ -481,7 +542,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs', 18: 'stones', 19: 'ledge', 20: 'drift' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs', 18: 'stones', 19: 'ledge', 20: 'drift', 21: 'beat', 22: 'backbeat' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

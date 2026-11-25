@@ -36,6 +36,34 @@ export function speedAt(x) {
   return d > 1500 ? base + Math.min(3, (d - 1500) / 400) : base;
 }
 
+/** The music's beat in seconds of course time (120 BPM). The beat sectors put take-offs on it. */
+export const BEAT = 0.5;
+
+/**
+ * Course time: the seconds a runner takes to reach distance x (the integral of 1 / speedAt), in closed form over the
+ * speed curve's pieces. The music is clocked by it, so its beats stay locked to the track through practice starts,
+ * pauses and revives.
+ */
+export function tauAt(x) {
+  const d = Math.max(0, x);
+  if (d <= 765) return 90 * Math.log((9 + d / 90) / 9);
+  const t765 = 90 * Math.log(17.5 / 9);
+  if (d <= 1500) return t765 + (d - 765) / 17.5;
+  const t1500 = t765 + 735 / 17.5;
+  if (d <= 2700) return t1500 + 400 * Math.log((17.5 + (d - 1500) / 400) / 17.5);
+  return t1500 + 400 * Math.log(20.5 / 17.5) + (d - 2700) / 20.5;
+}
+
+/** The distance a runner reaches at course time tau (the inverse of tauAt). */
+export function xAtTau(tau) {
+  const t765 = 90 * Math.log(17.5 / 9), t1500 = t765 + 735 / 17.5, t2700 = t1500 + 400 * Math.log(20.5 / 17.5);
+  if (tau <= 0) return 0;
+  if (tau <= t765) return 90 * 9 * (Math.exp(tau / 90) - 1);
+  if (tau <= t1500) return 765 + (tau - t765) * 17.5;
+  if (tau <= t2700) return 1500 + 400 * 17.5 * (Math.exp((tau - t1500) / 400) - 1);
+  return 2700 + (tau - t2700) * 20.5;
+}
+
 export function sectorAt(x) {
   return Math.max(0, Math.floor(x / SECTOR_LEN));
 }
@@ -84,6 +112,10 @@ export const SECTORS = [
     pal: { sky: ['#0A0514', '#241046', '#4A1A6E'], sun: ['#FFB86B', '#22F0FF'], grid: '#FF8A3D', rail: '#7CFFEA', neon: '#FF2BD6', block: '#FFE45C' } },
   { name: 'DRIFT BLOCKS', hint: 'A raised block drifts toward you: read its pace, then hop it and the spikes behind.',
     pal: { sky: ['#04040F', '#101040', '#241E78'], sun: ['#7CFFEA', '#B98CFF'], grid: '#B98CFF', rail: '#7CFFEA', neon: '#FFE45C', block: '#FF2BD6' } },
+  { name: 'ON THE BEAT', hint: 'Spikes land on the beat: jump with the kick drum.',
+    pal: { sky: ['#06020F', '#1A0B3D', '#3A1270'], sun: ['#FF2BD6', '#7A2BFF'], grid: '#B98CFF', rail: '#22F0FF', neon: '#FF2BD6', block: '#22F0FF' } },
+  { name: 'BACKBEAT', hint: 'An uneven count: three beats, two, three. Jump on each one.',
+    pal: { sky: ['#020A10', '#062A36', '#0F4A5A'], sun: ['#FFE45C', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#7CFFEA' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];

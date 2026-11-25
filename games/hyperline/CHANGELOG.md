@@ -2,6 +2,18 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.0 (2026-11-25)
+- All-new sound: real recorded effects for jumps, landings, chips, near misses, crashes, gravity flips, gates and the
+  menus. A wind rush builds with your speed, chips climb in pitch through a streak, and landings thump harder the
+  further you fall.
+- All-new music: a synthwave track for each district, with kick, snare, a pumping bass, arpeggios and pads. It
+  builds as you go deeper, drops away when you crash, and swoops in slow motion.
+- The music now runs on the track itself: its beat is locked to where you are, through pauses, revives and practice
+  starts.
+- Two new sectors before HYPERCORE, built on the beat:
+  - ON THE BEAT: every spike is a jump on the kick drum, and a low ceiling holds you until it comes.
+  - BACKBEAT: an uneven three, two, three count over spikes and pits.
+
 ## 0.22.0 (2026-11-25)
 - A real city street now lines the track: brick buildings with columns, cornices and window frames, their windows
   lit in each theme's colours, and neon signs on the walls as you approach. The tall towers now stand behind them as

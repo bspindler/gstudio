@@ -171,6 +171,17 @@ least 3 of 5 testers (the visual row of the bar).
 **Done when:** a listening review on phone speakers and earbuds finds no oscillator beeps and no effects buried
 under the music.
 
+Status (2026-11-25, 0.23.0):
+- [x] 21 sound effects from Kenney's CC0 packs (Interface Sounds, Sci-Fi Sounds, Digital SFX, from OpenGameArt),
+  trimmed, normalised and embedded as MP3 in `audio/sfx.js` (nothing is fetched). Listed in `audio/SOURCES.md`.
+- [x] A mix bus: a limiter on the master, separate effects and music levels, the music ducking on a crash and closing
+  its filter in slow motion, and a wind bed that opens up with speed. Chips rise in pitch with the streak, and
+  landings deepen with fall height.
+- [x] Music: a synthwave sequencer synthesised in code, with a kick, snare, hats, sidechained bass, an arpeggio
+  through a delay, and pads. Each theme has its own progression and sound (Am F C G, Dm Bb Gm A, Em C D B), and
+  layers build through each theme. It is clocked by course time (`tauAt`), so its beats are the track's.
+- [ ] The listening review on iPhone speakers and earbuds (Brian).
+
 ## Phase 5: beat-sync experiment
 
 - Course generator v2 places patterns on the beat grid in time (`t = beats × 60 / BPM`), converting with the speed
@@ -181,6 +192,19 @@ under the music.
   length.
 
 **Done when:** there's data from both sides, and Brian decides whether to roll beat sync out to every sector.
+
+Status (2026-11-25, 0.23.0):
+- [x] Course time `tauAt(x)` / `xAtTau(t)` (closed form over the speed curve). `BEAT` is 0.5 s (120 BPM).
+- [x] Two new sectors before HYPERCORE, which is now sector 24:
+  - ON THE BEAT: spikes whose ideal take-off falls on every other beat.
+  - BACKBEAT: a 3, 2, 3 count over spikes and wide pits.
+  - In both, a low ceiling ends just before each take-off, so a jump has to wait for the beat.
+- [x] Scorer: intro kill rates of 11% and 12% (band 3–25%), tap windows of 117 and 125 ms (fair is at least 50), no
+  hard failures. Overall bites rose from 81.8 to 83.6.
+- [x] The existing sectors are unchanged. A course is different only past sector 22, and the daily seeds and ghosts
+  before that are untouched.
+- [ ] The comparison: first-try clear rate and session length on the beat sectors against free-timed sectors, from
+  real players. Then Brian decides whether to roll beat sync out further.
 
 ## Phase 6: first session and playtests
 

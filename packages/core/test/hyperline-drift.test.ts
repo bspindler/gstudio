@@ -11,10 +11,11 @@ const pattern = () => PATTERNS.find((q) => q.id === 'drift')!;
 const bare = (objs: Course['objs']): Course => { const c = createCourse(5); c.objs.length = 0; c.nextX = 1e9; c.objs.push(...objs.sort((a, b) => a.x - b.x)); return c; };
 
 describe('hyperline DRIFT BLOCKS', () => {
-  it('is sector 21 for players, right before HYPERCORE, after SLIDING LEDGE, and introduces the drift pattern', () => {
+  it('is sector 21 for players, after SLIDING LEDGE and before the beat sectors, and introduces the drift pattern', () => {
     expect(sectorInfo(19).name).toBe('SLIDING LEDGE');
     expect(sectorInfo(20).name).toBe('DRIFT BLOCKS');
-    expect(sectorInfo(21).name).toBe('HYPERCORE');
+    expect(sectorInfo(21).name).toBe('ON THE BEAT');
+    expect(sectorInfo(23).name).toBe('HYPERCORE');
     expect(INTRO[20]).toBe('drift');
   });
 

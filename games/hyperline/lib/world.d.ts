@@ -22,3 +22,6 @@ export const SECTORS: SectorInfo[];
 export function speedAt(x: number): number;
 export function sectorAt(x: number): number;
 export function sectorInfo(i: number): SectorInfo;
+export const BEAT: number;
+export function tauAt(x: number): number;
+export function xAtTau(tau: number): number;

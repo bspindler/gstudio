@@ -249,7 +249,7 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 import { createStudio, resolveEndpoint } from '../sdk/studio-sdk.js';
 import { createCourse, extendCourse, pruneCourse } from './lib/course.js';
 import { createRunner, step } from './lib/sim.js';
-import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
+import { P, PS, STEP, sectorAt, sectorInfo, speedAt, tauAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
 import { applyEvent, checkMissions, chipMultiplier, clampStart, crateDue, isPractice, runsToNextCrate, sectorFromSearch, migrateSave, paidOffersOpen, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
@@ -259,10 +259,12 @@ import { SKIN_TONES } from './gear3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const VERSION = '0.22.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
-const studio = createStudio({ game: 'hyperline', version: '0.22.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const VERSION = '0.23.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
+const studio = createStudio({ game: 'hyperline', version: '0.23.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
+// The music follows course time at the runner's centre (where take-offs are measured), so its beats are the track's.
+audio.setClock(() => (G && G.state === 'run' ? tauAt(G.runner.x + PS / 2) : null));
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
 let reduced = RM.matches;
 RM.addEventListener?.('change', (e) => { reduced = e.matches; });
@@ -480,7 +482,7 @@ function simStep() {
   const ev = step(r, G.course, jump);
   G.simT += STEP; S.playS += STEP;
   const nc = nearChain(G.chain, ev); G.chain = nc.chain;
-  if (nc.slow) G.slow = SLOWMO.dur; // three near misses in a row: a brief slow-motion beat
+  if (nc.slow) { G.slow = SLOWMO.dur; audio.slowmo(); } // three near misses in a row: a brief slow-motion beat
   if (!r.grounded) G.peak = G.peak === null ? r.y : r.flip ? Math.min(G.peak, r.y) : Math.max(G.peak, r.y);
   recordGhost(G.rec, G.simT, r.x, r.y, r.flip);
   const cxw = r.x + PS / 2, cyw = r.y + PS / 2, sk = SK[S.eq];
@@ -501,7 +503,7 @@ function simStep() {
         G.stats = applyEvent(G.stats, e); audio.chip(G.stats.streak); popChip();
         spawn(e.x, e.y, 10, '#FFE45C', 5, 0.4, 0.1);
         const m = chipMultiplier(G.stats.streak);
-        if (m > before) { pop(`STREAK x${m}`, e.x, e.y + 0.6, '#FFE45C', 18); buzz(15); }
+        if (m > before) { pop(`STREAK x${m}`, e.x, e.y + 0.6, '#FFE45C', 18); buzz(15); audio.streak(); }
         break; }
       case 'chipMiss':
         if (G.stats.streak >= 8) pop('streak reset', cxw, cyw + 0.9, '#A08FC7', 13);
@@ -514,9 +516,9 @@ function simStep() {
         G.nearFlash = reduced ? 0.25 : 0.5; break;
       case 'pad': G.stats = applyEvent(G.stats, e); audio.pad(); spawn(cxw, r.y, 14, '#7CFF6B', 5, 0.45, 0.1, 4); break;
       case 'bar': G.stats = applyEvent(G.stats, e); break;
-      case 'gate': pop('THREADED', cxw, cyw + 0.9, '#FFE45C', 15); spawn(cxw, cyw, 8, '#FFE45C', 4, 0.35, 0.08); break;
-      case 'flipIn': audio.flip(); break;
-      case 'flipOut': audio.flip(); G.stats = applyEvent(G.stats, e); break;
+      case 'gate': audio.gate(); pop('THREADED', cxw, cyw + 0.9, '#FFE45C', 15); spawn(cxw, cyw, 8, '#FFE45C', 4, 0.35, 0.08); break;
+      case 'flipIn': audio.flip(true); break;
+      case 'flipOut': audio.flip(false); G.stats = applyEvent(G.stats, e); break;
       case 'die': die(); return;
     }
   }
@@ -635,6 +637,7 @@ function deathScreen(d) {
 function untilReset() { const ms = msToNextUtcDay(Date.now()), h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000); return `${h}h ${m}m`; }
 
 function revive() {
+  audio.revive();
   G.cont = true;
   const r = G.runner, a = r.x - 2, b = r.x + 12;
   // Remove every pattern that touches the restart zone, whole, so nothing is left half-built.
@@ -689,6 +692,7 @@ function update(rdt) {
   const slowK = G.slow > 0 ? SLOWMO.scale : 1, dt = rdt * slowK;
   G.slow = Math.max(0, G.slow - rdt);
   G.cam = springStep(G.cam, Math.min(rdt, 1 / 30));
+  audio.wind(speedAt(G.runner.x), G.state === 'run' && modal.hidden);
   G.t += dt;
   const k = 1 - Math.exp(-dt * 6);
   for (const p of G.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 9 * dt; p.life -= dt; }
@@ -898,7 +902,7 @@ document.addEventListener('click', async (e) => {
       break; }
     case 'crate': if (!S.crates) { toast(`Crates are earned: on your 2nd run, then every ${CRATE_EVERY} runs`); break; }
       showModal(`<div class="eyebrow">Neon Crate</div><button class="crate" data-act="crack" aria-label="Open the crate">${CRATE_SVG}</button><p class="muted">Tap to crack it open</p><p class="fine">Odds: ${oddsTxt()}</p>`); break;
-    case 'crack': if (!S.crates) break; S.crates--; S.opened++; save(); b.classList.add('crack'); b.disabled = true;
+    case 'crack': if (!S.crates) break; S.crates--; S.opened++; save(); audio.crate(); b.classList.add('crack'); b.disabled = true;
       setTimeout(() => { const r = rollCrate(); refresh(); showPull(r.s, r.dup); }, 480); break;
     case 'buy': { const k = b.dataset.item; b.disabled = true;
       if (await buy(k)) {
@@ -954,6 +958,8 @@ if (new URLSearchParams(location.search).has('hal')) {
   window.__hal = {
     /** The 3D renderer's last frame: draw calls and triangles (null on the 2D renderer). */
     render3d() { return r3d ? r3d.info() : null; },
+    /** The audio engine's state, and course time at the runner (for the beat-sync check). */
+    audio() { return { ...audio.debug(), tau: G && G.runner ? tauAt(G.runner.x + PS / 2) : null }; },
     view(x) {
       if (G.state !== 'run' && G.state !== 'paused') startRun();
       extendCourse(G.course, x + 120);
