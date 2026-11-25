@@ -8,3 +8,4 @@ export function buildRig(
   data: RigData,
   matFor: (materialName: string) => THREE.Material,
 ): { root: THREE.Group; meshes: THREE.Mesh[]; mixer: THREE.AnimationMixer; actions: Record<string, THREE.AnimationAction> };
+export function attachTo(T: typeof THREE, root: THREE.Object3D, att: import('../../../scripts/vendor/glb.js').Attachment, material: THREE.Material): THREE.Group | null;

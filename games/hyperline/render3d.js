@@ -19,8 +19,11 @@ export const BLOOM3D = { strength: 0.7, radius: 0.45, threshold: 0.68 };
 /** Colour meaning (docs/hyperline/style-guide.md): safe is cyan, hazards magenta (static) or red (live), rewards gold. */
 export const STYLE = { safe: '#22F0FF', safe2: '#2B6BFF', hazard: '#FF2BD6', live: '#FF2B5E', gold: '#FFE45C', gold2: '#FF9F1C' };
 const { safe: SAFE, hazard: HAZ, live: LIVE, gold: GOLD } = STYLE;
-/** The runner: a Quaternius hero (the player picks M or F), scaled to HERO.height units, under a low ceiling's 1.05. */
-export const HERO = { height: 0.95 };
+/**
+ * The runner: a Quaternius hero (the player picks M or F), HERO.height units tall, under a low ceiling's 1.05. The Large
+ * runner setting draws it HERO.large units tall (the hitbox never changes), and it ducks into a crouch under low ceilings.
+ */
+export const HERO = { height: 0.95, large: 1.5 };
 /** The bodies, loaded on demand (each module is the hero and its clips). */
 export const BODIES = { m: () => import('./models/hero-male.js'), f: () => import('./models/hero-female.js') };
 /** The outfit a locked skin's thumbnail shows: a dark silhouette. */
@@ -51,8 +54,9 @@ export async function createRenderer3d(canvas, overlay, opts = {}) {
   // The runner's rig and outfit code, and the chosen body; without them the runner falls back to the skin shapes.
   let kit = null;
   try {
-    const [rig, outfit, body] = await Promise.all([import('./lib/rig.js'), import('./outfit3d.js'), (BODIES[opts.body] || BODIES.m)()]);
-    kit = { buildRig: rig.buildRig, ...outfit, data: body.default, body: BODIES[opts.body] ? opts.body : 'm' };
+    const [rig, outfit, gear, body] = await Promise.all([import('./lib/rig.js'), import('./outfit3d.js'), import('./gear3d.js'), (BODIES[opts.body] || BODIES.m)()]);
+    const hair = await gear.loadHair(Object.keys(gear.HAIRS)); // small; loaded once so a runner can be dressed at once
+    kit = { buildRig: rig.buildRig, ...outfit, dress: gear.dress, hair, data: body.default, body: BODIES[opts.body] ? opts.body : 'm' };
   } catch { /* shapes */ }
   try {
     return build(T, renderer, canvas, overlay, kit);
@@ -285,36 +289,40 @@ function build(T, renderer, canvas, overlay, kit) {
 
   // ---------- the runner: a Quaternius hero in an outfit (style guide) ----------
   /** The hero in the chosen body: an outfit material on the body (eyes and brows hidden under the helmet), or a wireframe ghost. */
-  function makeRunner(ghost, parent = world) {
+  function makeRunner(ghost, parent = world, lookId = 'volt') {
     if (!kit) return null;
+    const look = kit.OUTFITS[lookId] || kit.OUTFITS.volt;
     const suit = ghost ? null : kit.outfitMaterial(T);
     const ghostMat = ghost ? new T.MeshBasicMaterial({ color: SAFE, transparent: true, opacity: 0.3, wireframe: true, depthWrite: false, toneMapped: false }) : null;
     const rig = kit.buildRig(T, kit.data, () => (ghost ? ghostMat : suit));
-    let headTop = 1.8;
+    let headTop = 1.8, gear = null;
     for (const m of rig.meshes) {
       if (/superhero/i.test(m.name)) { const top = kit.tagParts(T, m); headTop = top; if (suit) kit.setVisor(suit, top); }
-      else m.visible = false; // the helmet covers the eyes and brows
+      else m.visible = false; // the outfit's helmet, or its hair, brows and shades, replace the model's eyes and brows
     }
+    // hair and accessories go on while the rig is at rest and unscaled (gear3d.js)
+    if (!ghost) gear = kit.dress(T, rig, look, kit.body, kit.hair, headTop);
     const holder = new T.Group(), flipper = new T.Group(), sc = HERO.height / headTop;
     rig.root.scale.setScalar(sc);
     rig.root.rotation.y = Math.PI / 2; // face down the track (+x)
     flipper.add(rig.root); holder.add(flipper); parent.add(holder);
     rig.root.traverse((part) => { part.frustumCulled = false; });
     rig.actions.run.play();
-    return { holder, flipper, rig, suit, ghostMat, cur: rig.actions.run, mode: 'run', lastT: null };
+    return { holder, flipper, rig, suit, ghostMat, gear, look, lookId, cur: rig.actions.run, mode: 'run', lastT: null };
   }
   let runnerR = makeRunner(false), ghostR = makeRunner(true);
-  /** Picks the clip from the runner's state: idle on the start line, run on the ground, the airborne loop in the air. */
-  function animate(R, phase, airborne, speed, t) {
+  /** Picks the clip: idle on the start line, run on the ground, the airborne loop in the air, a crouch-run to duck. */
+  function animate(R, phase, airborne, speed, t, duck = false) {
     const A = R.rig.actions;
     const dt = R.lastT === null ? 0 : Math.max(0, Math.min(0.1, t - R.lastT)); R.lastT = t;
-    const want = phase === 'ready' ? 'idle' : airborne ? 'jump' : 'run';
+    const want = phase === 'ready' ? 'idle' : airborne ? 'jump' : duck && A.crouch ? 'crouch' : 'run';
     if (want !== R.mode) {
       const next = A[want];
       next.reset(); next.setLoop(T.LoopRepeat, Infinity); next.timeScale = 1;
       next.play(); R.cur.crossFadeTo(next, want === 'jump' ? 0.06 : 0.1, false); R.cur = next; R.mode = want;
     }
     if (want === 'run') A.run.timeScale = speed / 11; // the stride keeps up with the track
+    if (want === 'crouch') A.crouch.timeScale = speed / 5;
     R.rig.mixer.update(dt);
   }
   /** Feet on the surface (the ceiling, upside down, in a flip), squash about the feet. */
@@ -325,6 +333,7 @@ function build(T, renderer, canvas, overlay, kit) {
   }
   function dropRunner(R) {
     if (!R) return;
+    if (R.gear) R.gear.dispose();
     R.holder.parent && R.holder.parent.remove(R.holder);
     R.rig.root.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
     if (R.suit) R.suit.dispose();
@@ -629,7 +638,7 @@ function build(T, renderer, canvas, overlay, kit) {
     // ghost: a translucent outline of the runner
     if (ghostR) {
       ghostR.holder.visible = !!st.ghost;
-      if (st.ghost) { placeRunner(ghostR, st.ghost.x + PS / 2, st.ghost.y, !!st.ghost.flip, 1, 1); animate(ghostR, 'run', false, speedAt(st.ghost.x), t); }
+      if (st.ghost) { const k = st.large ? HERO.large / HERO.height : 1; placeRunner(ghostR, st.ghost.x + PS / 2, st.ghost.y, !!st.ghost.flip, k, k); animate(ghostR, 'run', false, speedAt(st.ghost.x), t); }
     } else if (st.ghost) runnerShape(st.skin, [st.ghost.x + PS / 2, st.ghost.y + PS / 2, 0], 0, t, 0.5, true, 0, false);
 
     // speed streaks along the track edges once things get fast (they stand still in the world, so they stream past)
@@ -651,13 +660,17 @@ function build(T, renderer, canvas, overlay, kit) {
       const sy = r.flip ? CEIL_Y : 0;
       shadow.visible = Math.abs(r.y - (r.flip ? CEIL_Y - PS : 0)) < 3;
       shadow.position.set(rpos[0], sy + (r.flip ? -0.003 : 0.003), 0); shadow.scale.set(PS * 0.6, 1, PS * 0.35);
+      if (runnerR && runnerR.lookId !== st.skin.id) { dropRunner(runnerR); runnerR = makeRunner(false, world, st.skin.id); } // a new outfit: dress from scratch
       if (runnerR) {
-        const al = st.blink ? 0.35 : 1, jx = st.skin.fx === 'glitch' ? 0.05 * Math.sin(t * 37) : 0;
-        kit.applyOutfit(runnerR.suit, kit.OUTFITS[st.skin.id] || kit.OUTFITS.volt, t);
+        const al = st.blink ? 0.35 : 1, jx = st.skin.fx === 'glitch' ? 0.05 * Math.sin(t * 37) : 0, look = runnerR.look;
+        kit.applyOutfit(runnerR.suit, look, t, st.tone);
         runnerR.suit.opacity = al; runnerR.suit.depthWrite = al > 0.9;
-        const { sx, sy } = squashScale(st.squash || 0);
-        placeRunner(runnerR, rpos[0] + jx, r.y, r.flip, sx, sy);
-        animate(runnerR, st.phase, !r.grounded, st.speed, t);
+        const { sx, sy } = squashScale(st.squash || 0), k = st.large ? HERO.large / HERO.height : 1;
+        // a large runner ducks under low ceilings (it would otherwise poke through slabs the hitbox passes under)
+        const duck = st.large && !r.flip && objs.some((o) => o.t === 'bar' && o.x - 0.9 < r.x + PS && o.x + o.w + 0.25 > r.x);
+        placeRunner(runnerR, rpos[0] + jx, r.y, r.flip, sx * k, sy * k);
+        animate(runnerR, st.phase, !r.grounded, st.speed, t, duck);
+        if (runnerR.gear) runnerR.gear.update({ t, speed: st.phase === 'run' ? st.speed : 0, air: !r.grounded, trim: kit.trimAt(look, t) });
       } else runnerShape(st.skin, rpos, r.rot, t, st.blink ? 0.35 : 1, false, st.squash || 0, r.flip);
     }
     if (runnerR) runnerR.holder.visible = !!st.showRunner;
@@ -736,7 +749,7 @@ function build(T, renderer, canvas, overlay, kit) {
   }
 
   // ---------- locker and shop thumbnails: the hero in a skin's outfit, on its own small renderer ----------
-  let thumbR = null;
+  let thumbR = null, thumbTone = '#E0AC82';
   /** The hero in skin sk's outfit on a px-square canvas (transparent), turned a little with t; locked is a dark silhouette. */
   function thumb(sk, px, t, locked) {
     if (!kit) return null;
@@ -748,14 +761,18 @@ function build(T, renderer, canvas, overlay, kit) {
       sc.add(new T.HemisphereLight(0x8a6cff, 0x0a0418, 1.3));
       const dl = new T.DirectionalLight(0xffffff, 2.2); dl.position.set(-1.2, 2, 3); sc.add(dl);
       const cm = new T.PerspectiveCamera(30, 1, 0.1, 50); cm.position.set(0, 0.52, 2.5); cm.lookAt(0, 0.48, 0);
-      thumbR = { tr, cvs, sc, cm, R: null };
+      thumbR = { tr, cvs, sc, cm, byId: new Map() };
     }
-    const tt = thumbR;
-    if (!tt.R) { tt.R = makeRunner(false, tt.sc); tt.R.rig.actions.run.stop(); tt.R.rig.actions.idle.play(); tt.R.rig.mixer.update(0.6); }
+    const tt = thumbR, id = locked ? '__locked' : sk.id;
+    // one dressed runner per outfit (a locked skin is a plain dark silhouette), shown only while it is drawn
+    let R = tt.byId.get(id);
+    if (!R) { R = makeRunner(false, tt.sc, locked ? '__none' : sk.id); if (locked) { R.gear.dispose(); R.look = LOCKED; } R.rig.actions.run.stop(); R.rig.actions.idle.play(); R.rig.mixer.update(0.6); tt.byId.set(id, R); }
+    for (const [k, other] of tt.byId) other.holder.visible = k === id;
     if (tt.cvs.width !== px) { tt.tr.setPixelRatio(1); tt.tr.setSize(px, px, false); }
-    kit.applyOutfit(tt.R.suit, locked ? LOCKED : kit.OUTFITS[sk.id] || kit.OUTFITS.volt, t);
-    tt.R.suit.opacity = 1; tt.R.suit.depthWrite = true;
-    tt.R.holder.rotation.y = -Math.PI / 2 + 0.45 + (t - 1.3) * 0.9; // a three-quarter view; turns when t runs
+    kit.applyOutfit(R.suit, locked ? LOCKED : R.look, t, thumbTone);
+    if (R.gear) R.gear.update({ t, speed: 0, air: false, trim: locked ? LOCKED.trim : kit.trimAt(R.look, t) });
+    R.suit.opacity = 1; R.suit.depthWrite = true;
+    R.holder.rotation.y = -Math.PI / 2 + 0.45 + (t - 1.3) * 0.9; // a three-quarter view; turns when t runs
     tt.tr.setClearColor(0x000000, 0);
     tt.tr.render(tt.sc, tt.cm);
     return tt.cvs;
@@ -766,9 +783,10 @@ function build(T, renderer, canvas, overlay, kit) {
     if (!kit || !BODIES[body] || body === kit.body) return;
     const mod = await BODIES[body]();
     kit = { ...kit, data: mod.default, body };
+    const lookId = runnerR ? runnerR.lookId : 'volt';
     dropRunner(runnerR); dropRunner(ghostR);
-    runnerR = makeRunner(false); ghostR = makeRunner(true);
-    if (thumbR && thumbR.R) { dropRunner(thumbR.R); thumbR.R = null; }
+    runnerR = makeRunner(false, world, lookId); ghostR = makeRunner(true);
+    if (thumbR) { for (const R of thumbR.byId.values()) dropRunner(R); thumbR.byId.clear(); }
   }
 
   // Warm-up: one of each pooled kind, then compile every shader now, so the first spike or sign on screen
@@ -782,6 +800,8 @@ function build(T, renderer, canvas, overlay, kit) {
   return {
     thumb,
     setBody,
+    /** The skin tone the thumbnails show on hair outfits. */
+    setThumbTone(tone) { thumbTone = tone; },
     /** Draw calls and triangles in the last frame (for the budget check). */
     info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
     onLost(fn) { lost = fn; },

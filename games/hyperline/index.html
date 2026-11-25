@@ -119,6 +119,10 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 .pop{display:inline-block;animation:chippop .22s ease-out}
 @keyframes chippop{0%{transform:scale(1.5)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.pop{animation:none}}
+.tones{display:flex;align-items:center;gap:10px;margin:2px 0}
+.tones span{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-right:auto}
+.tone{width:30px;height:30px;border-radius:50%;border:2px solid var(--edge);cursor:pointer;padding:0}
+.tone.on{border-color:var(--cyan);box-shadow:0 0 10px rgba(34,240,255,.5)}
 .btn.retry{width:100%;padding:18px 16px;font-size:20px;letter-spacing:.08em}
 .runsum{width:100%;text-align:left}
 .runsum summary{cursor:pointer;color:var(--dim);font-size:13px;font-weight:600;padding:6px 0}
@@ -251,11 +255,12 @@ import { applyEvent, checkMissions, chipMultiplier, clampStart, crateDue, isPrac
 import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
 import { createBloom, drawOverlay, drawScene, drawSkinThumb, makeShards, setThumbRenderer, SHARD_LIFE, skinColors } from './render.js';
 import { createRenderer3d } from './render3d.js';
+import { SKIN_TONES } from './gear3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const VERSION = '0.20.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
-const studio = createStudio({ game: 'hyperline', version: '0.20.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const VERSION = '0.21.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
+const studio = createStudio({ game: 'hyperline', version: '0.21.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -409,7 +414,7 @@ function useFlat() {
   cv.replaceWith(n); cv = n; out2d = cv.getContext('2d'); resize();
 }
 const use2d = () => createBloom(cv, src).then((b) => { if (!b) { useFlat(); return; } bloom = b; b.onLost(useFlat); resize(); }).catch(useFlat);
-if (RMODE !== '2d') createRenderer3d(cv, src, { body: S.body }).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(() => { setThumbRenderer(null); useFlat(); }); setThumbRenderer(r.thumb); paintThumbs(document); resize(); }).catch(use2d);
+if (RMODE !== '2d') createRenderer3d(cv, src, { body: S.body }).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(() => { setThumbRenderer(null); useFlat(); }); r.setThumbTone(SKIN_TONES[S.tone]); setThumbRenderer(r.thumb); paintThumbs(document); resize(); }).catch(use2d);
 else use2d();
 new ResizeObserver(resize).observe(stage);
 
@@ -721,7 +726,7 @@ function draw() {
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
     ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, shards: reduced ? [] : G.shards, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
-    reduced, phase: G.state, speed: speedAt(r.x), kick: reduced ? 0 : G.cam.y, showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
+    reduced, phase: G.state, tone: SKIN_TONES[S.tone], large: S.settings.bigRunner, speed: speedAt(r.x), kick: reduced ? 0 : G.cam.y, showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   };
   if (r3d) { st.overlayDirty = drawOverlay(cx, W, H, st); r3d.render(st); return; }
   drawScene(cx, W, H, st);
@@ -777,6 +782,7 @@ function renderLocker() {
   const srcTxt = { crate: 'Crate or credits', shop: 'In the shop', best: `Run ${fmt(APEX_AT)}m` };
   const body = lockerTab === 'skins'
     ? `<div class="seg" role="radiogroup" aria-label="Runner"><button role="radio" data-act="body" data-body="m" aria-selected="${S.body === 'm'}" aria-checked="${S.body === 'm'}">Runner M</button><button role="radio" data-act="body" data-body="f" aria-selected="${S.body === 'f'}" aria-checked="${S.body === 'f'}">Runner F</button></div>
+      <div class="tones" role="radiogroup" aria-label="Skin tone"><span>Skin tone</span>${SKIN_TONES.map((c, i) => `<button class="tone${S.tone === i ? ' on' : ''}" role="radio" aria-checked="${S.tone === i}" aria-label="Skin tone ${i + 1}" data-act="tone" data-tone="${i}" style="background:${c}"></button>`).join('')}</div>
       <p class="muted">${owned} of ${SKINS.length} outfits. Tap one you own to run in it.</p>
       <div class="grid">${SKINS.map((s) => { const o = S.owned[s.id], eq = S.eq === s.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="skin" data-skin="${s.id}">${thumb(s.id, 64, !o)}<span class="nm">${o ? s.name : '???'}</span><span class="rar ${s.rar}">${s.rar}</span><span class="st">${eq ? 'Equipped' : o ? (o > 1 ? '×' + o : 'Tap to equip') : srcTxt[s.src]}</span></button>`; }).join('')}</div>`
     : `<p class="muted">${ownedT} of ${TRAILS.length} trails. Each one unlocks directly with credits: you always get exactly the trail you pick.</p>
@@ -848,6 +854,7 @@ function showSettings() {
       ${sw('music', 'Music', 'Synth beat while you run')}
       ${sw('haptics', 'Haptics', 'Vibration on supported phones')}
       ${sw('ghost', 'Ghost', 'Race a replay of your best run')}
+      ${sw('bigRunner', 'Large runner', 'Bigger and more detailed; ducks under low ceilings. Same hitbox.')}
     </div>
     <p class="fine" style="text-align:left">Motion follows your device's reduced-motion setting${reduced ? ' (on: no camera shake, fewer particles)' : ''}.</p>
     <button class="danger" data-act="reset">Reset all progress</button>
@@ -901,6 +908,7 @@ document.addEventListener('click', async (e) => {
       refresh(); break; }
     case 'flex': showFlex(b.dataset.skin); break;
     case 'equip': S.eq = b.dataset.skin; save(); toast(SK[S.eq].name + ' equipped'); closeModal(); if (!$('view-locker').hidden) renderLocker(); break;
+    case 'tone': { const i = Math.max(0, Math.min(SKIN_TONES.length - 1, +b.dataset.tone || 0)); if (i !== S.tone) { S.tone = i; save(); audio.click(); if (r3d) r3d.setThumbTone(SKIN_TONES[i]); renderLocker(); } break; }
     case 'body': if (b.dataset.body !== S.body) { S.body = b.dataset.body === 'f' ? 'f' : 'm'; save(); audio.click(); renderLocker(); if (r3d) r3d.setBody(S.body).then(() => paintThumbs(document)); } break;
     case 'ltab': lockerTab = b.dataset.l === 'trails' ? 'trails' : 'skins'; renderLocker(); break;
     case 'skin': { const id = b.dataset.skin; if (S.owned[id]) { S.eq = id; save(); renderLocker(); toast(SK[id].name + ' equipped'); }

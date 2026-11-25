@@ -10,5 +10,7 @@ export function parseGltf(text: string, readUri: (uri: string) => Uint8Array): G
 export function parseGlb(bytes: Uint8Array | ArrayBuffer): Glb;
 export function extractRig(g: Glb, opts?: { clips?: { from: Glb; pick: Record<string, string> }[]; optimize?: boolean; quantize?: boolean }): RigData;
 export function reduceKeys(times: number[], values: number[], stride: number, eps: number): { times: number[]; values: number[] };
-export function toModuleSource(rig: RigData, meta: { source: string; license: string }): string;
+export type Attachment = { attach: string; prims: RigPrim[]; tris: number };
+export function attachPrims(part: Glb, body: Glb, bone: string, opts?: { quantize?: boolean }): Attachment;
+export function toModuleSource(rig: RigData | Attachment, meta: { source: string; license: string }): string;
 export function normalizeWeights(w: number[]): number[];

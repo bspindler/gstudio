@@ -60,6 +60,17 @@ time. The hero is scaled to 0.95 units tall, so it never looks as if it clips a 
   and a rim light in the trim colour outlines the runner.
 - An outfit can move a part to another garment. Gold Standard's tall boots cover the shins, for example.
 
+**Hair and accessories** (`gear3d.js`):
+- An outfit either wears a helmet or shows hair. With hair, the face shows the player's skin tone (one of five, picked
+  in the Locker) behind dark neon shades. Hairstyles are the Quaternius CC0 set, worn on the Head bone; M can have a
+  beard.
+- Accessories are built in code from each body's own bone positions: a jetpack (its flames grow in the air), a cape
+  and a scarf tail (they stream with speed), headphones, a spinning halo, a neon crest, and shoulder pads. Their
+  glowing parts use the outfit's trim colour.
+
+**Large runner** (Settings, off by default) draws the hero 1.5 units tall instead of 0.95. The hitbox is unchanged. A
+large runner ducks into a crouch-run under low ceilings; its crouch, hair included, stays under the 1.05 slab.
+
 Each skin keeps its id, rarity, price and source, so the shop, crates and odds are unchanged. New outfits are new
 entries in `OUTFITS`.
 

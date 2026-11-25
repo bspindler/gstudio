@@ -97,3 +97,22 @@ export function buildRig(T, data, matFor) {
   }
   return { root, meshes, mixer, actions };
 }
+
+/**
+ * Adds a rigid attachment (an `npm run model -- --attach` module: hair, a prop) to its bone in a built rig, in our
+ * material. Returns the mesh, or null when the rig has no such bone.
+ */
+export function attachTo(T, root, att, material) {
+  const bone = root.getObjectByName(att.attach);
+  if (!bone) return null;
+  const group = new T.Group();
+  for (const p of att.prims) {
+    const d = decodePrim(p), g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(d.pos, 3));
+    g.setAttribute('normal', new T.BufferAttribute(d.nrm, 3));
+    g.setIndex(new T.BufferAttribute(decode(p.idx, p.idx32 ? 'u32' : 'u16'), 1));
+    const m = new T.Mesh(g, material); m.frustumCulled = false; group.add(m);
+  }
+  bone.add(group);
+  return group;
+}

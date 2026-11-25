@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
 import { buildRig, decode, decodePrim } from '../../../games/hyperline/lib/rig.js';
-import { extractRig, normalizeWeights, parseGlb, parseGltf, reduceKeys, toModuleSource } from '../../../scripts/vendor/glb.js';
+import { attachPrims, extractRig, normalizeWeights, parseGlb, parseGltf, reduceKeys, toModuleSource } from '../../../scripts/vendor/glb.js';
 
 // ---- a tiny skinned GLB, built by hand ----
 // Two bones (Hips > Spine), one triangle skinned to them, and an animation that turns Spine.
@@ -166,6 +166,21 @@ describe('glb: parse and extract a skinned rig (offline, scripts/vendor)', () =>
     const bw = b.w!;
     for (let i = 0; i < bw.length; i += 4) expect(bw[i]! + bw[i + 1]! + bw[i + 2]! + bw[i + 3]!).toBeCloseTo(1, 5);
     expect(Array.from(b.j!)).toEqual(Array.from(a.j!));
+  });
+
+  it('attachPrims puts a rigid part into a bone\'s local space, so it rides that bone on the body', () => {
+    // the model's Spine sits at y = (1 + 0.5) * 0.5 = 0.75 (Armature scale 0.5); a part made at y = 0.75 sits on it
+    const part = glb({ withMesh: true, rigid: true, anims: [] });
+    const att = attachPrims(parseGlb(part), parseGlb(model), 'Spine', {});
+    expect(att.attach).toBe('Spine');
+    const r = buildRig(THREE, extractRig(parseGlb(model), { clips: [] }), () => new THREE.MeshBasicMaterial());
+    const bone = r.root.getObjectByName('Spine')!;
+    const d = decodePrim(att.prims[0]!);
+    // the part's first vertex (0,0,0) at its node Spine (0.75 up) lands back on the bone origin in bone space, scaled by 1/0.5
+    r.root.updateMatrixWorld(true);
+    const v = new THREE.Vector3(d.pos[0], d.pos[1], d.pos[2]).applyMatrix4(bone.matrixWorld);
+    expect(v.y).toBeCloseTo(0.75, 4);
+    expect(() => attachPrims(parseGlb(part), parseGlb(model), 'Nope', {})).toThrow(/Nope/);
   });
 
   it('keyframe reduction keeps the ends and every key that interpolation cannot reproduce', () => {

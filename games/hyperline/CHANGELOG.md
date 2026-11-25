@@ -2,6 +2,15 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.21.0 (2026-11-25)
+- Outfits now come with hair and accessories:
+  - Track Suit, Courier, Vaporwave and Glitch show hair, neon shades and your skin tone (pick one of five in the Locker).
+  - Firewalker and Apex wear jetpacks whose flames flare when you jump.
+  - Gold Standard and Chrome Serpent have capes that stream behind you.
+  - There are also headphones, a scarf, a spinning halo, a neon crest and shoulder pads.
+- New Large runner setting: a bigger, more detailed runner that ducks under low ceilings. It only changes the look;
+  the hitbox and your runs are exactly the same.
+
 ## 0.20.0 (2026-11-25)
 - Your runner is now a hero, and you pick M or F in the Locker. It's free, and you can switch any time.
 - Skins are now outfits: each one dresses your runner with its own top, sleeves, gloves, pants, boots and a

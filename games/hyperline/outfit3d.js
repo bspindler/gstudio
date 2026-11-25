@@ -30,33 +30,35 @@ export const GARMENTS = { helmet: ['head'], top: ['torso', 'upperArms'], belt: [
 /**
  * The outfits, one per skin id (the skin's rarity, price and source are unchanged). A garment is
  * { c: colour, p?: pattern, pc?: pattern colour, glow?: 0..1, metal?: 0..1 }. `cover` moves parts between garments.
+ * `hair` ({ m, f } hairstyles, gear3d.js HAIRS) replaces the helmet: the face shows the player's skin tone, behind
+ * neon shades (the visor band). `gear` lists accessories (gear3d.js GEAR); `beard` adds a beard on body M.
  */
 export const OUTFITS = {
-  volt: { name: 'Track Suit', trim: '#22F0FF', visor: '#22F0FF', g: {
+  volt: { name: 'Track Suit', trim: '#22F0FF', visor: '#22F0FF', hair: { m: 'parted', f: 'buns' }, hairColor: '#2A1A12', beard: true, gear: ['headphones'], g: {
     helmet: { c: '#10142A', metal: 0.6 }, top: { c: '#1C6BFF', p: 'sideLine', pc: '#E8FCFF', glow: 0.15 }, belt: { c: '#0A0E1E' },
     sleeves: { c: '#1C6BFF', p: 'sideLine', pc: '#E8FCFF' }, gloves: { c: '#0A0E1E' }, pants: { c: '#0C1430', p: 'sideLine', pc: '#22F0FF', glow: 0.1 }, boots: { c: '#E8FCFF', glow: 0.2 } } },
-  ember: { name: 'Firewalker', trim: '#FF8A3D', visor: '#FF8A3D', g: {
+  ember: { name: 'Firewalker', trim: '#FF8A3D', visor: '#FF8A3D', gear: ['jetpack'], g: {
     helmet: { c: '#1A0A08', metal: 0.5 }, top: { c: '#2A0C08', p: 'chevrons', pc: '#FF5A1F', glow: 0.5 }, belt: { c: '#FF8A3D', glow: 0.4 },
     sleeves: { c: '#2A0C08' }, gloves: { c: '#FF2B5E', glow: 0.25 }, pants: { c: '#120606', p: 'gradient', pc: '#FF2B5E' }, boots: { c: '#FF2B5E', glow: 0.2 } } },
-  mint: { name: 'Courier', trim: '#7CFF6B', visor: '#7CFF6B', cover: { upperArms: 'sleeves' }, g: {
+  mint: { name: 'Courier', trim: '#7CFF6B', visor: '#7CFF6B', cover: { upperArms: 'sleeves' }, hair: { m: 'buzzed', f: 'long' }, hairColor: '#0E5A44', gear: ['scarf'], g: {
     helmet: { c: '#0E1A14', metal: 0.3 }, top: { c: '#11B989', p: 'bands', pc: '#0A3A2A' }, belt: { c: '#7CFF6B', glow: 0.35 },
     sleeves: { c: '#16222A' }, gloves: { c: '#7CFF6B', glow: 0.2 }, pants: { c: '#1E2A2E', p: 'circuit', pc: '#11B989', glow: 0.05 }, boots: { c: '#0E1A14' } } },
-  vapor: { name: 'Vaporwave', trim: '#FF2BD6', visor: '#FF2BD6', g: {
+  vapor: { name: 'Vaporwave', trim: '#FF2BD6', visor: '#22F0FF', hair: { m: 'parted', f: 'long' }, hairColor: '#FF4FD8', gear: ['headphones'], g: {
     helmet: { c: '#2A0A3A', metal: 0.4 }, top: { c: '#7A2BFF', p: 'gradient', pc: '#FF2BD6', glow: 0.25 }, belt: { c: '#22F0FF', glow: 0.4 },
     sleeves: { c: '#FF2BD6', glow: 0.15 }, gloves: { c: '#2A0A3A' }, pants: { c: '#2A0A3A', p: 'hoops', pc: '#FF2BD6', glow: 0.2 }, boots: { c: '#22F0FF', glow: 0.2 } } },
-  hexa: { name: 'Hexline', trim: '#B98CFF', visor: '#22F0FF', g: {
+  hexa: { name: 'Hexline', trim: '#B98CFF', visor: '#22F0FF', gear: ['crest', 'shoulders'], g: {
     helmet: { c: '#1A1030', metal: 0.7 }, top: { c: '#2A1850', p: 'circuit', pc: '#22F0FF', glow: 0.35 }, belt: { c: '#B98CFF', glow: 0.3 },
     sleeves: { c: '#2A1850', p: 'circuit', pc: '#22F0FF', glow: 0.35 }, gloves: { c: '#B98CFF', glow: 0.2 }, pants: { c: '#1A1030', p: 'circuit', pc: '#B98CFF', glow: 0.3 }, boots: { c: '#B98CFF' } } },
-  aurum: { name: 'Gold Standard', trim: '#FFE45C', visor: '#FFE45C', cover: { shins: 'boots' }, g: {
+  aurum: { name: 'Gold Standard', trim: '#FFE45C', visor: '#FFE45C', cover: { shins: 'boots' }, gear: ['shoulders', 'cape'], g: {
     helmet: { c: '#C8A030', metal: 1 }, top: { c: '#D8B040', p: 'bands', pc: '#7A5A10', metal: 1 }, belt: { c: '#0A0806' },
     sleeves: { c: '#0A0806' }, gloves: { c: '#D8B040', metal: 1 }, pants: { c: '#0A0806' }, boots: { c: '#D8B040', p: 'bands', pc: '#7A5A10', metal: 1 } } },
-  glitch: { name: 'Glitch', trim: '#FFFFFF', visor: '#8A8AFF', fx: 'glitch', g: {
+  glitch: { name: 'Glitch', trim: '#FFFFFF', visor: '#8A8AFF', fx: 'glitch', hair: { m: 'buzzed', f: 'buzzed-f' }, hairColor: '#F2F2FF', gear: ['halo'], g: {
     helmet: { c: '#E8E8FF', metal: 0.2 }, top: { c: '#E8E8FF', p: 'hoops', pc: '#8A8AFF', glow: 0.1 }, belt: { c: '#8A8AFF', glow: 0.3 },
     sleeves: { c: '#E8E8FF' }, gloves: { c: '#20203A' }, pants: { c: '#20203A', p: 'hoops', pc: '#E8E8FF', glow: 0.1 }, boots: { c: '#E8E8FF' } } },
-  serpent: { name: 'Chrome Serpent', trim: '#E6E9FF', visor: '#E6E9FF', fx: 'rainbow', g: {
+  serpent: { name: 'Chrome Serpent', trim: '#E6E9FF', visor: '#E6E9FF', fx: 'rainbow', gear: ['crest', 'cape'], g: {
     helmet: { c: '#C8CCE8', metal: 1 }, top: { c: '#B8BCD8', p: 'scales', pc: '#FFFFFF', metal: 1, glow: 0.1 }, belt: { c: '#8C93C7', metal: 1 },
     sleeves: { c: '#B8BCD8', p: 'scales', pc: '#FFFFFF', metal: 1 }, gloves: { c: '#8C93C7', metal: 1 }, pants: { c: '#A0A4C8', p: 'scales', pc: '#FFFFFF', metal: 1 }, boots: { c: '#C8CCE8', metal: 1 } } },
-  apex: { name: 'Apex', trim: '#FFE45C', visor: '#FFE45C', fx: 'rainbow', g: {
+  apex: { name: 'Apex', trim: '#FFE45C', visor: '#FFE45C', fx: 'rainbow', gear: ['jetpack', 'halo'], g: {
     helmet: { c: '#0A0610', metal: 0.8 }, top: { c: '#0A0610', p: 'sideLine', pc: '#FF2BD6', glow: 0.4 }, belt: { c: '#FFE45C', glow: 0.5 },
     sleeves: { c: '#0A0610', p: 'sideLine', pc: '#FFE45C', glow: 0.4 }, gloves: { c: '#FF2BD6', glow: 0.3 }, pants: { c: '#0A0610', p: 'sideLine', pc: '#FF2BD6', glow: 0.4 }, boots: { c: '#FFE45C', glow: 0.3 } } },
 };
@@ -100,7 +102,7 @@ export function outfitMaterial(T) {
     oCol: { value: Array.from({ length: N }, () => new T.Color()) }, oPat: { value: new Array(N).fill(0) },
     oPc: { value: Array.from({ length: N }, () => new T.Color()) }, oGlow: { value: new Array(N).fill(0) },
     oMetal: { value: new Array(N).fill(0) }, oTrim: { value: new T.Color() }, oVisor: { value: new T.Color() },
-    oVisorY: { value: new T.Vector2(1.55, 1.63) }, oTime: { value: 0 }, oFx: { value: 0 },
+    oVisorY: { value: new T.Vector2(1.55, 1.63) }, oTime: { value: 0 }, oFx: { value: 0 }, oShades: { value: 0 },
   };
   const m = new T.MeshStandardMaterial({ roughness: 0.45, metalness: 0.2, transparent: true });
   m.userData.outfit = u;
@@ -109,7 +111,7 @@ export function outfitMaterial(T) {
     sh.vertexShader = 'attribute float part; attribute vec3 bindPos; attribute vec3 bindNrm;\nvarying float vPart; flat varying int vPartF; varying vec3 vBind; varying vec3 vBN;\n'
       + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vPart = part; vPartF = int(part + 0.5); vBind = bindPos; vBN = bindNrm;');
     sh.fragmentShader = `uniform vec3 oCol[${N}]; uniform float oPat[${N}]; uniform vec3 oPc[${N}]; uniform float oGlow[${N}]; uniform float oMetal[${N}];
-uniform vec3 oTrim; uniform vec3 oVisor; uniform vec2 oVisorY; uniform float oTime; uniform float oFx;
+uniform vec3 oTrim; uniform vec3 oVisor; uniform vec2 oVisorY; uniform float oTime; uniform float oFx; uniform float oShades;
 varying float vPart; flat varying int vPartF; varying vec3 vBind; varying vec3 vBN;
 float oPattern(float id, vec3 p, vec3 n) {
   if (id < 0.5) return 0.0;
@@ -127,28 +129,41 @@ float oPattern(float id, vec3 p, vec3 n) {
   int pi = vPartF;
   vec3 gc = oCol[pi]; float pat = oPattern(oPat[pi], vBind, vBN);
   if (oFx > 1.5) { float g = step(0.6, fract(vBind.y * 30.0 + floor(oTime * 11.0) * 0.37)); gc = mix(gc, g > 0.5 ? vec3(0.13, 0.94, 1.0) : vec3(1.0, 0.17, 0.84), 0.25 * g); } // glitch scanlines
-  diffuseColor.rgb = mix(gc, oPc[pi], pat);`)
+  diffuseColor.rgb = mix(gc, oPc[pi], pat);
+  float visor = (pi == 0 && vBind.y > oVisorY.x && vBind.y < oVisorY.y && vBN.z > 0.15) ? 1.0 : 0.0;
+  if (oShades > 0.5) { visor *= step(oVisorY.x + 0.012, vBind.y) * step(vBind.y, oVisorY.y - 0.01); diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.02, 0.02, 0.04), visor); } // shades: dark glass`)
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n  metalnessFactor = max(metalnessFactor, oMetal[vPartF]);')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
   float seam = smoothstep(0.08, 0.3, abs(vPart - floor(vPart + 0.5)));                 // where the part changes: neon piping
-  float visor = (vPartF == 0 && vBind.y > oVisorY.x && vBind.y < oVisorY.y && vBN.z > 0.15) ? 1.0 : 0.0;
   vec3 trim = oTrim;
   if (oFx > 0.5 && oFx < 1.5) trim = 0.6 + 0.4 * cos(6.2832 * (oTime * 0.35 + vBind.y * 0.8 + vec3(0.0, 0.33, 0.67))); // rainbow
   totalEmissiveRadiance += diffuseColor.rgb * oGlow[vPartF] * (0.4 + 0.6 * oPattern(oPat[vPartF], vBind, vBN))
-    + trim * seam * 1.4 + oVisor * visor * 2.2
+    + trim * seam * 1.4 + oVisor * visor * (oShades > 0.5 ? 0.45 : 2.2)
     + trim * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.4) * 0.9;`);
   };
   return m;
 }
 
-/** Points the outfit material at an outfit; t (seconds) drives rainbow and glitch effects. */
-export function applyOutfit(m, outfit, t = 0) {
+/** The trim colour at time t: the outfit's, or cycling through the spectrum for a rainbow outfit (as the shader does). */
+export function trimAt(outfit, t) {
+  if (outfit.fx !== 'rainbow') return outfit.trim;
+  const c = (k) => Math.round(255 * (0.6 + 0.4 * Math.cos(6.2832 * (t * 0.35 + k)))).toString(16).padStart(2, '0');
+  return `#${c(0)}${c(0.33)}${c(0.67)}`;
+}
+
+/**
+ * Points the outfit material at an outfit; t (seconds) drives rainbow and glitch effects. tone: the skin tone shown on
+ * the face when the outfit has hair instead of a helmet.
+ */
+export function applyOutfit(m, outfit, t = 0, tone = '#E0AC82') {
   const u = m.userData.outfit, gs = partGarments(outfit);
+  if (outfit.hair) gs[0] = { c: tone, p: 'none', pc: tone, glow: 0, metal: 0 };
   gs.forEach((g, i) => {
     u.oCol.value[i].set(g.c); u.oPc.value[i].set(g.pc); u.oPat.value[i] = PATTERNS[g.p] ?? 0;
     u.oGlow.value[i] = g.glow; u.oMetal.value[i] = g.metal;
   });
   u.oTrim.value.set(outfit.trim); u.oVisor.value.set(outfit.visor);
   u.oFx.value = outfit.fx === 'rainbow' ? 1 : outfit.fx === 'glitch' ? 2 : 0;
+  u.oShades.value = outfit.hair ? 1 : 0;
   u.oTime.value = t;
 }

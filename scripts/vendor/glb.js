@@ -187,9 +187,75 @@ export function reduceKeys(times, values, stride, eps) {
   return { times: keep.map((i) => times[i]), values: keep.flatMap((i) => values.slice(i * stride, i * stride + stride)) };
 }
 
-/** The rig as an ES module of data only: no imports and no code. */
+// ---- rigid attachments (hair, props) ----
+// Column-major 4x4 matrices, as glTF stores them.
+const m4 = {
+  trs(t = [0, 0, 0], r = [0, 0, 0, 1], sc = [1, 1, 1]) {
+    const [x, y, z, w] = r, [sx, sy, sz] = sc;
+    return [(1 - 2 * (y * y + z * z)) * sx, 2 * (x * y + z * w) * sx, 2 * (x * z - y * w) * sx, 0,
+      2 * (x * y - z * w) * sy, (1 - 2 * (x * x + z * z)) * sy, 2 * (y * z + x * w) * sy, 0,
+      2 * (x * z + y * w) * sz, 2 * (y * z - x * w) * sz, (1 - 2 * (x * x + y * y)) * sz, 0, t[0], t[1], t[2], 1];
+  },
+  mul(a, b) { const o = new Array(16).fill(0); for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) o[c * 4 + r] += a[k * 4 + r] * b[c * 4 + k]; return o; },
+  inv(m) {
+    const a = m, o = new Array(16);
+    const b00 = a[0] * a[5] - a[1] * a[4], b01 = a[0] * a[6] - a[2] * a[4], b02 = a[0] * a[7] - a[3] * a[4], b03 = a[1] * a[6] - a[2] * a[5];
+    const b04 = a[1] * a[7] - a[3] * a[5], b05 = a[2] * a[7] - a[3] * a[6], b06 = a[8] * a[13] - a[9] * a[12], b07 = a[8] * a[14] - a[10] * a[12];
+    const b08 = a[8] * a[15] - a[11] * a[12], b09 = a[9] * a[14] - a[10] * a[13], b10 = a[9] * a[15] - a[11] * a[13], b11 = a[10] * a[15] - a[11] * a[14];
+    const det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06, d = 1 / det;
+    o[0] = (a[5] * b11 - a[6] * b10 + a[7] * b09) * d; o[1] = (a[2] * b10 - a[1] * b11 - a[3] * b09) * d; o[2] = (a[13] * b05 - a[14] * b04 + a[15] * b03) * d; o[3] = (a[10] * b04 - a[9] * b05 - a[11] * b03) * d;
+    o[4] = (a[6] * b08 - a[4] * b11 - a[7] * b07) * d; o[5] = (a[0] * b11 - a[2] * b08 + a[3] * b07) * d; o[6] = (a[14] * b02 - a[12] * b05 - a[15] * b01) * d; o[7] = (a[8] * b05 - a[10] * b02 + a[11] * b01) * d;
+    o[8] = (a[4] * b10 - a[5] * b08 + a[7] * b06) * d; o[9] = (a[1] * b08 - a[0] * b10 - a[3] * b06) * d; o[10] = (a[12] * b04 - a[13] * b02 + a[15] * b00) * d; o[11] = (a[9] * b02 - a[8] * b04 - a[11] * b00) * d;
+    o[12] = (a[5] * b07 - a[4] * b09 - a[6] * b06) * d; o[13] = (a[0] * b09 - a[1] * b07 + a[2] * b06) * d; o[14] = (a[13] * b01 - a[12] * b03 - a[14] * b00) * d; o[15] = (a[8] * b03 - a[9] * b01 + a[10] * b00) * d;
+    return o;
+  },
+  pt(m, x, y, z) { return [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]]; },
+  dir(m, x, y, z) { const v = [m[0] * x + m[4] * y + m[8] * z, m[1] * x + m[5] * y + m[9] * z, m[2] * x + m[6] * y + m[10] * z], l = Math.hypot(...v) || 1; return v.map((c) => c / l); },
+};
+/** Each node's world matrix (TRS chain from the scene roots). */
+function worldMatrices(J) {
+  const parent = new Array(J.nodes.length).fill(-1);
+  J.nodes.forEach((n, i) => (n.children || []).forEach((c) => { parent[c] = i; }));
+  const memo = new Array(J.nodes.length);
+  const world = (i) => memo[i] || (memo[i] = (() => {
+    const n = J.nodes[i], local = n.matrix ? [...n.matrix] : m4.trs(n.translation, n.rotation, n.scale);
+    return parent[i] >= 0 ? m4.mul(world(parent[i]), local) : local;
+  })());
+  return J.nodes.map((_, i) => world(i));
+}
+
+/**
+ * A rigid part (hair, a prop) re-expressed in the local space of a bone of the body it was made for: every mesh in
+ * `part` is placed by its node's world matrix, then by the inverse of `bone`'s bind-pose world matrix in `body`. At
+ * runtime it is added to that bone (lib/rig.js attachTo), so it rides the bone through every animation.
+ */
+export function attachPrims(part, body, bone, opts = {}) {
+  const BJ = body.json, bi = BJ.nodes.findIndex((n) => n.name === bone);
+  if (bi < 0) throw new Error(`attach: no bone "${bone}" in the body. It has: ${BJ.nodes.map((n) => n.name).slice(0, 12).join(', ')}...`);
+  const toBone = m4.inv(worldMatrices(BJ)[bi]);
+  const J = part.json, worlds = worldMatrices(J);
+  let tris = 0;
+  const prims = [];
+  J.nodes.forEach((n, ni) => {
+    if (n.mesh === undefined) return;
+    const m = m4.mul(toBone, worlds[ni]);
+    for (const p of J.meshes[n.mesh].primitives) {
+      const A = p.attributes, P = read(part, A.POSITION), N = read(part, A.NORMAL), pos = [], nrm = [];
+      for (let i = 0; i < P.length; i += 3) { pos.push(...m4.pt(m, P[i], P[i + 1], P[i + 2])); nrm.push(...m4.dir(m, N[i], N[i + 1], N[i + 2])); }
+      const idx = p.indices !== undefined ? read(part, p.indices) : [...Array(P.length / 3).keys()];
+      tris += idx.length / 3;
+      const big = P.length / 3 > 65535, q = opts.quantize ? quantizePrim(pos, nrm, null, null) : null;
+      prims.push({ mat: p.material !== undefined ? J.materials[p.material].name || 'default' : 'default',
+        ...(q ? { pos: q.pos, posQ: q.posQ, nrm: q.nrm, nrm8: true } : { pos: b64(Float32Array, pos), nrm: b64(Float32Array, nrm) }),
+        idx: b64(big ? Uint32Array : Uint16Array, idx), idx32: big });
+    }
+  });
+  return { attach: bone, prims, tris };
+}
+
+/** The rig (or an attachment) as an ES module of data only: no imports and no code. */
 export function toModuleSource(rig, meta) {
   return `// ${meta.source}. License: ${meta.license}. Generated by scripts/vendor/glb-to-module.ts; do not edit by hand.\n`
-    + `// ${rig.tris} triangles, ${rig.meshes.length} meshes, ${rig.skins.length} skins, clips: ${rig.clips.map((c) => c.name).join(', ') || 'none'}.\n`
+    + (rig.attach ? `// ${rig.tris} triangles, attached to bone ${rig.attach}.\n` : `// ${rig.tris} triangles, ${rig.meshes.length} meshes, ${rig.skins.length} skins, clips: ${rig.clips.map((c) => c.name).join(', ') || 'none'}.\n`)
     + `export default ${JSON.stringify(rig)};\n`;
 }
