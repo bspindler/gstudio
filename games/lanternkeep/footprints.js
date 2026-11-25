@@ -1,7 +1,7 @@
 // Faint pale footprints left on the moonlit path by creatures that walk, fading in a second or two.
 // Pure bookkeeping (no drawing, no DOM) so both renderers share it and it can be tested.
 // Positions are in tiles, time is in seconds. Flyers (moths, fireflies, wisps) leave none.
-export const WALKERS = new Set(['beetle', 'toad', 'mossback', 'mole']);
+export const WALKERS = new Set(['beetle', 'toad', 'mossback', 'mole', 'burrower']);
 export const STRIDE = 0.4; // tiles walked between prints
 export const SIDE = 0.1; // sideways offset of each foot, in tiles
 export const CAP = 90; // most prints alive at once, so many creatures stay cheap

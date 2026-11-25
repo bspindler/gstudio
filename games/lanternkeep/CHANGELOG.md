@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.9.0 (2026-11-24)
+- New night 20, Burrow Hollow: Dusk Burrowers dig under a short stretch of the road, out of reach, and pop up further on, so spread your plants along the whole road.
+
 ## 0.8.0 (2026-11-21)
 - New night 18, Mirror Mist: Twin Wisps split in two the first time they are struck, each half with half the health.
 - Night Watch from night 16 brings the Gloam Stag, a big moonlit creature that walks slowly, then charges down the long straights of the path.

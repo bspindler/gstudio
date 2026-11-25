@@ -286,4 +286,18 @@ export const LEVELS = [
       [['toad', 3, 4], ['shadebearer', 12, 0.6, 2], ['beetle', 10, 0.6, 4]],
     ],
   }),
+  L('Burrow Hollow', 'Dusk Burrowers dig under a stretch of the road, out of reach, and pop up further on. Spread your plants along the whole road.', {
+    region: 'ember', towers: ALL, gold: 420, hpMul: 1.5,
+    paths: [[[-1, 2], [7, 2], [7, 5], [1, 5], [1, 8], [7, 8], [7, 11], [4, 11]]],
+    waves: [
+      [['moth', 12, 0.5], ['burrower', 4, 1.6, 3]],
+      [['burrower', 10, 0.9]],
+      [['beetle', 8, 0.9], ['burrower', 8, 0.8, 2]],
+      [['mossback', 3, 1.5], ['burrower', 10, 0.7, 2], ['firefly', 14, 0.3, 3]],
+      [['toad', 2, 5], ['burrower', 10, 0.7, 2]],
+      [['burrower', 14, 0.5], ['beetle', 10, 0.7, 3]],
+      [['mothmother', 1, 1], ['burrower', 12, 0.6, 3], ['mossback', 3, 1.5, 3]],
+      [['toad', 3, 4], ['burrower', 16, 0.5, 2], ['beetle', 10, 0.6, 4]],
+    ],
+  }),
 ];

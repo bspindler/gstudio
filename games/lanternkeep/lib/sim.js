@@ -104,6 +104,7 @@ export const ENEMIES = {
   mossback: { name: 'Mossback', hp: 120, speed: 0.7, armor: 1, reward: 14, leak: 1, r: 0.32, heal: { r: 1.4, pct: 0.06 }, tip: 'Heals creatures near it. Take it out first.' },
   toad: { name: 'Gloom Toad', hp: 650, speed: 0.5, armor: 3, reward: 75, leak: 5, r: 0.42, tip: 'A boss. Costs five lives if it reaches the lantern.' },
   mole: { name: 'Hollow Mole', hp: 70, speed: 0.95, armor: 1, reward: 10, leak: 1, r: 0.28, dive: { up: 2.4, down: 1.6 }, tip: 'Dives under the path for a stretch. Nothing can hit it down there, so cover the whole road.' },
+  burrower: { name: 'Dusk Burrower', hp: 80, speed: 0.9, armor: 1, reward: 10, leak: 1, r: 0.28, burrow: { from: 1.5, len: 1.8, every: 6, fast: 1.4 }, tip: 'Digs under a short stretch of the road, out of reach, and pops up further on. Spread your plants along the whole road.' },
   stag: { name: 'Gloam Stag', hp: 380, speed: 0.55, armor: 2, reward: 40, leak: 3, r: 0.4, charge: { speed: 2.1, minRun: 3, margin: 0.5 }, tip: 'Walks slowly, then charges down the long straights of the path. Slow it before the road runs straight.' },
   lampmoth: { name: 'Lampmoth', hp: 16, speed: 2.5, armor: 0, reward: 3, leak: 1, r: 0.17, lamp: { dazzle: 3.2, reach: 0.32 }, tip: 'Leaves the path and dives at your brightest plant. It dazzles that plant until it burns out, then flits for the lantern.' },
   twinwisp: { name: 'Twin Wisp', hp: 60, speed: 1.1, armor: 0, reward: 4, leak: 1, r: 0.24, twin: true, tip: 'Splits in two the first time it is struck, each half with half the health. Bursts and beams catch both.' },
@@ -561,6 +562,7 @@ export function step(g) {
     const path = g.paths[e.lane];
     let speed = def.speed;
     if (def.charge) { e.charging = charging(path, e.d, def.charge); if (e.charging) speed = def.charge.speed; }
+    if (def.burrow && e.under) speed *= def.burrow.fast; // tunnelling is quick, so it surfaces further on
     e.d += speed * (1 - e.slow) * DT;
     if (e.d >= path.len) {
       e.hp = 0;
@@ -574,6 +576,7 @@ export function step(g) {
     e.x = p.x;
     e.y = p.y;
     if (def.dive) e.under = e.d % (def.dive.up + def.dive.down) >= def.dive.up;
+    if (def.burrow) e.under = e.d >= def.burrow.from && (e.d - def.burrow.from) % def.burrow.every < def.burrow.len;
   }
 
   // healers mend their neighbours

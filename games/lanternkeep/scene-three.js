@@ -746,7 +746,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
         if (e.type === 'mossback' && tierName !== 'low') glowP.add(x, 0.4, z, 1.6, 0.06, 0.16, 0.04, 1);
       }
       // a diving mole sinks out of sight under the path and leaves a faint moving mound of earth
-      if (e.type === 'mole') {
+      if (e.type === 'mole' || e.type === 'burrower') {
         c.sink = (c.sink ?? 0) + ((e.under ? 1 : 0) - (c.sink ?? 0)) * 0.25;
         c.root.position.y = -0.5 * c.sink;
         c.root.visible = c.sink < 0.9;
