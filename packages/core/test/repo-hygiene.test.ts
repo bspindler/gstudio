@@ -98,6 +98,13 @@ describe('final review fixes: setup and CI', () => {
     expect(readFileSync(join(root, '.github/workflows/pages.yml'), 'utf8')).toMatch(/#.*PAGES_ENABLED/);
   });
 
+  it('the Pages workflow builds and deploys in separate jobs (deploying in the upload job raced the artifact listing)', () => {
+    const pages = workflow('pages.yml') as { jobs: Record<string, { needs?: string; steps?: { uses?: string }[] }> };
+    expect(pages.jobs.build?.steps?.some((s) => s.uses?.startsWith('actions/upload-pages-artifact'))).toBe(true);
+    expect(pages.jobs.deploy?.needs).toBe('build');
+    expect(pages.jobs.deploy?.steps?.map((s) => s.uses)).toEqual(['actions/deploy-pages@v4']);
+  });
+
   it('.vscode/settings.json keeps LF line endings and is not git-ignored', () => {
     const file = join(root, '.vscode/settings.json');
     expect(existsSync(file)).toBe(true);
