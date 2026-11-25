@@ -77,6 +77,7 @@ const b64 = (Arr, data) => Buffer.from(new Uint8Array(new Arr(data).buffer)).toS
  * opts.clips: [{ from: parsed GLB, pick: { ourName: 'NameInFile' } }]. Clip tracks map onto model nodes by name.
  */
 export function extractRig(g, opts = { clips: [] }) {
+  opts = { clips: [], ...opts };
   const J = g.json;
   const parent = new Array(J.nodes.length).fill(-1);
   J.nodes.forEach((n, i) => (n.children || []).forEach((c) => { parent[c] = i; }));
@@ -91,11 +92,14 @@ export function extractRig(g, opts = { clips: [] }) {
     const idx = p.indices !== undefined ? read(g, p.indices) : [...Array(J.accessors[A.POSITION].count).keys()];
     tris += idx.length / 3;
     const big = J.accessors[A.POSITION].count > 65535;
+    const pos = read(g, A.POSITION), nrm = read(g, A.NORMAL);
+    const joints = skinned ? read(g, A.JOINTS_0) : null, weights = skinned ? normalizeWeights(read(g, A.WEIGHTS_0)) : null;
+    const q = opts.quantize ? quantizePrim(pos, nrm, joints, weights) : null;
     return {
       mat: p.material !== undefined ? J.materials[p.material].name || `mat${p.material}` : 'default',
-      pos: b64(Float32Array, read(g, A.POSITION)), nrm: b64(Float32Array, read(g, A.NORMAL)),
+      ...(q ? { pos: q.pos, posQ: q.posQ, nrm: q.nrm, nrm8: true } : { pos: b64(Float32Array, pos), nrm: b64(Float32Array, nrm) }),
       idx: b64(big ? Uint32Array : Uint16Array, idx), idx32: big,
-      ...(skinned ? { j: b64(Uint16Array, read(g, A.JOINTS_0)), w: b64(Float32Array, normalizeWeights(read(g, A.WEIGHTS_0))) } : {}),
+      ...(skinned ? (q ? { j: q.j, j8: q.j8, w: q.w, w8: true } : { j: b64(Uint16Array, joints), w: b64(Float32Array, weights) }) : {}),
       ...(A.COLOR_0 !== undefined && J.accessors[A.COLOR_0].type === 'VEC4' ? { col: b64(Float32Array, read(g, A.COLOR_0)) } : {}),
     };
   };
@@ -133,6 +137,23 @@ export function extractRig(g, opts = { clips: [] }) {
     }
   }
   return { nodes, meshes, skins, clips, tris };
+}
+
+/**
+ * Smaller downloads: positions as 16-bit steps across the primitive's bounds (posQ = [min xyz, max xyz]), normals and
+ * weights as 8-bit, joint indices as 8-bit when every index fits. rig.js decodes them back to floats on load.
+ */
+function quantizePrim(pos, nrm, joints, weights) {
+  const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < pos.length; i++) { const c = i % 3; if (pos[i] < mn[c]) mn[c] = pos[i]; if (pos[i] > mx[c]) mx[c] = pos[i]; }
+  const qp = pos.map((v, i) => { const c = i % 3, r = mx[c] - mn[c] || 1; return Math.round(((v - mn[c]) / r) * 65535) - 32768; });
+  const out = { pos: b64(Int16Array, qp), posQ: [...mn, ...mx], nrm: b64(Int8Array, nrm.map((v) => Math.round(Math.max(-1, Math.min(1, v)) * 127))) };
+  if (joints) {
+    out.j8 = joints.every((v) => v < 256);
+    out.j = b64(out.j8 ? Uint8Array : Uint16Array, joints);
+    out.w = b64(Uint8Array, weights.map((v) => Math.round(v * 255)));
+  }
+  return out;
 }
 
 /** Whether every key equals the bind value (a quaternion also matches its negation, the same rotation). */

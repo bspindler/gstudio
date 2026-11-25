@@ -1,0 +1,12 @@
+export const PARTS: string[];
+export function partOfBone(name: string): number;
+export const PATTERNS: Record<string, number>;
+export const GARMENTS: Record<string, string[]>;
+export type Garment = { c: string; p?: string; pc?: string; glow?: number; metal?: number };
+export type Outfit = { name?: string; trim: string; visor: string; fx?: string; cover?: Record<string, string>; g: Record<string, Garment> };
+export const OUTFITS: Record<'volt' | 'ember' | 'mint' | 'vapor' | 'hexa' | 'aurum' | 'glitch' | 'serpent' | 'apex', Outfit>;
+export function partGarments(outfit: Outfit): Required<Pick<Garment, 'c' | 'p' | 'pc' | 'glow' | 'metal'>>[];
+export function tagParts(T: unknown, mesh: unknown): number;
+export function setVisor(m: unknown, headTop: number): void;
+export function outfitMaterial(T: unknown): unknown;
+export function applyOutfit(m: unknown, outfit: Outfit, t?: number): void;

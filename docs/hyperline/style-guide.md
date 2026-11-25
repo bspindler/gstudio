@@ -48,17 +48,26 @@ Every sign word is our own text: no brands, logos or other games' names (hard ru
 
 ## Runner
 
-The runner is the Quaternius robot (RobotExpressive, CC0), about 0.92 units tall, so it never looks as if it clips a
-low ceiling it passes under. Its materials are ours:
-- **Main:** the skin's first colour, emissive.
-- **Black (trim):** the skin's second colour, glowing.
-- **Grey:** dark chrome.
+The runner is a hero from Quaternius's Universal Base Characters (CC0), animated with the Universal Animation Library
+(CC0). The player picks **M or F** in the Locker. It's free, it's separate from skins, and it can be switched any
+time. The hero is scaled to 0.95 units tall, so it never looks as if it clips a low ceiling the sim lets you pass under.
 
-The physics owns the jump. The pose follows the physics: a take-off frame, then the airborne pose held until
-touchdown. The runner rides the ceiling upside down during a gravity flip. The ghost is a translucent outline of the
-same robot.
+**Skins are outfits** (`outfit3d.js`). They're clothes painted on in a shader, with no textures:
+- Each vertex is tagged with its body part (head, torso, waist, upper arms, forearms, hands, thighs, shins, feet).
+- An outfit dresses each garment (helmet, top, belt, sleeves, gloves, pants, boots) with a colour, a pattern (hoops, side
+  line, circuit, chevrons, gradient, scales, bands), a glow and a metalness.
+- Seams between garments glow as neon piping in the outfit's trim colour. The head is a helmet with a glowing visor,
+  and a rim light in the trim colour outlines the runner.
+- An outfit can move a part to another garment. Gold Standard's tall boots cover the shins, for example.
+
+Each skin keeps its id, rarity, price and source, so the shop, crates and odds are unchanged. New outfits are new
+entries in `OUTFITS`.
+
+The physics owns the jump: the hero switches to its airborne loop at take-off and back to the sprint at touchdown. It
+rides the ceiling upside down during a gravity flip. The ghost is a wireframe of the same hero. The robot
+(RobotExpressive) is retired from the game but stays in the lab.
 
 ## Budgets
 
-The runner stays at 15k triangles or fewer, and the whole scene at 150k or fewer. The game must hold 60 fps on an
+The runner stays at about 15k triangles or fewer (each hero is 14–15k), and the whole scene at 150k or fewer. The game must hold 60 fps on an
 iPhone 12.

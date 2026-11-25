@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
-import { buildRig, decode } from '../../../games/hyperline/lib/rig.js';
+import { buildRig, decode, decodePrim } from '../../../games/hyperline/lib/rig.js';
 import { extractRig, normalizeWeights, parseGlb, parseGltf, reduceKeys, toModuleSource } from '../../../scripts/vendor/glb.js';
 
 // ---- a tiny skinned GLB, built by hand ----
@@ -136,7 +136,7 @@ describe('glb: parse and extract a skinned rig (offline, scripts/vendor)', () =>
   it('every skinned vertex of the shipped robot has weights summing to 1', async () => {
     const robot = (await import('../../../games/hyperline/models/robot.js')).default;
     for (const m of robot.meshes.filter((x) => x.skin >= 0)) for (const p of m.prims) {
-      const w = decode(p.w!, 'f32');
+      const w = decodePrim(p).w!;
       for (let i = 0; i < w.length; i += 4) expect(w[i]! + w[i + 1]! + w[i + 2]! + w[i + 3]!).toBeCloseTo(1, 4);
     }
   });
@@ -154,6 +154,18 @@ describe('glb: parse and extract a skinned rig (offline, scripts/vendor)', () =>
         for (let i = 0; i < m.geometry.attributes.position.count; i++) { m.getVertexPosition(i, v); v.applyMatrix4(m.matrixWorld as never); expect(v.length()).toBeLessThan(6); }
       });
     }
+  });
+
+  it('quantized geometry decodes to within a hair of the original, and stays a valid skin', () => {
+    const full = extractRig(parseGlb(model), { clips: [] }), q = extractRig(parseGlb(model), { clips: [], quantize: true });
+    const fp = full.meshes[0]!.prims[0]!, qp = q.meshes[0]!.prims[0]!;
+    expect(qp.posQ).toHaveLength(6);
+    const a = decodePrim(fp), b = decodePrim(qp);
+    a.pos.forEach((v: number, i: number) => expect(b.pos[i]).toBeCloseTo(v, 3));
+    a.nrm.forEach((v: number, i: number) => expect(Math.abs(b.nrm[i]! - v)).toBeLessThan(0.02));
+    const bw = b.w!;
+    for (let i = 0; i < bw.length; i += 4) expect(bw[i]! + bw[i + 1]! + bw[i + 2]! + bw[i + 3]!).toBeCloseTo(1, 5);
+    expect(Array.from(b.j!)).toEqual(Array.from(a.j!));
   });
 
   it('keyframe reduction keeps the ends and every key that interpolation cannot reproduce', () => {

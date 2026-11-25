@@ -29,10 +29,12 @@ import robot from './models/robot.js';
 import heroM from './models/hero-male.js';
 import heroF from './models/hero-female.js';
 import { buildRig } from './lib/rig.js';
+import { applyOutfit, outfitMaterial, OUTFITS, setVisor, tagParts } from './outfit3d.js';
 
 const SKINS = [
-  { id: 'volt', a: '#22F0FF', b: '#2B6BFF' }, { id: 'mint', a: '#7CFF6B', b: '#11B989' },
-  { id: 'vapor', a: '#FF2BD6', b: '#7A2BFF' }, { id: 'aurum', a: '#FFE45C', b: '#FF9F1C' }, { id: 'serpent', a: '#E6E9FF', b: '#8C93C7' },
+  { id: 'volt', a: '#22F0FF', b: '#2B6BFF' }, { id: 'ember', a: '#FF8A3D', b: '#FF2B5E' }, { id: 'mint', a: '#7CFF6B', b: '#11B989' },
+  { id: 'vapor', a: '#FF2BD6', b: '#7A2BFF' }, { id: 'hexa', a: '#B98CFF', b: '#22F0FF' }, { id: 'aurum', a: '#FFE45C', b: '#FF9F1C' },
+  { id: 'glitch', a: '#FFFFFF', b: '#8A8AFF' }, { id: 'serpent', a: '#E6E9FF', b: '#8C93C7' }, { id: 'apex', a: '#FF2BD6', b: '#FFE45C' },
 ];
 const cv = document.getElementById('c');
 const renderer = new T.WebGLRenderer({ canvas: cv, antialias: true, powerPreference: 'high-performance' });
@@ -73,22 +75,11 @@ const RUNNERS = {
   heroM: { label: 'Hero M', data: heroM, height: 1.82, mirror: false, jump: { loop: 'jump' }, gesture: 'dance', note: 'Universal Base Characters + Animation Library (CC0)' },
   heroF: { label: 'Hero F', data: heroF, height: 1.78, mirror: false, jump: { loop: 'jump' }, gesture: 'dance', note: 'Universal Base Characters + Animation Library (CC0)' },
 };
-/** A dark suit with a glowing rim in the skin colour: a light-suit look for the untextured hero bodies. */
-function rimMaterial() {
-  const m = new T.MeshStandardMaterial({ roughness: 0.4, metalness: 0.3 });
-  m.userData.rim = { value: new T.Color() };
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.rimColor = m.userData.rim;
-    sh.fragmentShader = 'uniform vec3 rimColor;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>',
-      '#include <emissivemap_fragment>\n totalEmissiveRadiance += rimColor * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.2) * 1.6;');
-  };
-  return m;
-}
 function makeRunner(key) {
   const R = RUNNERS[key];
   const mats = key === 'robot'
     ? { Main: new T.MeshStandardMaterial({ roughness: 0.35, metalness: 0.2 }), Grey: new T.MeshStandardMaterial({ color: '#2A2440', roughness: 0.3, metalness: 0.8 }), Black: new T.MeshStandardMaterial({ color: '#05030A', roughness: 0.5, metalness: 0.4 }) }
-    : { suit: rimMaterial(), eyes: new T.MeshBasicMaterial({ color: '#FFFFFF', toneMapped: false }), brows: new T.MeshStandardMaterial({ color: '#05030A' }) };
+    : { suit: outfitMaterial(T), eyes: new T.MeshBasicMaterial({ color: '#FFFFFF', toneMapped: false }), brows: new T.MeshStandardMaterial({ color: '#05030A' }) };
   const pick = (n) => (key === 'robot' ? mats[n] || mats.Grey : /eye/i.test(n) ? mats.eyes : /hair/i.test(n) ? mats.brows : mats.suit);
   const rig = buildRig(T, R.data, pick);
   const sc = H / R.height;
@@ -96,6 +87,10 @@ function makeRunner(key) {
   rig.root.rotation.y = Math.PI / 2; // face down the track (+x)
   rig.root.traverse((o) => { o.frustumCulled = false; });
   let tris = 0; rig.meshes.forEach((m) => { tris += m.geometry.index.count / 3; });
+  if (key !== 'robot') for (const m of rig.meshes) {
+    if (m.material === mats.suit) setVisor(mats.suit, tagParts(T, m));
+    else m.visible = false; // the helmet covers the eyes and brows
+  }
   return { key, R, rig, mats, tris, cur: null };
 }
 const runners = Object.fromEntries(Object.keys(RUNNERS).map((k) => [k, makeRunner(k)]));
@@ -108,7 +103,7 @@ function skin(s) {
   for (const r of Object.values(runners)) {
     const M = r.mats;
     if (r.key === 'robot') { M.Main.color.set(s.a); M.Main.emissive.set(s.a); M.Main.emissiveIntensity = 0.55; M.Black.emissive.set(s.b); M.Black.emissiveIntensity = 0.9; }
-    else { M.suit.color.set(s.b).multiplyScalar(0.35); M.suit.emissive.set(s.b).multiplyScalar(0.18); M.suit.userData.rim.value.set(s.a); }
+    else applyOutfit(M.suit, OUTFITS[s.id] || OUTFITS.volt, performance.now() / 1000);
   }
 }
 skin(SKINS[0]);
@@ -182,6 +177,7 @@ function frame(now) {
   for (let i = 0; i < 80; i++) { tmp.position.set(-20 + ((i * 1.2 - dist) % 96 + 96) % 96, 0.006, 0); tmp.scale.set(1, 1, 1); tmp.updateMatrix(); lines.setMatrixAt(i, tmp.matrix); }
   lines.instanceMatrix.needsUpdate = true;
   rn.rig.mixer.update(dt);
+  if (rn.key !== 'robot' && skinNow) applyOutfit(rn.mats.suit, OUTFITS[skinNow.id] || OUTFITS.volt, now / 1000);
   composer.render();
   requestAnimationFrame(frame);
 }

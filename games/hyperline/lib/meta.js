@@ -125,7 +125,7 @@ export function freshSave() {
   return { v: 3, credits: 150, owned: { volt: 1 }, eq: 'volt', trails: { classic: 1 }, trail: 'classic',
     best: 0, runs: 0, crates: 0, opened: 0, top: [], daily: { day: '', best: 0 },
     missions: ['chips25', 'dist300', 'near3'], missionSeq: 3,
-    settings: { sound: true, music: true, haptics: true, ghost: false }, mode: 'endless', far: 1, playS: 0 };
+    settings: { sound: true, music: true, haptics: true, ghost: false }, mode: 'endless', far: 1, playS: 0, body: 'm' };
 }
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -172,5 +172,7 @@ export function migrateSave(raw) {
     far: Math.max(1, count(s.far), Math.floor(count(s.best) / SECTOR_LEN) + 1),
     // Seconds of run time ever played; gates paid offers.
     playS: count(s.playS),
+    // The hero body the player runs as: 'm' or 'f'.
+    body: s.body === 'f' ? 'f' : 'm',
   };
 }

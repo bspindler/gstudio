@@ -5,9 +5,9 @@ models go in the game. Our own materials replace the originals, and morph target
 
 | Module | Model | Author / pack | Licence | Where from |
 | --- | --- | --- | --- | --- |
-| `robot.js` (the runner in the game since 0.18.0) | RobotExpressive (clips: run, jump, death, idle, wave) | Tomás Laulhé (Quaternius); glTF conversion and changes by Don McCurdy | CC0 1.0 | three.js repo, `examples/models/gltf/RobotExpressive/` at r170 (its README states CC0) |
-| `hero-male.js` (a runner candidate, lab only) | Superhero_Male_FullBody (eyebrows, eyes, body); clips run = Sprint_Loop, jump = Jump_Loop, death = Death01, idle = Idle_Loop, dance = Dance_Loop | Quaternius: Universal Base Characters (Standard) and Universal Animation Library (Standard) | CC0 1.0 (`License_Standard.txt` and `License.txt` in the packs) | quaternius.com and quaternius.itch.io, downloaded 2026-11-25 |
-| `hero-female.js` (a runner candidate, lab only) | Superhero_Female_FullBody; the same clips | Quaternius: Universal Base Characters (Standard) and Universal Animation Library (Standard) | CC0 1.0 | quaternius.com and quaternius.itch.io, downloaded 2026-11-25 |
+| `robot.js` (the runner in 0.18.0–0.19.x; lab only since 0.20.0) | RobotExpressive (clips: run, jump, death, idle, wave) | Tomás Laulhé (Quaternius); glTF conversion and changes by Don McCurdy | CC0 1.0 | three.js repo, `examples/models/gltf/RobotExpressive/` at r170 (its README states CC0) |
+| `hero-male.js` (the runner, body M, since 0.20.0) | Superhero_Male_FullBody (eyebrows, eyes, body); clips run = Sprint_Loop, jump = Jump_Loop, death = Death01, idle = Idle_Loop, dance = Dance_Loop | Quaternius: Universal Base Characters (Standard) and Universal Animation Library (Standard) | CC0 1.0 (`License_Standard.txt` and `License.txt` in the packs) | quaternius.com and quaternius.itch.io, downloaded 2026-11-25 |
+| `hero-female.js` (the runner, body F, since 0.20.0) | Superhero_Female_FullBody; the same clips | Quaternius: Universal Base Characters (Standard) and Universal Animation Library (Standard) | CC0 1.0 | quaternius.com and quaternius.itch.io, downloaded 2026-11-25 |
 
-Clips are optimized at conversion: tracks that never leave the bind pose are dropped, and keys that interpolation
+Geometry is quantized (16-bit positions; 8-bit normals, weights and joint indices). Clips are optimized at conversion: tracks that never leave the bind pose are dropped, and keys that interpolation
 reproduces are removed. Textures are not used; our own materials replace them.

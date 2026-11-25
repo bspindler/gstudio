@@ -37,7 +37,7 @@ if (o.list) {
 if (!o.out || !o.source || o.license !== 'CC0') throw new Error('--out, --source and --license CC0 are required (only CC0 models go in a game)');
 const pick = Object.fromEntries((o.pick || '').split(',').filter(Boolean).map((kv) => kv.split('=') as [string, string]));
 const clips = o.clips ? [{ from: load(o.clips), pick }] : Object.keys(pick).length ? [{ from: model, pick }] : [];
-const rig = extractRig(model, { clips, optimize: true });
+const rig = extractRig(model, { clips, optimize: true, quantize: true });
 const src = toModuleSource(rig, { source: o.source, license: o.license });
 writeFileSync(o.out, src);
 console.log(`${o.out}: ${(src.length / 1024).toFixed(0)} KB, ${rig.tris} triangles, ${rig.meshes.length} meshes, clips ${rig.clips.map((c) => c.name).join(', ')}`);

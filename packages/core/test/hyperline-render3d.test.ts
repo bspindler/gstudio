@@ -9,7 +9,7 @@ const src = readFileSync(new URL('../../../games/hyperline/render3d.js', import.
 
 describe('hyperline 3D renderer (quality plan phase 2)', () => {
   it('is the default; ?r=2d keeps the 2D renderer, and a failed 3D setup falls back to it', () => {
-    expect(html).toMatch(/if \(RMODE !== '2d'\) createRenderer3d\(cv, src\)\.then\(\(r\) => \{ if \(!r\) \{ use2d\(\); return; \}/);
+    expect(html).toMatch(/if \(RMODE !== '2d'\) createRenderer3d\(cv, src, \{ body: S\.body \}\)\.then\(\(r\) => \{ if \(!r\) \{ use2d\(\); return; \}/);
   });
 
   it('draws from the same camera and state as the 2D renderer, and never changes game state', () => {
@@ -44,9 +44,8 @@ describe('drawOverlay: what the 3D renderer leaves to 2D', () => {
 });
 
 describe('hyperline art pass (quality plan phase 3, docs/hyperline/style-guide.md)', async () => {
-  const { STYLE, ROBOT, THEMES, themeAt } = await import('../../../games/hyperline/render3d.js');
-  const { SECTORS, SECTOR_LEN, BAR_Y, GRAV, JV } = await import('../../../games/hyperline/lib/world.js');
-  const robot = (await import('../../../games/hyperline/models/robot.js')).default as { clips: { name: string; dur: number }[] };
+  const { STYLE, THEMES, themeAt } = await import('../../../games/hyperline/render3d.js');
+  const { SECTORS, SECTOR_LEN } = await import('../../../games/hyperline/lib/world.js');
 
   it('colour has meaning: safe cyan, hazards magenta or red, rewards gold', () => {
     expect(STYLE).toMatchObject({ safe: '#22F0FF', hazard: '#FF2BD6', live: '#FF2B5E', gold: '#FFE45C' });
@@ -68,22 +67,7 @@ describe('hyperline art pass (quality plan phase 3, docs/hyperline/style-guide.m
     expect(THEMES.flatMap((t: { words: string[] }) => t.words).every((w: string) => /^[A-Z0-9/]+$/.test(w))).toBe(true);
   });
 
-  it('the robot stands under a low ceiling (it never looks as if it clips one the sim lets you pass)', () => {
-    const BIND_HEIGHT = 4.6; // RobotExpressive's bind-pose height in model units (feet at 0)
-    expect(BIND_HEIGHT * ROBOT.scale).toBeLessThan(BAR_Y);
-    expect(BIND_HEIGHT * ROBOT.scale).toBeGreaterThan(0.8); // at least the 0.8 hitbox, so it reads
-  });
-
-  it('the jump pose comes from inside the jump clip and is reached by the apex', () => {
-    const jump = robot.clips.find((c) => c.name === 'jump')!;
-    expect(ROBOT.jumpFrom).toBeGreaterThan(0);
-    expect(ROBOT.jumpHold).toBeGreaterThan(ROBOT.jumpFrom);
-    expect(ROBOT.jumpHold).toBeLessThan(jump.dur);
-    expect(src).toContain('next.timeScale = (ROBOT.jumpHold - ROBOT.jumpFrom) / RISE');
-    expect(JV / GRAV).toBeGreaterThan(0.2);
-  });
-
-  it('locker and shop thumbnails use the robot once the 3D renderer is up, and fall back to shapes when it is lost', () => {
+  it('locker and shop thumbnails use the hero once the 3D renderer is up, and fall back to shapes when it is lost', () => {
     expect(html).toMatch(/setThumbRenderer\(r\.thumb\); paintThumbs\(document\)/);
     expect(html).toMatch(/r\.onLost\(\(\) => \{ setThumbRenderer\(null\); useFlat\(\); \}\)/);
     expect(html).not.toContain('hex prism');

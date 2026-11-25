@@ -147,8 +147,10 @@ Status (2026-11-25, 0.18.0):
 - [ ] The black-silhouette readability check and the screenshot panel against reference games (the visual row of the
   bar). This needs human testers.
 - [ ] A device check on an iPhone 12 or newer (Brian).
-- [ ] Optional: once the packs are downloaded, compare a UBC humanoid runner and swap City MegaKit towers into the
-  skyline.
+- [x] Runner: the robot was compared with the Universal Base Characters heroes in the lab. The game now runs a hero,
+  M or F as the player picks (0.20.0). Skins are outfits painted onto the body (`outfit3d.js`, style guide). Models
+  are quantized and their clips optimized, so each body is about 230 KB gzipped and loads only when it's picked.
+- [ ] Swap City MegaKit buildings into the skyline (the pack is downloaded).
 
 **Done when:** three phone screenshots, set beside three reference-game screenshots, get 4 out of 5 or better from at
 least 3 of 5 testers (the visual row of the bar).

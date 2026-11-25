@@ -2,13 +2,35 @@
 // scripts/vendor/glb-to-module.ts). three.js is passed in, so this file has no imports and runs under tests with the
 // npm package. No loader and no network: the model's arrays are already in the module.
 
-const ARR = { f32: Float32Array, u16: Uint16Array, u32: Uint32Array };
+const ARR = { f32: Float32Array, u16: Uint16Array, u32: Uint32Array, i16: Int16Array, i8: Int8Array, u8: Uint8Array };
 
 /** Base64 to a typed array. */
 export function decode(s, type) {
   const bin = atob(s), u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
   return new ARR[type](u8.buffer);
+}
+
+/** A primitive's arrays as floats (and joint indices as u16), whichever form the module stored them in. */
+export function decodePrim(p) {
+  let pos, nrm, j = null, w = null;
+  if (p.posQ) {
+    const q = decode(p.pos, 'i16'), [x0, y0, z0, x1, y1, z1] = p.posQ, mn = [x0, y0, z0], r = [x1 - x0 || 1, y1 - y0 || 1, z1 - z0 || 1];
+    pos = new Float32Array(q.length);
+    for (let i = 0; i < q.length; i++) pos[i] = mn[i % 3] + ((q[i] + 32768) / 65535) * r[i % 3];
+  } else pos = decode(p.pos, 'f32');
+  if (p.nrm8) {
+    const q = decode(p.nrm, 'i8'); nrm = new Float32Array(q.length);
+    for (let i = 0; i < q.length; i += 3) { const x = q[i] / 127, y = q[i + 1] / 127, z = q[i + 2] / 127, l = Math.hypot(x, y, z) || 1; nrm[i] = x / l; nrm[i + 1] = y / l; nrm[i + 2] = z / l; }
+  } else nrm = decode(p.nrm, 'f32');
+  if (p.j) {
+    j = p.j8 ? Uint16Array.from(decode(p.j, 'u8')) : decode(p.j, 'u16');
+    if (p.w8) {
+      const q = decode(p.w, 'u8'); w = new Float32Array(q.length);
+      for (let i = 0; i < q.length; i += 4) { const s = q[i] + q[i + 1] + q[i + 2] + q[i + 3] || 1; for (let k = 0; k < 4; k++) w[i + k] = q[i + k] / s; }
+    } else w = decode(p.w, 'f32');
+  }
+  return { pos, nrm, j, w };
 }
 
 /**
@@ -38,14 +60,15 @@ export function buildRig(T, data, matFor) {
     const host = objs[m.node];
     for (const p of m.prims) {
       const g = new T.BufferGeometry();
-      g.setAttribute('position', new T.BufferAttribute(decode(p.pos, 'f32'), 3));
-      g.setAttribute('normal', new T.BufferAttribute(decode(p.nrm, 'f32'), 3));
+      const d = decodePrim(p);
+      g.setAttribute('position', new T.BufferAttribute(d.pos, 3));
+      g.setAttribute('normal', new T.BufferAttribute(d.nrm, 3));
       if (p.col) g.setAttribute('color', new T.BufferAttribute(decode(p.col, 'f32'), 4));
       g.setIndex(new T.BufferAttribute(decode(p.idx, p.idx32 ? 'u32' : 'u16'), 1));
       let mesh;
       if (m.skin >= 0) {
-        g.setAttribute('skinIndex', new T.BufferAttribute(decode(p.j, 'u16'), 4));
-        g.setAttribute('skinWeight', new T.BufferAttribute(decode(p.w, 'f32'), 4));
+        g.setAttribute('skinIndex', new T.BufferAttribute(d.j, 4));
+        g.setAttribute('skinWeight', new T.BufferAttribute(d.w, 4));
         mesh = new T.SkinnedMesh(g, mat(p.mat));
         host.add(mesh);
         // Identity bind matrix: glTF ignores a skinned mesh's own node transform (the joints place every vertex), as three's

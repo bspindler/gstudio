@@ -254,8 +254,8 @@ import { createRenderer3d } from './render3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const VERSION = '0.19.1'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
-const studio = createStudio({ game: 'hyperline', version: '0.19.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const VERSION = '0.20.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
+const studio = createStudio({ game: 'hyperline', version: '0.20.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -409,7 +409,7 @@ function useFlat() {
   cv.replaceWith(n); cv = n; out2d = cv.getContext('2d'); resize();
 }
 const use2d = () => createBloom(cv, src).then((b) => { if (!b) { useFlat(); return; } bloom = b; b.onLost(useFlat); resize(); }).catch(useFlat);
-if (RMODE !== '2d') createRenderer3d(cv, src).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(() => { setThumbRenderer(null); useFlat(); }); setThumbRenderer(r.thumb); paintThumbs(document); resize(); }).catch(use2d);
+if (RMODE !== '2d') createRenderer3d(cv, src, { body: S.body }).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(() => { setThumbRenderer(null); useFlat(); }); setThumbRenderer(r.thumb); paintThumbs(document); resize(); }).catch(use2d);
 else use2d();
 new ResizeObserver(resize).observe(stage);
 
@@ -760,7 +760,7 @@ function renderShop() {
     <span class="eyebrow">Featured skin</span>
     <div class="herobody">${thumb('serpent', 120, false, 'id="heroSkin"')}
       <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><div class="heroname">Chrome Serpent</div><span><span class="rar premium">premium</span></span>
-      <p class="muted">Color-shifting chrome with a rainbow sheen, on your runner and its trim. You get exactly this skin.</p></div></div>
+      <p class="muted">A chrome suit of scales with a rainbow-shifting trim. You get exactly this outfit.</p></div></div>
     <div class="row">${own ? '<button class="btn" data-act="flex" data-skin="serpent">Show flex card</button>' : buyBtn('serpent', `Get Chrome Serpent · ${price(CATALOG.serpent)}`)}</div>
   </div>
   <div class="panel"><div class="offer">${thumb('glitch', 56, true)}<div class="txt"><div class="t">Neon Crate${S.crates ? ` · ${S.crates} ready` : ''}</div><div class="muted">Earned from play, never sold: a free crate on your 2nd run, then every ${CRATE_EVERY} runs.${S.crates ? '' : ` Next in ${toNext} run${toNext > 1 ? 's' : ''}.`}</div></div><button class="btn" data-act="crate" ${S.crates ? '' : 'disabled'}>Open</button></div>
@@ -776,7 +776,8 @@ function renderLocker() {
   const owned = SKINS.filter((s) => S.owned[s.id]).length, ownedT = TRAILS.filter((t) => S.trails[t.id]).length;
   const srcTxt = { crate: 'Crate or credits', shop: 'In the shop', best: `Run ${fmt(APEX_AT)}m` };
   const body = lockerTab === 'skins'
-    ? `<p class="muted">${owned} of ${SKINS.length} skins. Tap one you own to run with it.</p>
+    ? `<div class="seg" role="radiogroup" aria-label="Runner"><button role="radio" data-act="body" data-body="m" aria-selected="${S.body === 'm'}" aria-checked="${S.body === 'm'}">Runner M</button><button role="radio" data-act="body" data-body="f" aria-selected="${S.body === 'f'}" aria-checked="${S.body === 'f'}">Runner F</button></div>
+      <p class="muted">${owned} of ${SKINS.length} outfits. Tap one you own to run in it.</p>
       <div class="grid">${SKINS.map((s) => { const o = S.owned[s.id], eq = S.eq === s.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="skin" data-skin="${s.id}">${thumb(s.id, 64, !o)}<span class="nm">${o ? s.name : '???'}</span><span class="rar ${s.rar}">${s.rar}</span><span class="st">${eq ? 'Equipped' : o ? (o > 1 ? '×' + o : 'Tap to equip') : srcTxt[s.src]}</span></button>`; }).join('')}</div>`
     : `<p class="muted">${ownedT} of ${TRAILS.length} trails. Each one unlocks directly with credits: you always get exactly the trail you pick.</p>
       <div class="grid">${TRAILS.map((t) => { const o = S.trails[t.id], eq = S.trail === t.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="trail" data-trail="${t.id}"><canvas data-trail="${t.id}" data-size="64" data-locked="${o ? 0 : 1}"></canvas><span class="nm">${t.name}</span><span class="st">${eq ? 'Equipped' : o ? 'Tap to equip' : `<span class="dia"></span>${t.cost.toLocaleString()}`}</span></button>`; }).join('')}</div>`;
@@ -900,6 +901,7 @@ document.addEventListener('click', async (e) => {
       refresh(); break; }
     case 'flex': showFlex(b.dataset.skin); break;
     case 'equip': S.eq = b.dataset.skin; save(); toast(SK[S.eq].name + ' equipped'); closeModal(); if (!$('view-locker').hidden) renderLocker(); break;
+    case 'body': if (b.dataset.body !== S.body) { S.body = b.dataset.body === 'f' ? 'f' : 'm'; save(); audio.click(); renderLocker(); if (r3d) r3d.setBody(S.body).then(() => paintThumbs(document)); } break;
     case 'ltab': lockerTab = b.dataset.l === 'trails' ? 'trails' : 'skins'; renderLocker(); break;
     case 'skin': { const id = b.dataset.skin; if (S.owned[id]) { S.eq = id; save(); renderLocker(); toast(SK[id].name + ' equipped'); }
       else if (SK[id].src === 'best') toast(`Reach ${fmt(APEX_AT)}m in one run to unlock Apex`);

@@ -19,8 +19,12 @@ export const BLOOM3D = { strength: 0.7, radius: 0.45, threshold: 0.68 };
 /** Colour meaning (docs/hyperline/style-guide.md): safe is cyan, hazards magenta (static) or red (live), rewards gold. */
 export const STYLE = { safe: '#22F0FF', safe2: '#2B6BFF', hazard: '#FF2BD6', live: '#FF2B5E', gold: '#FFE45C', gold2: '#FF9F1C' };
 const { safe: SAFE, hazard: HAZ, live: LIVE, gold: GOLD } = STYLE;
-/** The runner: the Quaternius robot, about 0.92 units tall (under a low ceiling's 1.05), mirrored so its left faces the camera. */
-export const ROBOT = { scale: 0.2, jumpFrom: 0.21, jumpHold: 0.33 };
+/** The runner: a Quaternius hero (the player picks M or F), scaled to HERO.height units, under a low ceiling's 1.05. */
+export const HERO = { height: 0.95 };
+/** The bodies, loaded on demand (each module is the hero and its clips). */
+export const BODIES = { m: () => import('./models/hero-male.js'), f: () => import('./models/hero-female.js') };
+/** The outfit a locked skin's thumbnail shows: a dark silhouette. */
+const LOCKED = { trim: '#3A2A6A', visor: '#3A2A6A', g: Object.fromEntries(['helmet', 'top', 'belt', 'sleeves', 'gloves', 'pants', 'boots'].map((k) => [k, { c: '#1A1033' }])) };
 /** Themes by sector (style guide): towers, window colours and sign words. */
 export const THEMES = [
   { name: 'Neon District', until: 7, facade: '#0C0618', win: ['#FF2BD6', '#22F0FF'], hMin: 6, hMax: 20, words: ['ARCADE', 'NOODLES', 'OPEN'] },
@@ -32,8 +36,11 @@ const TZ = 1.15, FLOOR_Y = -3.2;
 const SHAPE_MESH = { square: 'cube', hex: 'hex', diamond: 'octa' };
 const hash = (i, k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
 
-/** Resolves to the renderer, or null when three.js or WebGL is unavailable (the caller keeps the 2D renderer). */
-export async function createRenderer3d(canvas, overlay) {
+/**
+ * Resolves to the renderer, or null when three.js or WebGL is unavailable (the caller keeps the 2D renderer).
+ * opts.body: 'm' or 'f', the hero to run as (setBody switches it later).
+ */
+export async function createRenderer3d(canvas, overlay, opts = {}) {
   let T, renderer;
   try {
     T = await import('../sdk/vendor/three.module.js');
@@ -41,11 +48,14 @@ export async function createRenderer3d(canvas, overlay) {
   } catch {
     return null;
   }
-  // The runner model; without it the runner falls back to the skin shapes.
-  let robot = null;
-  try { const [m, rig] = await Promise.all([import('./models/robot.js'), import('./lib/rig.js')]); robot = { data: m.default, buildRig: rig.buildRig }; } catch { /* shapes */ }
+  // The runner's rig and outfit code, and the chosen body; without them the runner falls back to the skin shapes.
+  let kit = null;
   try {
-    return build(T, renderer, canvas, overlay, robot);
+    const [rig, outfit, body] = await Promise.all([import('./lib/rig.js'), import('./outfit3d.js'), (BODIES[opts.body] || BODIES.m)()]);
+    kit = { buildRig: rig.buildRig, ...outfit, data: body.default, body: BODIES[opts.body] ? opts.body : 'm' };
+  } catch { /* shapes */ }
+  try {
+    return build(T, renderer, canvas, overlay, kit);
   } catch (e) {
     try { renderer.dispose(); } catch { /* ignore */ }
     console.error('render3d: setup failed', e);
@@ -53,7 +63,7 @@ export async function createRenderer3d(canvas, overlay) {
   }
 }
 
-function build(T, renderer, canvas, overlay, robot) {
+function build(T, renderer, canvas, overlay, kit) {
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.NoToneMapping;
   renderer.info.autoReset = false; // count the whole frame (scene, overlay and bloom passes), reset in render()
@@ -273,47 +283,52 @@ function build(T, renderer, canvas, overlay, robot) {
   const shadow = new T.Mesh(new T.CircleGeometry(1, 24).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false, side: T.DoubleSide }));
   world.add(shadow);
 
-  // ---------- the runner: the Quaternius robot (style guide) ----------
-  const RISE = JV / GRAV; // seconds from take-off to the apex
-  function makeRobot(ghost, parent = world) {
-    if (!robot) return null;
-    const mats = ghost ? null : {
-      Main: new T.MeshStandardMaterial({ roughness: 0.35, metalness: 0.2, transparent: true }),
-      Grey: new T.MeshStandardMaterial({ color: '#2A2440', roughness: 0.3, metalness: 0.8, transparent: true }),
-      Black: new T.MeshStandardMaterial({ color: '#05030A', roughness: 0.5, metalness: 0.4, transparent: true }),
-    };
+  // ---------- the runner: a Quaternius hero in an outfit (style guide) ----------
+  /** The hero in the chosen body: an outfit material on the body (eyes and brows hidden under the helmet), or a wireframe ghost. */
+  function makeRunner(ghost, parent = world) {
+    if (!kit) return null;
+    const suit = ghost ? null : kit.outfitMaterial(T);
     const ghostMat = ghost ? new T.MeshBasicMaterial({ color: SAFE, transparent: true, opacity: 0.3, wireframe: true, depthWrite: false, toneMapped: false }) : null;
-    const rig = robot.buildRig(T, robot.data, (n) => (ghost ? ghostMat : mats[n] || mats.Grey));
-    const holder = new T.Group(), flipper = new T.Group();
-    rig.root.scale.set(-ROBOT.scale, ROBOT.scale, ROBOT.scale); // mirrored: its left side faces the camera
+    const rig = kit.buildRig(T, kit.data, () => (ghost ? ghostMat : suit));
+    let headTop = 1.8;
+    for (const m of rig.meshes) {
+      if (/superhero/i.test(m.name)) { const top = kit.tagParts(T, m); headTop = top; if (suit) kit.setVisor(suit, top); }
+      else m.visible = false; // the helmet covers the eyes and brows
+    }
+    const holder = new T.Group(), flipper = new T.Group(), sc = HERO.height / headTop;
+    rig.root.scale.setScalar(sc);
     rig.root.rotation.y = Math.PI / 2; // face down the track (+x)
     flipper.add(rig.root); holder.add(flipper); parent.add(holder);
     rig.root.traverse((part) => { part.frustumCulled = false; });
     rig.actions.run.play();
-    return { holder, flipper, rig, mats, ghostMat, cur: rig.actions.run, mode: 'run', lastT: null };
+    return { holder, flipper, rig, suit, ghostMat, cur: rig.actions.run, mode: 'run', lastT: null };
   }
-  const runnerR = makeRobot(false), ghostR = makeRobot(true);
-  /** Picks the clip from the runner's state: idle on the start line, run on the ground, the held jump pose in the air. */
+  let runnerR = makeRunner(false), ghostR = makeRunner(true);
+  /** Picks the clip from the runner's state: idle on the start line, run on the ground, the airborne loop in the air. */
   function animate(R, phase, airborne, speed, t) {
     const A = R.rig.actions;
     const dt = R.lastT === null ? 0 : Math.max(0, Math.min(0.1, t - R.lastT)); R.lastT = t;
     const want = phase === 'ready' ? 'idle' : airborne ? 'jump' : 'run';
     if (want !== R.mode) {
       const next = A[want];
-      next.reset();
-      if (want === 'jump') { next.setLoop(T.LoopOnce, 1); next.clampWhenFinished = true; next.time = ROBOT.jumpFrom; next.timeScale = (ROBOT.jumpHold - ROBOT.jumpFrom) / RISE; }
-      else { next.setLoop(T.LoopRepeat, Infinity); next.timeScale = 1; }
+      next.reset(); next.setLoop(T.LoopRepeat, Infinity); next.timeScale = 1;
       next.play(); R.cur.crossFadeTo(next, want === 'jump' ? 0.06 : 0.1, false); R.cur = next; R.mode = want;
     }
-    if (want === 'jump' && A.jump.time >= ROBOT.jumpHold) { A.jump.time = ROBOT.jumpHold; A.jump.timeScale = 0; } // hold the airborne pose
-    if (want === 'run') A.run.timeScale = speed / 10; // the stride keeps up with the track
+    if (want === 'run') A.run.timeScale = speed / 11; // the stride keeps up with the track
     R.rig.mixer.update(dt);
   }
   /** Feet on the surface (the ceiling, upside down, in a flip), squash about the feet. */
-  function placeRobot(R, x, y, flip, sx, sy) {
+  function placeRunner(R, x, y, flip, sx, sy) {
     R.holder.position.set(x, flip ? y + PS : y, 0);
     R.flipper.rotation.x = flip ? Math.PI : 0;
     R.holder.scale.set(sx, sy, sx);
+  }
+  function dropRunner(R) {
+    if (!R) return;
+    R.holder.parent && R.holder.parent.remove(R.holder);
+    R.rig.root.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    if (R.suit) R.suit.dispose();
+    if (R.ghostMat) R.ghostMat.dispose();
   }
 
   // ---------- skyline: towers with lit windows, and neon signs (style guide, themes) ----------
@@ -614,7 +629,7 @@ function build(T, renderer, canvas, overlay, robot) {
     // ghost: a translucent outline of the runner
     if (ghostR) {
       ghostR.holder.visible = !!st.ghost;
-      if (st.ghost) { placeRobot(ghostR, st.ghost.x + PS / 2, st.ghost.y, !!st.ghost.flip, 1, 1); animate(ghostR, 'run', false, speedAt(st.ghost.x), t); }
+      if (st.ghost) { placeRunner(ghostR, st.ghost.x + PS / 2, st.ghost.y, !!st.ghost.flip, 1, 1); animate(ghostR, 'run', false, speedAt(st.ghost.x), t); }
     } else if (st.ghost) runnerShape(st.skin, [st.ghost.x + PS / 2, st.ghost.y + PS / 2, 0], 0, t, 0.5, true, 0, false);
 
     // speed streaks along the track edges once things get fast (they stand still in the world, so they stream past)
@@ -637,14 +652,11 @@ function build(T, renderer, canvas, overlay, robot) {
       shadow.visible = Math.abs(r.y - (r.flip ? CEIL_Y - PS : 0)) < 3;
       shadow.position.set(rpos[0], sy + (r.flip ? -0.003 : 0.003), 0); shadow.scale.set(PS * 0.6, 1, PS * 0.35);
       if (runnerR) {
-        const [a, b] = skinColors(st.skin, t), M = runnerR.mats, al = st.blink ? 0.35 : 1;
-        let ca = a, jx = 0;
-        if (st.skin.fx === 'glitch') { const g = Math.floor(t * 11) % 3; ca = g === 0 ? '#22F0FF' : g === 1 ? '#FF2BD6' : a; jx = 0.05 * Math.sin(t * 37); }
-        M.Main.color.set(ca); M.Main.emissive.set(ca).multiplyScalar(0.45);
-        M.Black.emissive.set(b); M.Black.emissiveIntensity = 1;
-        for (const m of Object.values(M)) { m.opacity = al; m.depthWrite = al > 0.9; }
+        const al = st.blink ? 0.35 : 1, jx = st.skin.fx === 'glitch' ? 0.05 * Math.sin(t * 37) : 0;
+        kit.applyOutfit(runnerR.suit, kit.OUTFITS[st.skin.id] || kit.OUTFITS.volt, t);
+        runnerR.suit.opacity = al; runnerR.suit.depthWrite = al > 0.9;
         const { sx, sy } = squashScale(st.squash || 0);
-        placeRobot(runnerR, rpos[0] + jx, r.y, r.flip, sx, sy);
+        placeRunner(runnerR, rpos[0] + jx, r.y, r.flip, sx, sy);
         animate(runnerR, st.phase, !r.grounded, st.speed, t);
       } else runnerShape(st.skin, rpos, r.rot, t, st.blink ? 0.35 : 1, false, st.squash || 0, r.flip);
     }
@@ -723,11 +735,11 @@ function build(T, renderer, canvas, overlay, robot) {
     ribbon(pts.map((q, i) => { const k = i / n; return { x: q.x, y: q.y, w: PS * (sparks ? 0.06 : 0.27) * k, c: sparks ? '#FFE45C' : a, a: k * (sparks ? 0.5 : 0.9) }; }));
   }
 
-  // ---------- locker and shop thumbnails: the robot in a skin, on its own small renderer ----------
+  // ---------- locker and shop thumbnails: the hero in a skin's outfit, on its own small renderer ----------
   let thumbR = null;
-  /** The robot in skin sk on a px-square canvas (transparent), turned a little with t; locked draws a dark silhouette. */
+  /** The hero in skin sk's outfit on a px-square canvas (transparent), turned a little with t; locked is a dark silhouette. */
   function thumb(sk, px, t, locked) {
-    if (!robot) return null;
+    if (!kit) return null;
     if (!thumbR) {
       const cvs = document.createElement('canvas');
       const tr = new T.WebGLRenderer({ canvas: cvs, antialias: true, alpha: true, preserveDrawingBuffer: true });
@@ -735,25 +747,28 @@ function build(T, renderer, canvas, overlay, robot) {
       const sc = new T.Scene();
       sc.add(new T.HemisphereLight(0x8a6cff, 0x0a0418, 1.3));
       const dl = new T.DirectionalLight(0xffffff, 2.2); dl.position.set(-1.2, 2, 3); sc.add(dl);
-      const R = makeRobot(false, sc);
-      const cm = new T.PerspectiveCamera(30, 1, 0.1, 50); cm.position.set(0, 0.55, 2.45); cm.lookAt(0, 0.45, 0);
-      R.rig.actions.run.stop(); R.rig.actions.idle.play(); R.rig.mixer.update(0.6);
-      thumbR = { tr, cvs, sc, R, cm };
+      const cm = new T.PerspectiveCamera(30, 1, 0.1, 50); cm.position.set(0, 0.52, 2.5); cm.lookAt(0, 0.48, 0);
+      thumbR = { tr, cvs, sc, cm, R: null };
     }
-    const { tr, cvs, sc, R, cm } = thumbR, M = R.mats;
-    if (cvs.width !== px) { tr.setPixelRatio(1); tr.setSize(px, px, false); }
-    if (locked) {
-      M.Main.color.set('#3A2A6A'); M.Main.emissive.set('#000000'); M.Black.emissive.set('#1A1033');
-    } else {
-      const [a, b] = skinColors(sk, t);
-      const ca = sk.fx === 'glitch' ? ['#22F0FF', '#FF2BD6', a][Math.floor(t * 11) % 3] : a;
-      M.Main.color.set(ca); M.Main.emissive.set(ca).multiplyScalar(0.45); M.Black.emissive.set(b);
-    }
-    for (const m of Object.values(M)) { m.opacity = 1; m.depthWrite = true; }
-    R.holder.rotation.y = -Math.PI / 2 + 0.55 + (t - 1.3) * 0.9; // a three-quarter view; turns when t runs
-    tr.setClearColor(0x000000, 0);
-    tr.render(sc, cm);
-    return cvs;
+    const tt = thumbR;
+    if (!tt.R) { tt.R = makeRunner(false, tt.sc); tt.R.rig.actions.run.stop(); tt.R.rig.actions.idle.play(); tt.R.rig.mixer.update(0.6); }
+    if (tt.cvs.width !== px) { tt.tr.setPixelRatio(1); tt.tr.setSize(px, px, false); }
+    kit.applyOutfit(tt.R.suit, locked ? LOCKED : kit.OUTFITS[sk.id] || kit.OUTFITS.volt, t);
+    tt.R.suit.opacity = 1; tt.R.suit.depthWrite = true;
+    tt.R.holder.rotation.y = -Math.PI / 2 + 0.45 + (t - 1.3) * 0.9; // a three-quarter view; turns when t runs
+    tt.tr.setClearColor(0x000000, 0);
+    tt.tr.render(tt.sc, tt.cm);
+    return tt.cvs;
+  }
+
+  /** Switches the hero body ('m' or 'f'): loads it if needed, then rebuilds the runner, the ghost and the thumbnail runner. */
+  async function setBody(body) {
+    if (!kit || !BODIES[body] || body === kit.body) return;
+    const mod = await BODIES[body]();
+    kit = { ...kit, data: mod.default, body };
+    dropRunner(runnerR); dropRunner(ghostR);
+    runnerR = makeRunner(false); ghostR = makeRunner(true);
+    if (thumbR && thumbR.R) { dropRunner(thumbR.R); thumbR.R = null; }
   }
 
   // Warm-up: one of each pooled kind, then compile every shader now, so the first spike or sign on screen
@@ -766,6 +781,7 @@ function build(T, renderer, canvas, overlay, robot) {
 
   return {
     thumb,
+    setBody,
     /** Draw calls and triangles in the last frame (for the budget check). */
     info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
     onLost(fn) { lost = fn; },

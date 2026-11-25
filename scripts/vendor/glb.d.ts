@@ -1,6 +1,6 @@
 export type Glb = { json: Record<string, any>; bin: Uint8Array; buffers?: Uint8Array[] };
 export type RigNode = { name: string; parent: number; t: number[]; r: number[]; s: number[] };
-export type RigPrim = { mat: string; pos: string; nrm: string; idx: string; idx32: boolean; j?: string; w?: string; col?: string };
+export type RigPrim = { mat: string; pos: string; posQ?: number[]; nrm: string; nrm8?: boolean; idx: string; idx32: boolean; j?: string; j8?: boolean; w?: string; w8?: boolean; col?: string };
 export type RigMesh = { node: number; skin: number; prims: RigPrim[] };
 export type RigSkin = { joints: number[]; ibm: string };
 export type RigTrack = { node: number; path: 'quaternion' | 'position' | 'scale'; interp: 'linear' | 'step'; times: string; values: string };
@@ -8,7 +8,7 @@ export type RigClip = { name: string; dur: number; tracks: RigTrack[] };
 export type RigData = { nodes: RigNode[]; meshes: RigMesh[]; skins: RigSkin[]; clips: RigClip[]; tris: number };
 export function parseGltf(text: string, readUri: (uri: string) => Uint8Array): Glb;
 export function parseGlb(bytes: Uint8Array | ArrayBuffer): Glb;
-export function extractRig(g: Glb, opts?: { clips: { from: Glb; pick: Record<string, string> }[]; optimize?: boolean }): RigData;
+export function extractRig(g: Glb, opts?: { clips?: { from: Glb; pick: Record<string, string> }[]; optimize?: boolean; quantize?: boolean }): RigData;
 export function reduceKeys(times: number[], values: number[], stride: number, eps: number): { times: number[]; values: number[] };
 export function toModuleSource(rig: RigData, meta: { source: string; license: string }): string;
 export function normalizeWeights(w: number[]): number[];

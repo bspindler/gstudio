@@ -2,6 +2,13 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.20.0 (2026-11-25)
+- Your runner is now a hero, and you pick M or F in the Locker. It's free, and you can switch any time.
+- Skins are now outfits: each one dresses your runner with its own top, sleeves, gloves, pants, boots and a
+  glowing visor. Patterns include racing stripes, flame chevrons, circuit lines and gold armour, and the seams glow
+  neon. You own the same skins as before, at the same rarity.
+- Smaller downloads: the runner models are compressed and only your chosen body loads.
+
 ## 0.19.1 (2026-11-25)
 - The ghost of your best run is now off by default. Turn it on in Settings if you want to race it. (A save from
   0.19.0 keeps the ghost on until you switch it off once.)
