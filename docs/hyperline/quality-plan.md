@@ -5,6 +5,20 @@ doc is the finish line, and this plan is how we get there **without hiring anyon
 first) or made in code. Each phase ships on its own, keeps all tests green, and ends with a check that someone else
 can rerun.
 
+## Where it stands (2026-11-25, 0.23.6)
+
+Phases 0 and 2 to 5 are built, and phase 0's iPhone check is done: Brian played 0.23.x on his iPhone, and fixing what
+it turned up (a 30 fps cap from Low Power Mode, glow crawling over blocks, shaders and audio set up mid-run) brought it
+to a steady 57-58 fps. **Hal is back on Hyperline** (Brian, 2026-11-25) for caretaking: readability, juice, the sound
+mix and retuning existing sectors. **New sectors stay frozen** until the feel bar passes (tripwire `content-frozen`).
+
+Still open, and who owns it:
+- **Phase 1 feel probe and feel score**: Claude sessions (it changes Hal's scorer, which Hal doesn't edit).
+- **Removing the 2D renderer** (`render.js`) once nobody needs the fallback: Claude sessions.
+- **Phase 5 comparison**: needs real players' data on the beat sectors; then Brian decides.
+- **Phase 6 playtests**: Brian recruits; we write the script and the recording setup.
+- **Phase 7 Capacitor and TestFlight**: Claude sessions, with Brian's approvals through the gateway.
+
 ## Calls made
 
 - **No freelancers. Start from Quaternius** (Brian, 2026-11-25). The runner, the obstacles and the city come from
@@ -27,7 +41,7 @@ can rerun.
 - **Native haptics come last**, through Capacitor, once the web build passes the feel checklist. Creating accounts
   and submitting to the store go through the gateway as approvals.
 
-## Phase 0: cheap fixes (in progress)
+## Phase 0: cheap fixes (done)
 
 Shipped in 0.15.0:
 - [x] Fast retry. "Run again" is the first button and starts a run in one tap. The summary sits under "Run details",
@@ -50,7 +64,7 @@ Still to do in this phase:
 - [x] Hal: new Hyperline sectors are frozen (Brian's OK, 2026-11-25). The tripwire `content-frozen` discards a
   candidate that adds one, and the planner prompt points Hal at feel and readability work instead. To lift it, see
   `docs/hal/OPERATIONS.md` under "Content freezes".
-- [ ] A 10-minute session of 0.16.0 on Brian's iPhone.
+- [x] Sessions on Brian's iPhone (0.23.x, 2026-11-25). The regressions they found are fixed in 0.23.1 to 0.23.6.
 
 **Done when:** every item is checked off, the full test suite is green, and one 10-minute session on Brian's iPhone
 turns up no regressions.

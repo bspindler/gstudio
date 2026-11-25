@@ -892,9 +892,9 @@ describe('cli flags', () => {
     expect(parseRunArgs(['--nightly'], games, paused).games).toEqual(['gearhold']);
     expect(parseRunArgs(['--game', 'hyperline'], games, paused).games).toEqual(['hyperline']);
   });
-  it('Hyperline is paused while its renderer and art are rebuilt (Brian, 2026-11-25)', () => {
-    expect(HAL_PAUSED.hyperline).toMatch(/quality-plan/);
-    expect(parseRunArgs(['--nightly'], games).games).toEqual(['gearhold']);
+  it('Hyperline is back on Hal after its renderer, art and audio rebuild (Brian, 2026-11-25); its sectors stay frozen', () => {
+    expect(HAL_PAUSED.hyperline).toBeUndefined();
+    expect(parseRunArgs(['--nightly'], games).games).toContain('hyperline');
   });
   it('--nightly bills the subscription first, with push (--billing api forces credits); --billing, --game, --kind, --max-tickets, --no-push, --report-only', () => {
     expect(parseRunArgs(['--nightly'], games)).toMatchObject({ trigger: 'nightly', billing: 'subscription', push: true });

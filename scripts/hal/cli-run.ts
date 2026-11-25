@@ -45,9 +45,7 @@ const KINDS: readonly TicketKind[] = ['fix', 'tuning', 'polish', 'feature'];
  * Games Hal leaves alone by default (operator-owned). A run without --game skips them; `--game <slug>` still runs one
  * on purpose. Remove an entry to put Hal back on that game. See docs/hal/OPERATIONS.md, "Paused games".
  */
-export const HAL_PAUSED: Readonly<Record<string, string>> = {
-  hyperline: 'Brian, 2026-11-25: paused while its renderer and art are rebuilt (docs/hyperline/quality-plan.md, phases 2 and 3).',
-};
+export const HAL_PAUSED: Readonly<Record<string, string>> = {};
 
 export type RunCmdDeps = {
   halDir: string;

@@ -107,8 +107,8 @@ folder, and the sandbox allows none.
 `--game` skip them, while `./hal.sh run --game <slug>` still runs one on purpose. Remove the entry to put Hal back on
 the game.
 
-- **Hyperline** (since 2026-11-25): paused while its renderer and art are rebuilt (quality plan phases 2 and 3). The
-  content freeze below stays in place after the pause ends.
+Nothing is paused right now. Hyperline was paused on 2026-11-25 while its renderer, art and audio were rebuilt
+(quality plan phases 2 to 5) and came back the same day; its content freeze below stays in place.
 
 ### Content freezes
 
