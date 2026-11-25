@@ -25,13 +25,29 @@ export function parseGlb(bytes) {
   return { json, bin };
 }
 
+/**
+ * A .gltf (JSON text) with its buffers: each buffer is a local file read with readUri(uri), or a base64 data: URI.
+ * Anything else (a web URL, an absolute or parent path) is refused, so a model never pulls data from elsewhere.
+ */
+export function parseGltf(text, readUri) {
+  const json = JSON.parse(text);
+  const buffers = (json.buffers || []).map((b) => {
+    const uri = b.uri || '';
+    if (uri.startsWith('data:')) return new Uint8Array(Buffer.from(uri.slice(uri.indexOf(',') + 1), 'base64'));
+    if (!uri || /^[a-z]+:/i.test(uri) || uri.startsWith('/') || uri.split(/[\\/]/).includes('..')) throw new Error(`gltf: buffer "${uri}" is not a local file beside the model`);
+    return readUri(decodeURIComponent(uri));
+  });
+  return { json, bin: buffers[0] || new Uint8Array(0), buffers };
+}
+
 /** Reads an accessor as a flat array; normalized integers become floats in 0..1 (or -1..1), as glTF defines. */
 function read(g, i) {
   const a = g.json.accessors[i];
   if (a.sparse) throw new Error('glb: sparse accessors are not supported');
   const Arr = CTYPE[a.componentType], n = SIZE[a.type], v = g.json.bufferViews[a.bufferView];
   const base = (v.byteOffset || 0) + (a.byteOffset || 0), el = Arr.BYTES_PER_ELEMENT, stride = v.byteStride || n * el;
-  const dv = new DataView(g.bin.buffer, g.bin.byteOffset, g.bin.byteLength);
+  const buf = g.buffers ? g.buffers[v.buffer] : g.bin;
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const get = { 1: (o) => (Arr === Int8Array ? dv.getInt8(o) : dv.getUint8(o)), 2: (o) => (Arr === Int16Array ? dv.getInt16(o, true) : dv.getUint16(o, true)),
     4: (o) => (Arr === Float32Array ? dv.getFloat32(o, true) : dv.getUint32(o, true)) }[el];
   const out = new Array(a.count * n);
@@ -101,15 +117,53 @@ export function extractRig(g, opts = { clips: [] }) {
         const path = PATH[ch.target.path];
         const node = byName.get(src.from.json.nodes[ch.target.node]?.name);
         if (!path || node === undefined) continue;
-        const s = a.samplers[ch.sampler], times = read(src.from, s.input);
+        const s = a.samplers[ch.sampler];
+        let times = read(src.from, s.input), values = read(src.from, s.output);
         dur = Math.max(dur, times[times.length - 1] || 0);
+        if (opts.optimize && s.interpolation !== 'STEP') {
+          const stride = path === 'quaternion' ? 4 : 3, bind = path === 'quaternion' ? nodes[node].r : path === 'position' ? nodes[node].t : nodes[node].s;
+          const mag = Math.max(1, ...bind.map(Math.abs)), eps = path === 'quaternion' ? 5e-4 : 1e-4 * mag;
+          if (atBind(values, stride, bind, eps, path === 'quaternion')) continue; // never moves: the bind pose already says it
+          ({ times, values } = reduceKeys(times, values, stride, eps));
+        }
         tracks.push({ node, path, interp: s.interpolation === 'STEP' ? 'step' : 'linear',
-          times: b64(Float32Array, times), values: b64(Float32Array, read(src.from, s.output)) });
+          times: b64(Float32Array, times), values: b64(Float32Array, values) });
       }
       clips.push({ name: ours, dur, tracks });
     }
   }
   return { nodes, meshes, skins, clips, tris };
+}
+
+/** Whether every key equals the bind value (a quaternion also matches its negation, the same rotation). */
+function atBind(values, stride, bind, eps, quat) {
+  for (let i = 0; i < values.length; i += stride) {
+    let d = 0, dn = 0;
+    for (let c = 0; c < stride; c++) { d = Math.max(d, Math.abs(values[i + c] - bind[c])); dn = Math.max(dn, Math.abs(values[i + c] + bind[c])); }
+    if (d > eps && !(quat && dn <= eps)) return false;
+  }
+  return true;
+}
+
+/**
+ * Keyframe reduction: drops each key that linear interpolation between the last kept key and the next key reproduces
+ * within eps in every component. The first and last keys always stay.
+ */
+export function reduceKeys(times, values, stride, eps) {
+  const n = times.length;
+  if (n <= 2) return { times: [...times], values: [...values] };
+  const keep = [0];
+  for (let i = 1; i < n - 1; i++) {
+    const a = keep[keep.length - 1], b = i + 1, k = (times[i] - times[a]) / (times[b] - times[a]);
+    let ok = true;
+    for (let c = 0; c < stride && ok; c++) {
+      const va = values[a * stride + c], vb = values[b * stride + c];
+      if (Math.abs(va + (vb - va) * k - values[i * stride + c]) > eps) ok = false;
+    }
+    if (!ok) keep.push(i);
+  }
+  keep.push(n - 1);
+  return { times: keep.map((i) => times[i]), values: keep.flatMap((i) => values.slice(i * stride, i * stride + stride)) };
 }
 
 /** The rig as an ES module of data only: no imports and no code. */

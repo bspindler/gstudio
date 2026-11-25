@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
 import { buildRig, decode } from '../../../games/hyperline/lib/rig.js';
-import { extractRig, normalizeWeights, parseGlb, toModuleSource } from '../../../scripts/vendor/glb.js';
+import { extractRig, normalizeWeights, parseGlb, parseGltf, reduceKeys, toModuleSource } from '../../../scripts/vendor/glb.js';
 
 // ---- a tiny skinned GLB, built by hand ----
 // Two bones (Hips > Spine), one triangle skinned to them, and an animation that turns Spine.
@@ -82,6 +82,16 @@ describe('glb: parse and extract a skinned rig (offline, scripts/vendor)', () =>
     expect(() => parseGlb(new Uint8Array(40))).toThrow(/not a GLB/);
   });
 
+  it('reads a .gltf with its buffer in a separate file the same as the .glb', () => {
+    const g = parseGlb(model);
+    const json = structuredClone(g.json) as { buffers: { uri?: string; byteLength: number }[] };
+    json.buffers[0]!.uri = 'model.bin';
+    const files: Record<string, Uint8Array> = { 'model.bin': g.bin };
+    const fromGltf = parseGltf(JSON.stringify(json), (uri: string) => files[uri]!);
+    expect(extractRig(fromGltf, { clips: [] })).toEqual(extractRig(g, { clips: [] }));
+    expect(() => parseGltf(JSON.stringify({ ...json, buffers: [{ uri: 'https://example.com/x.bin', byteLength: 4 }] }), () => new Uint8Array(4))).toThrow(/local/);
+  });
+
   it('keeps the node tree, the skin, normalized weights as floats, and the material name', () => {
     const rig = extractRig(parseGlb(model), { clips: [] });
     expect(rig.nodes.map((n) => n.name)).toEqual(['Armature', 'Hips', 'Spine', 'Body']);
@@ -144,6 +154,26 @@ describe('glb: parse and extract a skinned rig (offline, scripts/vendor)', () =>
         for (let i = 0; i < m.geometry.attributes.position.count; i++) { m.getVertexPosition(i, v); v.applyMatrix4(m.matrixWorld as never); expect(v.length()).toBeLessThan(6); }
       });
     }
+  });
+
+  it('keyframe reduction keeps the ends and every key that interpolation cannot reproduce', () => {
+    // a straight line in 5 keys collapses to its ends; a bend keeps the corner
+    expect(reduceKeys([0, 1, 2, 3, 4], [0, 1, 2, 3, 4], 1, 1e-4)).toEqual({ times: [0, 4], values: [0, 4] });
+    expect(reduceKeys([0, 1, 2, 3, 4], [0, 1, 2, 1, 0], 1, 1e-4)).toEqual({ times: [0, 2, 4], values: [0, 2, 0] });
+    // vec3: a key differing in any component stays
+    expect(reduceKeys([0, 1, 2], [0, 0, 0, 1, 1, 5, 2, 2, 2], 3, 1e-4).times).toEqual([0, 1, 2]);
+  });
+
+  it('optimize drops tracks that never move from the bind pose, and shrinks the rest', () => {
+    const still = glb({ withMesh: false, anims: [{ name: 'Still', times: [0, 0.5, 1], quats: [[0, 0, 0, 1], [0, 0, 0, 1], [0, 0, 0, 1]] }] });
+    const turn = glb({ withMesh: false, anims: [{ name: 'Turn', times: [0, 0.5, 1], quats: [[0, 0, 0, 1], [0, 0, Math.sin(Math.PI / 8), Math.cos(Math.PI / 8)], [0, 0, Math.SQRT1_2, Math.SQRT1_2]] }] });
+    const rig = extractRig(parseGlb(model), { clips: [{ from: parseGlb(still), pick: { still: 'Still' } }, { from: parseGlb(turn), pick: { turn: 'Turn' } }], optimize: true });
+    expect(rig.clips[0]!.tracks).toEqual([]);
+    expect(rig.clips[0]!.dur).toBeCloseTo(1); // the clip keeps its length
+    expect(rig.clips[1]!.tracks).toHaveLength(1);
+    const r = buildRig(THREE, rig, () => new THREE.MeshBasicMaterial());
+    r.actions.turn!.play(); r.mixer.update(0.5);
+    expect(r.root.getObjectByName('Spine')!.quaternion.z).toBeCloseTo(Math.sin(Math.PI / 8), 3); // slerp-close after reduction
   });
 
   it('drops tracks for bones the model does not have', () => {

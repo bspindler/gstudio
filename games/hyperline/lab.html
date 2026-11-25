@@ -21,11 +21,13 @@ button.on{border-color:var(--cyan);box-shadow:0 0 12px rgba(34,240,255,.4)}
 <div class="info" id="info">Runner lab · loading</div>
 <div class="bar" id="bar"></div>
 <script type="module">
-// Runner lab (dev only): the Quaternius robot (CC0) built by lib/rig.js from models/robot.js, in our own neon
+// Runner lab (dev only): the runner candidates (all Quaternius, CC0) built by lib/rig.js from models/*.js, in our own neon
 // materials and bloom, on a moving track at roughly the game's camera angle. Data only; nothing is fetched at runtime
 // beyond the game's own files.
 import * as T from '../sdk/vendor/three.module.js';
 import robot from './models/robot.js';
+import heroM from './models/hero-male.js';
+import heroF from './models/hero-female.js';
 import { buildRig } from './lib/rig.js';
 
 const SKINS = [
@@ -63,21 +65,51 @@ const towers = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshBasicMa
 for (let i = 0; i < 60; i++) { const h = 3 + ((i * 7919) % 13); tmp.position.set(-40 + i * 2.2, h / 2 - 1, -45 - (i % 3) * 4); tmp.scale.set(1.8, h, 1.8); tmp.updateMatrix(); towers.setMatrixAt(i, tmp.matrix); }
 scene.add(towers);
 
-// The runner. Our materials: Main = skin colour (emissive), Grey = dark chrome, Black = the glow trim.
-const mats = { Main: new T.MeshStandardMaterial({ roughness: 0.35, metalness: 0.2 }),
-  Grey: new T.MeshStandardMaterial({ color: '#2A2440', roughness: 0.3, metalness: 0.8 }),
-  Black: new T.MeshStandardMaterial({ color: '#05030A', roughness: 0.5, metalness: 0.4 }) };
-const rig = buildRig(T, robot, (n) => mats[n] || mats.Grey);
-// Mirrored (x = -0.3) so the character's left side faces the camera: one-sided gestures like the wave stay visible.
-const MIRROR = new URLSearchParams(location.search).get('mirror') !== '0';
-rig.root.scale.set(MIRROR ? -0.3 : 0.3, 0.3, 0.3);
-rig.root.rotation.y = Math.PI / 2; // face down the track (+x)
-scene.add(rig.root);
-let tris = 0; rig.meshes.forEach((m) => { tris += m.geometry.index.count / 3; });
+// The runners to compare, all scaled to the same height. Each has our own materials (by its material names), the
+// physics-owned jump (a held pose, or a looping airborne clip) and a gesture.
+const H = 1.38; // lab height for every runner
+const RUNNERS = {
+  robot: { label: 'Robot', data: robot, height: 4.6, mirror: true, jump: { hold: [0.21, 0.33] }, gesture: 'wave', note: 'RobotExpressive (CC0)' },
+  heroM: { label: 'Hero M', data: heroM, height: 1.82, mirror: false, jump: { loop: 'jump' }, gesture: 'dance', note: 'Universal Base Characters + Animation Library (CC0)' },
+  heroF: { label: 'Hero F', data: heroF, height: 1.78, mirror: false, jump: { loop: 'jump' }, gesture: 'dance', note: 'Universal Base Characters + Animation Library (CC0)' },
+};
+/** A dark suit with a glowing rim in the skin colour: a light-suit look for the untextured hero bodies. */
+function rimMaterial() {
+  const m = new T.MeshStandardMaterial({ roughness: 0.4, metalness: 0.3 });
+  m.userData.rim = { value: new T.Color() };
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rimColor = m.userData.rim;
+    sh.fragmentShader = 'uniform vec3 rimColor;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\n totalEmissiveRadiance += rimColor * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 2.2) * 1.6;');
+  };
+  return m;
+}
+function makeRunner(key) {
+  const R = RUNNERS[key];
+  const mats = key === 'robot'
+    ? { Main: new T.MeshStandardMaterial({ roughness: 0.35, metalness: 0.2 }), Grey: new T.MeshStandardMaterial({ color: '#2A2440', roughness: 0.3, metalness: 0.8 }), Black: new T.MeshStandardMaterial({ color: '#05030A', roughness: 0.5, metalness: 0.4 }) }
+    : { suit: rimMaterial(), eyes: new T.MeshBasicMaterial({ color: '#FFFFFF', toneMapped: false }), brows: new T.MeshStandardMaterial({ color: '#05030A' }) };
+  const pick = (n) => (key === 'robot' ? mats[n] || mats.Grey : /eye/i.test(n) ? mats.eyes : /hair/i.test(n) ? mats.brows : mats.suit);
+  const rig = buildRig(T, R.data, pick);
+  const sc = H / R.height;
+  rig.root.scale.set(R.mirror ? -sc : sc, sc, sc); // the robot is mirrored so its left side (its wave) faces the camera
+  rig.root.rotation.y = Math.PI / 2; // face down the track (+x)
+  rig.root.traverse((o) => { o.frustumCulled = false; });
+  let tris = 0; rig.meshes.forEach((m) => { tris += m.geometry.index.count / 3; });
+  return { key, R, rig, mats, tris, cur: null };
+}
+const runners = Object.fromEntries(Object.keys(RUNNERS).map((k) => [k, makeRunner(k)]));
+let rn = runners[new URLSearchParams(location.search).get('runner') in RUNNERS ? new URLSearchParams(location.search).get('runner') : 'robot'];
+for (const r of Object.values(runners)) { scene.add(r.rig.root); r.rig.root.visible = r === rn; }
 
+let skinNow = null;
 function skin(s) {
-  mats.Main.color.set(s.a); mats.Main.emissive.set(s.a); mats.Main.emissiveIntensity = 0.55;
-  mats.Black.emissive.set(s.b); mats.Black.emissiveIntensity = 0.9;
+  skinNow = s;
+  for (const r of Object.values(runners)) {
+    const M = r.mats;
+    if (r.key === 'robot') { M.Main.color.set(s.a); M.Main.emissive.set(s.a); M.Main.emissiveIntensity = 0.55; M.Black.emissive.set(s.b); M.Black.emissiveIntensity = 0.9; }
+    else { M.suit.color.set(s.b).multiplyScalar(0.35); M.suit.emissive.set(s.b).multiplyScalar(0.18); M.suit.userData.rim.value.set(s.a); }
+  }
 }
 skin(SKINS[0]);
 
@@ -87,35 +119,43 @@ const bloom = new T.UnrealBloomPass(new T.Vector2(2, 2), 0.7, 0.5, 0.6);
 composer.addPass(bloom);
 composer.addPass(new T.OutputPass());
 
-// Animation: run loops; jump and death play once and return to run.
-let cur = rig.actions.run; cur.play();
-const fade = (name, once, blend = 0.08) => {
-  const next = rig.actions[name]; if (next === cur) { next.reset().play(); return; }
-  next.reset(); next.setLoop(once ? T.LoopOnce : T.LoopRepeat, Infinity); next.clampWhenFinished = once;
-  next.play(); cur.crossFadeTo(next, blend, false); cur = next;
-};
-// Jump: physics owns it. The clip's own crouch, hop and landing (0.71 s) are skipped: start at its take-off frame,
-// ease into the airborne pose over the rise, hold that pose until touchdown, then blend straight back into the run.
-const JUMP = { from: 0.21, hold: 0.33 }, JV = 7.5, G = 26, RISE = JV / G;
+// Animation. The physics owns the jump: the robot holds a pose from inside its jump clip; a hero loops its airborne clip.
+const JV = 7.5, G = 26, RISE = JV / G;
 let y = 0, vy = 0, dead = false, airborne = false;
-// Gestures (wave) turn the character toward the camera; running faces down the track. facing: 0 = track, 1 = camera.
-let facing = 0, turn = 0;
+let facing = 0, turn = 0; // gestures turn the runner toward the camera
+const fade = (name, once, blend = 0.1) => {
+  const A = rn.rig.actions, next = A[name];
+  if (next === rn.cur) { next.reset().play(); return; }
+  next.reset(); next.timeScale = 1; next.setLoop(once ? T.LoopOnce : T.LoopRepeat, Infinity); next.clampWhenFinished = once;
+  next.play(); if (rn.cur) rn.cur.crossFadeTo(next, blend, false); rn.cur = next;
+};
+function startJump() {
+  const j = rn.R.jump, a = rn.rig.actions.jump;
+  a.reset(); a.timeScale = 1;
+  if (j.hold) { a.setLoop(T.LoopOnce, 1); a.clampWhenFinished = true; a.time = j.hold[0]; a.timeScale = (j.hold[1] - j.hold[0]) / RISE; }
+  else a.setLoop(T.LoopRepeat, Infinity);
+  a.play(); rn.cur.crossFadeTo(a, 0.06, false); rn.cur = a;
+}
 const jump = () => {
   if (dead) { dead = false; fade('run', false); return; }
   if (airborne) return;
-  vy = JV; airborne = true; facing = 0;
-  const a = rig.actions.jump;
-  a.reset(); a.setLoop(T.LoopOnce, 1); a.clampWhenFinished = true;
-  a.time = JUMP.from; a.timeScale = (JUMP.hold - JUMP.from) / RISE;
-  a.play(); cur.crossFadeTo(a, 0.06, false); cur = a;
+  vy = JV; airborne = true; facing = 0; startJump();
 };
+function use(key) {
+  rn.rig.root.visible = false; rn = runners[key]; rn.rig.root.visible = true;
+  rn.rig.mixer.stopAllAction(); rn.cur = null; dead = false; airborne = false; y = 0; vy = 0; facing = 0;
+  fade('run', false);
+  bar.querySelectorAll('.rk').forEach((x) => x.classList.toggle('on', x.dataset.k === key));
+}
 const bar = document.getElementById('bar');
 const btn = (label, fn, cls = '') => { const b = document.createElement('button'); b.textContent = label; b.className = cls; b.onclick = (e) => { e.stopPropagation(); fn(b); }; bar.append(b); return b; };
-btn('Jump', jump); btn('Crash', () => { dead = true; facing = 0; fade('death', true); }); btn('Wave', () => { facing = 1; fade('wave', false); });
+for (const k of Object.keys(RUNNERS)) { const b = btn(RUNNERS[k].label, () => use(k), 'rk'); b.dataset.k = k; }
+btn('Jump', jump); btn('Crash', () => { dead = true; facing = 0; fade('death', true); }); btn('Gesture', () => { facing = 1; fade(rn.R.gesture, false); });
 btn('Run', () => { facing = 0; dead = false; fade('run', false); });
 for (const s of SKINS) { const b = btn('', () => { skin(s); bar.querySelectorAll('.sw').forEach((x) => x.classList.remove('on')); b.classList.add('on'); }, 'sw'); b.style.background = `radial-gradient(${s.a},${s.b})`; b.title = s.id; }
 bar.querySelector('.sw').classList.add('on');
 cv.addEventListener('pointerdown', jump);
+use(rn.key);
 
 function resize() {
   const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); composer.setSize(w, h);
@@ -128,20 +168,20 @@ let last = performance.now(), dist = 0, frames = 0, acc = 0, fps = 0, worst = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   worst = Math.max(worst, dt * 1000); acc += dt; frames++;
-  if (acc > 1) { fps = frames / acc; info.textContent = `Runner lab · Quaternius robot (CC0) · ${tris} tris · ${fps.toFixed(0)} fps · worst ${worst.toFixed(0)} ms`; acc = 0; frames = 0; worst = 0; }
+  if (acc > 1) { fps = frames / acc; info.textContent = `Runner lab · ${rn.R.label}: ${rn.R.note} · ${rn.tris} tris · ${fps.toFixed(0)} fps · worst ${worst.toFixed(0)} ms`; acc = 0; frames = 0; worst = 0; }
   if (!dead) dist += dt * 11;
   if (airborne) {
     vy -= G * dt; y += vy * dt;
-    const a = rig.actions.jump;
-    if (a.time >= JUMP.hold) { a.time = JUMP.hold; a.timeScale = 0; } // hold the airborne pose
-    if (y <= 0) { y = 0; vy = 0; airborne = false; if (!dead) fade("run", false); }
+    const j = rn.R.jump, a = rn.rig.actions.jump;
+    if (j.hold && a.time >= j.hold[1]) { a.time = j.hold[1]; a.timeScale = 0; } // hold the airborne pose
+    if (y <= 0) { y = 0; vy = 0; airborne = false; if (!dead) fade('run', false, 0.08); }
   }
-  rig.root.position.y = y;
+  rn.rig.root.position.y = y;
   turn += (facing - turn) * (1 - Math.exp(-dt * 10));
-  rig.root.rotation.y = Math.PI / 2 - turn * 1.15; // about 66 degrees toward the camera
+  rn.rig.root.rotation.y = Math.PI / 2 - turn * 1.15; // about 66 degrees toward the camera
   for (let i = 0; i < 80; i++) { tmp.position.set(-20 + ((i * 1.2 - dist) % 96 + 96) % 96, 0.006, 0); tmp.scale.set(1, 1, 1); tmp.updateMatrix(); lines.setMatrixAt(i, tmp.matrix); }
   lines.instanceMatrix.needsUpdate = true;
-  rig.mixer.update(dt);
+  rn.rig.mixer.update(dt);
   composer.render();
   requestAnimationFrame(frame);
 }
