@@ -40,6 +40,20 @@ function read(g, i) {
   return out;
 }
 
+/**
+ * Skin weights scaled so each vertex's four sum to 1, as three's GLTFLoader does on load. Some exports (FBX2GLTF, for
+ * one) write weights that don't, and unnormalized weights fling vertices far away as the bones move.
+ */
+export function normalizeWeights(w) {
+  const out = w.slice();
+  for (let i = 0; i < out.length; i += 4) {
+    const s = out[i] + out[i + 1] + out[i + 2] + out[i + 3];
+    if (s > 0) for (let k = 0; k < 4; k++) out[i + k] /= s;
+    else { out[i] = 1; out[i + 1] = out[i + 2] = out[i + 3] = 0; }
+  }
+  return out;
+}
+
 const b64 = (Arr, data) => Buffer.from(new Uint8Array(new Arr(data).buffer)).toString('base64');
 
 /**
@@ -65,7 +79,7 @@ export function extractRig(g, opts = { clips: [] }) {
       mat: p.material !== undefined ? J.materials[p.material].name || `mat${p.material}` : 'default',
       pos: b64(Float32Array, read(g, A.POSITION)), nrm: b64(Float32Array, read(g, A.NORMAL)),
       idx: b64(big ? Uint32Array : Uint16Array, idx), idx32: big,
-      ...(skinned ? { j: b64(Uint16Array, read(g, A.JOINTS_0)), w: b64(Float32Array, read(g, A.WEIGHTS_0)) } : {}),
+      ...(skinned ? { j: b64(Uint16Array, read(g, A.JOINTS_0)), w: b64(Float32Array, normalizeWeights(read(g, A.WEIGHTS_0))) } : {}),
       ...(A.COLOR_0 !== undefined && J.accessors[A.COLOR_0].type === 'VEC4' ? { col: b64(Float32Array, read(g, A.COLOR_0)) } : {}),
     };
   };

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 
 import { buildRig, decode } from '../../../games/hyperline/lib/rig.js';
-import { extractRig, parseGlb, toModuleSource } from '../../../scripts/vendor/glb.js';
+import { extractRig, normalizeWeights, parseGlb, toModuleSource } from '../../../scripts/vendor/glb.js';
 
 // ---- a tiny skinned GLB, built by hand ----
 // Two bones (Hips > Spine), one triangle skinned to them, and an animation that turns Spine.
@@ -116,6 +116,34 @@ describe('glb: parse and extract a skinned rig (offline, scripts/vendor)', () =>
   it('fails loudly on a clip name that is not in the file, listing what is', () => {
     expect(() => extractRig(parseGlb(model), { clips: [{ from: parseGlb(library), pick: { run: 'Nope' } }] }))
       .toThrow(/Nope.*Sprint_Loop/);
+  });
+
+  it('normalizes skin weights to sum to 1 (unnormalized ones fling vertices: the robot hands summed to 1.76)', () => {
+    const w = normalizeWeights([0.73, 0.6, 0.31, 0.11, 0, 0, 0, 0]);
+    [0.73 / 1.75, 0.6 / 1.75, 0.31 / 1.75, 0.11 / 1.75, 1, 0, 0, 0].forEach((v, i) => expect(w[i]).toBeCloseTo(v, 9));
+  });
+
+  it('every skinned vertex of the shipped robot has weights summing to 1', async () => {
+    const robot = (await import('../../../games/hyperline/models/robot.js')).default;
+    for (const m of robot.meshes.filter((x) => x.skin >= 0)) for (const p of m.prims) {
+      const w = decode(p.w!, 'f32');
+      for (let i = 0; i < w.length; i += 4) expect(w[i]! + w[i + 1]! + w[i + 2]! + w[i + 3]!).toBeCloseTo(1, 4);
+    }
+  });
+
+  it('the shipped robot stays in one piece through its run cycle (skinned hands were flung off the body)', async () => {
+    const robot = (await import('../../../games/hyperline/models/robot.js')).default;
+    const r = buildRig(THREE, robot, () => new THREE.MeshBasicMaterial());
+    r.actions.run!.play();
+    const v = new THREE.Vector3();
+    for (let k = 0; k < 12; k++) {
+      r.mixer.update(0.08); r.root.updateMatrixWorld(true);
+      r.root.traverse((m: { isSkinnedMesh?: boolean; skeleton: { update(): void }; geometry: { attributes: { position: { count: number } } }; getVertexPosition(i: number, v: unknown): void; matrixWorld: unknown }) => {
+        if (!m.isSkinnedMesh) return;
+        m.skeleton.update();
+        for (let i = 0; i < m.geometry.attributes.position.count; i++) { m.getVertexPosition(i, v); v.applyMatrix4(m.matrixWorld as never); expect(v.length()).toBeLessThan(6); }
+      });
+    }
   });
 
   it('drops tracks for bones the model does not have', () => {

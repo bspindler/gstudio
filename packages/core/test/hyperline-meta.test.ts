@@ -124,7 +124,7 @@ describe('hyperline save migration', () => {
     expect(s.trail).toBe('classic');
     expect(s.trails).toEqual({ classic: 1 });
     expect(s.missions).toHaveLength(3);
-    expect(s.settings).toEqual({ sound: true, music: true, haptics: true });
+    expect(s.settings).toEqual({ sound: true, music: true, haptics: true, ghost: true });
     expect(s.daily).toEqual({ day: '', best: 0 });
   });
 

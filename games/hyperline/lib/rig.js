@@ -48,7 +48,10 @@ export function buildRig(T, data, matFor) {
         g.setAttribute('skinWeight', new T.BufferAttribute(decode(p.w, 'f32'), 4));
         mesh = new T.SkinnedMesh(g, mat(p.mat));
         host.add(mesh);
-        mesh.bind(skeletons[m.skin], host.matrixWorld);
+        // Identity bind matrix: glTF ignores a skinned mesh's own node transform (the joints place every vertex), as three's
+        // GLTFLoader does. Binding to the node's world matrix applied the robot armature's 100x scale twice, so its hands
+        // were thrown dozens of units off the body and swept across the screen as the arms swung.
+        mesh.bind(skeletons[m.skin], new T.Matrix4());
       } else {
         mesh = new T.Mesh(g, mat(p.mat));
         host.add(mesh);

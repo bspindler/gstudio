@@ -114,8 +114,32 @@ function build(T, renderer, canvas, overlay, robot) {
     return { root, solid, edges, mat };
   });
   /** An axis-aligned box from (x0,y0,z0) to (x1,y1,z1): faces tinted col (fillA = their opacity), edges in neon. */
+  // Nothing is drawn through the camera. three's wide lines break into screen-wide stripes when a segment reaches behind
+  // the lens, and the camera looks down at the track, so its near plane is tilted: the top of a tall wall beside the
+  // camera can be behind it while its base is still in front. Every neon segment is trimmed against the real near plane
+  // (view depth NEAR_D, eye E looking along F), and a box that reaches behind it draws its edges as trimmed segments.
+  const NEAR_D = 0.3, E = [0, 0, 0], F = [1, 0, 0];
+  const depth = (x, y, z) => (x - E[0]) * F[0] + (y - E[1]) * F[1] + (z - E[2]) * F[2];
+  function clipNear(pts) {
+    let out = null;
+    for (let i = 0; i < pts.length; i += 6) {
+      const da = depth(pts[i], pts[i + 1], pts[i + 2]) - NEAR_D, db = depth(pts[i + 3], pts[i + 4], pts[i + 5]) - NEAR_D;
+      if (da >= 0 && db >= 0) { if (out) out.push(pts[i], pts[i + 1], pts[i + 2], pts[i + 3], pts[i + 4], pts[i + 5]); continue; }
+      if (!out) out = pts.slice(0, i);
+      if (da < 0 && db < 0) continue;
+      const k = da / (da - db), p = [0, 1, 2].map((j) => pts[i + j] + (pts[i + 3 + j] - pts[i + j]) * k);
+      if (da < 0) out.push(...p, pts[i + 3], pts[i + 4], pts[i + 5]); else out.push(pts[i], pts[i + 1], pts[i + 2], ...p);
+    }
+    return out || pts;
+  }
+  /** The 12 edges of an axis-aligned box as flat segments. */
+  const boxEdgeSegs = (x0, x1, y0, y1, z0, z1) => [
+    x0, y0, z0, x1, y0, z0, x0, y1, z0, x1, y1, z0, x0, y0, z1, x1, y0, z1, x0, y1, z1, x1, y1, z1,
+    x0, y0, z0, x0, y1, z0, x1, y0, z0, x1, y1, z0, x0, y0, z1, x0, y1, z1, x1, y0, z1, x1, y1, z1,
+    x0, y0, z0, x0, y0, z1, x1, y0, z0, x1, y0, z1, x0, y1, z0, x0, y1, z1, x1, y1, z0, x1, y1, z1,
+  ];
   function box(x0, x1, y0, y1, z0, z1, c, fillA, edgeW, surface = false, alpha = 1, edgeCol = c) {
-    if (x1 - x0 <= 0.001) return;
+    if (x1 - x0 <= 0.001 || alpha <= 0) return;
     const b = boxes.next();
     b.root.position.set(x0, y0, z0); b.root.scale.set(x1 - x0, Math.max(0.001, y1 - y0), z1 - z0);
     col.set(c);
@@ -124,7 +148,10 @@ function build(T, renderer, canvas, overlay, robot) {
     b.mat.opacity = fillA * alpha; b.solid.visible = fillA > 0;
     b.mat.depthWrite = fillA * alpha > 0.85;
     const lm = b.edges.material; lm.color.set(edgeCol); lm.linewidth = edgeW * DPR; lm.opacity = alpha;
-    b.edges.visible = edgeW > 0;
+    let behind = false;
+    for (const x of [x0, x1]) for (const y of [y0, y1]) for (const z of [z0, z1]) if (depth(x, y, z) < NEAR_D) behind = true;
+    b.edges.visible = edgeW > 0 && !behind;
+    if (edgeW > 0 && behind) segs(boxEdgeSegs(x0, x1, y0, y1, z0, z1), edgeCol, edgeW, alpha, false);
   }
 
   // Free line sets: segments given as flat [x0,y0,z0, x1,y1,z1, ...].
@@ -136,6 +163,7 @@ function build(T, renderer, canvas, overlay, robot) {
     return { root: ls, geo, cap: 0 };
   });
   function segs(pts, c, w, alpha = 1, additive = true) {
+    pts = clipNear(pts);
     if (pts.length < 6 || alpha <= 0) return;
     const l = lines.next();
     // setPositions keeps the array it is given, so the buffer is reused until a frame needs more room.
@@ -168,6 +196,7 @@ function build(T, renderer, canvas, overlay, robot) {
     m.mat.opacity = alpha; m.mat.depthWrite = alpha > 0.9;
     const lm = m.edges.material;
     lm.color.set(edge || (wire ? a : mixHex(a, '#FFFFFF', 0.5))); lm.linewidth = (edge ? 1.8 : 1.4) * DPR; lm.opacity = alpha;
+    m.edges.visible = depth(pos[0], pos[1], pos[2]) - Math.max(scale[0], scale[1], scale[2]) > NEAR_D; // small: drop its edges near the lens
   }
 
   // ---------- sky, sun, stars, mountains, floor ----------
@@ -358,8 +387,12 @@ function build(T, renderer, canvas, overlay, robot) {
   });
   const points = new T.Points(pGeo, pMat); points.frustumCulled = false; world.add(points);
   let pN = 0;
+  /** 0 within 2.2 units of the camera, 1 from 4.5 on: trails and particles fade out before they reach the lens
+   *  (a light trail behind a runner launched above the camera otherwise swept the top of the screen). */
+  const lensFade = (x, y, z = 0) => Math.max(0, Math.min(1, (depth(x, y, z) - NEAR_D - 2.2) / 2.3));
   const pt = (x, y, z, c, size, alpha) => {
-    if (pN >= PMAX) return;
+    alpha *= lensFade(x, y, z);
+    if (pN >= PMAX || alpha <= 0) return;
     col.set(c); pPos.set([x, y, z], pN * 3); pCol.set([col.r, col.g, col.b], pN * 3); pSize[pN] = size; pAl[pN] = alpha; pN++;
   };
 
@@ -377,6 +410,7 @@ function build(T, renderer, canvas, overlay, robot) {
   });
   /** A strip through pts [{x, y, w (half width), c, a}] in the track plane z = 0. */
   function ribbon(pts) {
+    pts = pts.filter((p) => lensFade(p.x, p.y) > 0).map((p) => ({ ...p, a: p.a * lensFade(p.x, p.y) }));
     if (pts.length < 2) return;
     const r = ribbons.next(), n = Math.min(pts.length, r.cap);
     const P = r.geo.attributes.position.array, C = r.geo.attributes.color.array;
@@ -429,6 +463,7 @@ function build(T, renderer, canvas, overlay, robot) {
     cam.position.set(...c2.eye); cam.up.set(0, 1, 0); cam.lookAt(c2.eye[0] + c2.f[0], c2.eye[1] + c2.f[1], c2.eye[2] + c2.f[2]);
 
     renderer.info.reset();
+    E[0] = c2.eye[0]; E[1] = c2.eye[1]; E[2] = c2.eye[2]; F[0] = c2.f[0]; F[1] = c2.f[1]; F[2] = c2.f[2];
     boxes.begin(); lines.begin(); meshes.begin(); ribbons.begin(); pN = 0;
 
     // backdrop

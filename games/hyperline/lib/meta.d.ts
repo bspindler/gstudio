@@ -9,7 +9,7 @@ export type Save = {
   v: 3; credits: number; owned: Record<string, number>; eq: string; trails: Record<string, number>; trail: string;
   best: number; runs: number; crates: number; opened: number; top: { run: number; d: number; at: number }[];
   daily: { day: string; best: number }; missions: string[]; missionSeq: number;
-  settings: { sound: boolean; music: boolean; haptics: boolean }; mode: Mode; far: number; playS: number;
+  settings: { sound: boolean; music: boolean; haptics: boolean; ghost: boolean }; mode: Mode; far: number; playS: number;
 };
 export const CHIP_CR: number;
 export const NEAR_CR: number;

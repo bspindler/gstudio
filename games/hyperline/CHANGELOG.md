@@ -2,6 +2,13 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.19.0 (2026-11-25)
+- Fixed the neon flashes across the top of the screen while running: the robot's hands were being drawn far from its
+  body and swept across the view as its arms swung. They're back on the robot.
+- New Ghost setting: turn off the replay of your best run if you'd rather run alone.
+- Settings now shows the real version number.
+- Neon edges and trails are trimmed before they reach the camera, so nothing streaks across the lens.
+
 ## 0.18.0 (2026-11-25)
 - The runner is now a little neon robot (a CC0 model by Quaternius), running, leaping and riding the ceiling upside
   down. Its jump pose follows your jump exactly. Every skin now dresses the robot, and the locker and shop show it.

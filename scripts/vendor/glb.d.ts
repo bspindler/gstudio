@@ -9,3 +9,4 @@ export type RigData = { nodes: RigNode[]; meshes: RigMesh[]; skins: RigSkin[]; c
 export function parseGlb(bytes: Uint8Array | ArrayBuffer): Glb;
 export function extractRig(g: Glb, opts?: { clips: { from: Glb; pick: Record<string, string> }[] }): RigData;
 export function toModuleSource(rig: RigData, meta: { source: string; license: string }): string;
+export function normalizeWeights(w: number[]): number[];
