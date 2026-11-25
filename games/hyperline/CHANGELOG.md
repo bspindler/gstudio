@@ -2,6 +2,15 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.1 (2026-11-25)
+- Sharper on phones: the 3D scene is now anti-aliased, so neon edges and buildings no longer look grainy. When a
+  phone struggles it trims effects first and never drops below 1.5x resolution.
+- Smoother on phones: lighter materials for the track and obstacles, and phones start on a lighter setting (softer
+  glow, a shorter street ahead).
+- Clearer sound: the effects are higher quality, the mix is less squashed, the bass carries on small speakers, and
+  phones get a speaker EQ.
+- Add `?perf` to the address to see a frame-rate readout.
+
 ## 0.23.0 (2026-11-25)
 - All-new sound: real recorded effects for jumps, landings, chips, near misses, crashes, gravity flips, gates and the
   menus. A wind rush builds with your speed, chips climb in pitch through a streak, and landings thump harder the

@@ -28,7 +28,7 @@ describe('hyperline hero runner: the player picks M or F (Brian, 2026-11-25)', (
     expect(html).toMatch(/data-act="body" data-body="m"/);
     expect(html).toMatch(/data-act="body" data-body="f"/);
     expect(html).toMatch(/case 'body':[^\n]*S\.body = [^\n]*r3d\.setBody\(S\.body\)/);
-    expect(html).toMatch(/createRenderer3d\(cv, src, \{ body: S\.body \}\)/);
+    expect(html).toMatch(/createRenderer3d\(cv, src, \{ body: S\.body, tier: PHONE \? 1 : 0 \}\)/);
     expect(r3d).not.toContain('models/robot.js');
   });
 });

@@ -24,6 +24,12 @@ const { safe: SAFE, hazard: HAZ, live: LIVE, gold: GOLD } = STYLE;
  * runner setting draws it HERO.large units tall (the hitbox never changes), and it ducks into a crouch under low ceilings.
  */
 export const HERO = { height: 0.95, large: 1.5 };
+/**
+ * Quality tiers. 0 is a desktop; phones start at 1. When frames run long the game steps down a tier before it lowers
+ * the resolution. street: how far ahead (units) the street row is drawn; bloom: the glow's resolution, as a fraction
+ * of the screen's.
+ */
+export const QUALITY = [{ street: 100, bloom: 1 }, { street: 70, bloom: 0.5 }, { street: 45, bloom: 0.35 }];
 /** Street-level buildings: Quaternius Downtown City MegaKit (CC0), interiors and ornamental trim left out. */
 export const CITY = { large: () => import('./models/city/large.js'), medium: () => import('./models/city/medium.js'), small: () => import('./models/city/small.js') };
 /** The street row: one building per lot along each side of the track, facing it, CITY_LOT units apart. */
@@ -64,7 +70,7 @@ export async function createRenderer3d(canvas, overlay, opts = {}) {
     try { kit.city = (await Promise.all(Object.values(CITY).map((f) => f()))).map((m) => m.default); } catch { /* code-built towers only */ }
   } catch { /* shapes */ }
   try {
-    return build(T, renderer, canvas, overlay, kit);
+    return build(T, renderer, canvas, overlay, kit, opts);
   } catch (e) {
     try { renderer.dispose(); } catch { /* ignore */ }
     console.error('render3d: setup failed', e);
@@ -72,7 +78,8 @@ export async function createRenderer3d(canvas, overlay, opts = {}) {
   }
 }
 
-function build(T, renderer, canvas, overlay, kit) {
+function build(T, renderer, canvas, overlay, kit, opts = {}) {
+  let tier = Math.max(0, Math.min(QUALITY.length - 1, opts.tier | 0));
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.NoToneMapping;
   renderer.info.autoReset = false; // count the whole frame (scene, overlay and bloom passes), reset in render()
@@ -126,7 +133,7 @@ function build(T, renderer, canvas, overlay, kit) {
 
   // Boxes: a lit, emissive solid and its neon edges.
   const boxes = pool(() => {
-    const mat = new T.MeshStandardMaterial({ roughness: 0.45, metalness: 0.25, transparent: true });
+    const mat = new T.MeshLambertMaterial({ transparent: true }); // Lambert: far cheaper per pixel on phones than PBR, and these are flat neon slabs
     const solid = new T.Mesh(unitBox, mat);
     const edges = new T.LineSegments2(boxEdges, lineMat());
     const root = new T.Group(); root.add(solid, edges); world.add(root);
@@ -197,7 +204,7 @@ function build(T, renderer, canvas, overlay, kit) {
 
   // Meshes from MESHES (runner shapes, spikes, chips), flat shaded with neon edges.
   const meshes = pool(() => {
-    const mat = new T.MeshStandardMaterial({ roughness: 0.35, metalness: 0.2, flatShading: true, transparent: true });
+    const mat = new T.MeshLambertMaterial({ flatShading: true, transparent: true });
     const solid = new T.Mesh(meshGeo.cube, mat);
     const edges = new T.LineSegments2(meshEdge.cube, lineMat());
     const root = new T.Group(); root.add(solid, edges); world.add(root);
@@ -459,7 +466,7 @@ function build(T, renderer, canvas, overlay, kit) {
     // the street row: lots from just behind the camera to the fog, both sides, a kit building on each
     for (const ct of cityTypes) ct.n = 0;
     if (cityTypes.length) {
-      const l0 = Math.floor((rx - 12) / CITY_LOT), l1 = Math.floor((rx + 100) / CITY_LOT);
+      const l0 = Math.floor((rx - 12) / CITY_LOT), l1 = Math.floor((rx + QUALITY[tier].street) / CITY_LOT);
       for (let k = l0; k <= l1; k++) for (const side of [-1, 1]) {
         const seed = k * 2 + (side > 0 ? 1 : 0), ct = cityTypes[Math.floor(hash(seed, 21) * cityTypes.length)];
         if (ct.n >= CITY_MAX || hash(seed, 22) < 0.12) continue; // the odd empty lot
@@ -557,11 +564,17 @@ function build(T, renderer, canvas, overlay, kit) {
   screen.add(speed, vigQuad, flashQuad);
 
   // ---------- composer ----------
-  const composer = new T.EffectComposer(renderer);
+  // The scene renders into a 4x multisampled buffer: the bloom chain draws into render targets, which the renderer's
+  // own antialias flag doesn't reach, and without it every neon edge is jagged (grainy on a phone's dense screen).
+  const msaa = new T.WebGLRenderTarget(1, 1, { type: T.HalfFloatType, samples: 4 });
+  const composer = new T.EffectComposer(renderer, msaa);
   composer.addPass(new T.RenderPass(scene, cam));
   const screenPass = new T.RenderPass(screen, ortho); screenPass.clear = false; screenPass.clearDepth = true;
   composer.addPass(screenPass);
   const bloom = new T.UnrealBloomPass(new T.Vector2(2, 2), BLOOM3D.strength, BLOOM3D.radius, BLOOM3D.threshold);
+  // a lower quality tier blurs the glow at a fraction of the screen's resolution (the glow is soft anyway)
+  const bloomSetSize = bloom.setSize.bind(bloom);
+  bloom.setSize = (w, h) => bloomSetSize(Math.max(2, Math.round(w * QUALITY[tier].bloom)), Math.max(2, Math.round(h * QUALITY[tier].bloom)));
   composer.addPass(bloom);
   composer.addPass(new T.OutputPass());
 
@@ -888,7 +901,11 @@ function build(T, renderer, canvas, overlay, kit) {
   try { renderer.compile(scene, cam); renderer.compile(screen, ortho); } catch { /* compiled lazily instead */ }
   boxes.end(); lines.end(); meshes.end(); ribbons.end(); signs.end();
 
+  let lastSize = null;
   return {
+    /** The quality tier (QUALITY index); setTier re-sizes the bloom to match. */
+    tier: () => tier,
+    setTier(t) { tier = Math.max(0, Math.min(QUALITY.length - 1, t)); if (lastSize) this.resize(...lastSize); },
     thumb,
     setBody,
     /** The skin tone the thumbnails show on hair outfits. */
@@ -898,6 +915,7 @@ function build(T, renderer, canvas, overlay, kit) {
     onLost(fn) { lost = fn; },
     /** w, h: CSS pixels; dpr: device pixels per CSS pixel. */
     resize(w, h, dpr) {
+      lastSize = [w, h, dpr];
       W = w; H = h; DPR = dpr;
       renderer.setPixelRatio(dpr); renderer.setSize(w, h, false); composer.setPixelRatio(dpr); composer.setSize(w, h);
     },

@@ -259,10 +259,10 @@ import { SKIN_TONES } from './gear3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const VERSION = '0.23.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
-const studio = createStudio({ game: 'hyperline', version: '0.23.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const VERSION = '0.23.1'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
+const studio = createStudio({ game: 'hyperline', version: '0.23.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
-const audio = createAudio();
+const audio = createAudio({ phone: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches });
 // The music follows course time at the runner's centre (where take-offs are measured), so its beats are the track's.
 audio.setClock(() => (G && G.state === 'run' ? tauAt(G.runner.x + PS / 2) : null));
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -398,6 +398,8 @@ async function buy(key) {
 // (text pops). The 2D renderer draws the whole scene on that canvas and shows it through a bloom pass, or by a plain
 // copy (the original look) when WebGL is unavailable. 3D is the default; ?r=2d forces the 2D renderer.
 const RMODE = new URLSearchParams(location.search).get('r');
+// Phones (a coarse pointer) start a quality tier down: cheaper glow and a shorter street row (render3d.js QUALITY).
+const PHONE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 let cv = $('game'), out2d = null, bloom = null, r3d = null;
 const src = document.createElement('canvas'), cx = src.getContext('2d'), stage = $('stage');
 let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1), dprCap = DPR;
@@ -416,7 +418,7 @@ function useFlat() {
   cv.replaceWith(n); cv = n; out2d = cv.getContext('2d'); resize();
 }
 const use2d = () => createBloom(cv, src).then((b) => { if (!b) { useFlat(); return; } bloom = b; b.onLost(useFlat); resize(); }).catch(useFlat);
-if (RMODE !== '2d') createRenderer3d(cv, src, { body: S.body }).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(() => { setThumbRenderer(null); useFlat(); }); r.setThumbTone(SKIN_TONES[S.tone]); setThumbRenderer(r.thumb); paintThumbs(document); resize(); }).catch(use2d);
+if (RMODE !== '2d') createRenderer3d(cv, src, { body: S.body, tier: PHONE ? 1 : 0 }).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(() => { setThumbRenderer(null); useFlat(); }); r.setThumbTone(SKIN_TONES[S.tone]); setThumbRenderer(r.thumb); paintThumbs(document); resize(); }).catch(use2d);
 else use2d();
 new ResizeObserver(resize).observe(stage);
 
@@ -941,7 +943,13 @@ function loop(now) {
     draw();
     // Adaptive resolution: if frames run long, step the canvas resolution down (never below 1x).
     frames++; if (dt > 1 / 45) slow++;
-    if (frames >= 90) { if (slow > 45 && dprCap > 1) { dprCap = Math.max(1, dprCap - 0.5); resize(); } frames = 0; slow = 0; }
+    // When frames run long, give up effects first (a lower quality tier), then resolution, never below 1.5x: a phone
+    // that dropped straight to 1x looked grainy.
+    if (frames >= 90) {
+      if (slow > 45) { if (r3d && r3d.tier() < 2) r3d.setTier(r3d.tier() + 1); else if (dprCap > 1.5) { dprCap = Math.max(1.5, dprCap - 0.5); resize(); } }
+      frames = 0; slow = 0;
+    }
+    if (perfBox) perfTick(dt);
   } else {
     G.t += dt;
     const h = $('heroSkin');
@@ -950,6 +958,18 @@ function loop(now) {
   if (!modal.hidden && !reduced) mcard.querySelectorAll('canvas.spin').forEach((h) => paintCanvas(h, G.t));
   requestAnimationFrame(loop);
 }
+// ---- ?perf: a small frame-time readout for device testing (fps, slow frames, resolution, quality tier, triangles) ----
+const perfBox = new URLSearchParams(location.search).has('perf') ? Object.assign(document.createElement('div'), { id: 'perf' }) : null;
+let perfFrames = [], perfAt = 0;
+if (perfBox) { perfBox.style.cssText = 'position:fixed;left:6px;bottom:calc(6px + env(safe-area-inset-bottom,0px));z-index:99;font:11px/1.35 ui-monospace,monospace;color:#7CFFEA;background:rgba(7,3,15,.75);padding:4px 6px;border-radius:6px;pointer-events:none;white-space:pre'; document.body.appendChild(perfBox); }
+function perfTick(dt) {
+  perfFrames.push(dt * 1000); perfAt += dt;
+  if (perfAt < 1) return;
+  const f = perfFrames.slice().sort((a, b) => a - b), p95 = f[Math.floor(f.length * 0.95)] || 0, info = r3d ? r3d.info() : null;
+  perfBox.textContent = `${(f.length / perfAt).toFixed(0)} fps  p95 ${p95.toFixed(1)} ms  max ${f[f.length - 1].toFixed(0)} ms\nDPR ${DPR}  tier ${r3d ? r3d.tier() : '2d'}  ${info ? (info.triangles / 1000).toFixed(0) + 'k tris  ' + info.calls + ' calls' : ''}`;
+  perfFrames = []; perfAt = 0;
+}
+
 // ---- hal hook (test only; inert without ?hal) ----
 // Hal's before/after shots: view(x) starts a run on the course behind the ready screen, puts the runner at distance x
 // and freezes there (paused, with no pause screen), so the frame shows that part of the course and its sector banner.

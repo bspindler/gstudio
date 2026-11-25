@@ -20,7 +20,11 @@ export const MUSIC_THEMES = [
 const THEME_UNTIL = [7, 14, Infinity]; // sectors per theme, as in render3d.js THEMES
 const triad = ([root, q]) => [root, root + (q === 'm' ? 3 : 4), root + 7];
 
-export function createAudio() {
+/**
+ * opts.phone: tune the master for a phone's small speaker: cut the sub-bass it can't reproduce (it only eats headroom)
+ * and lift the presence range, where a small speaker sounds clear.
+ */
+export function createAudio(opts = {}) {
   let ctx = null, master = null, sfxBus = null, musicBus = null, musicFilter = null, musicDuck = null, pump = null;
   let reverb = null, delaySend = null, noise = null;
   const buffers = {};
@@ -37,8 +41,18 @@ export function createAudio() {
       try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers: follows the ringer */ }
       try { ctx = new AC(); } catch { return null; }
       const limiter = ctx.createDynamicsCompressor();
-      limiter.threshold.value = -10; limiter.knee.value = 6; limiter.ratio.value = 12; limiter.attack.value = 0.003; limiter.release.value = 0.15;
-      master = ctx.createGain(); master.gain.value = 0.9; master.connect(limiter); limiter.connect(ctx.destination);
+      // a gentle limiter: catches peaks without squashing the mix flat (the first one dulled everything on a phone)
+      limiter.threshold.value = -6; limiter.knee.value = 8; limiter.ratio.value = 6; limiter.attack.value = 0.004; limiter.release.value = 0.2;
+      master = ctx.createGain(); master.gain.value = 0.9;
+      let tail = master;
+      if (opts.phone) {
+        const hp = ctx.createBiquadFilter(), lo = ctx.createBiquadFilter(), hi = ctx.createBiquadFilter();
+        hp.type = 'highpass'; hp.frequency.value = 85; hp.Q.value = 0.7;
+        lo.type = 'lowshelf'; lo.frequency.value = 180; lo.gain.value = -3;
+        hi.type = 'highshelf'; hi.frequency.value = 2800; hi.gain.value = 4;
+        master.connect(hp); hp.connect(lo); lo.connect(hi); tail = hi;
+      }
+      tail.connect(limiter); limiter.connect(ctx.destination);
       sfxBus = ctx.createGain(); sfxBus.gain.value = 0.85; sfxBus.connect(master);
       musicDuck = ctx.createGain(); musicDuck.connect(master);
       musicFilter = ctx.createBiquadFilter(); musicFilter.type = 'lowpass'; musicFilter.frequency.value = 18000; musicFilter.connect(musicDuck);
@@ -134,7 +148,7 @@ export function createAudio() {
     // bass: eighth notes on the chord root, two detuned saws through a plucky low-pass
     if (s % 2 === 0) {
       const f = midi(chord[0] - 24 + (hyper && s % 8 === 6 ? 12 : 0));
-      for (const det of [-8, 8]) synth('sawtooth', f, det, at, SIX * 1.8, { lp: 1100, lpTo: 260, q: 6, vol: 0.16, out: pump });
+      for (const det of [-8, 8]) synth('sawtooth', f, det, at, SIX * 1.8, { lp: 1900, lpTo: 420, q: 5, vol: 0.15, out: pump }); // bright enough to carry on a phone speaker
     }
     // pads: the chord held across the bar, slow in and out
     if (s === 0) for (const nt of notes) for (const det of [-10, 10]) synth('sawtooth', midi(nt), det, at, SIX * 16, { lp: 1300, vol: 0.022, attack: 0.35, out: pump });
@@ -197,7 +211,7 @@ export function createAudio() {
     wind(speed, running) {
       if (!ctx || !windGain) return;
       const k = Math.max(0, Math.min(1, (speed - 9) / 9)), t = ctx.currentTime;
-      windGain.gain.setTargetAtTime(running && sound ? 0.05 + 0.17 * k : 0, t, 0.15);
+      windGain.gain.setTargetAtTime(running && sound ? 0.03 + 0.1 * k : 0, t, 0.15); // a bed under the mix, not over it
       windFilter.frequency.setTargetAtTime(300 + 2400 * k, t, 0.2);
     },
     jump() { if (!play('jump', { vol: 0.55, rate: 0.97 + Math.random() * 0.06 })) tone(420, 0.09, { to: 880, vol: 0.09 }); },

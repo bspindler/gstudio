@@ -9,7 +9,7 @@ const src = readFileSync(new URL('../../../games/hyperline/render3d.js', import.
 
 describe('hyperline 3D renderer (quality plan phase 2)', () => {
   it('is the default; ?r=2d keeps the 2D renderer, and a failed 3D setup falls back to it', () => {
-    expect(html).toMatch(/if \(RMODE !== '2d'\) createRenderer3d\(cv, src, \{ body: S\.body \}\)\.then\(\(r\) => \{ if \(!r\) \{ use2d\(\); return; \}/);
+    expect(html).toMatch(/if \(RMODE !== '2d'\) createRenderer3d\(cv, src, \{ body: S\.body, tier: PHONE \? 1 : 0 \}\)\.then\(\(r\) => \{ if \(!r\) \{ use2d\(\); return; \}/);
   });
 
   it('draws from the same camera and state as the 2D renderer, and never changes game state', () => {
@@ -89,8 +89,43 @@ describe('hyperline street row: Downtown City MegaKit buildings (Brian, 2026-11-
 
   it('lots line both sides of the track, from just behind the camera to the fog; whole windows light together', () => {
     expect(CITY_LOT).toBeGreaterThan(10);
-    expect(src).toMatch(/const l0 = Math\.floor\(\(rx - 12\) \/ CITY_LOT\), l1 = Math\.floor\(\(rx \+ 100\) \/ CITY_LOT\)/);
+    expect(src).toMatch(/const l0 = Math\.floor\(\(rx - 12\) \/ CITY_LOT\), l1 = Math\.floor\(\(rx \+ QUALITY\[tier\]\.street\) \/ CITY_LOT\)/);
     expect(src).toMatch(/for \(const side of \[-1, 1\]\)/);
     expect(src).toMatch(/function paneRandoms\(g\)/);
+  });
+});
+
+describe('hyperline on phones (Brian, 2026-11-25: grainy, laggy and muffled on iPhone)', async () => {
+  const { QUALITY } = await import('../../../games/hyperline/render3d.js');
+  const audio = readFileSync(new URL('../../../games/hyperline/audio.js', import.meta.url), 'utf8');
+  const sfx = readFileSync(new URL('../../../games/hyperline/audio/sfx.js', import.meta.url), 'utf8');
+
+  it('the scene renders into a 4x multisampled buffer (the bloom chain bypasses the renderer antialias flag)', () => {
+    expect(src).toMatch(/new T\.WebGLRenderTarget\(1, 1, \{ type: T\.HalfFloatType, samples: 4 \}\)/);
+    expect(src).toMatch(/new T\.EffectComposer\(renderer, msaa\)/);
+  });
+
+  it('track, obstacles and props use Lambert (cheap per pixel); only the hero keeps its outfit shader', () => {
+    expect(src).not.toMatch(/MeshStandardMaterial\(\{ roughness: 0\.45/);
+    expect((src.match(/new T\.MeshLambertMaterial/g) || []).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('phones start a quality tier down; slow frames step the tier down before resolution, never below 1.5x', () => {
+    expect(QUALITY).toHaveLength(3);
+    expect(QUALITY[1]!.bloom).toBeLessThan(QUALITY[0]!.bloom);
+    expect(QUALITY[2]!.street).toBeLessThan(QUALITY[0]!.street);
+    expect(html).toMatch(/const PHONE = typeof matchMedia === 'function' && matchMedia\('\(pointer: coarse\)'\)\.matches/);
+    expect(html).toMatch(/if \(r3d && r3d\.tier\(\) < 2\) r3d\.setTier\(r3d\.tier\(\) \+ 1\); else if \(dprCap > 1\.5\) \{ dprCap = Math\.max\(1\.5, dprCap - 0\.5\)/);
+  });
+
+  it('?perf shows a frame-time readout for device tests', () => {
+    expect(html).toMatch(/new URLSearchParams\(location\.search\)\.has\('perf'\)/);
+  });
+
+  it('audio: 96 kbps effects, a gentle limiter, and a phone speaker EQ', () => {
+    expect(sfx).toContain('96 kbps');
+    expect(audio).toMatch(/limiter\.threshold\.value = -6;/);
+    expect(audio).toMatch(/if \(opts\.phone\) \{/);
+    expect(html).toMatch(/createAudio\(\{ phone: /);
   });
 });

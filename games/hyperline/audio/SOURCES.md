@@ -2,7 +2,7 @@
 
 Every sound effect in `sfx.js` comes from Kenney's audio packs, which are CC0 1.0 (public domain). They were downloaded
 from OpenGameArt on 2026-11-25; kenney.nl refuses automated downloads, so it wasn't used. Each sound is trimmed (leading
-silence, long tails), peak-normalised to -1 dBFS and encoded as 48 kbps mono MP3. The wind loop is left whole so it
+silence, long tails), peak-normalised to -1 dBFS and encoded as 96 kbps mono MP3. The wind loop is left whole so it
 loops seamlessly.
 
 | Sound | Source file | Pack | Licence |
