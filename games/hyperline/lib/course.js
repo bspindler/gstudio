@@ -448,7 +448,7 @@ export const PATTERNS = [
   // arrives. Same two-sided window as the shuttle, `want` seconds wide, with a wider block and a gentler drift.
   { id: 'drift', sector: 20, weight: (s) => (s === 20 ? 1.8 : 0.9),
     build(x, d, r, intro) {
-      const xc = x + 9 + r() * 2, v = speedAt(xc + 6), want = intro ? 0.1 : 0.115, n = 5, SL = 0.3, M = 20;
+      const xc = x + 9 + r() * 2, v = speedAt(xc + 6), want = intro ? 0.12 : 0.15, n = 5, SL = 0.3, M = 20;
       const sx = xc - (TB + want) * v + 0.16 + T2 * v - (n - 1) * SW - 0.6;
       const o = [{ t: 'block', x: xc + (PS - 0.06) - SL * M, w: 1.6 + r() * 0.4, h: 1, sl: SL, m: xc + M }];
       spikes(o, sx, n);

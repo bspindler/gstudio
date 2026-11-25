@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.14.0 (2026-11-24)
 - New sector DRIFT BLOCKS: a raised block drifts toward you over a spike strip, so hop it as it arrives.
+- DRIFT BLOCKS is a little more forgiving: the hop over the drifting block has a roomier take-off window.
 
 ## 0.13.0 (2026-11-22)
 - New sector SLIDING LEDGE: the far edge of a pit slowly slides in and out as you run, so time your jump to where the ledge is. It comes before HYPERCORE, which is now sector 20.
