@@ -152,9 +152,14 @@ describe('hyperline draw calls (Brian, 2026-11-25: still a bit laggy on iPhone)'
     expect(gear).toMatch(/c\.userData\.animated\) continue;/);
   });
 
-  it('a quarter of a second of frames over 20 ms steps the quality down', () => {
-    expect(html).toMatch(/frames\+\+; if \(dt > 1 \/ 50\) slow\+\+;/);
-    expect(html).toMatch(/if \(frames >= 60\) \{\n[^\n]*\n      if \(slow > 15\) \{ if \(r3d/);
+  it('a quarter of a second of frames over 20 ms steps the quality down; fast frames step it back up', () => {
+    expect(html).toMatch(/if \(f\.filter\(\(x\) => x > 20\)\.length > 15\)/);
+    expect(html).toMatch(/else if \(q\(0\.9\) < 18 && \+\+fast >= 3\)/);
+  });
+
+  it('a steady 33 ms is a 30 fps cap (iOS Low Power Mode), not load: quality is kept, or given back', () => {
+    expect(html).toMatch(/capped = med > 30 && med < 36 && q\(0\.9\) - q\(0\.1\) < 4;/);
+    expect(html).toMatch(/if \(capped\) \{\n    if \(r3d && r3d\.tier\(\) > START_TIER\) r3d\.setTier\(START_TIER\);/);
   });
 });
 

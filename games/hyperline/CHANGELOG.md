@@ -2,6 +2,11 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.5 (2026-11-25)
+- A phone capped at 30 fps (iOS Low Power Mode does this) no longer drops its graphics quality trying to go faster;
+  it keeps full quality, since the cap stays whatever we draw. Quality also comes back on its own once frames run
+  fast again. The `?perf` readout says "capped 30" when it sees a cap.
+
 ## 0.23.4 (2026-11-25)
 - With `?perf` in the address, each run's frame-time stats are also sent to the studio as one anonymous event, so
   device tests can be read back. Normal play sends nothing new.
