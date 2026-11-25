@@ -2,6 +2,13 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.6 (2026-11-25)
+- No more stutters at the start of a run or the first time the trail, a crash flash or the speed lines appear. Every
+  shader is now compiled on the menu for the buffer the game really draws into (the old warm-up compiled them for the
+  screen and skipped hidden objects, so a phone stalled for about 200 ms compiling mid-run). The audio is built while
+  the menu is up and its samples decode a piece at a time, instead of all at once on the tap that starts the run.
+- Quality steps down only when frames stay slow for two seconds, not after one burst.
+
 ## 0.23.5 (2026-11-25)
 - A phone capped at 30 fps (iOS Low Power Mode does this) no longer drops its graphics quality trying to go faster;
   it keeps full quality, since the cap stays whatever we draw. Quality also comes back on its own once frames run

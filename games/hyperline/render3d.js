@@ -911,9 +911,16 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
   // Warm-up: one of each pooled kind, then compile every shader now, so the first spike or sign on screen
   // doesn't stall a frame mid-run.
   batchesBegin(); lines.begin(); ribbons.begin(); signs.begin();
-  box(0, 1, 0, 1, 0, 1, SAFE, 1, 1); segs([0, 0, 0, 1, 1, 1], SAFE, 1); mesh('pyramid', [0, 0, 0], [1, 1, 1], [0, 0, 0], HAZ, HAZ); ribbon([{ x: 0, y: 0, w: 1, c: SAFE, a: 1 }, { x: 1, y: 0, w: 1, c: SAFE, a: 1 }]);
+  box(0, 1, 0, 1, 0, 1, SAFE, 1, 1); segs([0, 0, 0, 1, 1, 1], SAFE, 1); mesh('pyramid', [0, 0, 0], [1, 1, 1], [0, 0, 0], HAZ, HAZ); ribbons.next();
   signs.next().root.material.map = signTexture(THEMES[0].words[0], THEMES[0].win[0]);
+  // compile() skips hidden objects, and the trail, flash, vignette, speed lines and ghost are hidden on the menu
+  // (each cost a 200 ms stall on a phone the first time it showed in a run), so show everything for the compile
+  const hidden = []; for (const sc of [scene, screen]) sc.traverse((obj) => { if (!obj.visible) { hidden.push(obj); obj.visible = true; } });
+  // into the composer's buffer: a shader drawn to a render target is a different variant from one drawn to the canvas
+  renderer.setRenderTarget(msaa);
   try { renderer.compile(scene, cam); renderer.compile(screen, ortho); } catch { /* compiled lazily instead */ }
+  renderer.setRenderTarget(null);
+  for (const obj of hidden) obj.visible = false;
   flushSegs(); batchesEnd(); lines.end(); ribbons.end(); signs.end();
 
   let lastSize = null;
@@ -930,7 +937,7 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
       // a breakdown of what draws: visible meshes and lines per group in the scene (the composer's passes add the rest)
       const by = {};
       scene.traverseVisible((o) => { if (!(o.isMesh || o.isLine || o.isPoints || o.isSprite)) return; let k = o.isLineSegments2 ? 'lines' : o.isInstancedMesh ? 'instanced' : o.isSkinnedMesh ? 'runner' : o.isPoints ? 'points' : o.isSprite ? 'sprite' : 'mesh'; if (k === 'mesh' && o.parent && o.parent !== world && o.parent !== scene) k = 'meshInGroup'; by[k] = (by[k] || 0) + 1; });
-      return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, by };
+      return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, by, programs: renderer.info.programs.length };
     },
     onLost(fn) { lost = fn; },
     /** w, h: CSS pixels; dpr: device pixels per CSS pixel. */

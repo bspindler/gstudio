@@ -34,55 +34,64 @@ export function createAudio(opts = {}) {
 
   function ensure() {
     if (!sound) return null;
-    if (!ctx) {
-      const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (!AC) return null;
-      // iPhone: Web Audio is muted by the ring/silent switch unless the page's audio session is 'playback', like a music app.
-      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers: follows the ringer */ }
-      try { ctx = new AC(); } catch { return null; }
-      const limiter = ctx.createDynamicsCompressor();
-      // a gentle limiter: catches peaks without squashing the mix flat (the first one dulled everything on a phone)
-      limiter.threshold.value = -6; limiter.knee.value = 8; limiter.ratio.value = 6; limiter.attack.value = 0.004; limiter.release.value = 0.2;
-      master = ctx.createGain(); master.gain.value = 0.9;
-      let tail = master;
-      if (opts.phone) {
-        const hp = ctx.createBiquadFilter(), lo = ctx.createBiquadFilter(), hi = ctx.createBiquadFilter();
-        hp.type = 'highpass'; hp.frequency.value = 85; hp.Q.value = 0.7;
-        lo.type = 'lowshelf'; lo.frequency.value = 180; lo.gain.value = -3;
-        hi.type = 'highshelf'; hi.frequency.value = 2800; hi.gain.value = 4;
-        master.connect(hp); hp.connect(lo); lo.connect(hi); tail = hi;
-      }
-      tail.connect(limiter); limiter.connect(ctx.destination);
-      sfxBus = ctx.createGain(); sfxBus.gain.value = 0.85; sfxBus.connect(master);
-      musicDuck = ctx.createGain(); musicDuck.connect(master);
-      musicFilter = ctx.createBiquadFilter(); musicFilter.type = 'lowpass'; musicFilter.frequency.value = 18000; musicFilter.connect(musicDuck);
-      musicBus = ctx.createGain(); musicBus.gain.value = 0.3; musicBus.connect(musicFilter);
-      pump = ctx.createGain(); pump.connect(musicBus); // bass and pads, ducked by the kick (sidechain)
-      noise = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
-      const d = noise.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      // a short plate for the snare, and a dotted-eighth delay for the arp
-      reverb = ctx.createConvolver();
-      const ir = ctx.createBuffer(2, ctx.sampleRate * 1.6, ctx.sampleRate);
-      for (let c = 0; c < 2; c++) { const ch = ir.getChannelData(c); for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / ch.length) ** 3; }
-      reverb.buffer = ir;
-      const rvGain = ctx.createGain(); rvGain.gain.value = 0.35; reverb.connect(rvGain); rvGain.connect(musicBus);
-      const delay = ctx.createDelay(1), fb = ctx.createGain(), dl = ctx.createBiquadFilter();
-      delay.delayTime.value = SIX * 3; fb.gain.value = 0.32; dl.type = 'lowpass'; dl.frequency.value = 2400;
-      delaySend = ctx.createGain(); delaySend.connect(delay); delay.connect(dl); dl.connect(fb); fb.connect(delay); dl.connect(musicBus);
-      decodeAll();
-    }
+    if (!ctx) build();
+    if (!ctx) return null;
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     return ctx;
   }
 
-  function decodeAll() {
-    for (const [name, b64] of Object.entries(SFX)) {
-      const bin = atob(b64), u8 = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      // the callback form works on older Safari as well as the promise form elsewhere
-      try { ctx.decodeAudioData(u8.buffer, (buf) => { buffers[name] = buf; if (name === 'wind') startWind(); }, () => {}); } catch { /* keep the synth fallback */ }
+  /** Creates the context and the mix (paused until a tap resumes it). */
+  function build() {
+    const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!AC) return;
+    // iPhone: Web Audio is muted by the ring/silent switch unless the page's audio session is 'playback', like a music app.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers: follows the ringer */ }
+    try { ctx = new AC(); } catch { return; }
+    const limiter = ctx.createDynamicsCompressor();
+    // a gentle limiter: catches peaks without squashing the mix flat (the first one dulled everything on a phone)
+    limiter.threshold.value = -6; limiter.knee.value = 8; limiter.ratio.value = 6; limiter.attack.value = 0.004; limiter.release.value = 0.2;
+    master = ctx.createGain(); master.gain.value = 0.9;
+    let tail = master;
+    if (opts.phone) {
+      const hp = ctx.createBiquadFilter(), lo = ctx.createBiquadFilter(), hi = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 85; hp.Q.value = 0.7;
+      lo.type = 'lowshelf'; lo.frequency.value = 180; lo.gain.value = -3;
+      hi.type = 'highshelf'; hi.frequency.value = 2800; hi.gain.value = 4;
+      master.connect(hp); hp.connect(lo); lo.connect(hi); tail = hi;
     }
+    tail.connect(limiter); limiter.connect(ctx.destination);
+    sfxBus = ctx.createGain(); sfxBus.gain.value = 0.85; sfxBus.connect(master);
+    musicDuck = ctx.createGain(); musicDuck.connect(master);
+    musicFilter = ctx.createBiquadFilter(); musicFilter.type = 'lowpass'; musicFilter.frequency.value = 18000; musicFilter.connect(musicDuck);
+    musicBus = ctx.createGain(); musicBus.gain.value = 0.3; musicBus.connect(musicFilter);
+    pump = ctx.createGain(); pump.connect(musicBus); // bass and pads, ducked by the kick (sidechain)
+    noise = ctx.createBuffer(1, ctx.sampleRate * 0.5, ctx.sampleRate);
+    const d = noise.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    // a short plate for the snare, and a dotted-eighth delay for the arp
+    reverb = ctx.createConvolver();
+    const rvGain = ctx.createGain(); rvGain.gain.value = 0.35; reverb.connect(rvGain); rvGain.connect(musicBus);
+    const delay = ctx.createDelay(1), fb = ctx.createGain(), dl = ctx.createBiquadFilter();
+    delay.delayTime.value = SIX * 3; fb.gain.value = 0.32; dl.type = 'lowpass'; dl.frequency.value = 2400;
+    delaySend = ctx.createGain(); delaySend.connect(delay); delay.connect(dl); dl.connect(fb); fb.connect(delay); dl.connect(musicBus);
+    // The heavy setup (the reverb's impulse, unpacking and decoding 21 samples) runs a piece per task, so it never
+    // holds up a frame (done in one go on the run's first tap, it stalled that frame for a quarter of a second).
+    const jobs = [buildReverb, ...Object.keys(SFX).map((name) => () => decode(name))];
+    const next = () => { const job = jobs.shift(); if (!job) return; job(); setTimeout(next, 0); };
+    setTimeout(next, 0);
+  }
+
+  function buildReverb() {
+    const ir = ctx.createBuffer(2, ctx.sampleRate * 1.6, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const ch = ir.getChannelData(c); for (let i = 0; i < ch.length; i++) { const k = 1 - i / ch.length; ch[i] = (Math.random() * 2 - 1) * k * k * k; } }
+    reverb.buffer = ir;
+  }
+
+  function decode(name) {
+    const bin = atob(SFX[name]), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    // the callback form works on older Safari as well as the promise form elsewhere
+    try { ctx.decodeAudioData(u8.buffer, (buf) => { buffers[name] = buf; if (name === 'wind') startWind(); }, () => {}); } catch { /* keep the synth fallback */ }
   }
 
   /** Plays a sample; false when it isn't decoded (the caller may fall back to synthesis). */
@@ -190,6 +199,9 @@ export function createAudio(opts = {}) {
   }
 
   return {
+    /** Builds the audio while the menu is idle: creating a context took a quarter of a second on a phone, which
+     * landed on the first frame of the run when the tap that started it built it. It starts paused; a tap resumes it. */
+    prepare() { if (sound && !ctx) build(); },
     unlock() { ensure(); },
     setSound(on) { sound = on; if (!on) this.stopBeat(); if (ctx) (on ? ctx.resume() : ctx.suspend()).catch(() => {}); },
     setMusic(on) { music = on; if (!on) this.stopBeat(); },

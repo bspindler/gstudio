@@ -154,7 +154,7 @@ describe('hyperline draw calls (Brian, 2026-11-25: still a bit laggy on iPhone)'
 
   it('a quarter of a second of frames over 20 ms steps the quality down; fast frames step it back up', () => {
     expect(html).toMatch(/if \(f\.filter\(\(x\) => x > 20\)\.length > 15\)/);
-    expect(html).toMatch(/else if \(q\(0\.9\) < 18 && \+\+fast >= 3\)/);
+    expect(html).toMatch(/if \(q\(0\.9\) < 18 && \+\+fast >= 3\)/);
   });
 
   it('a steady 33 ms is a 30 fps cap (iOS Low Power Mode), not load: quality is kept, or given back', () => {
@@ -168,5 +168,26 @@ describe('hyperline ?perf reports each run (Brian, 2026-11-25: "do you get the s
     expect(html).toMatch(/if \(!perfBox \|\| perfRun\.length < 30\)/);
     expect(html).toMatch(/studio\.track\('custom', \{ event: 'perf_run', frames:/);
     expect(html).toMatch(/perfReport\(\);\n  studio\.track\('level_end'/);
+  });
+});
+
+describe('hyperline hitches (Brian, 2026-11-25: a few stutters per run on iPhone)', () => {
+  const audio = readFileSync(new URL('../../../games/hyperline/audio.js', import.meta.url), 'utf8');
+
+  it('the warm-up compiles every object, hidden or not, for the composer buffer the game draws into', () => {
+    expect(src).toMatch(/sc\.traverse\(\(obj\) => \{ if \(!obj\.visible\) \{ hidden\.push\(obj\); obj\.visible = true; \} \}\)/);
+    expect(src).toMatch(/renderer\.setRenderTarget\(msaa\);\n  try \{ renderer\.compile\(scene, cam\); renderer\.compile\(screen, ortho\);/);
+    expect(src).toMatch(/ribbons\.next\(\);/);
+  });
+
+  it('audio is built on the menu and decodes a sample per task, never all on the first tap', () => {
+    expect(audio).toMatch(/prepare\(\) \{ if \(sound && !ctx\) build\(\); \}/);
+    expect(audio).toMatch(/const next = \(\) => \{ const job = jobs\.shift\(\); if \(!job\) return; job\(\); setTimeout\(next, 0\); \};/);
+    expect(audio).not.toMatch(/function decodeAll/);
+    expect(html).toMatch(/setTimeout\(\(\) => audio\.prepare\(\), 400\)/);
+  });
+
+  it('quality steps down only after two slow windows in a row', () => {
+    expect(html).toMatch(/if \(\+\+slow < 2\) return;/);
   });
 });
