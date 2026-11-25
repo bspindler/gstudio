@@ -6,6 +6,7 @@ import { BLOOM3D, createRenderer3d } from '../../../games/hyperline/render3d.js'
 
 const html = readFileSync(new URL('../../../games/hyperline/index.html', import.meta.url), 'utf8');
 const src = readFileSync(new URL('../../../games/hyperline/render3d.js', import.meta.url), 'utf8');
+const gear = readFileSync(new URL('../../../games/hyperline/gear3d.js', import.meta.url), 'utf8');
 
 describe('hyperline 3D renderer (quality plan phase 2)', () => {
   it('is the default; ?r=2d keeps the 2D renderer, and a failed 3D setup falls back to it', () => {
@@ -101,13 +102,13 @@ describe('hyperline on phones (Brian, 2026-11-25: grainy, laggy and muffled on i
   const sfx = readFileSync(new URL('../../../games/hyperline/audio/sfx.js', import.meta.url), 'utf8');
 
   it('the scene renders into a 4x multisampled buffer (the bloom chain bypasses the renderer antialias flag)', () => {
-    expect(src).toMatch(/new T\.WebGLRenderTarget\(1, 1, \{ type: T\.HalfFloatType, samples: 4 \}\)/);
+    expect(src).toMatch(/new T\.WebGLRenderTarget\(1, 1, \{ type: tier > 0 \? T\.UnsignedByteType : T\.HalfFloatType, samples: 4 \}\)/);
     expect(src).toMatch(/new T\.EffectComposer\(renderer, msaa\)/);
   });
 
   it('track, obstacles and props use Lambert (cheap per pixel); only the hero keeps its outfit shader', () => {
     expect(src).not.toMatch(/MeshStandardMaterial\(\{ roughness: 0\.45/);
-    expect((src.match(/new T\.MeshLambertMaterial/g) || []).length).toBeGreaterThanOrEqual(2);
+    expect(src).toMatch(/function batchMaterial\(base, glow, flat, opacity\) \{\n    const m = new T\.MeshLambertMaterial/);
   });
 
   it('phones start a quality tier down; slow frames step the tier down before resolution, never below 1.5x', () => {
@@ -132,7 +133,27 @@ describe('hyperline on phones (Brian, 2026-11-25: grainy, laggy and muffled on i
 
 describe('hyperline: only neon edges glow (Brian, 2026-11-25: glow crawling over blocks on iPhone)', () => {
   it('obstacle faces stay well under the bloom threshold; their edges carry the glow', () => {
-    expect(src).toMatch(/else \{ b\.mat\.color\.copy\(col\)\.multiplyScalar\(0\.2\); b\.mat\.emissive\.copy\(col\)\.multiplyScalar\(0\.16\); \}/);
-    expect(src).toMatch(/m\.mat\.color\.copy\(col\)\.lerp\(col2, 0\.35\)\.multiplyScalar\(0\.45\)/);
+    // base 0.2 and glow 0.16 for obstacle faces (a track surface 0.03 / 0.05); meshes 0.45 / 0.3
+    expect(src).toMatch(/batch\(`box\|\$\{surface \? 1 : 0\}\|\$\{op\}`, unitBox, surface \? 0\.03 : 0\.2, surface \? 0\.05 : 0\.16, false, op\)/);
+    expect(src).toMatch(/batch\(`mesh\|\$\{name\}\|\$\{op\}`, name === 'sphere' \? sphereGeo : meshGeo\[name\], 0\.45, 0\.3, true, op\)/);
+  });
+});
+
+describe('hyperline draw calls (Brian, 2026-11-25: still a bit laggy on iPhone)', () => {
+  it('neon lines are batched per colour, width, opacity and blending, and drawn once per frame', () => {
+    expect(src).toMatch(/const a = Math\.min\(1, Math\.round\(alpha \* 20\) \/ 20\) \|\| 0\.05, key = `\$\{c\}\|\$\{w\}\|\$\{a\}\|\$\{additive \? 1 : 0\}`/);
+    expect(src).toMatch(/flushSegs\(\); batchesEnd\(\); lines\.end\(\)/);
+    expect(src).toMatch(/if \(edgeW > 0\) segs\(boxEdgeSegs\(/);
+  });
+
+  it('boxes and small meshes are instanced (one draw per geometry and opacity); gear pieces merge per material', () => {
+    expect(src).toMatch(/const im = new T\.InstancedMesh\(geo, batchMaterial\(base, glow, flat, opacity\), BATCH_CAP\)/);
+    expect(gear).toMatch(/function mergeByMaterial\(T, g\)/);
+    expect(gear).toMatch(/c\.userData\.animated\) continue;/);
+  });
+
+  it('a quarter of a second of frames over 20 ms steps the quality down', () => {
+    expect(html).toMatch(/frames\+\+; if \(dt > 1 \/ 50\) slow\+\+;/);
+    expect(html).toMatch(/if \(frames >= 60\) \{\n[^\n]*\n      if \(slow > 15\) \{ if \(r3d/);
   });
 });

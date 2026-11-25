@@ -24,7 +24,7 @@ describe('hyperline 3D: nothing is drawn through the camera', () => {
   it('neon segments are trimmed against the tilted near plane, and boxes reaching behind it draw trimmed edges', () => {
     expect(r3d).toMatch(/function clipNear\(/);
     expect(r3d).toMatch(/pts = clipNear\(pts\)/);
-    expect(r3d).toMatch(/if \(edgeW > 0 && behind\) segs\(boxEdgeSegs\(/);
+    expect(r3d).toMatch(/if \(edgeW > 0\) segs\(boxEdgeSegs\(/); // every box edge is a trimmed, batched segment
     expect(r3d).toMatch(/F\[0\] = c2\.f\[0\]/);
   });
 

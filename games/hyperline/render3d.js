@@ -97,9 +97,7 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
 
   // ---------- shared geometry ----------
   const unitBox = new T.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5); // spans 0..1 on each axis
-  const boxEdges = new T.LineSegmentsGeometry().fromEdgesGeometry(new T.EdgesGeometry(unitBox));
   const meshGeo = {};
-  const meshEdge = {};
   for (const [name, m] of Object.entries(MESHES)) {
     const pos = [];
     for (const f of m.faces) for (let i = 1; i + 1 < f.length; i++) for (const k of [f[0], f[i], f[i + 1]]) pos.push(...m.verts[k]);
@@ -107,10 +105,8 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
     g.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
     g.computeVertexNormals();
     meshGeo[name] = g;
-    meshEdge[name] = new T.LineSegmentsGeometry().fromEdgesGeometry(new T.EdgesGeometry(g, 1));
   }
   const sphereGeo = new T.IcosahedronGeometry(1, 2);
-  const sphereEdge = new T.LineSegmentsGeometry().fromEdgesGeometry(new T.EdgesGeometry(new T.IcosahedronGeometry(1, 1), 1));
 
   // ---------- pools ----------
   const lineMats = [];
@@ -131,14 +127,31 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
   const world = new T.Group();
   scene.add(world);
 
-  // Boxes: a lit, emissive solid and its neon edges.
-  const boxes = pool(() => {
-    const mat = new T.MeshLambertMaterial({ transparent: true }); // Lambert: far cheaper per pixel on phones than PBR, and these are flat neon slabs
-    const solid = new T.Mesh(unitBox, mat);
-    const edges = new T.LineSegments2(boxEdges, lineMat());
-    const root = new T.Group(); root.add(solid, edges); world.add(root);
-    return { root, solid, edges, mat };
-  });
+  // ---------- instanced batches: boxes and small meshes (spikes, chips) ----------
+  // One draw per geometry and opacity, each instance with its own colour (a draw per box or spike, and another for its
+  // edges, came to well over 100 a frame, which iPhone Safari felt). Lambert, cheap per pixel. A face's colour is the
+  // instance colour times the material's base under the lights, plus the instance colour times `glow` as emissive.
+  function batchMaterial(base, glow, flat, opacity) {
+    const m = new T.MeshLambertMaterial({ color: new T.Color(base, base, base), transparent: opacity < 1, opacity, flatShading: flat, depthWrite: opacity > 0.85 });
+    m.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n  totalEmissiveRadiance += vColor.rgb * ${glow.toFixed(3)};`); };
+    m.customProgramCacheKey = () => `batch${glow}`;
+    return m;
+  }
+  const batches = new Map(), BATCH_CAP = 256, tmpMat = new T.Matrix4(), tmpEuler = new T.Euler(), tmpQuat = new T.Quaternion(), tmpV = new T.Vector3(), tmpPos = new T.Vector3(), tmpScl = new T.Vector3();
+  function batch(key, geo, base, glow, flat, opacity) {
+    let b = batches.get(key);
+    if (!b) {
+      const im = new T.InstancedMesh(geo, batchMaterial(base, glow, flat, opacity), BATCH_CAP);
+      im.instanceColor = new T.InstancedBufferAttribute(new Float32Array(BATCH_CAP * 3), 3);
+      im.frustumCulled = false; im.count = 0; world.add(im);
+      b = { im, n: 0 }; batches.set(key, b);
+    }
+    return b;
+  }
+  function batchAdd(b, m4, c) { if (b.n >= BATCH_CAP) return; b.im.setMatrixAt(b.n, m4); b.im.setColorAt(b.n, c); b.n++; }
+  const batchesBegin = () => { for (const b of batches.values()) b.n = 0; };
+  const batchesEnd = () => { for (const b of batches.values()) { b.im.count = b.n; b.im.instanceMatrix.needsUpdate = true; if (b.im.instanceColor) b.im.instanceColor.needsUpdate = true; } };
+  const opacityStep = (a) => Math.max(0.05, Math.min(1, Math.round(a * 20) / 20));
   /** An axis-aligned box from (x0,y0,z0) to (x1,y1,z1): faces tinted col (fillA = their opacity), edges in neon. */
   // Nothing is drawn through the camera. three's wide lines break into screen-wide stripes when a segment reaches behind
   // the lens, and the camera looks down at the track, so its near plane is tilted: the top of a tall wall beside the
@@ -166,20 +179,16 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
   ];
   function box(x0, x1, y0, y1, z0, z1, c, fillA, edgeW, surface = false, alpha = 1, edgeCol = c) {
     if (x1 - x0 <= 0.001 || alpha <= 0) return;
-    const b = boxes.next();
-    b.root.position.set(x0, y0, z0); b.root.scale.set(x1 - x0, Math.max(0.001, y1 - y0), z1 - z0);
-    col.set(c);
-    if (surface) { b.mat.color.setRGB(0.02, 0.01, 0.05); b.mat.emissive.copy(col).multiplyScalar(0.05); }
-    // faces stay well under the bloom threshold so only the neon edges glow: a lit face bright enough to bloom made
-    // blotchy halos that crawled over blocks as they moved (worse with a phone's lower-resolution glow)
-    else { b.mat.color.copy(col).multiplyScalar(0.2); b.mat.emissive.copy(col).multiplyScalar(0.16); }
-    b.mat.opacity = fillA * alpha; b.solid.visible = fillA > 0;
-    b.mat.depthWrite = fillA * alpha > 0.85;
-    const lm = b.edges.material; lm.color.set(edgeCol); lm.linewidth = edgeW * DPR; lm.opacity = alpha;
-    let behind = false;
-    for (const x of [x0, x1]) for (const y of [y0, y1]) for (const z of [z0, z1]) if (depth(x, y, z) < NEAR_D) behind = true;
-    b.edges.visible = edgeW > 0 && !behind;
-    if (edgeW > 0 && behind) segs(boxEdgeSegs(x0, x1, y0, y1, z0, z1), edgeCol, edgeW, alpha, false);
+    if (fillA > 0) {
+      // faces stay well under the bloom threshold so only the neon edges glow: a lit face bright enough to bloom made
+      // blotchy halos that crawled over blocks as they moved (worse with a phone's lower-resolution glow). A track
+      // surface is darker still, so the grid and the runner read on it.
+      const op = opacityStep(fillA * alpha), b = batch(`box|${surface ? 1 : 0}|${op}`, unitBox, surface ? 0.03 : 0.2, surface ? 0.05 : 0.16, false, op);
+      tmpMat.compose(tmpPos.set(x0, y0, z0), tmpQuat.identity(), tmpScl.set(x1 - x0, Math.max(0.001, y1 - y0), z1 - z0));
+      batchAdd(b, tmpMat, col.set(c));
+    }
+    // edges join the batched lines (trimmed at the lens like any segment)
+    if (edgeW > 0) segs(boxEdgeSegs(x0, x1, y0, y1, z0, z1), edgeCol, edgeW, alpha, false);
   }
 
   // Free line sets: segments given as flat [x0,y0,z0, x1,y1,z1, ...].
@@ -190,41 +199,45 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
     world.add(ls);
     return { root: ls, geo, cap: 0 };
   });
+  // Neon lines are batched: every segs() call in a frame joins a bucket keyed by colour, width, opacity (in 5% steps)
+  // and blending, and flushSegs() draws each bucket once. Each call used to be its own draw, well over 100 a frame,
+  // which iPhone Safari felt far more than a desktop.
+  const buckets = new Map();
   function segs(pts, c, w, alpha = 1, additive = true) {
     pts = clipNear(pts);
     if (pts.length < 6 || alpha <= 0) return;
-    const l = lines.next();
-    // setPositions keeps the array it is given, so the buffer is reused until a frame needs more room.
-    const need = pts.length;
-    if (need > l.cap) { l.cap = Math.max(need, l.cap * 2, 24); l.buf = new Float32Array(l.cap); l.geo.setPositions(l.buf); }
-    l.buf.set(pts);
-    l.geo.attributes.instanceStart.data.needsUpdate = true;
-    l.geo.instanceCount = need / 6;
-    const m = l.root.material; m.color.set(c); m.linewidth = w * DPR; m.opacity = alpha;
-    m.blending = additive ? T.AdditiveBlending : T.NormalBlending;
+    const a = Math.min(1, Math.round(alpha * 20) / 20) || 0.05, key = `${c}|${w}|${a}|${additive ? 1 : 0}`;
+    let bk = buckets.get(key);
+    if (!bk) { bk = { c, w, a, additive, pts: [] }; buckets.set(key, bk); }
+    for (let i = 0; i < pts.length; i++) bk.pts.push(pts[i]);
+  }
+  function flushSegs() {
+    for (const bk of buckets.values()) {
+      const l = lines.next(), need = bk.pts.length;
+      // setPositions keeps the array it is given, so the buffer is reused until a frame needs more room.
+      if (need > l.cap) { l.cap = Math.max(need, l.cap * 2, 48); l.buf = new Float32Array(l.cap); l.geo.setPositions(l.buf); }
+      l.buf.set(bk.pts);
+      l.geo.attributes.instanceStart.data.needsUpdate = true;
+      l.geo.instanceCount = need / 6;
+      const m = l.root.material; m.color.set(bk.c); m.linewidth = bk.w * DPR; m.opacity = bk.a;
+      m.blending = bk.additive ? T.AdditiveBlending : T.NormalBlending;
+    }
+    buckets.clear();
   }
 
-  // Meshes from MESHES (runner shapes, spikes, chips), flat shaded with neon edges.
-  const meshes = pool(() => {
-    const mat = new T.MeshLambertMaterial({ flatShading: true, transparent: true });
-    const solid = new T.Mesh(meshGeo.cube, mat);
-    const edges = new T.LineSegments2(meshEdge.cube, lineMat());
-    const root = new T.Group(); root.add(solid, edges); world.add(root);
-    return { root, solid, edges, mat };
-  });
+  // Meshes from MESHES (runner shapes, spikes, chips): instanced, flat shaded, with their edges in the batched lines.
+  const edgeLocal = {};
+  const edgesOf = (name) => edgeLocal[name] || (edgeLocal[name] = new T.EdgesGeometry(name === 'sphere' ? new T.IcosahedronGeometry(1, 1) : meshGeo[name], 1).attributes.position.array);
   function mesh(name, pos, scale, rot, a, b, alpha = 1, wire = false, edge = '') {
-    const m = meshes.next();
-    const sphere = name === 'sphere';
-    m.solid.geometry = sphere ? sphereGeo : meshGeo[name]; m.edges.geometry = sphere ? sphereEdge : meshEdge[name];
-    m.root.position.set(pos[0], pos[1], pos[2]); m.root.scale.set(scale[0], scale[1], scale[2]);
-    m.root.rotation.set(rot[0], rot[1], rot[2], 'ZYX'); // rotateXYZ in proj.js turns about x, then y, then z
-    m.solid.visible = !wire;
-    col.set(a); col2.set(b);
-    m.mat.color.copy(col).lerp(col2, 0.35).multiplyScalar(0.45); m.mat.emissive.copy(col2).multiplyScalar(0.3);
-    m.mat.opacity = alpha; m.mat.depthWrite = alpha > 0.9;
-    const lm = m.edges.material;
-    lm.color.set(edge || (wire ? a : mixHex(a, '#FFFFFF', 0.5))); lm.linewidth = (edge ? 1.8 : 1.4) * DPR; lm.opacity = alpha;
-    m.edges.visible = depth(pos[0], pos[1], pos[2]) - Math.max(scale[0], scale[1], scale[2]) > NEAR_D; // small: drop its edges near the lens
+    tmpMat.compose(tmpPos.set(pos[0], pos[1], pos[2]), tmpQuat.setFromEuler(tmpEuler.set(rot[0], rot[1], rot[2], 'ZYX')), tmpScl.set(scale[0], scale[1], scale[2])); // rotateXYZ in proj.js turns about x, then y, then z
+    if (!wire) {
+      const op = opacityStep(alpha), bt = batch(`mesh|${name}|${op}`, name === 'sphere' ? sphereGeo : meshGeo[name], 0.45, 0.3, true, op);
+      batchAdd(bt, tmpMat, col.set(a).lerp(col2.set(b), 0.35));
+    }
+    if (depth(pos[0], pos[1], pos[2]) - Math.max(scale[0], scale[1], scale[2]) <= NEAR_D) return; // small: no edges near the lens
+    const L = edgesOf(name), pts = new Array(L.length);
+    for (let i = 0; i < L.length; i += 3) { tmpV.set(L[i], L[i + 1], L[i + 2]).applyMatrix4(tmpMat); pts[i] = tmpV.x; pts[i + 1] = tmpV.y; pts[i + 2] = tmpV.z; }
+    segs(pts, edge || (wire ? a : mixHex(a, '#FFFFFF', 0.5)), edge ? 1.8 : 1.4, alpha, false);
   }
 
   // ---------- sky, sun, stars, mountains, floor ----------
@@ -568,7 +581,7 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
   // ---------- composer ----------
   // The scene renders into a 4x multisampled buffer: the bloom chain draws into render targets, which the renderer's
   // own antialias flag doesn't reach, and without it every neon edge is jagged (grainy on a phone's dense screen).
-  const msaa = new T.WebGLRenderTarget(1, 1, { type: T.HalfFloatType, samples: 4 });
+  const msaa = new T.WebGLRenderTarget(1, 1, { type: tier > 0 ? T.UnsignedByteType : T.HalfFloatType, samples: 4 }); // 8-bit on phones: half the memory traffic
   const composer = new T.EffectComposer(renderer, msaa);
   composer.addPass(new T.RenderPass(scene, cam));
   const screenPass = new T.RenderPass(screen, ortho); screenPass.clear = false; screenPass.clearDepth = true;
@@ -593,7 +606,7 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
 
     renderer.info.reset();
     E[0] = c2.eye[0]; E[1] = c2.eye[1]; E[2] = c2.eye[2]; F[0] = c2.f[0]; F[1] = c2.f[1]; F[2] = c2.f[2];
-    boxes.begin(); lines.begin(); meshes.begin(); ribbons.begin(); pN = 0;
+    batchesBegin(); lines.begin(); ribbons.begin(); pN = 0;
 
     // backdrop
     skyMat.uniforms.c0.value.set(pal.sky[0]); skyMat.uniforms.c1.value.set(pal.sky[1]); skyMat.uniforms.c2.value.set(pal.sky[2]);
@@ -799,7 +812,7 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
     for (const k of ['position', 'color', 'size', 'alpha']) pGeo.attributes[k].needsUpdate = true;
     pMat.uniforms.scale.value = (H * DPR) / 2 / Math.tan((cam.fov * Math.PI) / 360);
 
-    boxes.end(); lines.end(); meshes.end(); ribbons.end();
+    flushSegs(); batchesEnd(); lines.end(); ribbons.end();
 
     // screen layer
     ortho.left = 0; ortho.right = W; ortho.top = H; ortho.bottom = 0; ortho.updateProjectionMatrix();
@@ -897,11 +910,11 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
 
   // Warm-up: one of each pooled kind, then compile every shader now, so the first spike or sign on screen
   // doesn't stall a frame mid-run.
-  boxes.begin(); lines.begin(); meshes.begin(); ribbons.begin(); signs.begin();
+  batchesBegin(); lines.begin(); ribbons.begin(); signs.begin();
   box(0, 1, 0, 1, 0, 1, SAFE, 1, 1); segs([0, 0, 0, 1, 1, 1], SAFE, 1); mesh('pyramid', [0, 0, 0], [1, 1, 1], [0, 0, 0], HAZ, HAZ); ribbon([{ x: 0, y: 0, w: 1, c: SAFE, a: 1 }, { x: 1, y: 0, w: 1, c: SAFE, a: 1 }]);
   signs.next().root.material.map = signTexture(THEMES[0].words[0], THEMES[0].win[0]);
   try { renderer.compile(scene, cam); renderer.compile(screen, ortho); } catch { /* compiled lazily instead */ }
-  boxes.end(); lines.end(); meshes.end(); ribbons.end(); signs.end();
+  flushSegs(); batchesEnd(); lines.end(); ribbons.end(); signs.end();
 
   let lastSize = null;
   return {
@@ -913,7 +926,12 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
     /** The skin tone the thumbnails show on hair outfits. */
     setThumbTone(tone) { thumbTone = tone; },
     /** Draw calls and triangles in the last frame (for the budget check). */
-    info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
+    info: () => {
+      // a breakdown of what draws: visible meshes and lines per group in the scene (the composer's passes add the rest)
+      const by = {};
+      scene.traverseVisible((o) => { if (!(o.isMesh || o.isLine || o.isPoints || o.isSprite)) return; let k = o.isLineSegments2 ? 'lines' : o.isInstancedMesh ? 'instanced' : o.isSkinnedMesh ? 'runner' : o.isPoints ? 'points' : o.isSprite ? 'sprite' : 'mesh'; if (k === 'mesh' && o.parent && o.parent !== world && o.parent !== scene) k = 'meshInGroup'; by[k] = (by[k] || 0) + 1; });
+      return { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, by };
+    },
     onLost(fn) { lost = fn; },
     /** w, h: CSS pixels; dpr: device pixels per CSS pixel. */
     resize(w, h, dpr) {

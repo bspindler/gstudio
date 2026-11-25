@@ -2,6 +2,11 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.3 (2026-11-25)
+- Smoother on iPhone: the game draws the same scene with about half as many draw calls. Blocks, spikes and chips are
+  drawn together, neon lines are batched, and accessories are merged. Phones also use a lighter scene buffer and step
+  down sooner when frames run long.
+
 ## 0.23.2 (2026-11-25)
 - Blocks, spikes and other obstacles no longer have glow crawling over their faces: their faces sit darker, and only
   their neon edges glow. Phones also render the glow at a higher resolution.

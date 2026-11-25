@@ -31,6 +31,24 @@ export function hairFor(look, body) {
   return [style, body === 'm' && look.beard ? 'beard' : null, body === 'f' ? 'brows-f' : 'brows-m'].filter(Boolean);
 }
 
+/**
+ * Merges a gear group's pieces into one mesh per material (a jetpack was a dozen draws, now two or three). Pieces keep
+ * their place: each one's own transform is baked into its copy of the geometry.
+ */
+function mergeByMaterial(T, g) {
+  const byMat = new Map();
+  for (const c of [...g.children]) {
+    if (!c.isMesh || c.userData.animated) continue; // flames, the halo and cloth move on their own: left as they are
+    c.updateMatrix();
+    const geo = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+    for (const k of Object.keys(geo.attributes)) if (k !== 'position' && k !== 'normal') geo.deleteAttribute(k);
+    geo.applyMatrix4(c.matrix);
+    (byMat.get(c.material) || byMat.set(c.material, []).get(c.material)).push(geo);
+    g.remove(c);
+  }
+  for (const [mat, geos] of byMat) g.add(new T.Mesh(geos.length > 1 ? T.mergeGeometries(geos) : geos[0], mat));
+}
+
 /** A cloth strip (cape, scarf tail) that streams back with speed and flutters; its top edge stays pinned. */
 function clothMaterial(T, base) {
   const m = new T.MeshStandardMaterial({ roughness: 0.55, metalness: 0.15, side: T.DoubleSide, ...base });
@@ -80,14 +98,14 @@ export function dress(T, rig, look, body, hair, headTop) {
         const nozzle = new T.Mesh(new T.ConeGeometry(0.05, 0.07, 14, 1, true), shell); nozzle.position.set(x, y - 0.18, z - 0.03); g.add(nozzle);
         // wide at the nozzle, tapering down to a point; it scales from the nozzle
         const flame = new T.Mesh(new T.ConeGeometry(0.045, 0.3, 12).rotateX(Math.PI).translate(0, -0.15, 0), glow);
-        flame.position.set(x, y - 0.21, z - 0.03); g.add(flame); flames.push(flame);
+        flame.position.set(x, y - 0.21, z - 0.03); flame.userData.animated = true; g.add(flame); flames.push(flame);
       }
     } else if (kind === 'cape' || kind === 'scarf') {
       const cape = kind === 'cape', w = cape ? 0.46 : 0.11, h = cape ? 0.95 : 0.5;
       const m = clothMaterial(T, { color: '#1A1030' });
       const strip = new T.Mesh(new T.PlaneGeometry(w, h, cape ? 6 : 2, 14).translate(cape ? 0 : 0.06, -h / 2, 0), m);
-      strip.position.set(0, neck.y - (cape ? 0.06 : 0.02), neck.z - (cape ? 0.12 : 0.09)); g.add(strip); cloth.push(m);
-      if (!cape) { const ring = new T.Mesh(new T.TorusGeometry(0.075, 0.028, 8, 20), m); ring.rotation.x = Math.PI / 2; ring.position.set(0, neck.y - 0.02, neck.z); g.add(ring); }
+      strip.position.set(0, neck.y - (cape ? 0.06 : 0.02), neck.z - (cape ? 0.12 : 0.09)); strip.userData.animated = true; g.add(strip); cloth.push(m);
+      if (!cape) { const ring = new T.Mesh(new T.TorusGeometry(0.075, 0.028, 8, 20), m); ring.rotation.x = Math.PI / 2; ring.position.set(0, neck.y - 0.02, neck.z); ring.userData.animated = true; g.add(ring); }
       else { const clasp = new T.Mesh(new T.BoxGeometry(0.42, 0.025, 0.03), glow); clasp.position.set(0, neck.y - 0.06, neck.z - 0.1); g.add(clasp); }
     } else if (kind === 'headphones') {
       const band = new T.Mesh(new T.TorusGeometry(0.118, 0.013, 8, 28, Math.PI), shell); band.position.set(0, headMidY, head.z + 0.005); g.add(band);
@@ -96,7 +114,7 @@ export function dress(T, rig, look, body, hair, headTop) {
         const ring = new T.Mesh(new T.TorusGeometry(0.04, 0.007, 6, 20), glow); ring.rotation.y = Math.PI / 2; ring.position.set(x * 1.21, headMidY - 0.01, head.z + 0.005); g.add(ring);
       }
     } else if (kind === 'halo') {
-      halo = new T.Mesh(new T.TorusGeometry(0.11, 0.008, 8, 40), glow); halo.rotation.x = Math.PI / 2; halo.position.set(0, top + 0.08, head.z); g.add(halo);
+      halo = new T.Mesh(new T.TorusGeometry(0.11, 0.008, 8, 40), glow); halo.rotation.x = Math.PI / 2; halo.position.set(0, top + 0.08, head.z); halo.userData.animated = true; g.add(halo);
     } else if (kind === 'crest') {
       for (let i = 0; i < 5; i++) {
         const fh = 0.04 + 0.025 * Math.sin((i / 4) * Math.PI) + i * 0.006;
@@ -107,10 +125,11 @@ export function dress(T, rig, look, body, hair, headTop) {
         const p = at(`upperarm_${side}`), pad = new T.Group();
         const dome = new T.Mesh(new T.SphereGeometry(0.085, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), shell); dome.scale.set(1.05, 0.65, 1.15); pad.add(dome);
         const rim = new T.Mesh(new T.TorusGeometry(0.087, 0.008, 6, 24), glow); rim.rotation.x = Math.PI / 2; rim.scale.set(1.05, 1.15, 1); pad.add(rim);
-        pad.position.set(p.x, p.y + 0.035, p.z); mount(pad, `upperarm_${side}`); parts.push(pad);
+        mergeByMaterial(T, pad); pad.position.set(p.x, p.y + 0.035, p.z); mount(pad, `upperarm_${side}`); parts.push(pad);
       }
       continue;
     }
+    mergeByMaterial(T, g);
     mount(g, kind === 'jetpack' || kind === 'cape' ? 'spine_03' : kind === 'scarf' ? 'neck_01' : 'Head');
     parts.push(g);
   }
