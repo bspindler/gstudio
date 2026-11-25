@@ -61,6 +61,7 @@ export const LEVEL_SOURCES: { game: string; file: string; array: string }[] = [
   { game: 'tidepool-pals', file: 'games/tidepool-pals/levels.js', array: 'RAW' },
   { game: 'gearhold', file: 'games/gearhold/levels.js', array: 'LEVELS' },
   { game: 'lanternkeep', file: 'games/lanternkeep/lib/levels.js', array: 'LEVELS' },
+  { game: 'hyperline', file: 'games/hyperline/lib/world.js', array: 'SECTORS' },
 ];
 
 /**

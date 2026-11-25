@@ -576,6 +576,19 @@ export const levelRemoved: Rule = (diff) => {
   return out;
 };
 
+/**
+ * Operator freezes on new content, by game (levels, sectors or nights, as LEVEL_SOURCES counts them). A frozen game
+ * may still be fixed, retuned and polished; a candidate that adds content to it is discarded. Only Brian lifts one.
+ */
+export const CONTENT_FROZEN: Readonly<Record<string, string>> = {
+  hyperline: "Brian, 2026-11-25: no new sectors until Hyperline's feel passes the quality bar (docs/hyperline/quality-plan.md). Plan feel and quality work instead.",
+};
+export const contentFrozen: Rule = (diff) =>
+  Object.entries(CONTENT_FROZEN).flatMap(([game, why]) => {
+    const before = diff.levelCounts.before[game], after = diff.levelCounts.after[game];
+    return before !== undefined && after !== undefined && after > before ? [hit('content-frozen', undefined, `${game}: ${before} before, ${after} after. ${why}`)] : [];
+  });
+
 const isTestFile = (p: string) => /\.test\.[cm]?[jt]sx?$/i.test(p);
 export const testsRemoved: Rule = (diff) => {
   const out: Violation[] = [];
@@ -756,6 +769,7 @@ export const TRIPWIRE_RULES: Record<string, Rule> = {
   'kid-flash': kidFlash,
   'kid-exit': kidExit,
   'level-removed': levelRemoved,
+  'content-frozen': contentFrozen,
   'tests-removed': testsRemoved,
   'outside-scope': outsideScope,
   secret,

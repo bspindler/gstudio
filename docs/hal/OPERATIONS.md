@@ -101,6 +101,17 @@ These checks live in the scorer because Hal may edit `packages/core/test/lantern
 `npm run hal` is `node --import tsx`, not the `tsx` command, because the tsx command opens a socket in the temp
 folder, and the sandbox allows none.
 
+### Content freezes
+
+`CONTENT_FROZEN` in `packages/core/src/hal/tripwires.ts` lists the games whose content Hal may not grow. The tripwire
+`content-frozen` discards any candidate that raises a frozen game's level, sector or night count, as `LEVEL_SOURCES` in
+`scripts/hal/git.ts` counts them. Fixes, retuning and polish still go through. The planner prompt says the same, so Hal
+doesn't waste builds on content it can't ship. To lift a freeze, delete the game's entry and the matching section of
+`scripts/hal/prompts/planner.md`.
+
+- **Hyperline** (since 2026-11-25): no new sectors until its feel passes the quality bar in
+  `docs/hyperline/quality-plan.md`.
+
 ## The morning report
 
 The bookmark from `npm run hal -- setup` opens the morning report. `npm run hal -- serve` serves it (add `--lan` so

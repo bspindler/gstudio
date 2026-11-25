@@ -47,8 +47,9 @@ Shipped in 0.16.0:
 - [x] A reward by run 2: the first Neon Crate comes on run 2, then every 5th run (`crateDue` in `lib/meta.js`).
 
 Still to do in this phase:
-- [ ] Hal: freeze new Hyperline sectors. Point the planner's Hyperline backlog at this plan's open items instead of
-  content. **This needs Brian's OK**, because it changes what Hal works on every night.
+- [x] Hal: new Hyperline sectors are frozen (Brian's OK, 2026-11-25). The tripwire `content-frozen` discards a
+  candidate that adds one, and the planner prompt points Hal at feel and readability work instead. To lift it, see
+  `docs/hal/OPERATIONS.md` under "Content freezes".
 - [ ] A 10-minute session of 0.16.0 on Brian's iPhone.
 
 **Done when:** every item is checked off, the full test suite is green, and one 10-minute session on Brian's iPhone

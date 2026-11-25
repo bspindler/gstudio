@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkTripwires } from '@studio/core/hal';
 import {
-  blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
+  blobText, changedPaths, collectDiff, collectTreeDiff, commitTree, countArrayItems, LEVEL_SOURCES, ensureMainWorktree, extendTree, HAL_MAIN, mainWorktreeDir, newCandidateWorktree,
   addFileToTree, adoptHeld, dropHeld, holdCandidate, linkNodeModules, listHeld, pushHalMain, replayHalOnto, trustRootDigest, removeWorktree, revertPass, runGit, snapshotTree, squashMerge, verifyNodeModules, vitestCounts, type GitRunner,
 } from './git.js';
 import { LEVELS as GEARHOLD_LEVELS } from '../../games/gearhold/levels.js';
@@ -18,6 +18,17 @@ const put = (root: string, rel: string, data: string | Buffer) => { mkdirSync(di
 const GEAR = (n: number) => `export const WALLS = '#';\nexport const LEVELS = [\n${Array.from({ length: n }, (_, i) => `  { name: 'L${i}', map: ['#S#', '#X#'] },`).join('\n')}\n];\n`;
 const TIDE = (n: number) => `const L = (n) => ({ n });\nconst RAW = [\n${Array.from({ length: n }, (_, i) => `  L(${i + 1}),`).join('\n')}\n];\nexport const AUTHORED = RAW.map((d) => d);\n`;
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 1, 2, 3]);
+
+describe('LEVEL_SOURCES', () => {
+  it("counts Hyperline's sectors, so level-removed and content-frozen see them", async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(new URL('../../games/hyperline/lib/world.js', import.meta.url), 'utf8');
+    const { SECTORS } = await import('../../games/hyperline/lib/world.js');
+    const h = LEVEL_SOURCES.find((x) => x.game === 'hyperline')!;
+    expect(h).toEqual({ game: 'hyperline', file: 'games/hyperline/lib/world.js', array: 'SECTORS' });
+    expect(countArrayItems(src, h.array)).toBe(SECTORS.length);
+  });
+});
 
 describe('countArrayItems', () => {
   it('counts top-level items, ignoring nesting, strings, comments and a trailing comma', () => {

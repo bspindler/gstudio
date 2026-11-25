@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   checkTripwires, protectedPath, halHook, network, dependency, payment, randomReward, darkPattern, assetSource, levelRemoved, testsRemoved, outsideScope,
-  isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, kidVoice, kidAudio, kidFlash, kidExit, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, halHookBlock, type Diff, type FileChange,
+  contentFrozen, CONTENT_FROZEN, isProtectedPath, addedLines, kidAsset, childDirected, studioOwned, kidRecorder, kidVoice, kidAudio, kidFlash, kidExit, secret, hostApi, testPrefixesFor, TRIPWIRE_RULES, halHookBlock, type Diff, type FileChange,
 } from '../src/hal/tripwires.js';
 
 const M = (path: string, before: string, after: string): FileChange => ({ path, status: 'M', before, after, binary: false });
@@ -813,5 +813,22 @@ describe('final review: Block Barn bypasses', () => {
     expect(TRIPWIRE_RULES['kid-audio']).toBe(kidAudio);
     expect(TRIPWIRE_RULES['kid-flash']).toBe(kidFlash);
     expect(TRIPWIRE_RULES['kid-exit']).toBe(kidExit);
+  });
+});
+
+describe('content-frozen (operator freeze on new content for a game)', () => {
+  it('freezes new Hyperline sectors until its feel passes the quality bar (Brian, 2026-11-25)', () => {
+    expect(CONTENT_FROZEN.hyperline).toMatch(/quality-plan/);
+    expect(TRIPWIRE_RULES['content-frozen']).toBe(contentFrozen);
+  });
+
+  it('flags a candidate that adds a sector to a frozen game', () => {
+    expect(contentFrozen(diff([], { levelCounts: { before: { hyperline: 22 }, after: { hyperline: 23 } } })))
+      .toEqual([{ rule: 'content-frozen', detail: expect.stringMatching(/^hyperline: 22 before, 23 after\. /) }]);
+  });
+
+  it('lets a frozen game keep its count (fixes, feel and retuning) and leaves other games free to grow', () => {
+    expect(contentFrozen(diff([], { levelCounts: { before: { hyperline: 22 }, after: { hyperline: 22 } } }))).toEqual([]);
+    expect(contentFrozen(diff([], { levelCounts: { before: { gearhold: 20 }, after: { gearhold: 21 } } }))).toEqual([]);
   });
 });
