@@ -29,6 +29,9 @@ const api = createApp({
 serve({ fetch: api.fetch, port: 8787, hostname: bind });
 
 const site = new Hono();
+// Dev only: make browsers revalidate every file (304 when unchanged). Without it iPhone Safari kept serving stale game
+// modules after a change, so a fix looked like it had done nothing on the phone.
+site.use('*', async (c, next) => { await next(); c.header('Cache-Control', 'no-cache'); });
 const root = relative(process.cwd(), repo).split(sep).join('/') || '.';
 site.use('/sdk/*', serveStatic({ root: `${root}/packages`, rewriteRequestPath: (p) => p.replace(/^\/sdk/, '/sdk') }));
 // The GStudio shelf page; read per request so edits show on refresh. `<` is escaped so a title can't close the script tag.
