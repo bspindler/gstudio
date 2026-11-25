@@ -7,18 +7,16 @@ const html = readFileSync(new URL('../../../games/hyperline/index.html', import.
 const r3d = readFileSync(new URL('../../../games/hyperline/render3d.js', import.meta.url), 'utf8');
 
 describe('hyperline: the best-run ghost can be turned off (Brian, 2026-11-25: off by default)', () => {
-  it('a Ghost setting, off by default and off for older saves; on only when the player turns it on', () => {
-    expect(freshSave().settings.ghostOn).toBe(false);
-    expect(migrateSave({ ...freshSave(), settings: { sound: true, music: true, haptics: true } }).settings.ghostOn).toBe(false);
-    // 0.19.0 wrote ghost: true by default for everyone; that was never a choice, so it is not carried over
-    expect(migrateSave({ ...freshSave(), settings: { sound: true, music: true, haptics: true, ghost: true } }).settings.ghostOn).toBe(false);
-    expect(migrateSave({ ...freshSave(), settings: { sound: true, music: true, haptics: true, ghostOn: true } }).settings.ghostOn).toBe(true);
+  it('a Ghost setting, off by default; on only when the player turns it on', () => {
+    expect(freshSave().settings.ghost).toBe(false);
+    expect(migrateSave({ ...freshSave(), settings: { sound: true, music: true, haptics: true } }).settings.ghost).toBe(false);
+    expect(migrateSave({ ...freshSave(), settings: { sound: true, music: true, haptics: true, ghost: true } }).settings.ghost).toBe(true);
   });
 
   it('settings has the switch, and a run with it off races no ghost', () => {
-    expect(html).toContain("sw('ghostOn', 'Ghost'");
-    expect(html).toMatch(/G\.ghost = !S\.settings\.ghostOn \|\| start > 1 \? null :/);
-    expect(html).toMatch(/S\.settings\.ghostOn && GH\.endless \? 'Race your best-run ghost/);
+    expect(html).toContain("sw('ghost', 'Ghost'");
+    expect(html).toMatch(/G\.ghost = !S\.settings\.ghost \|\| start > 1 \? null :/);
+    expect(html).toMatch(/S\.settings\.ghost && GH\.endless \? 'Race your best-run ghost/);
   });
 });
 

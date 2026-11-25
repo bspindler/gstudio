@@ -3,7 +3,8 @@
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
 ## 0.19.1 (2026-11-25)
-- The ghost of your best run is now off by default. Turn it on in Settings if you want to race it.
+- The ghost of your best run is now off by default. Turn it on in Settings if you want to race it. (A save from
+  0.19.0 keeps the ghost on until you switch it off once.)
 
 ## 0.19.0 (2026-11-25)
 - Fixed the neon flashes across the top of the screen while running: the robot's hands were being drawn far from its

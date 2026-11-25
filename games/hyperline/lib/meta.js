@@ -125,7 +125,7 @@ export function freshSave() {
   return { v: 3, credits: 150, owned: { volt: 1 }, eq: 'volt', trails: { classic: 1 }, trail: 'classic',
     best: 0, runs: 0, crates: 0, opened: 0, top: [], daily: { day: '', best: 0 },
     missions: ['chips25', 'dist300', 'near3'], missionSeq: 3,
-    settings: { sound: true, music: true, haptics: true, ghostOn: false }, mode: 'endless', far: 1, playS: 0 };
+    settings: { sound: true, music: true, haptics: true, ghost: false }, mode: 'endless', far: 1, playS: 0 };
 }
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -166,9 +166,7 @@ export function migrateSave(raw) {
     v: 3, credits: count(s.credits), owned, eq: owned[s.eq] ? s.eq : 'volt', trails, trail: trails[s.trail] ? s.trail : 'classic',
     best: count(s.best), runs: count(s.runs), crates: count(s.crates), opened: count(s.opened), top, daily,
     missions, missionSeq: seq,
-    settings: { sound: st.sound !== false, music: st.music !== false, haptics: st.haptics !== false, ghostOn: st.ghostOn === true },
-    // The best-run ghost is off unless the player turns it on (Brian, 2026-11-25). The 0.19.0 key `ghost` defaulted on and
-    // was never a choice, so it is dropped rather than carried over.
+    settings: { sound: st.sound !== false, music: st.music !== false, haptics: st.haptics !== false, ghost: st.ghost === true }, // the best-run ghost is off unless turned on
     mode: s.mode === 'daily' ? 'daily' : 'endless',
     // Furthest sector reached; older saves infer it from their best endless distance.
     far: Math.max(1, count(s.far), Math.floor(count(s.best) / SECTOR_LEN) + 1),

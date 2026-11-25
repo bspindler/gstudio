@@ -442,7 +442,7 @@ function startRun() {
   S.runs++; G.run = S.runs; G.mode = S.mode; G.day = today(); G.start = start;
   G.runner = runnerAt(start); G.stats = newRunStats(G.mode, start);
   // Ghosts replay a run from sector 1, so a practice start races no ghost.
-  G.ghost = !S.settings.ghostOn || start > 1 ? null : G.mode === 'daily' ? (GH.daily && GH.daily.day === G.day ? GH.daily.g : null) : GH.endless;
+  G.ghost = !S.settings.ghost || start > 1 ? null : G.mode === 'daily' ? (GH.daily && GH.daily.day === G.day ? GH.daily.g : null) : GH.endless;
   G.rec = createGhostRecorder(); G.simT = 0; G.acc = 0;
   G.state = 'run'; $('ready').hidden = true; $('pauseBtn').hidden = false;
   save();
@@ -674,7 +674,7 @@ function renderReady() {
   $('readySub').textContent = S.mode === 'daily'
     ? `Same course for everyone today · new course in ${untilReset()}`
     : start > 1 ? 'Practice start · tap to jump · hold to keep jumping'
-    : (S.settings.ghostOn && GH.endless ? 'Race your best-run ghost · hold to keep jumping' : 'Tap to jump · hold to keep jumping');
+    : (S.settings.ghost && GH.endless ? 'Race your best-run ghost · hold to keep jumping' : 'Tap to jump · hold to keep jumping');
   $('readyMissions').innerHTML = `<h4>Missions</h4>${missionRows(null)}`;
 }
 
@@ -846,7 +846,7 @@ function showSettings() {
       ${sw('sound', 'Sound', 'Jumps, chips, crashes')}
       ${sw('music', 'Music', 'Synth beat while you run')}
       ${sw('haptics', 'Haptics', 'Vibration on supported phones')}
-      ${sw('ghostOn', 'Ghost', 'Race a replay of your best run')}
+      ${sw('ghost', 'Ghost', 'Race a replay of your best run')}
     </div>
     <p class="fine" style="text-align:left">Motion follows your device's reduced-motion setting${reduced ? ' (on: no camera shake, fewer particles)' : ''}.</p>
     <button class="danger" data-act="reset">Reset all progress</button>
@@ -883,7 +883,7 @@ document.addEventListener('click', async (e) => {
     case 'settings': pause(); showSettings(); break;
     case 'set': {
       const k = b.dataset.key; S.settings[k] = !S.settings[k]; save(); b.setAttribute('aria-checked', String(S.settings[k]));
-      if (k === 'ghostOn') { if (!S.settings.ghostOn && G.state === 'run') G.ghost = null; if (G.state === 'ready') renderReady(); }
+      if (k === 'ghost') { if (!S.settings.ghost && G.state === 'run') G.ghost = null; if (G.state === 'ready') renderReady(); }
       if (k === 'sound') audio.setSound(S.settings.sound);
       if (k === 'music') { audio.setMusic(S.settings.music); if (S.settings.music && G.state === 'run') audio.startBeat(G.stats.sector - 1); }
       if (k === 'haptics' && S.settings.haptics) buzz(20);
