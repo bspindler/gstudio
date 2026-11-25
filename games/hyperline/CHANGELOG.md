@@ -2,6 +2,10 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.2 (2026-11-25)
+- Blocks, spikes and other obstacles no longer have glow crawling over their faces: their faces sit darker, and only
+  their neon edges glow. Phones also render the glow at a higher resolution.
+
 ## 0.23.1 (2026-11-25)
 - Sharper on phones: the 3D scene is now anti-aliased, so neon edges and buildings no longer look grainy. When a
   phone struggles it trims effects first and never drops below 1.5x resolution.

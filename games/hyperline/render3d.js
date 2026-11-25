@@ -29,7 +29,7 @@ export const HERO = { height: 0.95, large: 1.5 };
  * the resolution. street: how far ahead (units) the street row is drawn; bloom: the glow's resolution, as a fraction
  * of the screen's.
  */
-export const QUALITY = [{ street: 100, bloom: 1 }, { street: 70, bloom: 0.5 }, { street: 45, bloom: 0.35 }];
+export const QUALITY = [{ street: 100, bloom: 1 }, { street: 70, bloom: 0.65 }, { street: 45, bloom: 0.5 }];
 /** Street-level buildings: Quaternius Downtown City MegaKit (CC0), interiors and ornamental trim left out. */
 export const CITY = { large: () => import('./models/city/large.js'), medium: () => import('./models/city/medium.js'), small: () => import('./models/city/small.js') };
 /** The street row: one building per lot along each side of the track, facing it, CITY_LOT units apart. */
@@ -170,7 +170,9 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
     b.root.position.set(x0, y0, z0); b.root.scale.set(x1 - x0, Math.max(0.001, y1 - y0), z1 - z0);
     col.set(c);
     if (surface) { b.mat.color.setRGB(0.02, 0.01, 0.05); b.mat.emissive.copy(col).multiplyScalar(0.05); }
-    else { b.mat.color.copy(col).multiplyScalar(0.55); b.mat.emissive.copy(col).multiplyScalar(0.32); }
+    // faces stay well under the bloom threshold so only the neon edges glow: a lit face bright enough to bloom made
+    // blotchy halos that crawled over blocks as they moved (worse with a phone's lower-resolution glow)
+    else { b.mat.color.copy(col).multiplyScalar(0.2); b.mat.emissive.copy(col).multiplyScalar(0.16); }
     b.mat.opacity = fillA * alpha; b.solid.visible = fillA > 0;
     b.mat.depthWrite = fillA * alpha > 0.85;
     const lm = b.edges.material; lm.color.set(edgeCol); lm.linewidth = edgeW * DPR; lm.opacity = alpha;
@@ -218,7 +220,7 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
     m.root.rotation.set(rot[0], rot[1], rot[2], 'ZYX'); // rotateXYZ in proj.js turns about x, then y, then z
     m.solid.visible = !wire;
     col.set(a); col2.set(b);
-    m.mat.color.copy(col).lerp(col2, 0.35); m.mat.emissive.copy(col2).multiplyScalar(0.45);
+    m.mat.color.copy(col).lerp(col2, 0.35).multiplyScalar(0.45); m.mat.emissive.copy(col2).multiplyScalar(0.3);
     m.mat.opacity = alpha; m.mat.depthWrite = alpha > 0.9;
     const lm = m.edges.material;
     lm.color.set(edge || (wire ? a : mixHex(a, '#FFFFFF', 0.5))); lm.linewidth = (edge ? 1.8 : 1.4) * DPR; lm.opacity = alpha;

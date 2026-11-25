@@ -129,3 +129,10 @@ describe('hyperline on phones (Brian, 2026-11-25: grainy, laggy and muffled on i
     expect(html).toMatch(/createAudio\(\{ phone: /);
   });
 });
+
+describe('hyperline: only neon edges glow (Brian, 2026-11-25: glow crawling over blocks on iPhone)', () => {
+  it('obstacle faces stay well under the bloom threshold; their edges carry the glow', () => {
+    expect(src).toMatch(/else \{ b\.mat\.color\.copy\(col\)\.multiplyScalar\(0\.2\); b\.mat\.emissive\.copy\(col\)\.multiplyScalar\(0\.16\); \}/);
+    expect(src).toMatch(/m\.mat\.color\.copy\(col\)\.lerp\(col2, 0\.35\)\.multiplyScalar\(0\.45\)/);
+  });
+});
