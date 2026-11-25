@@ -249,11 +249,12 @@ import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
 import { applyEvent, checkMissions, chipMultiplier, clampStart, crateDue, isPractice, runsToNextCrate, sectorFromSearch, migrateSave, paidOffersOpen, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
-import { createBloom, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
+import { createBloom, drawOverlay, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
+import { createRenderer3d } from './render3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.16.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.17.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -386,24 +387,30 @@ async function buy(key) {
 }
 
 /* ---------- game ---------- */
-// The scene is drawn on an off-screen 2D canvas, then shown on #game: through three.js with a neon bloom
-// when WebGL works, or by a plain copy (the original look) when it doesn't.
-let cv = $('game'), out2d = null, bloom = null;
+// The 3D renderer (render3d.js) draws the scene in three.js on #game, with the off-screen 2D canvas as its overlay
+// (text pops). The 2D renderer draws the whole scene on that canvas and shows it through a bloom pass, or by a plain
+// copy (the original look) when WebGL is unavailable. 3D is the default; ?r=2d forces the 2D renderer.
+const RMODE = new URLSearchParams(location.search).get('r');
+let cv = $('game'), out2d = null, bloom = null, r3d = null;
 const src = document.createElement('canvas'), cx = src.getContext('2d'), stage = $('stage');
 let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1), dprCap = DPR;
 function resize() {
   const r = stage.getBoundingClientRect(); DPR = Math.min(dprCap, window.devicePixelRatio || 1);
   W = r.width; H = r.height; if (!W || !H) return;
   src.width = Math.round(W * DPR); src.height = Math.round(H * DPR);
-  if (bloom) bloom.resize(src.width, src.height); else if (out2d) { cv.width = src.width; cv.height = src.height; }
+  if (r3d) r3d.resize(W, H, DPR);
+  else if (bloom) bloom.resize(src.width, src.height); else if (out2d) { cv.width = src.width; cv.height = src.height; }
 }
 function useFlat() {
   if (bloom) bloom.dispose();
-  bloom = null;
+  if (r3d) r3d.dispose();
+  bloom = null; r3d = null;
   const n = document.createElement('canvas'); n.id = 'game'; n.setAttribute('aria-label', cv.getAttribute('aria-label') || '');
   cv.replaceWith(n); cv = n; out2d = cv.getContext('2d'); resize();
 }
-createBloom(cv, src).then((b) => { if (!b) { useFlat(); return; } bloom = b; b.onLost(useFlat); resize(); }).catch(useFlat);
+const use2d = () => createBloom(cv, src).then((b) => { if (!b) { useFlat(); return; } bloom = b; b.onLost(useFlat); resize(); }).catch(useFlat);
+if (RMODE !== '2d') createRenderer3d(cv, src).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(useFlat); resize(); }).catch(use2d);
+else use2d();
 new ResizeObserver(resize).observe(stage);
 
 let G, pressed = false;
@@ -709,13 +716,15 @@ function draw() {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const r = G.runner, sh = G.shake * 0.9;
   const gp = G.ghost && G.state !== 'ready' ? ghostAt(G.ghost, G.simT) : null;
-  drawScene(cx, W, H, {
+  const st = {
     bestMark: G.state !== 'ready' && G.start <= 1 ? bestMarkX(G.mode === 'daily' ? (G.day === S.daily.day ? S.daily.best : 0) : S.best, G.start) : null,
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
     ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, shards: reduced ? [] : G.shards, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
     reduced, speed: speedAt(r.x), kick: reduced ? 0 : G.cam.y, showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
-  });
+  };
+  if (r3d) { st.overlayDirty = drawOverlay(cx, W, H, st); r3d.render(st); return; }
+  drawScene(cx, W, H, st);
   if (bloom) bloom.present(); else if (out2d) out2d.drawImage(src, 0, 0);
 }
 

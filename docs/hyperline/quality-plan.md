@@ -85,6 +85,20 @@ Build the measuring tools first, so the renderer port in phase 2 is judged on nu
 
 **Done when:** 3D is the default and the phase 1 numbers are no worse than the 2D baseline.
 
+Status (2026-11-25, 0.17.0):
+- [x] `render3d.js` draws everything `drawScene` does, from the same camera and state: the track, all 22 sectors'
+  obstacle types, chips, the best-distance gate, the ghost, every skin shape (including glitch and rainbow), all six
+  trails, particles, shards, ripples, the sky, sun, mountains and floor grid, plus bloom. Text pops and the binary
+  trail's digits go through `drawOverlay`, a 2D overlay composited before bloom.
+- [x] A side-by-side check of all 22 sectors on the same daily course against the 2D renderer.
+- [x] 3D is the default. `?r=2d`, a failed WebGL setup or a lost context fall back to the 2D renderer.
+- [x] A frame-time probe on the Mac (Metal), at 390×844 and DPR 3, with the CPU throttled 4× to stand in for a
+  phone: p50 and p95 at 16.7 ms, max 16.8 ms, no frame over 33 ms.
+- [ ] The weekly real-device check: 60 fps on an iPhone 12 or newer (Brian).
+- [ ] Delete the 2D scene path one release after the switch. The skin thumbnails stay 2D until phase 3 renders the
+  character.
+- [ ] The style guide (`docs/hyperline/style-guide.md`) and its colour rules. They land with phase 3's art pass.
+
 ## Phase 3: art from Quaternius
 
 Started 2026-11-25. The pipeline (`npm run model`, `lib/rig.js`) and the runner lab (`games/hyperline/lab.html`,

@@ -419,6 +419,32 @@ export function takeoffTicks(objs, rcx) {
   return out;
 }
 
+/* ---------- overlay (both renderers) ---------- */
+function drawPops(c, cam, pops) {
+  for (const pp of pops) {
+    const q = project(cam, pp.x, pp.y + pp.age * 1.6, 0);
+    if (!q) continue;
+    c.globalAlpha = Math.max(0, 1 - pp.age / pp.life);
+    c.font = `700 ${Math.round(pp.size)}px "Chakra Petch",sans-serif`; c.textAlign = 'center';
+    c.lineWidth = 4; c.strokeStyle = 'rgba(7,3,15,.8)'; c.strokeText(pp.text, q.x, q.y);
+    c.fillStyle = pp.col; c.fillText(pp.text, q.x, q.y);
+  }
+  c.globalAlpha = 1;
+}
+/**
+ * What the 3D renderer leaves to 2D: floating text pops and the binary trail's digits, drawn on a cleared,
+ * transparent canvas from the same camera. Returns whether anything was drawn (so the 3D renderer can skip uploading).
+ */
+export function drawOverlay(c, W, H, st) {
+  c.clearRect(0, 0, W, H);
+  const binary = st.trailId === 'binary' && st.trailPts && st.trailPts.length > 1;
+  if (!st.pops.length && !binary) return false;
+  const cam = cameraFor(st, W, H);
+  if (binary) drawTrail(c, cam, 'binary', st.trailPts, st.skin, st.t);
+  drawPops(c, cam, st.pops);
+  return true;
+}
+
 /* ---------- scene ---------- */
 const STARS = Array.from({ length: 80 }, (_, i) => {
   const h = (k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
@@ -723,16 +749,7 @@ export function drawScene(c, W, H, st) {
   c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
   drawShards(c, cam, st.shards, st.skin, t);
 
-  // floating text pops
-  for (const pp of st.pops) {
-    const q = project(cam, pp.x, pp.y + pp.age * 1.6, 0);
-    if (!q) continue;
-    c.globalAlpha = Math.max(0, 1 - pp.age / pp.life);
-    c.font = `700 ${Math.round(pp.size)}px "Chakra Petch",sans-serif`; c.textAlign = 'center';
-    c.lineWidth = 4; c.strokeStyle = 'rgba(7,3,15,.8)'; c.strokeText(pp.text, q.x, q.y);
-    c.fillStyle = pp.col; c.fillText(pp.text, q.x, q.y);
-  }
-  c.globalAlpha = 1;
+  drawPops(c, cam, st.pops);
 
   // speed lines at the edges once things get fast
   if (!st.reduced && st.speed > 10.5 && st.showRunner) {

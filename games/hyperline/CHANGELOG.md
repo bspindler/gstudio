@@ -2,6 +2,11 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.17.0 (2026-11-25)
+- A new 3D renderer: the track, every obstacle, the runner, the sky, the sun and the mountains are now drawn as a real
+  lit 3D scene with neon edges, depth fog, a glowing floor grid and bloom. The gameplay is exactly the same. Phones
+  without WebGL keep the previous look, and `?r=2d` forces it.
+
 ## 0.16.0 (2026-11-25)
 - Three near misses in a row trigger a brief slow-motion beat.
 - The camera now kicks up on take-off, dips on landing (more for a bigger fall), and widens a little as you speed up.
