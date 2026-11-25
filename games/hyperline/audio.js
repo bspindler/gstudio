@@ -94,6 +94,8 @@ export function createAudio() {
       tone(1568, 0.07, { type: 'square', vol: 0.05, at: c.currentTime });
       tone(2349, 0.11, { type: 'square', vol: 0.05, at: c.currentTime + 0.06 });
     },
+    /** Landing thud: freq from landPitch (lower for a longer fall). */
+    land(freq) { tone(freq, 0.12, { type: 'sine', to: freq * 0.55, vol: 0.22 }); hiss(0.06, { vol: 0.06, f0: 900, f1: 200, type: 'lowpass', q: 0.7 }); },
     flip() { tone(300, 0.25, { type: 'sine', to: 900, vol: 0.14 }); },
     death() {
       hiss(0.5, { vol: 0.45, f0: 3000, f1: 80, type: 'lowpass', q: 0.8 });

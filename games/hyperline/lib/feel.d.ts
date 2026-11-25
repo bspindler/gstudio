@@ -1,0 +1,11 @@
+export const SLOWMO: { chain: number; scale: number; dur: number };
+export function nearChain(chain: number, events: { t: string }[]): { chain: number; slow: boolean };
+export type Spring = { y: number; v: number };
+export function springStep(s: Spring, dt: number): Spring;
+export function kick(s: Spring, impulse: number): Spring;
+export const KICK_JUMP: number;
+export function kickLand(fall: number): number;
+export function fovFor(speed: number | undefined, landscape: boolean): number;
+export function landPitch(fall: number): number;
+export const MAGNET_R: number;
+export function magnetPull(dx: number, dy: number): number;

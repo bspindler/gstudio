@@ -2,6 +2,13 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.16.0 (2026-11-25)
+- Three near misses in a row trigger a brief slow-motion beat.
+- The camera now kicks up on take-off, dips on landing (more for a bigger fall), and widens a little as you speed up.
+- Landings have a thud that gets deeper the further you fall.
+- Chips just ahead of you slide toward the runner, and the chip counter pops with each pickup.
+- Your first free Neon Crate now comes on your 2nd run, then every 5 runs as before.
+
 ## 0.15.0 (2026-11-25)
 - Run again is now the big first button on the wreck screen and drops you straight into a new run: one tap, no ready screen. The full breakdown and missions sit under "Run details".
 - Coyote time: a tap up to 80 ms after you run off an edge still jumps.

@@ -37,15 +37,19 @@ Shipped in 0.15.0:
 - [x] Nothing paid before run 4 and 2 minutes of play (`paidOffersOpen` in `lib/meta.js`). The credits revive is
   always listed first.
 
+Shipped in 0.16.0:
+- [x] A 0.3× slow-motion moment for 300 ms on three near-miss clears in a row (`lib/feel.js`; world time only, and
+  the simulation stays at a fixed step).
+- [x] Camera: a spring kick up on jump and a dip on landing scaled by fall height, plus up to +6° FOV at top speed.
+  The kick is off with reduced motion.
+- [x] A landing thud whose pitch follows the fall height (with a light haptic where supported), chips that are drawn
+  sliding toward the runner, and a pop on the chip counter.
+- [x] A reward by run 2: the first Neon Crate comes on run 2, then every 5th run (`crateDue` in `lib/meta.js`).
+
 Still to do in this phase:
-- [ ] A 0.3× slow-motion moment for 300 ms on a streak of three near misses (render time only; the simulation stays
-  at a fixed step).
-- [ ] Camera: an upward kick on jump, lag and settle on landing, and a slight FOV widening as speed rises.
-- [ ] A landing thud whose pitch follows the fall height, and chips that pull toward the runner as they're collected.
-- [ ] A reward by run 2. The first Neon Crate comes on run 2 (it now comes on run 5), and the regular every-5-runs
-  rhythm continues after it.
 - [ ] Hal: freeze new Hyperline sectors. Point the planner's Hyperline backlog at this plan's open items instead of
   content. **This needs Brian's OK**, because it changes what Hal works on every night.
+- [ ] A 10-minute session of 0.16.0 on Brian's iPhone.
 
 **Done when:** every item is checked off, the full test suite is green, and one 10-minute session on Brian's iPhone
 turns up no regressions.

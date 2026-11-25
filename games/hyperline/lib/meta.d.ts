@@ -27,6 +27,8 @@ export function missionById(id: string): Mission | undefined;
 export function missionProgress(m: Mission, s: RunStats): number;
 export function checkMissions(active: string[], s: RunStats): string[];
 export function rollMission(seq: number, active: string[]): { id: string; seq: number };
+export function crateDue(runs: number): boolean;
+export function runsToNextCrate(runs: number): number;
 export const PAID_MIN_RUNS: number;
 export const PAID_MIN_PLAY_S: number;
 export function paidOffersOpen(s: { runs: number; playS: number }): boolean;

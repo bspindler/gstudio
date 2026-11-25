@@ -7,6 +7,7 @@ import { clipToNear, faceNormal, makeCamera, MESHES, project, rotateXYZ, toView 
 import { blockX, moverH, railLit } from './lib/sim.js';
 import { bladeX, pitEnd } from './lib/course.js';
 import { bestMarkShimmer } from './lib/ghost.js';
+import { fovFor, magnetPull } from './lib/feel.js';
 import { AIR, BAR_H, CEIL_Y, PS, SECTOR_LEN, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 
 /* ---------- bloom presenter (three.js, shared core copy) ---------- */
@@ -427,9 +428,10 @@ const hash = (i, k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.54
 
 export function cameraFor(st, W, H) {
   const rx = st.rx, f = st.flipT;
-  const eye = [rx - 5.6 + st.shakeX, 3.1 + st.lift - f * 1.5 + st.shakeY, 2.5];
-  const target = [rx + 6.5, 0.55 + st.lift * 0.85 + f * 2.4, -0.25];
-  return makeCamera(eye, target, W > H ? 50 : 64, W, H);
+  const k = st.kick || 0; // camera spring: up on take-off, a dip on landing
+  const eye = [rx - 5.6 + st.shakeX, 3.1 + st.lift - f * 1.5 + st.shakeY + k, 2.5];
+  const target = [rx + 6.5, 0.55 + st.lift * 0.85 + f * 2.4 + k * 0.6, -0.25];
+  return makeCamera(eye, target, fovFor(st.speed, W > H), W, H);
 }
 
 /**
@@ -649,7 +651,9 @@ export function drawScene(c, W, H, st) {
       } }); break;
       case 'chip': if (!o.got) dr.push({ z: depth(o.x, o.y, 0), f: () => {
         c.globalAlpha = fade;
-        mesh(c, cam, MESHES.octa, [o.x, o.y, 0], [0.34, 0.5, 0.34], [0, t * 3 + o.x, 0], '#FFE45C', '#FF9F1C');
+        // chip magnet (drawn only): chips just ahead slide toward the runner before the pickup
+        const rr = st.runner, mx = rr.x + PS / 2, my = rr.y + PS / 2, pull = st.reduced ? 0 : magnetPull(o.x - mx, o.y - my);
+        mesh(c, cam, MESHES.octa, [o.x + (mx - o.x) * pull, o.y + (my - o.y) * pull, 0], [0.34, 0.5, 0.34], [0, t * 3 + o.x, 0], '#FFE45C', '#FF9F1C');
       } }); break;
     }
   }

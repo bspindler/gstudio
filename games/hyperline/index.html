@@ -116,6 +116,9 @@ h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:u
 .panel{background:var(--night);border:1px solid var(--edge);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .btn{border:0;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px;letter-spacing:.04em;cursor:pointer;background:var(--cyan);color:var(--void);box-shadow:0 0 16px rgba(34,240,255,.45);white-space:nowrap}
 .btn.buy{background:var(--pink);color:var(--void);box-shadow:0 0 16px rgba(255,43,214,.5)}
+.pop{display:inline-block;animation:chippop .22s ease-out}
+@keyframes chippop{0%{transform:scale(1.5)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.pop{animation:none}}
 .btn.retry{width:100%;padding:18px 16px;font-size:20px;letter-spacing:.08em}
 .runsum{width:100%;text-align:left}
 .runsum summary{cursor:pointer;color:var(--dim);font-size:13px;font-weight:600;padding:6px 0}
@@ -244,12 +247,13 @@ import { createCourse, extendCourse, pruneCourse } from './lib/course.js';
 import { createRunner, step } from './lib/sim.js';
 import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
-import { applyEvent, checkMissions, chipMultiplier, clampStart, isPractice, sectorFromSearch, migrateSave, paidOffersOpen, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
+import { applyEvent, checkMissions, chipMultiplier, clampStart, crateDue, isPractice, runsToNextCrate, sectorFromSearch, migrateSave, paidOffersOpen, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
 import { createBloom, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
 import { createAudio } from './audio.js';
+import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.15.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.16.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -295,7 +299,7 @@ const CATALOG = {
 const CREDIT_GRANT = { stack: 500, vault: 3000 };
 const price = (item) => `$${item.priceUsd.toFixed(2)}`;
 
-/* Neon Crate odds. Crates are earned from play only (one every CRATE_EVERY runs), never sold.
+/* Neon Crate odds. Crates are earned from play only (run 2, then every CRATE_EVERY runs: crateDue), never sold.
    Each tier's share is split evenly across its skins; weights sum to 1. */
 const TIER = { common: 0.62, rare: 0.30, epic: 0.08 };
 const CRATE_POOL = SKINS.filter((s) => s.src === 'crate');
@@ -339,6 +343,7 @@ function showModal(h) { mcard.innerHTML = h; modal.hidden = false; paintThumbs(m
 const closeModal = () => { modal.hidden = true; };
 function cred() { $('credCount').textContent = S.credits.toLocaleString(); $('shopDot').hidden = !S.crates; }
 const fmt = (n) => Math.floor(n).toLocaleString();
+function popChip() { const e = $('chipTxt'); e.classList.remove('pop'); void e.offsetWidth; e.classList.add('pop'); }
 const buzz = (p) => { if (S.settings.haptics) try { navigator.vibrate && navigator.vibrate(p); } catch (e) { /* unsupported */ } };
 
 function paintCanvas(cv, t) {
@@ -418,7 +423,7 @@ function runnerAt(start) { const r = createRunner(); r.x += sectorStart(start); 
 function reset() {
   const start = startFor(S.mode);
   G = { state: 'ready', mode: S.mode, start, course: makeCourse(S.mode, start), runner: runnerAt(start), stats: newRunStats(S.mode, start), simT: 0, acc: 0,
-    t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], ripples: [], lightTrail: [], shards: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false,
+    t: G ? G.t : 0, shake: 0, flash: 0, parts: [], pops: [], ripples: [], lightTrail: [], shards: [], trail: [], buf: 0, cont: false, awarded: 0, run: 0, counted: false, cam: { y: 0, v: 0 }, chain: 0, slow: 0, peak: null,
     blink: 0, lift: 0, flipT: 0, doneM: [], ghost: null, rec: null, day: today(), trailTick: 0 };
   $('ready').hidden = false; $('paused').hidden = true; $('pauseBtn').hidden = true;
   renderReady(); hud();
@@ -462,20 +467,26 @@ function simStep() {
   if (G.buf > 0) G.buf -= STEP;
   const ev = step(r, G.course, jump);
   G.simT += STEP; S.playS += STEP;
+  const nc = nearChain(G.chain, ev); G.chain = nc.chain;
+  if (nc.slow) G.slow = SLOWMO.dur; // three near misses in a row: a brief slow-motion beat
+  if (!r.grounded) G.peak = G.peak === null ? r.y : r.flip ? Math.min(G.peak, r.y) : Math.max(G.peak, r.y);
   recordGhost(G.rec, G.simT, r.x, r.y, r.flip);
   const cxw = r.x + PS / 2, cyw = r.y + PS / 2, sk = SK[S.eq];
   for (const e of ev) {
     switch (e.t) {
-      case 'jump': G.buf = 0; G.squash = -1; audio.jump(); spawn(cxw, r.flip ? r.y + PS : r.y, 5, '#FFFFFF', 3, 0.25, 0.08); break;
-      case 'land':
+      case 'jump': G.buf = 0; G.squash = -1; audio.jump(); if (!reduced) G.cam = kick(G.cam, KICK_JUMP); spawn(cxw, r.flip ? r.y + PS : r.y, 5, '#FFFFFF', 3, 0.25, 0.08); break;
+      case 'land': {
+        const fall = G.peak === null ? 0 : Math.abs(G.peak - r.y); G.peak = null;
+        audio.land(landPitch(fall)); buzz(fall > 2 ? 18 : 8);
+        if (!reduced) G.cam = kick(G.cam, kickLand(fall));
         G.squash = 1;
         spawn(cxw, r.flip ? r.y + PS : r.y, 7, sk.a, 4, 0.3, 0.1);
         G.ripples.push({ x: cxw, flip: r.flip, age: 0 }); if (G.ripples.length > 4) G.ripples.shift();
         if (e.spikes >= 3) pop(`${e.spikes} IN ONE JUMP`, cxw, cyw + 0.8, '#7CFF6B', 16);
-        G.stats = applyEvent(G.stats, e); break;
+        G.stats = applyEvent(G.stats, e); break; }
       case 'chip': {
         const before = chipMultiplier(G.stats.streak);
-        G.stats = applyEvent(G.stats, e); audio.chip(G.stats.streak);
+        G.stats = applyEvent(G.stats, e); audio.chip(G.stats.streak); popChip();
         spawn(e.x, e.y, 10, '#FFE45C', 5, 0.4, 0.1);
         const m = chipMultiplier(G.stats.streak);
         if (m > before) { pop(`STREAK x${m}`, e.x, e.y + 0.6, '#FFE45C', 18); buzz(15); }
@@ -550,7 +561,7 @@ function showDeath() {
     recordRun(G.run || 0, dist);
   }
   let crate = false;
-  if (!G.counted) { G.counted = true; if (S.runs % CRATE_EVERY === 0) { S.crates++; crate = true; } }
+  if (!G.counted) { G.counted = true; if (crateDue(S.runs)) { S.crates++; crate = true; } }
   const apex = !practice && !S.owned.apex && dist >= APEX_AT; if (apex) S.owned.apex = 1;
   // Swap completed missions for the next ones in the list.
   const done = G.doneM.map((id) => missionById(id));
@@ -578,7 +589,7 @@ function missionRows(stats, fresh = []) {
 }
 function deathScreen(d) {
   lastDeath = d;
-  const st = G.stats, daily = G.mode === 'daily', gap = d.prevBest - d.dist, toNext = CRATE_EVERY - (S.runs % CRATE_EVERY);
+  const st = G.stats, daily = G.mode === 'daily', gap = d.prevBest - d.dist, toNext = runsToNextCrate(S.runs);
   const secName = sectorInfo(st.sector - 1).name;
   const practice = isPractice(st), distCr = Math.floor(Math.max(0, st.dist - st.from) / 5);
   const credRevive = G.cont ? '' : `<button class="btn ghost" data-act="revive-cr" ${S.credits < REVIVE_CR ? 'disabled' : ''}>Revive · ${REVIVE_CR} credits</button>`;
@@ -618,7 +629,7 @@ function revive() {
   const gone = new Set(G.course.objs.filter((o) => o.t !== 'chip' && o.x < b && o.x + (o.w || 0.8) > a).map((o) => o.g));
   G.course.objs = G.course.objs.filter((o) => !gone.has(o.g));
   Object.assign(r, { y: 0, vy: 0, grounded: true, flip: false, dead: '', rot: 0, air: 0, coy: 0 });
-  G.state = 'run'; G.blink = 1.4; G.acc = 0; pressed = false;
+  G.state = 'run'; G.blink = 1.4; G.acc = 0; G.peak = null; G.chain = 0; G.slow = 0; pressed = false;
   $('pauseBtn').hidden = false;
   closeModal(); audio.startBeat(G.stats.sector - 1);
 }
@@ -660,9 +671,13 @@ function renderReady() {
   $('readyMissions').innerHTML = `<h4>Missions</h4>${missionRows(null)}`;
 }
 
-function update(dt) {
+function update(rdt) {
+  if (G.hitstop > 0) { G.hitstop -= rdt; G.t += rdt; return; }
+  // Slow motion scales world time; the sim still advances in fixed STEPs, so a run replays the same.
+  const slowK = G.slow > 0 ? SLOWMO.scale : 1, dt = rdt * slowK;
+  G.slow = Math.max(0, G.slow - rdt);
+  G.cam = springStep(G.cam, Math.min(rdt, 1 / 30));
   G.t += dt;
-  if (G.hitstop > 0) { G.hitstop -= dt; return; }
   const k = 1 - Math.exp(-dt * 6);
   for (const p of G.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.vy -= 9 * dt; p.life -= dt; }
   G.parts = G.parts.filter((p) => p.life > 0);
@@ -699,7 +714,7 @@ function draw() {
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
     ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, shards: reduced ? [] : G.shards, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
-    reduced, speed: speedAt(r.x), showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
+    reduced, speed: speedAt(r.x), kick: reduced ? 0 : G.cam.y, showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   });
   if (bloom) bloom.present(); else if (out2d) out2d.drawImage(src, 0, 0);
 }
@@ -730,7 +745,7 @@ function buyBtn(key, label) {
   return passed.has(key) ? '<span class="fine">Not now</span>' : `<button class="btn buy" data-act="buy" data-item="${key}">${label || price(CATALOG[key])}</button>`;
 }
 function renderShop() {
-  const own = !!S.owned.serpent, toNext = CRATE_EVERY - (S.runs % CRATE_EVERY);
+  const own = !!S.owned.serpent, toNext = runsToNextCrate(S.runs);
   $('view-shop').innerHTML = `
   <div class="panel hero">
     <span class="eyebrow">Featured skin</span>
@@ -739,7 +754,7 @@ function renderShop() {
       <p class="muted">Color-shifting hex prism with a rainbow sheen. You get exactly this skin.</p></div></div>
     <div class="row">${own ? '<button class="btn" data-act="flex" data-skin="serpent">Show flex card</button>' : buyBtn('serpent', `Get Chrome Serpent · ${price(CATALOG.serpent)}`)}</div>
   </div>
-  <div class="panel"><div class="offer">${thumb('glitch', 56, true)}<div class="txt"><div class="t">Neon Crate${S.crates ? ` · ${S.crates} ready` : ''}</div><div class="muted">Earned from play, never sold: one free crate every ${CRATE_EVERY} runs.${S.crates ? '' : ` Next in ${toNext} run${toNext > 1 ? 's' : ''}.`}</div></div><button class="btn" data-act="crate" ${S.crates ? '' : 'disabled'}>Open</button></div>
+  <div class="panel"><div class="offer">${thumb('glitch', 56, true)}<div class="txt"><div class="t">Neon Crate${S.crates ? ` · ${S.crates} ready` : ''}</div><div class="muted">Earned from play, never sold: a free crate on your 2nd run, then every ${CRATE_EVERY} runs.${S.crates ? '' : ` Next in ${toNext} run${toNext > 1 ? 's' : ''}.`}</div></div><button class="btn" data-act="crate" ${S.crates ? '' : 'disabled'}>Open</button></div>
     <p class="fine">Odds: ${oddsTxt()}</p></div>
   <div class="panel"><h3>Your top runs</h3>${topRows()}<p class="fine">Reach ${fmt(APEX_AT)}m in one run to unlock the exclusive <b style="color:var(--lime)">Apex</b> skin. It can't be bought.</p></div>
   <div class="panel"><h3>Credits</h3><p class="muted">Use credits to revive, or to unlock a specific skin or trail from your locker.</p>
@@ -862,7 +877,7 @@ document.addEventListener('click', async (e) => {
       if (k === 'music') { audio.setMusic(S.settings.music); if (S.settings.music && G.state === 'run') audio.startBeat(G.stats.sector - 1); }
       if (k === 'haptics' && S.settings.haptics) buzz(20);
       break; }
-    case 'crate': if (!S.crates) { toast(`Crates are earned: one every ${CRATE_EVERY} runs`); break; }
+    case 'crate': if (!S.crates) { toast(`Crates are earned: on your 2nd run, then every ${CRATE_EVERY} runs`); break; }
       showModal(`<div class="eyebrow">Neon Crate</div><button class="crate" data-act="crack" aria-label="Open the crate">${CRATE_SVG}</button><p class="muted">Tap to crack it open</p><p class="fine">Odds: ${oddsTxt()}</p>`); break;
     case 'crack': if (!S.crates) break; S.crates--; S.opened++; save(); b.classList.add('crack'); b.disabled = true;
       setTimeout(() => { const r = rollCrate(); refresh(); showPull(r.s, r.dup); }, 480); break;

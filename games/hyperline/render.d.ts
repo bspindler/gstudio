@@ -22,7 +22,7 @@ export function takeoffTicks(objs: any[], rcx: number): { x: number; a: number }
 export function makeShards(x: number, y: number, n: number, rand: () => number): Shard[];
 
 export function cameraFor(
-  st: { rx: number; lift: number; flipT: number; shakeX: number; shakeY: number },
+  st: { rx: number; lift: number; flipT: number; shakeX: number; shakeY: number; kick?: number; speed?: number },
   W: number,
   H: number,
 ): Camera;

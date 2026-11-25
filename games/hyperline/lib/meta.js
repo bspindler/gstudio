@@ -105,6 +105,12 @@ export function rollMission(seq, active) {
   return { id: MISSIONS[seq % n].id, seq: seq + 1 };
 }
 
+/* ---------- earned crates ---------- */
+
+/** A free Neon Crate on run 2 (a reward early in the first session), then on every 5th run. */
+export function crateDue(runs) { return runs === 2 || (runs > 0 && runs % 5 === 0); }
+export function runsToNextCrate(runs) { let k = 1; while (!crateDue(runs + k)) k++; return k; }
+
 /* ---------- paid offers ---------- */
 
 /** Nothing paid is offered before run PAID_MIN_RUNS and PAID_MIN_PLAY_S seconds of total play. */
