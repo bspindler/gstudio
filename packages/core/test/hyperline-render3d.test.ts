@@ -73,3 +73,24 @@ describe('hyperline art pass (quality plan phase 3, docs/hyperline/style-guide.m
     expect(html).not.toContain('hex prism');
   });
 });
+
+describe('hyperline street row: Downtown City MegaKit buildings (Brian, 2026-11-25)', async () => {
+  const { CITY, CITY_LOT } = await import('../../../games/hyperline/render3d.js');
+  it('three buildings, each lean (no interiors or ornamental trim) and with real glass for the windows', async () => {
+    expect(Object.keys(CITY)).toEqual(['large', 'medium', 'small']);
+    for (const load of Object.values(CITY)) {
+      const data = (await load()).default as { tris: number; meshes: { prims: { mat: string }[] }[] };
+      const mats = data.meshes.flatMap((m) => m.prims.map((p) => p.mat));
+      expect(data.tris).toBeLessThan(8000);
+      expect(mats.some((m) => /glass/i.test(m))).toBe(true);
+      expect(mats.some((m) => /interior/i.test(m))).toBe(false);
+    }
+  });
+
+  it('lots line both sides of the track, from just behind the camera to the fog; whole windows light together', () => {
+    expect(CITY_LOT).toBeGreaterThan(10);
+    expect(src).toMatch(/const l0 = Math\.floor\(\(rx - 12\) \/ CITY_LOT\), l1 = Math\.floor\(\(rx \+ 100\) \/ CITY_LOT\)/);
+    expect(src).toMatch(/for \(const side of \[-1, 1\]\)/);
+    expect(src).toMatch(/function paneRandoms\(g\)/);
+  });
+});

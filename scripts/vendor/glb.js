@@ -104,9 +104,11 @@ export function extractRig(g, opts = { clips: [] }) {
     };
   };
   // Every mesh in the file: skinned ones deform with their skin, the rest ride rigidly on their node (robot parts).
+  const matName = (p) => (p.material !== undefined ? J.materials[p.material].name || `mat${p.material}` : 'default');
+  const keepPrim = (p) => !(opts.dropMats && opts.dropMats.test(matName(p)));
   const meshes = J.nodes.flatMap((n, node) => (n.mesh === undefined ? [] : [{
-    node, skin: n.skin ?? -1, prims: J.meshes[n.mesh].primitives.map((p) => prim(p, n.skin !== undefined)) }]));
-  if (!meshes.length) throw new Error('glb: no meshes');
+    node, skin: n.skin ?? -1, prims: J.meshes[n.mesh].primitives.filter(keepPrim).map((p) => prim(p, n.skin !== undefined)) }])).filter((m) => m.prims.length);
+  if (!meshes.length && !opts.dropMats) throw new Error('glb: no meshes');
   const skins = (J.skins || []).map((k) => ({ joints: k.joints, ibm: b64(Float32Array, read(g, k.inverseBindMatrices)) }));
   const byName = new Map(nodes.map((n, i) => [n.name, i]));
   const clips = [];

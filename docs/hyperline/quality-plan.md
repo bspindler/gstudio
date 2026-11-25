@@ -150,7 +150,10 @@ Status (2026-11-25, 0.18.0):
 - [x] Runner: the robot was compared with the Universal Base Characters heroes in the lab. The game now runs a hero,
   M or F as the player picks (0.20.0). Skins are outfits painted onto the body (`outfit3d.js`, style guide). Models
   are quantized and their clips optimized, so each body is about 230 KB gzipped and loads only when it's picked.
-- [ ] Swap City MegaKit buildings into the skyline (the pack is downloaded).
+- [x] City MegaKit buildings form a street row along the track (0.22.0). There are three buildings, interiors and
+  ornamental trim stripped (4–7k triangles each), with whole windows lit in the theme colours. The code-built towers
+  stand behind as the far skyline. A full view is about 100–113k triangles, under the 150k budget; check it on the
+  iPhone.
 
 **Done when:** three phone screenshots, set beside three reference-game screenshots, get 4 out of 5 or better from at
 least 3 of 5 testers (the visual row of the bar).

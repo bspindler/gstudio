@@ -2,6 +2,11 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.22.0 (2026-11-25)
+- A real city street now lines the track: brick buildings with columns, cornices and window frames, their windows
+  lit in each theme's colours, and neon signs on the walls as you approach. The tall towers now stand behind them as
+  the skyline.
+
 ## 0.21.0 (2026-11-25)
 - Outfits now come with hair and accessories:
   - Track Suit, Courier, Vaporwave and Glitch show hair, neon shades and your skin tone (pick one of five in the Locker).

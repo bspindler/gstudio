@@ -14,7 +14,7 @@ const load = (f: string): Glb => (f.endsWith('.gltf') ? parseGltf(readFileSync(f
 
 const { values: o, positionals } = parseArgs({
   allowPositionals: true,
-  options: { list: { type: 'boolean' }, clips: { type: 'string' }, attach: { type: 'string' }, to: { type: 'string' }, pick: { type: 'string' }, out: { type: 'string' },
+  options: { list: { type: 'boolean' }, clips: { type: 'string' }, attach: { type: 'string' }, to: { type: 'string' }, drop: { type: 'string' }, pick: { type: 'string' }, out: { type: 'string' },
     source: { type: 'string' }, license: { type: 'string' } },
 });
 const file = positionals[0];
@@ -46,7 +46,7 @@ if (o.attach) {
 }
 const pick = Object.fromEntries((o.pick || '').split(',').filter(Boolean).map((kv) => kv.split('=') as [string, string]));
 const clips = o.clips ? [{ from: load(o.clips), pick }] : Object.keys(pick).length ? [{ from: model, pick }] : [];
-const rig = extractRig(model, { clips, optimize: true, quantize: true });
+const rig = extractRig(model, { clips, optimize: true, quantize: true, ...(o.drop ? { dropMats: new RegExp(o.drop) } : {}) });
 const src = toModuleSource(rig, { source: o.source, license: o.license });
 writeFileSync(o.out, src);
 console.log(`${o.out}: ${(src.length / 1024).toFixed(0)} KB, ${rig.tris} triangles, ${rig.meshes.length} meshes, clips ${rig.clips.map((c) => c.name).join(', ')}`);

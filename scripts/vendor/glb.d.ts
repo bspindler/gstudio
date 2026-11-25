@@ -8,7 +8,7 @@ export type RigClip = { name: string; dur: number; tracks: RigTrack[] };
 export type RigData = { nodes: RigNode[]; meshes: RigMesh[]; skins: RigSkin[]; clips: RigClip[]; tris: number };
 export function parseGltf(text: string, readUri: (uri: string) => Uint8Array): Glb;
 export function parseGlb(bytes: Uint8Array | ArrayBuffer): Glb;
-export function extractRig(g: Glb, opts?: { clips?: { from: Glb; pick: Record<string, string> }[]; optimize?: boolean; quantize?: boolean }): RigData;
+export function extractRig(g: Glb, opts?: { clips?: { from: Glb; pick: Record<string, string> }[]; optimize?: boolean; quantize?: boolean; dropMats?: RegExp }): RigData;
 export function reduceKeys(times: number[], values: number[], stride: number, eps: number): { times: number[]; values: number[] };
 export type Attachment = { attach: string; prims: RigPrim[]; tris: number };
 export function attachPrims(part: Glb, body: Glb, bone: string, opts?: { quantize?: boolean }): Attachment;

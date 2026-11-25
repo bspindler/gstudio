@@ -183,6 +183,14 @@ describe('glb: parse and extract a skinned rig (offline, scripts/vendor)', () =>
     expect(() => attachPrims(parseGlb(part), parseGlb(model), 'Nope', {})).toThrow(/Nope/);
   });
 
+  it('dropMats leaves out primitives whose material matches (interiors, heavy trim)', () => {
+    const all = extractRig(parseGlb(model), { clips: [] });
+    expect(all.meshes[0]!.prims.map((p) => p.mat)).toEqual(['Suit']);
+    const none = extractRig(parseGlb(model), { clips: [], dropMats: /^Suit$/ });
+    expect(none.meshes).toEqual([]);
+    expect(none.tris).toBe(0);
+  });
+
   it('keyframe reduction keeps the ends and every key that interpolation cannot reproduce', () => {
     // a straight line in 5 keys collapses to its ends; a bend keeps the corner
     expect(reduceKeys([0, 1, 2, 3, 4], [0, 1, 2, 3, 4], 1, 1e-4)).toEqual({ times: [0, 4], values: [0, 4] });

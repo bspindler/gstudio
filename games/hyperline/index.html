@@ -259,8 +259,8 @@ import { SKIN_TONES } from './gear3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const VERSION = '0.21.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
-const studio = createStudio({ game: 'hyperline', version: '0.21.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const VERSION = '0.22.0'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
+const studio = createStudio({ game: 'hyperline', version: '0.22.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');

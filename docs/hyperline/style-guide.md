@@ -31,8 +31,12 @@ before the runner reaches it:
 1. The sky gradient, then stars.
 2. The sun, with synthwave cuts across it.
 3. A mountain silhouette with a neon ridge line.
-4. **The skyline:** instanced towers on both sides of the track, with lit windows and the odd neon sign. Because it is
-   real 3D, the towers stream past at running speed and give the scene its sense of speed.
+4. **The skyline:**
+   - **The street row:** Quaternius Downtown City MegaKit buildings (CC0) line both sides of the track, facing it,
+     one to a lot. The walls take the theme's facade colour, and the real glass panes light up whole windows at random
+     in the theme's window colours. Neon signs hang on the side walls that face the runner. Because it is real 3D, the
+     buildings stream past at running speed.
+   - **The towers:** taller code-built towers with lit windows stand behind the street row as the far skyline.
 5. The floor grid, fading into the horizon fog.
 6. The track and the playfield.
 

@@ -24,6 +24,10 @@ const { safe: SAFE, hazard: HAZ, live: LIVE, gold: GOLD } = STYLE;
  * runner setting draws it HERO.large units tall (the hitbox never changes), and it ducks into a crouch under low ceilings.
  */
 export const HERO = { height: 0.95, large: 1.5 };
+/** Street-level buildings: Quaternius Downtown City MegaKit (CC0), interiors and ornamental trim left out. */
+export const CITY = { large: () => import('./models/city/large.js'), medium: () => import('./models/city/medium.js'), small: () => import('./models/city/small.js') };
+/** The street row: one building per lot along each side of the track, facing it, CITY_LOT units apart. */
+export const CITY_LOT = 13;
 /** The bodies, loaded on demand (each module is the hero and its clips). */
 export const BODIES = { m: () => import('./models/hero-male.js'), f: () => import('./models/hero-female.js') };
 /** The outfit a locked skin's thumbnail shows: a dark silhouette. */
@@ -56,7 +60,8 @@ export async function createRenderer3d(canvas, overlay, opts = {}) {
   try {
     const [rig, outfit, gear, body] = await Promise.all([import('./lib/rig.js'), import('./outfit3d.js'), import('./gear3d.js'), (BODIES[opts.body] || BODIES.m)()]);
     const hair = await gear.loadHair(Object.keys(gear.HAIRS)); // small; loaded once so a runner can be dressed at once
-    kit = { buildRig: rig.buildRig, ...outfit, dress: gear.dress, hair, data: body.default, body: BODIES[opts.body] ? opts.body : 'm' };
+    kit = { buildRig: rig.buildRig, decodePrim: rig.decodePrim, decode: rig.decode, ...outfit, dress: gear.dress, hair, data: body.default, body: BODIES[opts.body] ? opts.body : 'm' };
+    try { kit.city = (await Promise.all(Object.values(CITY).map((f) => f()))).map((m) => m.default); } catch { /* code-built towers only */ }
   } catch { /* shapes */ }
   try {
     return build(T, renderer, canvas, overlay, kit);
@@ -374,6 +379,62 @@ function build(T, renderer, canvas, overlay, kit) {
     const m = new T.Mesh(new T.PlaneGeometry(1, 72 / 256), new T.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false, side: T.DoubleSide }));
     m.renderOrder = -4; scene.add(m); return { root: m };
   });
+  // ---------- the street row: Downtown City MegaKit buildings (walls and glass), instanced ----------
+  // Walls: the theme's facade colour, trim a little lighter, lit from the key light; glass: each pane lit or dark at
+  // random in the theme's window colours. Both fog into the horizon like the towers behind.
+  const cityShader = (glass) => new T.ShaderMaterial({
+    uniforms: { facade: { value: new T.Color() }, w0: { value: new T.Color() }, w1: { value: new T.Color() }, fogC: { value: new T.Color() }, eye: { value: new T.Vector3() } },
+    vertexShader: `attribute float shade; varying vec3 vW; varying vec3 vN; varying float vS; flat varying float vId;
+      void main(){ vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(instanceMatrix) * normal); vS = shade; vId = float(gl_InstanceID); gl_Position = projectionMatrix * viewMatrix * w; }`,
+    // glass: shade carries each pane's own random number (panes are found at build time), so whole windows light up
+    fragmentShader: `uniform vec3 facade; uniform vec3 w0; uniform vec3 w1; uniform vec3 fogC; uniform vec3 eye; varying vec3 vW; varying vec3 vN; varying float vS; flat varying float vId;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + vId * 3.17) * 43758.5453); }
+      void main(){
+        vec3 c;
+        ${glass ? `float r = fract(vS * 7.31 + vId * 0.6180339);
+          float on = step(0.42, r); c = mix(vec3(0.03, 0.02, 0.07), mix(w0, w1, step(0.72, fract(r * 13.7))) * 0.95, on);`
+          : `float l = 0.45 + 0.55 * max(0.0, dot(vN, normalize(vec3(-0.45, 0.8, 0.55)))); c = facade * l * mix(1.0, 2.2, vS);`}
+        float d = length(vW - eye);
+        gl_FragColor = vec4(mix(c, fogC, smoothstep(40.0, 150.0, d) * 0.85), 1.0);
+      }`,
+  });
+  const cityFacade = cityShader(false), cityGlass = cityShader(true), CITY_MAX = 12;
+  /** A random number per window: the glass mesh's connected pieces (vertices welded by position), grouped into windows. */
+  function paneRandoms(g) {
+    const pos = g.attributes.position, idx = g.index.array, n = pos.count, parent = new Int32Array(n).map((_, i) => i), weld = new Map();
+    const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    const join = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a] = b; };
+    for (let i = 0; i < n; i++) { const k = `${Math.round(pos.getX(i) * 100)},${Math.round(pos.getY(i) * 100)},${Math.round(pos.getZ(i) * 100)}`; if (weld.has(k)) join(i, weld.get(k)); else weld.set(k, i); }
+    for (let t = 0; t < idx.length; t += 3) { join(idx[t], idx[t + 1]); join(idx[t], idx[t + 2]); }
+    // a window is several panes split by mullions: group pieces by where their centres fall on a window-sized grid
+    // (about 1.6 m wide, one 3.2 m floor tall) so a whole window lights or goes dark together
+    const sum = new Map();
+    for (let i = 0; i < n; i++) { const r = find(i), c = sum.get(r) || [0, 0, 0, 0]; c[0] += pos.getX(i); c[1] += pos.getY(i); c[2] += pos.getZ(i); c[3]++; sum.set(r, c); }
+    const rand = new Map();
+    for (const [r, c] of sum) rand.set(r, hash(Math.floor(c[0] / c[3] / 1.6) * 7.1 + Math.floor(c[2] / c[3] / 1.6) * 3.3, Math.floor(c[1] / c[3] / 3.2) + 31));
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = rand.get(find(i));
+    return out;
+  }
+  /** One building type: merged walls and merged glass, each an InstancedMesh; footprint for placing it. */
+  const cityTypes = (kit && kit.city ? kit.city : []).map((data) => {
+    const walls = [], glass = [];
+    for (const m of data.meshes) for (const p of m.prims) {
+      const d = kit.decodePrim(p), g = new T.BufferGeometry();
+      g.setAttribute('position', new T.BufferAttribute(d.pos, 3)); g.setAttribute('normal', new T.BufferAttribute(d.nrm, 3));
+      g.setIndex(new T.BufferAttribute(kit.decode(p.idx, p.idx32 ? 'u32' : 'u16'), 1));
+      if (/glass/i.test(p.mat)) glass.push(g);
+      else { g.setAttribute('shade', new T.BufferAttribute(new Float32Array(d.pos.length / 3).fill(/trim|concrete/i.test(p.mat) ? 1 : 0), 1)); walls.push(g); }
+    }
+    for (const g of glass) g.setAttribute('shade', new T.BufferAttribute(paneRandoms(g), 1));
+    const merge = (gs) => (gs.length ? T.mergeGeometries(gs) : null);
+    const wg = merge(walls), gg = merge(glass);
+    const box = new T.Box3(); for (const g of [wg, gg]) if (g) { g.computeBoundingBox(); box.union(g.boundingBox); }
+    const mk = (g, mat) => { if (!g) return null; const im = new T.InstancedMesh(g, mat, CITY_MAX); im.frustumCulled = false; im.renderOrder = -5; im.count = 0; scene.add(im); return im; };
+    return { walls: mk(wg, cityFacade), glass: mk(gg, cityGlass), box, n: 0 };
+  });
+  const cityQ = new T.Quaternion(), cityFlip = new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), Math.PI);
+
   const tmpM = new T.Matrix4(), tmpQ = new T.Quaternion(), tmpS = new T.Vector3(), tmpP = new T.Vector3();
   function skyline(rx, theme, reduced) {
     signs.begin();
@@ -381,9 +442,10 @@ function build(T, renderer, canvas, overlay, kit) {
     for (let i = 0; i < TOWERS; i++) {
       const k = k0 + (i >> 1), side = i & 1 ? 1 : -1, seed = k * 2 + (i & 1);
       const hgt = theme.hMin + hash(seed, 3) ** 1.6 * (theme.hMax - theme.hMin), wd = 4 + hash(seed, 4) * 5, dp = 4 + hash(seed, 5) * 5;
-      const z = side * (18 + hash(seed, 6) * 28), x = k * TSPACE + hash(seed, 7) * 3;
-      tmpP.set(x, FLOOR_Y, z); tmpS.set(wd, hgt, dp); tmpM.compose(tmpP, tmpQ, tmpS); towers.setMatrixAt(i, tmpM);
-      if (hash(seed, 8) < 0.3 && x > rx + 8) {
+      const back = cityTypes.length ? 1.45 : 1; // behind the street row, the towers are the taller skyline
+      const z = side * (cityTypes.length ? 34 + hash(seed, 6) * 30 : 18 + hash(seed, 6) * 28), x = k * TSPACE + hash(seed, 7) * 3;
+      tmpP.set(x, FLOOR_Y, z); tmpS.set(wd, hgt * back, dp); tmpM.compose(tmpP, tmpQ, tmpS); towers.setMatrixAt(i, tmpM);
+      if (!cityTypes.length && hash(seed, 8) < 0.3 && x > rx + 8) {
         const sgn = signs.next().root, word = theme.words[Math.floor(hash(seed, 9) * theme.words.length)], c = theme.win[hash(seed, 10) < 0.5 ? 0 : 1];
         sgn.material.map = signTexture(word, c); sgn.material.needsUpdate = sgn.userData.key !== word + c; sgn.userData.key = word + c;
         const sw = Math.min(dp * 0.9, 6);
@@ -393,6 +455,34 @@ function build(T, renderer, canvas, overlay, kit) {
       }
     }
     towers.instanceMatrix.needsUpdate = true;
+
+    // the street row: lots from just behind the camera to the fog, both sides, a kit building on each
+    for (const ct of cityTypes) ct.n = 0;
+    if (cityTypes.length) {
+      const l0 = Math.floor((rx - 12) / CITY_LOT), l1 = Math.floor((rx + 100) / CITY_LOT);
+      for (let k = l0; k <= l1; k++) for (const side of [-1, 1]) {
+        const seed = k * 2 + (side > 0 ? 1 : 0), ct = cityTypes[Math.floor(hash(seed, 21) * cityTypes.length)];
+        if (ct.n >= CITY_MAX || hash(seed, 22) < 0.12) continue; // the odd empty lot
+        const bw = ct.box.max.x - ct.box.min.x, sc = Math.min(0.62, (CITY_LOT - 1.2) / bw) * (0.85 + 0.15 * hash(seed, 23));
+        const cx = -(ct.box.min.x + ct.box.max.x) / 2, dist = 12.5 + hash(seed, 24) * 4;
+        // the front (local z = 0, facing +z) toward the track: as is on the far side, turned round on the near side
+        const q = side < 0 ? cityQ : cityFlip, x = k * CITY_LOT + CITY_LOT / 2;
+        tmpP.set(cx * sc * (side < 0 ? 1 : -1), 0, 0).add(new T.Vector3(x, FLOOR_Y, side * dist));
+        tmpS.set(sc, sc, sc); tmpM.compose(tmpP, q, tmpS);
+        if (ct.walls) ct.walls.setMatrixAt(ct.n, tmpM);
+        if (ct.glass) ct.glass.setMatrixAt(ct.n, tmpM);
+        ct.n++;
+        if (hash(seed, 8) < 0.35 && x > rx + 8) {
+          const sgn = signs.next().root, word = theme.words[Math.floor(hash(seed, 9) * theme.words.length)], c = theme.win[hash(seed, 10) < 0.5 ? 0 : 1];
+          sgn.material.map = signTexture(word, c); sgn.material.needsUpdate = sgn.userData.key !== word + c; sgn.userData.key = word + c;
+          const hgt = (ct.box.max.y - ct.box.min.y) * sc, sw = Math.min(5, (ct.box.max.z - ct.box.min.z) * sc * 0.8);
+          sgn.scale.set(sw, sw, 1); sgn.position.set(x - (bw * sc) / 2 - 0.08, FLOOR_Y + hgt * (0.45 + hash(seed, 11) * 0.35), side * (dist + (ct.box.max.z - ct.box.min.z) * sc * 0.5));
+          sgn.rotation.set(0, -Math.PI / 2, 0); // on the side wall that looks back at the runner
+          sgn.material.opacity = reduced ? 0.85 : 0.75 + 0.25 * (hash(seed, 12) < 0.15 ? Math.abs(Math.sin(rx * 0.9 + seed)) : 1);
+        }
+      }
+    }
+    for (const ct of cityTypes) for (const im of [ct.walls, ct.glass]) if (im) { im.count = ct.n; im.instanceMatrix.needsUpdate = true; }
     signs.end();
   }
 
@@ -507,6 +597,7 @@ function build(T, renderer, canvas, overlay, kit) {
     const theme = themeAt(rx);
     towerMat.uniforms.facade.value.set(theme.facade); towerMat.uniforms.w0.value.set(theme.win[0]); towerMat.uniforms.w1.value.set(theme.win[1]);
     towerMat.uniforms.fogC.value.copy(scene.fog.color); towerMat.uniforms.eye.value.copy(cam.position);
+    for (const m of [cityFacade, cityGlass]) { const u = m.uniforms; u.facade.value.set(theme.facade).multiplyScalar(2.2); u.w0.value.set(theme.win[0]); u.w1.value.set(theme.win[1]); u.fogC.value.copy(scene.fog.color); u.eye.value.copy(cam.position); }
     skyline(rx, theme, st.reduced);
     floor.position.x = Math.floor(rx / 2) * 2; floor.position.z = 0;
     floorMat.uniforms.grid.value.set(pal.grid); floorMat.uniforms.base.value.set(mixHex(pal.sky[2], '#000000', 0.7));

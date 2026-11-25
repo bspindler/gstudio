@@ -10,3 +10,5 @@ export const HERO: { height: number; large: number };
 export const BODIES: { m: () => Promise<{ default: import('../../scripts/vendor/glb.js').RigData }>; f: () => Promise<{ default: import('../../scripts/vendor/glb.js').RigData }> };
 export const THEMES: { name: string; until: number; facade: string; win: string[]; hMin: number; hMax: number; words: string[] }[];
 export function themeAt(x: number): { name: string; until: number; facade: string; win: string[]; hMin: number; hMax: number; words: string[] };
+export const CITY: Record<'large' | 'medium' | 'small', () => Promise<{ default: import('../../scripts/vendor/glb.js').RigData }>>;
+export const CITY_LOT: number;
