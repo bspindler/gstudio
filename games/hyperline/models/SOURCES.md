@@ -5,4 +5,4 @@ models go in the game. Our own materials replace the originals, and morph target
 
 | Module | Model | Author / pack | Licence | Where from |
 | --- | --- | --- | --- | --- |
-| `robot.js` | RobotExpressive (clips: run, jump, death, idle, wave) | Tomás Laulhé (Quaternius); glTF conversion and changes by Don McCurdy | CC0 1.0 | three.js repo, `examples/models/gltf/RobotExpressive/` at r170 (its README states CC0) |
+| `robot.js` (the runner in the game since 0.18.0) | RobotExpressive (clips: run, jump, death, idle, wave) | Tomás Laulhé (Quaternius); glTF conversion and changes by Don McCurdy | CC0 1.0 | three.js repo, `examples/models/gltf/RobotExpressive/` at r170 (its README states CC0) |

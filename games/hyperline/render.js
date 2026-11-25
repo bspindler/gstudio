@@ -252,8 +252,22 @@ function runnerShape(c, cam, sk, pos, rz, t, alpha = 1, wire = false, squash = 0
 
 /* ---------- thumbnails ---------- */
 /** A skin rendered in 3D for the locker, shop and flex card. */
+let thumbFn = null;
+/** The 3D renderer's thumbnail painter (the robot in a skin); null keeps the 2D shapes. */
+export function setThumbRenderer(fn) { thumbFn = fn; }
 export function drawSkinThumb(c, sk, cx, cy, size, t, locked) {
   const Wd = size * 2.2, cam = makeCamera([0, 1.25, 3.85], [0, 0, 0], 30, Wd, Wd);
+  const img = thumbFn ? thumbFn(sk, Math.round(Wd * 2), t, locked) : null;
+  if (img) {
+    c.save(); c.translate(cx - Wd / 2, cy - Wd / 2);
+    if (!locked) {
+      const [a] = skinColors(sk, t), g = c.createRadialGradient(Wd / 2, Wd / 2, 0, Wd / 2, Wd / 2, size * 0.95);
+      g.addColorStop(0, css(rgb(a), 0.4)); g.addColorStop(1, css(rgb(a), 0)); c.fillStyle = g; c.fillRect(0, 0, Wd, Wd);
+    }
+    c.drawImage(img, 0, 0, Wd, Wd);
+    if (locked) { c.fillStyle = '#B6A6F0'; c.font = `700 ${size * 0.55}px "Chakra Petch",sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('?', Wd / 2, Wd / 2 + size * 0.03); }
+    c.restore(); return;
+  }
   c.save(); c.translate(cx - Wd / 2, cy - Wd / 2);
   const rz = 0, spin = 0.65 + t * 0.9;
   if (locked) {

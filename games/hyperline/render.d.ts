@@ -31,3 +31,4 @@ export function paletteAt(x: number): { sky: string[]; sun: string[]; grid: stri
 export function mixHex(a: string, b: string, t: number): string;
 export function skinColors(sk: { a: string; b: string; fx?: string }, t: number): [string, string];
 export function drawOverlay(c: unknown, W: number, H: number, st: any): boolean;
+export function setThumbRenderer(fn: ((sk: unknown, px: number, t: number, locked: boolean) => unknown) | null): void;

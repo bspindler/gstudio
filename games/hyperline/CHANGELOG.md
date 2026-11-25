@@ -2,6 +2,15 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.18.0 (2026-11-25)
+- The runner is now a little neon robot (a CC0 model by Quaternius), running, leaping and riding the ceiling upside
+  down. Its jump pose follows your jump exactly. Every skin now dresses the robot, and the locker and shop show it.
+- A city skyline streams past on both sides, with lit windows and neon signs, in three themes: Neon District, Flip
+  City and Hypercore.
+- Colour now has one meaning everywhere: cyan is safe to land on, magenta is a hazard, red is a hazard that is live
+  right now, and gold is a reward.
+- Speed streaks run along the track edges at top speed.
+
 ## 0.17.0 (2026-11-25)
 - A new 3D renderer: the track, every obstacle, the runner, the sky, the sun and the mountains are now drawn as a real
   lit 3D scene with neon edges, depth fog, a glowing floor grid and bloom. The gameplay is exactly the same. Phones

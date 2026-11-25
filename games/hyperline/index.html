@@ -249,12 +249,12 @@ import { P, PS, STEP, sectorAt, sectorInfo, speedAt } from './lib/world.js';
 import { dailySeed, msToNextUtcDay, utcDay } from './lib/rng.js';
 import { applyEvent, checkMissions, chipMultiplier, clampStart, crateDue, isPractice, runsToNextCrate, sectorFromSearch, migrateSave, paidOffersOpen, sectorStart, missionById, missionProgress, NEAR_CR, newRunStats, rollMission, runCredits } from './lib/meta.js';
 import { bestMarkX, createGhostRecorder, finishGhost, ghostAt, recordGhost, validGhost } from './lib/ghost.js';
-import { createBloom, drawOverlay, drawScene, drawSkinThumb, makeShards, SHARD_LIFE, skinColors } from './render.js';
+import { createBloom, drawOverlay, drawScene, drawSkinThumb, makeShards, setThumbRenderer, SHARD_LIFE, skinColors } from './render.js';
 import { createRenderer3d } from './render3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const studio = createStudio({ game: 'hyperline', version: '0.17.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'hyperline', version: '0.18.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio();
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -274,7 +274,6 @@ const SKINS = [
   { id: 'apex', name: 'Apex', rar: 'exclusive', a: '#FF2BD6', b: '#FFE45C', shape: 'diamond', fx: 'rainbow', src: 'best' },
 ];
 const SK = Object.fromEntries(SKINS.map((s) => [s.id, s]));
-const SHAPE_NAME = { square: 'Cube', circle: 'Sphere', hex: 'Hex prism', diamond: 'Octahedron' };
 const CRATE_EVERY = 5, REVIVE_CR = 150, DUP_BACK = 60, APEX_AT = 1500;
 /* Credits unlock one specific crate skin directly, so nothing random is ever bought. */
 const UNLOCK_CR = { common: 300, rare: 700, epic: 1400 };
@@ -409,7 +408,7 @@ function useFlat() {
   cv.replaceWith(n); cv = n; out2d = cv.getContext('2d'); resize();
 }
 const use2d = () => createBloom(cv, src).then((b) => { if (!b) { useFlat(); return; } bloom = b; b.onLost(useFlat); resize(); }).catch(useFlat);
-if (RMODE !== '2d') createRenderer3d(cv, src).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(useFlat); resize(); }).catch(use2d);
+if (RMODE !== '2d') createRenderer3d(cv, src).then((r) => { if (!r) { use2d(); return; } r3d = r; r.onLost(() => { setThumbRenderer(null); useFlat(); }); setThumbRenderer(r.thumb); paintThumbs(document); resize(); }).catch(use2d);
 else use2d();
 new ResizeObserver(resize).observe(stage);
 
@@ -721,7 +720,7 @@ function draw() {
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
     ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, shards: reduced ? [] : G.shards, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
     shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
-    reduced, speed: speedAt(r.x), kick: reduced ? 0 : G.cam.y, showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
+    reduced, phase: G.state, speed: speedAt(r.x), kick: reduced ? 0 : G.cam.y, showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   };
   if (r3d) { st.overlayDirty = drawOverlay(cx, W, H, st); r3d.render(st); return; }
   drawScene(cx, W, H, st);
@@ -760,7 +759,7 @@ function renderShop() {
     <span class="eyebrow">Featured skin</span>
     <div class="herobody">${thumb('serpent', 120, false, 'id="heroSkin"')}
       <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><div class="heroname">Chrome Serpent</div><span><span class="rar premium">premium</span></span>
-      <p class="muted">Color-shifting hex prism with a rainbow sheen. You get exactly this skin.</p></div></div>
+      <p class="muted">Color-shifting chrome with a rainbow sheen, on your runner and its trim. You get exactly this skin.</p></div></div>
     <div class="row">${own ? '<button class="btn" data-act="flex" data-skin="serpent">Show flex card</button>' : buyBtn('serpent', `Get Chrome Serpent · ${price(CATALOG.serpent)}`)}</div>
   </div>
   <div class="panel"><div class="offer">${thumb('glitch', 56, true)}<div class="txt"><div class="t">Neon Crate${S.crates ? ` · ${S.crates} ready` : ''}</div><div class="muted">Earned from play, never sold: a free crate on your 2nd run, then every ${CRATE_EVERY} runs.${S.crates ? '' : ` Next in ${toNext} run${toNext > 1 ? 's' : ''}.`}</div></div><button class="btn" data-act="crate" ${S.crates ? '' : 'disabled'}>Open</button></div>
@@ -777,7 +776,7 @@ function renderLocker() {
   const srcTxt = { crate: 'Crate or credits', shop: 'In the shop', best: `Run ${fmt(APEX_AT)}m` };
   const body = lockerTab === 'skins'
     ? `<p class="muted">${owned} of ${SKINS.length} skins. Tap one you own to run with it.</p>
-      <div class="grid">${SKINS.map((s) => { const o = S.owned[s.id], eq = S.eq === s.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="skin" data-skin="${s.id}">${thumb(s.id, 64, !o)}<span class="nm">${o ? s.name : '???'}</span><span class="rar ${s.rar}">${s.rar}</span><span class="st">${eq ? 'Equipped' : o ? (o > 1 ? '×' + o : SHAPE_NAME[s.shape]) : srcTxt[s.src]}</span></button>`; }).join('')}</div>`
+      <div class="grid">${SKINS.map((s) => { const o = S.owned[s.id], eq = S.eq === s.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="skin" data-skin="${s.id}">${thumb(s.id, 64, !o)}<span class="nm">${o ? s.name : '???'}</span><span class="rar ${s.rar}">${s.rar}</span><span class="st">${eq ? 'Equipped' : o ? (o > 1 ? '×' + o : 'Tap to equip') : srcTxt[s.src]}</span></button>`; }).join('')}</div>`
     : `<p class="muted">${ownedT} of ${TRAILS.length} trails. Each one unlocks directly with credits: you always get exactly the trail you pick.</p>
       <div class="grid">${TRAILS.map((t) => { const o = S.trails[t.id], eq = S.trail === t.id; return `<button class="skin${eq ? ' eq' : ''}" data-act="trail" data-trail="${t.id}"><canvas data-trail="${t.id}" data-size="64" data-locked="${o ? 0 : 1}"></canvas><span class="nm">${t.name}</span><span class="st">${eq ? 'Equipped' : o ? 'Tap to equip' : `<span class="dia"></span>${t.cost.toLocaleString()}`}</span></button>`; }).join('')}</div>`;
   $('view-locker').innerHTML = `<div><h2>Locker</h2></div>
@@ -940,6 +939,8 @@ function loop(now) {
 // Nothing here touches the network; Hal's browser blocks every request but the local game server.
 if (new URLSearchParams(location.search).has('hal')) {
   window.__hal = {
+    /** The 3D renderer's last frame: draw calls and triangles (null on the 2D renderer). */
+    render3d() { return r3d ? r3d.info() : null; },
     view(x) {
       if (G.state !== 'run' && G.state !== 'paused') startRun();
       extendCourse(G.course, x + 120);

@@ -12,10 +12,22 @@ import { blockX, moverH, railLit } from './lib/sim.js';
 import { bladeX, pitEnd } from './lib/course.js';
 import { bestMarkShimmer } from './lib/ghost.js';
 import { MESHES } from './lib/proj.js';
-import { BAR_H, CEIL_Y, PS, speedAt } from './lib/world.js';
+import { BAR_H, CEIL_Y, GRAV, JV, PS, sectorAt, speedAt } from './lib/world.js';
 import { cameraFor, hueShiftHex, lightTrailAlpha, mixHex, paletteAt, sectorHueShift, shardAlpha, skinColors, squashScale, takeoffTicks } from './render.js';
 
 export const BLOOM3D = { strength: 0.7, radius: 0.45, threshold: 0.68 };
+/** Colour meaning (docs/hyperline/style-guide.md): safe is cyan, hazards magenta (static) or red (live), rewards gold. */
+export const STYLE = { safe: '#22F0FF', safe2: '#2B6BFF', hazard: '#FF2BD6', live: '#FF2B5E', gold: '#FFE45C', gold2: '#FF9F1C' };
+const { safe: SAFE, hazard: HAZ, live: LIVE, gold: GOLD } = STYLE;
+/** The runner: the Quaternius robot, about 0.92 units tall (under a low ceiling's 1.05), mirrored so its left faces the camera. */
+export const ROBOT = { scale: 0.2, jumpFrom: 0.21, jumpHold: 0.33 };
+/** Themes by sector (style guide): towers, window colours and sign words. */
+export const THEMES = [
+  { name: 'Neon District', until: 7, facade: '#0C0618', win: ['#FF2BD6', '#22F0FF'], hMin: 6, hMax: 20, words: ['ARCADE', 'NOODLES', 'OPEN'] },
+  { name: 'Flip City', until: 14, facade: '#05121A', win: ['#22F0FF', '#FFB347'], hMin: 9, hMax: 28, words: ['SYNTH', 'VOLT', '24/7'] },
+  { name: 'Hypercore', until: Infinity, facade: '#0A0A1C', win: ['#FFFFFF', '#B98CFF'], hMin: 12, hMax: 40, words: ['CORE', 'HYPER', 'MAX'] },
+];
+export const themeAt = (x) => { const i = sectorAt(x); return THEMES.find((t) => i < t.until); };
 const TZ = 1.15, FLOOR_Y = -3.2;
 const SHAPE_MESH = { square: 'cube', hex: 'hex', diamond: 'octa' };
 const hash = (i, k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
@@ -29,8 +41,11 @@ export async function createRenderer3d(canvas, overlay) {
   } catch {
     return null;
   }
+  // The runner model; without it the runner falls back to the skin shapes.
+  let robot = null;
+  try { const [m, rig] = await Promise.all([import('./models/robot.js'), import('./lib/rig.js')]); robot = { data: m.default, buildRig: rig.buildRig }; } catch { /* shapes */ }
   try {
-    return build(T, renderer, canvas, overlay);
+    return build(T, renderer, canvas, overlay, robot);
   } catch (e) {
     try { renderer.dispose(); } catch { /* ignore */ }
     console.error('render3d: setup failed', e);
@@ -38,9 +53,10 @@ export async function createRenderer3d(canvas, overlay) {
   }
 }
 
-function build(T, renderer, canvas, overlay) {
+function build(T, renderer, canvas, overlay, robot) {
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.NoToneMapping;
+  renderer.info.autoReset = false; // count the whole frame (scene, overlay and bloom passes), reset in render()
   const scene = new T.Scene();
   scene.fog = new T.Fog(0x000000, 40, 115);
   const cam = new T.PerspectiveCamera(64, 1, 0.1, 600);
@@ -228,6 +244,105 @@ function build(T, renderer, canvas, overlay) {
   const shadow = new T.Mesh(new T.CircleGeometry(1, 24).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false, side: T.DoubleSide }));
   world.add(shadow);
 
+  // ---------- the runner: the Quaternius robot (style guide) ----------
+  const RISE = JV / GRAV; // seconds from take-off to the apex
+  function makeRobot(ghost, parent = world) {
+    if (!robot) return null;
+    const mats = ghost ? null : {
+      Main: new T.MeshStandardMaterial({ roughness: 0.35, metalness: 0.2, transparent: true }),
+      Grey: new T.MeshStandardMaterial({ color: '#2A2440', roughness: 0.3, metalness: 0.8, transparent: true }),
+      Black: new T.MeshStandardMaterial({ color: '#05030A', roughness: 0.5, metalness: 0.4, transparent: true }),
+    };
+    const ghostMat = ghost ? new T.MeshBasicMaterial({ color: SAFE, transparent: true, opacity: 0.3, wireframe: true, depthWrite: false, toneMapped: false }) : null;
+    const rig = robot.buildRig(T, robot.data, (n) => (ghost ? ghostMat : mats[n] || mats.Grey));
+    const holder = new T.Group(), flipper = new T.Group();
+    rig.root.scale.set(-ROBOT.scale, ROBOT.scale, ROBOT.scale); // mirrored: its left side faces the camera
+    rig.root.rotation.y = Math.PI / 2; // face down the track (+x)
+    flipper.add(rig.root); holder.add(flipper); parent.add(holder);
+    rig.root.traverse((part) => { part.frustumCulled = false; });
+    rig.actions.run.play();
+    return { holder, flipper, rig, mats, ghostMat, cur: rig.actions.run, mode: 'run', lastT: null };
+  }
+  const runnerR = makeRobot(false), ghostR = makeRobot(true);
+  /** Picks the clip from the runner's state: idle on the start line, run on the ground, the held jump pose in the air. */
+  function animate(R, phase, airborne, speed, t) {
+    const A = R.rig.actions;
+    const dt = R.lastT === null ? 0 : Math.max(0, Math.min(0.1, t - R.lastT)); R.lastT = t;
+    const want = phase === 'ready' ? 'idle' : airborne ? 'jump' : 'run';
+    if (want !== R.mode) {
+      const next = A[want];
+      next.reset();
+      if (want === 'jump') { next.setLoop(T.LoopOnce, 1); next.clampWhenFinished = true; next.time = ROBOT.jumpFrom; next.timeScale = (ROBOT.jumpHold - ROBOT.jumpFrom) / RISE; }
+      else { next.setLoop(T.LoopRepeat, Infinity); next.timeScale = 1; }
+      next.play(); R.cur.crossFadeTo(next, want === 'jump' ? 0.06 : 0.1, false); R.cur = next; R.mode = want;
+    }
+    if (want === 'jump' && A.jump.time >= ROBOT.jumpHold) { A.jump.time = ROBOT.jumpHold; A.jump.timeScale = 0; } // hold the airborne pose
+    if (want === 'run') A.run.timeScale = speed / 10; // the stride keeps up with the track
+    R.rig.mixer.update(dt);
+  }
+  /** Feet on the surface (the ceiling, upside down, in a flip), squash about the feet. */
+  function placeRobot(R, x, y, flip, sx, sy) {
+    R.holder.position.set(x, flip ? y + PS : y, 0);
+    R.flipper.rotation.x = flip ? Math.PI : 0;
+    R.holder.scale.set(sx, sy, sx);
+  }
+
+  // ---------- skyline: towers with lit windows, and neon signs (style guide, themes) ----------
+  const TOWERS = 44, TSPACE = 8.5;
+  const towerMat = new T.ShaderMaterial({
+    uniforms: { facade: { value: new T.Color() }, w0: { value: new T.Color() }, w1: { value: new T.Color() }, fogC: { value: new T.Color() }, eye: { value: new T.Vector3() }, lit: { value: 0.45 } },
+    vertexShader: `varying vec3 vW; varying vec3 vN; flat varying float vId;
+      void main(){ vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(instanceMatrix) * normal); vId = float(gl_InstanceID); gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 facade; uniform vec3 w0; uniform vec3 w1; uniform vec3 fogC; uniform vec3 eye; uniform float lit; varying vec3 vW; varying vec3 vN; flat varying float vId;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233)) + vId * 3.17) * 43758.5453); }
+      void main(){
+        vec3 c = facade;
+        if (abs(vN.y) < 0.5) {
+          float along = abs(vN.x) > 0.5 ? vW.z : vW.x;
+          vec2 cell = floor(vec2(along / 1.3, vW.y / 1.6)), f = fract(vec2(along / 1.3, vW.y / 1.6));
+          float on = step(1.0 - lit, h(cell)) * step(0.22, f.x) * step(f.x, 0.78) * step(0.25, f.y) * step(f.y, 0.7);
+          c = mix(c, mix(w0, w1, step(0.5, h(cell + 7.0))) * 0.9, on);
+        } else c = facade * 1.6;
+        float d = length(vW - eye);
+        gl_FragColor = vec4(mix(c, fogC, smoothstep(45.0, 175.0, d) * 0.85), 1.0);
+      }`,
+  });
+  const towers = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), towerMat, TOWERS);
+  towers.frustumCulled = false; towers.renderOrder = -5; scene.add(towers);
+  const signTex = new Map();
+  const signTexture = (word, c) => {
+    const key = word + c; if (signTex.has(key)) return signTex.get(key);
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 72; const g = cv.getContext('2d');
+    g.font = '700 54px "Chakra Petch", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.shadowColor = c; g.shadowBlur = 14; g.fillStyle = c; g.fillText(word, 128, 38); g.shadowBlur = 0; g.fillStyle = '#FFFFFF'; g.globalAlpha = 0.65; g.fillText(word, 128, 38);
+    const tx = new T.CanvasTexture(cv); tx.colorSpace = T.SRGBColorSpace; signTex.set(key, tx); return tx;
+  };
+  const signs = pool(() => {
+    const m = new T.Mesh(new T.PlaneGeometry(1, 72 / 256), new T.MeshBasicMaterial({ transparent: true, depthWrite: false, toneMapped: false, side: T.DoubleSide }));
+    m.renderOrder = -4; scene.add(m); return { root: m };
+  });
+  const tmpM = new T.Matrix4(), tmpQ = new T.Quaternion(), tmpS = new T.Vector3(), tmpP = new T.Vector3();
+  function skyline(rx, theme, reduced) {
+    signs.begin();
+    const k0 = Math.floor((rx - 12) / TSPACE);
+    for (let i = 0; i < TOWERS; i++) {
+      const k = k0 + (i >> 1), side = i & 1 ? 1 : -1, seed = k * 2 + (i & 1);
+      const hgt = theme.hMin + hash(seed, 3) ** 1.6 * (theme.hMax - theme.hMin), wd = 4 + hash(seed, 4) * 5, dp = 4 + hash(seed, 5) * 5;
+      const z = side * (18 + hash(seed, 6) * 28), x = k * TSPACE + hash(seed, 7) * 3;
+      tmpP.set(x, FLOOR_Y, z); tmpS.set(wd, hgt, dp); tmpM.compose(tmpP, tmpQ, tmpS); towers.setMatrixAt(i, tmpM);
+      if (hash(seed, 8) < 0.3 && x > rx + 8) {
+        const sgn = signs.next().root, word = theme.words[Math.floor(hash(seed, 9) * theme.words.length)], c = theme.win[hash(seed, 10) < 0.5 ? 0 : 1];
+        sgn.material.map = signTexture(word, c); sgn.material.needsUpdate = sgn.userData.key !== word + c; sgn.userData.key = word + c;
+        const sw = Math.min(dp * 0.9, 6);
+        sgn.scale.set(sw, sw, 1); sgn.position.set(x - wd / 2 - 0.05, FLOOR_Y + hgt * (0.55 + hash(seed, 11) * 0.3), z);
+        sgn.rotation.set(0, -Math.PI / 2, 0); // on the face that looks back at the runner, so it reads as you approach
+        sgn.material.opacity = reduced ? 0.85 : 0.75 + 0.25 * (hash(seed, 12) < 0.15 ? Math.abs(Math.sin(rx * 0.9 + seed)) : 1);
+      }
+    }
+    towers.instanceMatrix.needsUpdate = true;
+    signs.end();
+  }
+
   // ---------- particles (and the classic trail's squares) ----------
   const PMAX = 700;
   const pGeo = new T.BufferGeometry();
@@ -313,6 +428,7 @@ function build(T, renderer, canvas, overlay) {
     cam.fov = 2 * Math.atan(H / 2 / c2.focal) * 180 / Math.PI; cam.aspect = W / H; cam.updateProjectionMatrix();
     cam.position.set(...c2.eye); cam.up.set(0, 1, 0); cam.lookAt(c2.eye[0] + c2.f[0], c2.eye[1] + c2.f[1], c2.eye[2] + c2.f[2]);
 
+    renderer.info.reset();
     boxes.begin(); lines.begin(); meshes.begin(); ribbons.begin(); pN = 0;
 
     // backdrop
@@ -329,6 +445,10 @@ function build(T, renderer, canvas, overlay) {
     mtn.position.set(cam.position.x + fwd.x * MTN_D, FLOOR_Y + 26, cam.position.z + fwd.z * MTN_D);
     mtn.lookAt(cam.position.x, FLOOR_Y + 26, cam.position.z); mtn.scale.set(1400, 70, 1);
     mtnMat.uniforms.fill.value.set(mixHex(pal.sky[0], pal.sky[2], 0.3)); mtnMat.uniforms.edge.value.set(pal.grid); mtnMat.uniforms.off.value = rx * 0.05;
+    const theme = themeAt(rx);
+    towerMat.uniforms.facade.value.set(theme.facade); towerMat.uniforms.w0.value.set(theme.win[0]); towerMat.uniforms.w1.value.set(theme.win[1]);
+    towerMat.uniforms.fogC.value.copy(scene.fog.color); towerMat.uniforms.eye.value.copy(cam.position);
+    skyline(rx, theme, st.reduced);
     floor.position.x = Math.floor(rx / 2) * 2; floor.position.z = 0;
     floorMat.uniforms.grid.value.set(pal.grid); floorMat.uniforms.base.value.set(mixHex(pal.sky[2], '#000000', 0.7));
     floorMat.uniforms.horizon.value.copy(scene.fog.color); floorMat.uniforms.eye.value.copy(cam.position);
@@ -343,16 +463,16 @@ function build(T, renderer, canvas, overlay) {
     for (const p of pits) { if (p.x > a) tsegs.push([a, p.x]); a = Math.max(a, pitEnd(p, r.x)); }
     if (a < far) tsegs.push([a, far]);
     for (const [x0, x1] of tsegs) {
-      box(x0, x1, -0.38, 0, -TZ, TZ, pal.rail, 1, 1.2, true);
+      box(x0, x1, -0.38, 0, -TZ, TZ, SAFE, 1, 1.2, true);
       const L = [];
       for (let x = Math.ceil(x0); x < x1; x += 2) L.push(x, 0.002, -TZ, x, 0.002, TZ);
       L.push(x0, 0.002, 0, x1, 0.002, 0);
-      segs(L, pal.rail, 1, 0.35);
-      segs([x0, 0, TZ, x1, 0, TZ, x0, 0, -TZ, x1, 0, -TZ], pal.rail, 2.4, 1);
+      segs(L, SAFE, 1, 0.28);
+      segs([x0, 0, TZ, x1, 0, TZ, x0, 0, -TZ, x1, 0, -TZ], SAFE, 2.4, 1);
     }
 
     // take-off ticks
-    if (!r.flip) { const L = []; let al = 0; for (const k of takeoffTicks(objs, rcx)) { L.push(k.x, 0.006, -TZ * 0.8, k.x, 0.006, TZ * 0.8); al = Math.max(al, k.a); } segs(L, pal.neon, 1.6, al); }
+    if (!r.flip) { const L = []; let al = 0; for (const k of takeoffTicks(objs, rcx)) { L.push(k.x, 0.006, -TZ * 0.8, k.x, 0.006, TZ * 0.8); al = Math.max(al, k.a); } segs(L, SAFE, 1.6, al); }
 
     // objects
     for (const o of objs) {
@@ -364,54 +484,54 @@ function build(T, renderer, canvas, overlay) {
           const bx = blockX(o, r.x);
           if (o.f !== undefined) {
             const left = o.f - r.x, lift = left > 0 ? Math.min(1, left / 7) * 9 : 0;
-            if (left > 0) box(bx, bx + o.w, 0, 0.04, -1, 1, pal.block, 0.35, 1);
-            box(bx, bx + o.w, lift, lift + o.h, -1, 1, pal.block, 1, 2);
-          } else box(bx, bx + o.w, 0, o.h, -1, 1, pal.block, 1, 2);
+            if (left > 0) box(bx, bx + o.w, 0, 0.04, -1, 1, SAFE, 0.35, 1);
+            box(bx, bx + o.w, lift, lift + o.h, -1, 1, SAFE, 1, 2);
+          } else box(bx, bx + o.w, 0, o.h, -1, 1, SAFE, 1, 2);
           break;
         }
         case 'blade': {
           const bx = bladeX(o, r.x), px = o.x + o.amp + o.w / 2, top = o.h + 4;
-          box(bx, bx + o.w, 0, o.h, -1, 1, pal.block, 1, 2);
-          segs([px, top, -1, bx + o.w / 2, o.h, -1, px, top, 1, bx + o.w / 2, o.h, 1, px - 0.4, top, -1, px + 0.4, top, -1, px - 0.4, top, 1, px + 0.4, top, 1], pal.neon, 1.6, 0.55);
+          box(bx, bx + o.w, 0, o.h, -1, 1, HAZ, 1, 2);
+          segs([px, top, -1, bx + o.w / 2, o.h, -1, px, top, 1, bx + o.w / 2, o.h, 1, px - 0.4, top, -1, px + 0.4, top, -1, px - 0.4, top, 1, px + 0.4, top, 1], HAZ, 1.6, 0.55);
           break;
         }
         case 'spike': {
           const rise = o.f === undefined ? 1 : Math.max(0.02, Math.min(1, 1 - (o.f - r.x) / 1.6));
-          if (rise < 1) box(o.x + 0.04, o.x + 0.76, 0, 0.04, -1, 1, pal.neon, 0.35, 1);
-          for (const zz of [-0.52, 0.52]) mesh('pyramid', [o.x + 0.4, o.inv ? o.y - 0.4 * rise : o.y + 0.4 * rise, zz], [0.76, 0.8 * rise, 0.92], [o.inv ? Math.PI : 0, 0, 0], mixHex(pal.neon, '#12051F', 0.55), mixHex(pal.neon, '#12051F', 0.85), 1, false, pal.neon);
+          if (rise < 1) box(o.x + 0.04, o.x + 0.76, 0, 0.04, -1, 1, HAZ, 0.35, 1);
+          for (const zz of [-0.52, 0.52]) mesh('pyramid', [o.x + 0.4, o.inv ? o.y - 0.4 * rise : o.y + 0.4 * rise, zz], [0.76, 0.8 * rise, 0.92], [o.inv ? Math.PI : 0, 0, 0], mixHex(HAZ, '#12051F', 0.55), mixHex(HAZ, '#12051F', 0.85), 1, false, HAZ);
           break;
         }
         case 'bar': {
-          box(o.x, o.x + o.w, o.y, o.y + BAR_H, -1.3, 1.3, '#FF8A3D', 0.55, 2);
+          box(o.x, o.x + o.w, o.y, o.y + BAR_H, -1.3, 1.3, HAZ, 0.55, 2);
           const L = []; for (let k = 0.3; k < BAR_H; k += 0.45) L.push(o.x, o.y + k, -1.3, o.x, o.y + k, 1.3);
-          segs(L, '#FFE45C', 1, 0.45);
-          segs([o.x, o.y, -1.3, o.x, o.y, 1.3, o.x, o.y, 1.3, o.x + o.w, o.y, 1.3], '#FFE45C', 3, 1);
+          segs(L, HAZ, 1, 0.45);
+          segs([o.x, o.y, -1.3, o.x, o.y, 1.3, o.x, o.y, 1.3, o.x + o.w, o.y, 1.3], HAZ, 3, 1);
           break;
         }
         case 'pad': {
-          box(o.x, o.x + o.w, 0, 0.1, -0.9, 0.9, '#7CFF6B', 1, 1.6);
+          box(o.x, o.x + o.w, 0, 0.1, -0.9, 0.9, SAFE, 1, 1.6);
           const ph = (t * 3) % 1, L = [];
           for (let k = 0; k < 2; k++) { const xx = o.x + 0.3 + ((k * 0.5 + ph) % 1) * (o.w - 0.6); L.push(xx - 0.3, 0.12, -0.7, xx, 0.12, 0, xx, 0.12, 0, xx - 0.3, 0.12, 0.7); }
-          segs(L, '#7CFF6B', 2.2, 1);
+          segs(L, SAFE, 2.2, 1);
           break;
         }
         case 'mover': {
           const h = moverH(o, r.x);
-          segs([o.x + 0.2, h - 0.3, 1, o.x + 0.2, FLOOR_Y, 1, o.x + o.w - 0.2, h - 0.3, 1, o.x + o.w - 0.2, FLOOR_Y, 1], '#FFE45C', 1, 0.35);
-          box(o.x, o.x + o.w, h - 0.3, h, -1, 1, '#FFE45C', 1, 2);
+          segs([o.x + 0.2, h - 0.3, 1, o.x + 0.2, FLOOR_Y, 1, o.x + o.w - 0.2, h - 0.3, 1, o.x + o.w - 0.2, FLOOR_Y, 1], SAFE, 1, 0.35);
+          box(o.x, o.x + o.w, h - 0.3, h, -1, 1, SAFE, 1, 2);
           break;
         }
         case 'flip': {
-          box(o.x, o.x + o.w, CEIL_Y, CEIL_Y + 0.3, -TZ, TZ, pal.rail, 0.5, 1.8, true);
+          box(o.x, o.x + o.w, CEIL_Y, CEIL_Y + 0.3, -TZ, TZ, SAFE, 0.5, 1.8, true);
           const L = [];
           for (let x = Math.ceil(o.x) + 0.5; x < o.x + o.w; x += 3) L.push(x, 0.4, 0, x, 1.2, 0, x - 0.25, 0.9, 0, x, 1.2, 0, x + 0.25, 0.9, 0, x, 1.2, 0);
-          segs(L, pal.rail, 2, 0.5 + 0.3 * Math.sin(t * 6));
+          segs(L, SAFE, 2, 0.5 + 0.3 * Math.sin(t * 6));
           break;
         }
         case 'gate': {
-          box(o.x, o.x + o.w, 0, o.y, -1.2, 1.2, pal.block, 0.8, 2);
-          box(o.x, o.x + o.w, o.h, o.h + 1.4, -1.2, 1.2, pal.block, 0.8, 2);
-          segs([o.x, o.y, -1.2, o.x, o.h, -1.2, o.x, o.y, 1.2, o.x, o.h, 1.2, o.x, o.y, -1.2, o.x, o.y, 1.2, o.x, o.h, -1.2, o.x, o.h, 1.2], pal.neon, 3, 0.6 + 0.3 * Math.sin(t * 7));
+          box(o.x, o.x + o.w, 0, o.y, -1.2, 1.2, HAZ, 0.8, 2);
+          box(o.x, o.x + o.w, o.h, o.h + 1.4, -1.2, 1.2, HAZ, 0.8, 2);
+          segs([o.x, o.y, -1.2, o.x, o.h, -1.2, o.x, o.y, 1.2, o.x, o.h, 1.2, o.x, o.y, -1.2, o.x, o.y, 1.2, o.x, o.h, -1.2, o.x, o.h, 1.2], SAFE, 3, 0.6 + 0.3 * Math.sin(t * 7)); // the gap you thread is the safe part
           break;
         }
         case 'pit': {
@@ -421,19 +541,19 @@ function build(T, renderer, canvas, overlay) {
             const k = Math.max(0, Math.min(1, 1 - ahead / (o.glow - o.drop)));
             if (k <= 0) break;
             const blink = st.reduced ? 1 : 0.6 + 0.4 * Math.sin(t * (8 + 14 * k)), al = (0.4 + 0.6 * k) * blink;
-            box(o.x, o.x + o.w, 0, 0.1, -1.1, 1.1, '#FF8A3D', 0.9, 2.2, false, al);
+            box(o.x, o.x + o.w, 0, 0.1, -1.1, 1.1, LIVE, 0.9, 2.2, false, al);
             const L = []; for (let xx = o.x; xx <= o.x + o.w + 0.01; xx += o.w / 4) L.push(xx, 0.12, -1.1, xx, 0.12, 1.1);
-            segs(L, '#FFE45C', 2.4, al);
+            segs(L, LIVE, 2.4, al);
           } else {
             const tf = -ahead / speedAt(o.x);
             if (tf > 0.55) break;
             const yy = -30 * tf * tf;
-            box(o.x, o.x + o.w, yy - 0.1, yy, -1.1, 1.1, '#FF8A3D', 0.7, 1.6, false, (1 - tf / 0.55) * 0.8);
+            box(o.x, o.x + o.w, yy - 0.1, yy, -1.1, 1.1, LIVE, 0.7, 1.6, false, (1 - tf / 0.55) * 0.8);
           }
           break;
         }
         case 'rail': {
-          const lit = railLit(o, rcx), c = lit ? '#FF2B5E' : '#7CFFEA';
+          const lit = railLit(o, rcx), c = lit ? LIVE : SAFE;
           box(o.x, o.x + o.w, 0, lit ? 0.22 : 0.06, -1.1, 1.1, c, lit ? 1 : 0.4, lit ? 2.4 : 1.2, false, lit ? 1 : 0.35);
           const L = [o.x, 0, -1.2, o.x + o.w, 0, -1.2, o.x, 0, 1.2, o.x + o.w, 0, 1.2];
           for (let k = 0; k <= 3; k++) { const xx = o.x + (o.w * k) / 3; L.push(xx, 0, -1.2, xx, lit ? 1.1 : 0.3, -1.2, xx, 0, 1.2, xx, lit ? 1.1 : 0.3, 1.2); }
@@ -443,7 +563,7 @@ function build(T, renderer, canvas, overlay) {
         case 'chip': {
           if (o.got) break;
           const mx = rcx, my = r.y + PS / 2, pull = st.reduced ? 0 : magnetPull(o.x - mx, o.y - my);
-          mesh('octa', [o.x + (mx - o.x) * pull, o.y + (my - o.y) * pull, 0], [0.34, 0.5, 0.34], [0, t * 3 + o.x, 0], '#FFE45C', '#FF9F1C');
+          mesh('octa', [o.x + (mx - o.x) * pull, o.y + (my - o.y) * pull, 0], [0.34, 0.5, 0.34], [0, t * 3 + o.x, 0], GOLD, STYLE.gold2);
           break;
         }
       }
@@ -452,12 +572,22 @@ function build(T, renderer, canvas, overlay) {
     // best-distance gate
     if (st.bestMark != null && st.bestMark > rx - 6 && st.bestMark < far) {
       const bm = st.bestMark, sh = bestMarkShimmer(rx, bm), L = [bm, 0, -1.2, bm, 3, -1.2, bm, 0, 1.2, bm, 3, 1.2, bm, 3, -1.2, bm, 3, 1.2];
-      segs(L, '#7CFFEA', 1, 0.3);
-      if (sh > 0) segs(L, '#22F0FF', 2, sh * (st.reduced ? 0.5 : 0.45 + 0.15 * Math.sin(t * 14)));
+      segs(L, GOLD, 1, 0.3);
+      if (sh > 0) segs(L, GOLD, 2, sh * (st.reduced ? 0.5 : 0.45 + 0.15 * Math.sin(t * 14)));
     }
 
-    // ghost
-    if (st.ghost) runnerShape(st.skin, [st.ghost.x + PS / 2, st.ghost.y + PS / 2, 0], 0, t, 0.5, true, 0, false);
+    // ghost: a translucent outline of the runner
+    if (ghostR) {
+      ghostR.holder.visible = !!st.ghost;
+      if (st.ghost) { placeRobot(ghostR, st.ghost.x + PS / 2, st.ghost.y, !!st.ghost.flip, 1, 1); animate(ghostR, 'run', false, speedAt(st.ghost.x), t); }
+    } else if (st.ghost) runnerShape(st.skin, [st.ghost.x + PS / 2, st.ghost.y + PS / 2, 0], 0, t, 0.5, true, 0, false);
+
+    // speed streaks along the track edges once things get fast (they stand still in the world, so they stream past)
+    if (!st.reduced && st.speed > 12.5 && st.showRunner) {
+      const k = Math.min(1, (st.speed - 12.5) / 4), j0 = Math.floor(rx / 4), L = [];
+      for (let i = 0; i < 18; i++) { const j = j0 + i, x = j * 4 + hash(j, 1) * 4, z = (hash(j, 2) < 0.5 ? -1 : 1) * (1.6 + hash(j, 3) * 1.4), y = 0.15 + hash(j, 4) * 1.8; L.push(x, y, z, x + 2 + hash(j, 5) * 3, y, z); }
+      segs(L, '#CFFBFF', 1.2, 0.35 * k);
+    }
 
     // runner, trails, glow, shadow
     const rpos = [r.x + PS / 2, r.y + PS / 2, 0];
@@ -471,8 +601,19 @@ function build(T, renderer, canvas, overlay) {
       const sy = r.flip ? CEIL_Y : 0;
       shadow.visible = Math.abs(r.y - (r.flip ? CEIL_Y - PS : 0)) < 3;
       shadow.position.set(rpos[0], sy + (r.flip ? -0.003 : 0.003), 0); shadow.scale.set(PS * 0.6, 1, PS * 0.35);
-      runnerShape(st.skin, rpos, r.rot, t, st.blink ? 0.35 : 1, false, st.squash || 0, r.flip);
+      if (runnerR) {
+        const [a, b] = skinColors(st.skin, t), M = runnerR.mats, al = st.blink ? 0.35 : 1;
+        let ca = a, jx = 0;
+        if (st.skin.fx === 'glitch') { const g = Math.floor(t * 11) % 3; ca = g === 0 ? '#22F0FF' : g === 1 ? '#FF2BD6' : a; jx = 0.05 * Math.sin(t * 37); }
+        M.Main.color.set(ca); M.Main.emissive.set(ca).multiplyScalar(0.45);
+        M.Black.emissive.set(b); M.Black.emissiveIntensity = 1;
+        for (const m of Object.values(M)) { m.opacity = al; m.depthWrite = al > 0.9; }
+        const { sx, sy } = squashScale(st.squash || 0);
+        placeRobot(runnerR, rpos[0] + jx, r.y, r.flip, sx, sy);
+        animate(runnerR, st.phase, !r.grounded, st.speed, t);
+      } else runnerShape(st.skin, rpos, r.rot, t, st.blink ? 0.35 : 1, false, st.squash || 0, r.flip);
     }
+    if (runnerR) runnerR.holder.visible = !!st.showRunner;
 
     // ripples
     for (const rp of st.ripples || []) {
@@ -547,7 +688,51 @@ function build(T, renderer, canvas, overlay) {
     ribbon(pts.map((q, i) => { const k = i / n; return { x: q.x, y: q.y, w: PS * (sparks ? 0.06 : 0.27) * k, c: sparks ? '#FFE45C' : a, a: k * (sparks ? 0.5 : 0.9) }; }));
   }
 
+  // ---------- locker and shop thumbnails: the robot in a skin, on its own small renderer ----------
+  let thumbR = null;
+  /** The robot in skin sk on a px-square canvas (transparent), turned a little with t; locked draws a dark silhouette. */
+  function thumb(sk, px, t, locked) {
+    if (!robot) return null;
+    if (!thumbR) {
+      const cvs = document.createElement('canvas');
+      const tr = new T.WebGLRenderer({ canvas: cvs, antialias: true, alpha: true, preserveDrawingBuffer: true });
+      tr.outputColorSpace = T.SRGBColorSpace;
+      const sc = new T.Scene();
+      sc.add(new T.HemisphereLight(0x8a6cff, 0x0a0418, 1.3));
+      const dl = new T.DirectionalLight(0xffffff, 2.2); dl.position.set(-1.2, 2, 3); sc.add(dl);
+      const R = makeRobot(false, sc);
+      const cm = new T.PerspectiveCamera(30, 1, 0.1, 50); cm.position.set(0, 0.55, 2.45); cm.lookAt(0, 0.45, 0);
+      R.rig.actions.run.stop(); R.rig.actions.idle.play(); R.rig.mixer.update(0.6);
+      thumbR = { tr, cvs, sc, R, cm };
+    }
+    const { tr, cvs, sc, R, cm } = thumbR, M = R.mats;
+    if (cvs.width !== px) { tr.setPixelRatio(1); tr.setSize(px, px, false); }
+    if (locked) {
+      M.Main.color.set('#3A2A6A'); M.Main.emissive.set('#000000'); M.Black.emissive.set('#1A1033');
+    } else {
+      const [a, b] = skinColors(sk, t);
+      const ca = sk.fx === 'glitch' ? ['#22F0FF', '#FF2BD6', a][Math.floor(t * 11) % 3] : a;
+      M.Main.color.set(ca); M.Main.emissive.set(ca).multiplyScalar(0.45); M.Black.emissive.set(b);
+    }
+    for (const m of Object.values(M)) { m.opacity = 1; m.depthWrite = true; }
+    R.holder.rotation.y = -Math.PI / 2 + 0.55 + (t - 1.3) * 0.9; // a three-quarter view; turns when t runs
+    tr.setClearColor(0x000000, 0);
+    tr.render(sc, cm);
+    return cvs;
+  }
+
+  // Warm-up: one of each pooled kind, then compile every shader now, so the first spike or sign on screen
+  // doesn't stall a frame mid-run.
+  boxes.begin(); lines.begin(); meshes.begin(); ribbons.begin(); signs.begin();
+  box(0, 1, 0, 1, 0, 1, SAFE, 1, 1); segs([0, 0, 0, 1, 1, 1], SAFE, 1); mesh('pyramid', [0, 0, 0], [1, 1, 1], [0, 0, 0], HAZ, HAZ); ribbon([{ x: 0, y: 0, w: 1, c: SAFE, a: 1 }, { x: 1, y: 0, w: 1, c: SAFE, a: 1 }]);
+  signs.next().root.material.map = signTexture(THEMES[0].words[0], THEMES[0].win[0]);
+  try { renderer.compile(scene, cam); renderer.compile(screen, ortho); } catch { /* compiled lazily instead */ }
+  boxes.end(); lines.end(); meshes.end(); ribbons.end(); signs.end();
+
   return {
+    thumb,
+    /** Draw calls and triangles in the last frame (for the budget check). */
+    info: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
     onLost(fn) { lost = fn; },
     /** w, h: CSS pixels; dpr: device pixels per CSS pixel. */
     resize(w, h, dpr) {

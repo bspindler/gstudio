@@ -97,7 +97,7 @@ Status (2026-11-25, 0.17.0):
 - [ ] The weekly real-device check: 60 fps on an iPhone 12 or newer (Brian).
 - [ ] Delete the 2D scene path one release after the switch. The skin thumbnails stay 2D until phase 3 renders the
   character.
-- [ ] The style guide (`docs/hyperline/style-guide.md`) and its colour rules. They land with phase 3's art pass.
+- [x] The style guide (`docs/hyperline/style-guide.md`) and its colour rules (0.18.0).
 
 ## Phase 3: art from Quaternius
 
@@ -130,6 +130,25 @@ Steps:
   windows, and neon signs drawn as canvas textures. Each theme gets its own colour grade and skyline.
 - Speed streaks at the track edges at top speed.
 - A triangle budget: the runner at 15k or fewer, and the whole scene at 150k or fewer.
+
+Status (2026-11-25, 0.18.0):
+- [x] The style guide is written, and the 3D playfield follows its colour rules (safe cyan, hazards magenta or red,
+  rewards gold). The backdrop keeps each sector's palette.
+- [x] The runner is the Quaternius robot (RobotExpressive, CC0), scaled under a low ceiling. Run, a physics-owned jump
+  pose and gravity flips (upside down on the ceiling) all work. Every skin dresses it, including rainbow and glitch.
+  The ghost is a wireframe of it. The UBC humanoid isn't compared yet, because its pack hasn't been downloaded.
+- [x] The locker, shop and featured-skin thumbnails render the robot, on a small renderer of their own. Locked skins
+  show a dark silhouette with a "?".
+- [x] A skyline in three themes: instanced towers with lit windows streaming past, and neon signs with our own words.
+  They're built in code, because the City MegaKit pack hasn't been downloaded.
+- [x] Speed streaks at the track edges at top speed.
+- [x] Budgets, measured on the Mac (Metal, DPR 3, CPU ×1 and ×4): p95 16.7 ms, no frame over 33 ms, about 80 draw
+  calls and about 3–4k triangles a frame. Shaders compile at start-up, so nothing stalls mid-run.
+- [ ] The black-silhouette readability check and the screenshot panel against reference games (the visual row of the
+  bar). This needs human testers.
+- [ ] A device check on an iPhone 12 or newer (Brian).
+- [ ] Optional: once the packs are downloaded, compare a UBC humanoid runner and swap City MegaKit towers into the
+  skyline.
 
 **Done when:** three phone screenshots, set beside three reference-game screenshots, get 4 out of 5 or better from at
 least 3 of 5 testers (the visual row of the bar).

@@ -10,7 +10,6 @@ const src = readFileSync(new URL('../../../games/hyperline/render3d.js', import.
 describe('hyperline 3D renderer (quality plan phase 2)', () => {
   it('is the default; ?r=2d keeps the 2D renderer, and a failed 3D setup falls back to it', () => {
     expect(html).toMatch(/if \(RMODE !== '2d'\) createRenderer3d\(cv, src\)\.then\(\(r\) => \{ if \(!r\) \{ use2d\(\); return; \}/);
-    expect(html).toMatch(/r\.onLost\(useFlat\)/);
   });
 
   it('draws from the same camera and state as the 2D renderer, and never changes game state', () => {
@@ -41,5 +40,52 @@ describe('drawOverlay: what the 3D renderer leaves to 2D', () => {
     calls.length = 0;
     expect(drawOverlay(ctx, 390, 700, { ...base, pops: [{ text: 'CLOSE!', x: 14, y: 1, col: '#22F0FF', size: 18, age: 0, life: 0.9 }] })).toBe(true);
     expect(calls).toContain('fillText');
+  });
+});
+
+describe('hyperline art pass (quality plan phase 3, docs/hyperline/style-guide.md)', async () => {
+  const { STYLE, ROBOT, THEMES, themeAt } = await import('../../../games/hyperline/render3d.js');
+  const { SECTORS, SECTOR_LEN, BAR_Y, GRAV, JV } = await import('../../../games/hyperline/lib/world.js');
+  const robot = (await import('../../../games/hyperline/models/robot.js')).default as { clips: { name: string; dur: number }[] };
+
+  it('colour has meaning: safe cyan, hazards magenta or red, rewards gold', () => {
+    expect(STYLE).toMatchObject({ safe: '#22F0FF', hazard: '#FF2BD6', live: '#FF2B5E', gold: '#FFE45C' });
+  });
+
+  it('the playfield uses only the style colours (no stray obstacle colours from the old palette)', () => {
+    const play = src.slice(src.indexOf('// track segments between pits'), src.indexOf('// ghost:'));
+    expect(play).not.toMatch(/'#(?:FF8A3D|7CFF6B|7CFFEA|FFE45C|FF2B5E)'/i);
+    expect(play).not.toMatch(/pal\.(?:block|neon|rail)/);
+    for (const k of ['SAFE', 'HAZ', 'LIVE', 'GOLD']) expect(play).toContain(k);
+  });
+
+  it('every sector has a theme, in order: Neon District, Flip City, Hypercore', () => {
+    const names = SECTORS.map((_: unknown, i: number) => themeAt(i * SECTOR_LEN + 1).name);
+    expect(names[0]).toBe('Neon District');
+    expect(names[7]).toBe('Flip City');
+    expect(names[14]).toBe('Hypercore');
+    expect(names.at(-1)).toBe('Hypercore');
+    expect(THEMES.flatMap((t: { words: string[] }) => t.words).every((w: string) => /^[A-Z0-9/]+$/.test(w))).toBe(true);
+  });
+
+  it('the robot stands under a low ceiling (it never looks as if it clips one the sim lets you pass)', () => {
+    const BIND_HEIGHT = 4.6; // RobotExpressive's bind-pose height in model units (feet at 0)
+    expect(BIND_HEIGHT * ROBOT.scale).toBeLessThan(BAR_Y);
+    expect(BIND_HEIGHT * ROBOT.scale).toBeGreaterThan(0.8); // at least the 0.8 hitbox, so it reads
+  });
+
+  it('the jump pose comes from inside the jump clip and is reached by the apex', () => {
+    const jump = robot.clips.find((c) => c.name === 'jump')!;
+    expect(ROBOT.jumpFrom).toBeGreaterThan(0);
+    expect(ROBOT.jumpHold).toBeGreaterThan(ROBOT.jumpFrom);
+    expect(ROBOT.jumpHold).toBeLessThan(jump.dur);
+    expect(src).toContain('next.timeScale = (ROBOT.jumpHold - ROBOT.jumpFrom) / RISE');
+    expect(JV / GRAV).toBeGreaterThan(0.2);
+  });
+
+  it('locker and shop thumbnails use the robot once the 3D renderer is up, and fall back to shapes when it is lost', () => {
+    expect(html).toMatch(/setThumbRenderer\(r\.thumb\); paintThumbs\(document\)/);
+    expect(html).toMatch(/r\.onLost\(\(\) => \{ setThumbRenderer\(null\); useFlat\(\); \}\)/);
+    expect(html).not.toContain('hex prism');
   });
 });
