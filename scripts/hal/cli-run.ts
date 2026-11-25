@@ -41,6 +41,14 @@ export function macNotify(title: string, body: string): void {
 }
 const KINDS: readonly TicketKind[] = ['fix', 'tuning', 'polish', 'feature'];
 
+/**
+ * Games Hal leaves alone by default (operator-owned). A run without --game skips them; `--game <slug>` still runs one
+ * on purpose. Remove an entry to put Hal back on that game. See docs/hal/OPERATIONS.md, "Paused games".
+ */
+export const HAL_PAUSED: Readonly<Record<string, string>> = {
+  hyperline: 'Brian, 2026-11-25: paused while its renderer and art are rebuilt (docs/hyperline/quality-plan.md, phases 2 and 3).',
+};
+
 export type RunCmdDeps = {
   halDir: string;
   /** Game slugs in scope by default (not scorer names). */
@@ -54,7 +62,7 @@ export type RunCmdDeps = {
 const defaultRepo = () => fileURLToPath(new URL('../../', import.meta.url));
 
 /** Throws an Error with the message to show (cli.ts makes that exit 1). */
-export function parseRunArgs(rest: string[], games: string[]): RunOptions {
+export function parseRunArgs(rest: string[], games: string[], paused: Readonly<Record<string, string>> = HAL_PAUSED): RunOptions {
   const { values, positionals } = parseArgs({
     args: rest, allowPositionals: true,
     options: {
@@ -81,7 +89,7 @@ export function parseRunArgs(rest: string[], games: string[]): RunOptions {
     if (!Number.isInteger(maxTickets) || maxTickets < 1 || maxTickets > 8) throw new Error('--max-tickets must be an integer from 1 to 8');
   }
   return {
-    games: sel.length ? sel : [...games], kinds: kinds as TicketKind[], reportOnly: values['report-only'] === true, maxTickets,
+    games: sel.length ? sel : games.filter((g) => !(g in paused)), kinds: kinds as TicketKind[], reportOnly: values['report-only'] === true, maxTickets,
     trigger: nightly ? 'nightly' : 'manual', billing, push: values['no-push'] !== true,
   };
 }

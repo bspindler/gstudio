@@ -101,6 +101,15 @@ These checks live in the scorer because Hal may edit `packages/core/test/lantern
 `npm run hal` is `node --import tsx`, not the `tsx` command, because the tsx command opens a socket in the temp
 folder, and the sandbox allows none.
 
+### Paused games
+
+`HAL_PAUSED` in `scripts/hal/cli-run.ts` lists the games Hal leaves alone. The nightly run and any run without
+`--game` skip them, while `./hal.sh run --game <slug>` still runs one on purpose. Remove the entry to put Hal back on
+the game.
+
+- **Hyperline** (since 2026-11-25): paused while its renderer and art are rebuilt (quality plan phases 2 and 3). The
+  content freeze below stays in place after the pause ends.
+
 ### Content freezes
 
 `CONTENT_FROZEN` in `packages/core/src/hal/tripwires.ts` lists the games whose content Hal may not grow. The tripwire

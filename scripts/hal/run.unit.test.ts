@@ -13,7 +13,7 @@ import type { CheckCommands } from './candidate.js';
 import { runClaude, type ClaudeCall, type ClaudeResult } from './claude.js';
 import { ensureMainWorktree, HAL_MAIN, runGit, type GitRunner } from './git.js';
 import { acquireLock, CI_UNDO_REASON, defaultStartTime, heldCommand, lockLive, runAlert, runNight, shipPendingCommand, undoCommand, type RunDeps, type RunOptions, type RunReport } from './run.js';
-import { parseRunArgs, realRunDeps, runRunCommand } from './cli-run.js';
+import { HAL_PAUSED, parseRunArgs, realRunDeps, runRunCommand } from './cli-run.js';
 import { redactor } from './run-util.js';
 import { createStore } from './store.js';
 import { killLiveGroups, runIsolated, sandboxAvailable } from './sandbox.js';
@@ -885,7 +885,16 @@ describe('undo', () => {
 describe('cli flags', () => {
   const games = ['hyperline', 'gearhold'];
   it('defaults: manual, subscription, push on, 6 tickets, all games', () => {
-    expect(parseRunArgs([], games)).toEqual({ games, kinds: [], reportOnly: false, maxTickets: 6, trigger: 'manual', billing: 'subscription', push: true });
+    expect(parseRunArgs([], games, {})).toEqual({ games, kinds: [], reportOnly: false, maxTickets: 6, trigger: 'manual', billing: 'subscription', push: true });
+  });
+  it('a paused game is left out of the default set; --game still runs it on purpose', () => {
+    const paused = { hyperline: 'rebuild in progress' };
+    expect(parseRunArgs(['--nightly'], games, paused).games).toEqual(['gearhold']);
+    expect(parseRunArgs(['--game', 'hyperline'], games, paused).games).toEqual(['hyperline']);
+  });
+  it('Hyperline is paused while its renderer and art are rebuilt (Brian, 2026-11-25)', () => {
+    expect(HAL_PAUSED.hyperline).toMatch(/quality-plan/);
+    expect(parseRunArgs(['--nightly'], games).games).toEqual(['gearhold']);
   });
   it('--nightly bills the subscription first, with push (--billing api forces credits); --billing, --game, --kind, --max-tickets, --no-push, --report-only', () => {
     expect(parseRunArgs(['--nightly'], games)).toMatchObject({ trigger: 'nightly', billing: 'subscription', push: true });
