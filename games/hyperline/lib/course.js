@@ -14,6 +14,7 @@
 //   gate  {x, w, y, h}    slot gate: solid below y and above h; pass through the gap between
 //   pit with c: 1         a crumbling panel: glows `glow` units ahead, drops `drop` units ahead; a plain pit to the sim
 //   blade {x, w, h, amp, k, ph}  pendulum blade: solid below h; its left edge swings x .. x + 2*amp as the runner advances
+//   block with sl, m: a shuttle or drift block that slides back toward the runner (see blockX in sim.js)
 //   rail  {x, w, per, ph} blinking floor rail: lit for half of every `per` units; lethal to the grounded runner while lit
 
 import { mulberry32 } from './rng.js';
@@ -441,6 +442,19 @@ export const PATTERNS = [
       ];
       return { o, len: 1 + far + 0.5 };
     } },
+
+  // Sector 20: drift blocks. A raised block drifts slowly toward the runner (it closes at 1.3x the track speed, against
+  // the shuttle's 1.6x) over a short spike strip, so the take-off point moves with the block's pace: hop it as it
+  // arrives. Same two-sided window as the shuttle, `want` seconds wide, with a wider block and a gentler drift.
+  { id: 'drift', sector: 20, weight: (s) => (s === 20 ? 1.8 : 0.9),
+    build(x, d, r, intro) {
+      const xc = x + 9 + r() * 2, v = speedAt(xc + 6), want = intro ? 0.1 : 0.115, n = 5, SL = 0.3, M = 20;
+      const sx = xc - (TB + want) * v + 0.16 + T2 * v - (n - 1) * SW - 0.6;
+      const o = [{ t: 'block', x: xc + (PS - 0.06) - SL * M, w: 1.6 + r() * 0.4, h: 1, sl: SL, m: xc + M }];
+      spikes(o, sx, n);
+      o.push({ t: 'chip', x: sx + n * SW / 2, y: 2.7 });
+      return { o, len: sx + n * SW - x + 0.5 };
+    } },
 ];
 
 // Sliding ledge: half the slide (units) and its pace (radians per unit of track).
@@ -467,7 +481,7 @@ const RISER_REACH = (JV + Math.sqrt(JV * JV + 2 * GRAV * 0.88)) / GRAV;
 const BY_ID =Object.fromEntries(PATTERNS.map((p) => [p.id, p]));
 
 /** The pattern each sector opens with: the obstacle it introduces. */
-export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs', 18: 'stones', 19: 'ledge' };
+export const INTRO = { 1: 'bar', 2: 'padPit', 3: 'twin', 4: 'mover', 5: 'flip', 6: 'gate', 7: 'sweep', 8: 'pulse', 9: 'crumble', 10: 'boost', 11: 'riser', 12: 'stagger', 13: 'drop', 14: 'shuttle', 15: 'pillars', 16: 'pendulum', 17: 'springs', 18: 'stones', 19: 'ledge', 20: 'drift' };
 
 /** startX: where the run begins (0, or a sector start for a practice run); the same 24-unit lead-in follows it. */
 export function createCourse(seed, startX = 0) {

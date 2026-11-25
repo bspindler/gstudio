@@ -12,7 +12,7 @@ const bare = (objs: Course['objs']): Course => { const c = createCourse(5); c.ob
 describe('hyperline SLIDING LEDGE', () => {
   it('is sector 20 for players, right before HYPERCORE, and introduces the ledge pattern', () => {
     expect(sectorInfo(19).name).toBe('SLIDING LEDGE');
-    expect(sectorInfo(20).name).toBe('HYPERCORE');
+    expect(sectorInfo(20).name).toBe('DRIFT BLOCKS');
     expect(INTRO[19]).toBe('ledge');
   });
 

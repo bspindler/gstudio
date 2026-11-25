@@ -80,6 +80,8 @@ export const SECTORS = [
     pal: { sky: ['#020A10', '#062A34', '#0C5560'], sun: ['#E6FF6B', '#22F0FF'], grid: '#7CFFEA', rail: '#FF2BD6', neon: '#FFE45C', block: '#22F0FF' } },
   { name: 'SLIDING LEDGE', hint: 'The far edge of the pit slides in and out: time the jump to where the ledge is.',
     pal: { sky: ['#0A0514', '#241046', '#4A1A6E'], sun: ['#FFB86B', '#22F0FF'], grid: '#FF8A3D', rail: '#7CFFEA', neon: '#FF2BD6', block: '#FFE45C' } },
+  { name: 'DRIFT BLOCKS', hint: 'A raised block drifts toward you: read its pace, then hop it and the spikes behind.',
+    pal: { sky: ['#04040F', '#101040', '#241E78'], sun: ['#7CFFEA', '#B98CFF'], grid: '#B98CFF', rail: '#7CFFEA', neon: '#FFE45C', block: '#FF2BD6' } },
   { name: 'HYPERCORE', hint: 'Everything at once. Faster.',
     pal: { sky: ['#000000', '#0A0A1F', '#1F0A3A'], sun: ['#FFFFFF', '#22F0FF'], grid: '#22F0FF', rail: '#FF2BD6', neon: '#FFE45C', block: '#FF2BD6' } },
 ];

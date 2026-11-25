@@ -404,7 +404,14 @@ export function takeoffTicks(objs, rcx) {
     if (o.t !== 'block' && o.t !== 'spike' && o.t !== 'pit') continue;
     if (o.t === 'spike' && o.inv) continue;
     if (o.sa) continue; // a sliding ledge has no fixed middle to mark
-    const mid = o.t === 'spike' ? o.x + 0.4 : o.x + (o.w || 0) / 2;
+    let mid = o.t === 'spike' ? o.x + 0.4 : o.x + (o.w || 0) / 2;
+    if (o.sl) {
+      // a sliding block's middle is where it will be when the jump peaks over it: settle on that point (it moves the take-off)
+      for (let k = 0; k < 6; k++) {
+        const x0 = mid - (AIR * speedAt(mid)) / 2 - PS / 2;
+        mid = blockX(o, x0) + o.w / 2;
+      }
+    }
     const x = mid - (AIR * speedAt(mid)) / 2, a = tickAlpha(x - rcx);
     if (a > 0) out.push({ x, a });
   }

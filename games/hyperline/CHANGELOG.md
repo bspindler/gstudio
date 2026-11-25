@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.14.0 (2026-11-24)
+- New sector DRIFT BLOCKS: a raised block drifts toward you over a spike strip, so hop it as it arrives.
+
 ## 0.13.0 (2026-11-22)
 - New sector SLIDING LEDGE: the far edge of a pit slowly slides in and out as you run, so time your jump to where the ledge is. It comes before HYPERCORE, which is now sector 20.
 
