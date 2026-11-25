@@ -1,0 +1,21 @@
+{
+  "night": "2026-11-24",
+  "runs": [
+    {
+      "run": "run-2026-11-25T06-00-05-143Z",
+      "at": "2026-11-25T07:37:26.623Z",
+      "scorers": {
+        "gearhold-play": {
+          "fitness": 99.92,
+          "measures": {
+            "winnable": 100,
+            "fairDamage": 99.71,
+            "pace": 100,
+            "feel": 99.95,
+            "tension": 40.89
+          }
+        }
+      }
+    }
+  ]
+}
