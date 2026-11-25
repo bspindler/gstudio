@@ -24,7 +24,8 @@
     "build:pages": "tsx scripts/build-pages.ts",
     "demo:1b": "tsx scripts/demo-1b.ts",
     "ci:local": "tsx scripts/ci-local.ts",
-    "build:three": "node --import tsx scripts/build-three.ts"
+    "build:three": "node --import tsx scripts/build-three.ts",
+    "model": "node --import tsx scripts/vendor/glb-to-module.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

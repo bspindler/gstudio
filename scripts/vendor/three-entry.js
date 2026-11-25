@@ -17,6 +17,9 @@ export {
   DataTexture, Matrix3, Spherical, Ray, Triangle, TetrahedronGeometry, TorusKnotGeometry, Path, Curve, LineCurve3,
   CubicBezierCurve3, ReinhardToneMapping, PCFSoftShadowMap, VSMShadowMap, MultiplyBlending, SubtractiveBlending,
   NearestFilter, LinearSRGBColorSpace,
+  // Skinned, animated models built from data modules (games/<slug>/lib/rig.js); still no loaders.
+  Bone, Skeleton, SkinnedMesh, AnimationMixer, AnimationClip, QuaternionKeyframeTrack, VectorKeyframeTrack,
+  InterpolateDiscrete, InterpolateLinear, LoopOnce, LoopRepeat,
 } from 'three';
 export { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 export { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';

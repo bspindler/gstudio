@@ -1,20 +1,24 @@
 # Hyperline: quality plan, phase by phase
 
 2026-11-25. This builds on the "Quality Bar and Art & Feel Plan" (Brian, 2026-11-25). The quality bar table in that
-doc is the finish line, and this plan is how we get there **without hiring anyone**. Every asset is either made in
-code (procedural meshes, shaders and audio) or taken from CC0 sources. Each phase ships on its own, keeps all
-tests green, and ends with a check that someone else can rerun.
+doc is the finish line, and this plan is how we get there **without hiring anyone**. Every asset is CC0 (Quaternius
+first) or made in code. Each phase ships on its own, keeps all tests green, and ends with a check that someone else
+can rerun.
 
 ## Calls made
 
-- **No freelancers.** The runner, the obstacle kit and the environments are built procedurally in three.js code from
-  primitives and shaders. That keeps them fully original (hard rule 6), means there's no license to track and no
-  model files to load, and lets Hal iterate on them. CC0 models (Quaternius, Kenney) are only a fallback reference.
-- **The runner is a hover-bike.** A lane runner reads naturally on a bike, its silhouette holds up at phone size, and
-  it gives skins real surface to work with (hull, canopy, thruster colour, trail). Each existing skin maps onto a hull
-  variant. Chrome Serpent owners keep a premium look, and nobody loses anything they own.
-- **No glTF loader.** Geometry is built in JS modules, so the "no network code in games" check stays exactly as
-  strict as it is now. Skinning isn't needed because the bike animates by transforms (lean, bob, thruster flare).
+- **No freelancers. Start from Quaternius** (Brian, 2026-11-25). The runner, the obstacles and the city come from
+  Quaternius's CC0 packs, re-materialled in our own neon look. Code-built pieces fill any gaps. CC0 allows
+  commercial use and changes, needs no attribution, and the models are generic, so hard rule 6 holds. Every model
+  in a game is logged in `games/hyperline/models/SOURCES.md` with its pack, URL and CC0 licence.
+- **The runner is an animated Quaternius character.** Quaternius makes rigged characters, not vehicles, and comes
+  with run, jump and death animations. The test model is RobotExpressive (Tomás Laulhé / Quaternius, CC0, from the
+  three.js examples), already working in the lab. Skins recolour our materials, so every existing skin maps onto the
+  character, Chrome Serpent owners keep a premium look, and nobody loses anything they own.
+- **No glTF loader in the game.** `npm run model` (`scripts/vendor/glb-to-module.ts`) converts a GLB offline into a
+  data-only JS module (`games/hyperline/models/*.js`). `games/hyperline/lib/rig.js` turns it into skinned or rigid
+  meshes with our own materials and three.js animation clips. The "no network code in games" check stays exactly as
+  strict as it is now. The three.js bundle gained only the skinning and animation classes.
 - **Sound effects come from CC0 packs plus designed synthesis. Music is a code-driven sequencer playing CC0 drum and
   synth one-shots.** We own the arrangement, every track's BPM and beat grid are exact (which beat sync needs), and
   nothing has to be licensed. Each sample is logged in `games/hyperline/audio/SOURCES.md` with its CC0 source.
@@ -76,17 +80,31 @@ Build the measuring tools first, so the renderer port in phase 2 is judged on nu
 
 **Done when:** 3D is the default and the phase 1 numbers are no worse than the 2D baseline.
 
-## Phase 3: art built in code
+## Phase 3: art from Quaternius
 
-- The hover-bike, built from primitives with bevelled edges, an emissive trim and a thruster light. Its animation is
-  lean on jump, compress on landing, a speed wobble, and a break-apart on crash that reuses the shard system.
-- The existing skins become hull, canopy and trim variants plus effects (rainbow and glitch shaders). The locker and
-  shop thumbnails render the bike.
-- An obstacle kit of about 15 modular pieces (spike, block, blade, pillar, gate, pad, rail, ledge, slab and so on).
-  Every one has to pass the black-silhouette check.
-- Environments: a shader sun, layered mountains, an instanced city skyline with parallax and lit windows, and neon
-  signs drawn as canvas textures. Each theme gets its own colour grade and skyline.
+Started 2026-11-25. The pipeline (`npm run model`, `lib/rig.js`) and the runner lab (`games/hyperline/lab.html`,
+dev only) are done, with the Quaternius robot running, jumping, crashing and recolouring in each skin.
+
+Packs to pull (the free Standard portion of each, CC0, glTF). These are downloaded from itch.io by hand, because its
+pay-what-you-want page is built for a person and not a script:
+- **Universal Base Characters**, for a humanoid runner, if the robot loses.
+- **Universal Animation Library**, the "root motion disabled" export, for sprint, jump, fall, land and death clips
+  that share UBC's rig.
+- **Cyberpunk Game Kit** and **Ultimate Space Kit**, as candidates for obstacles and props.
+- **Downtown City MegaKit**, for skyline buildings.
+
+Steps:
+- Pick the runner: the robot or a UBC humanoid. Compare them in the lab at phone size, on silhouette, readability at
+  speed, and how well each wears a skin colour.
+- The existing skins become material sets and effects (rainbow and glitch shaders). The locker and shop thumbnails
+  render the character.
+- Hit-stop and the crash use the death clip and then the existing shard break-apart.
+- An obstacle kit of about 15 pieces (spike, block, blade, pillar, gate, pad, rail, ledge, slab and so on), from the
+  kits where a piece fits and built in code where none does. Every piece has to pass the black-silhouette check.
+- Environments: a shader sun, layered mountains, an instanced skyline from the City MegaKit with parallax and lit
+  windows, and neon signs drawn as canvas textures. Each theme gets its own colour grade and skyline.
 - Speed streaks at the track edges at top speed.
+- A triangle budget: the runner at 15k or fewer, and the whole scene at 150k or fewer.
 
 **Done when:** three phone screenshots, set beside three reference-game screenshots, get 4 out of 5 or better from at
 least 3 of 5 testers (the visual row of the bar).
