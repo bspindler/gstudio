@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { gearholdPlayScorer, HYPERLINE_UNTIL, SCORERS, scorerFor, TIDEPOOL_TO } from '../src/hal/scorers.js';
 import { LEVELS } from '../../../games/gearhold/levels.js';
-import { AUTHORED } from '../../../games/tidepool-pals/levels.js';
+import { AUTHORED, LAST_HAND_LEVEL } from '../../../games/tidepool-pals/levels.js';
 import { SECTORS, SECTOR_LEN } from '../../../games/hyperline/lib/world.js';
 
 describe('hal scorers', () => {
@@ -85,7 +85,7 @@ describe('hal scorers', () => {
 
 describe('default ranges follow each game\'s content (new levels and sectors get scored)', () => {
   it('Tidepool: the hand-made levels plus 10 generated ones, at least 1-30', () => {
-    expect(TIDEPOOL_TO).toBe(Math.max(30, AUTHORED.length + 10));
+    expect(TIDEPOOL_TO).toBe(Math.max(30, AUTHORED.length + 10, LAST_HAND_LEVEL));
     expect(scorerFor('tidepool-pals').defaults).toEqual({ from: 1, to: TIDEPOOL_TO, seeds: 100 });
   });
   it('Hyperline: 150 units into the last (endless) sector, so every sector is run and reach is a fraction of the whole course', () => {

@@ -8,6 +8,7 @@ export type Features = {
 export type PooledLevel = LevelDef & { pool: number };
 export declare const HELPER_LEVEL: number;
 export declare const AUTHORED: PooledLevel[];
+export declare const LAST_HAND_LEVEL: number;
 export declare const MOVE_BONUS: Record<number, number>;
 export declare const BOARD_EASE: Record<number, Array<[number, string]>>;
 export declare function poolOf(n: number): number;

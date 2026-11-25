@@ -3,7 +3,7 @@ import type { Range } from './baseline.js';
 import { scoreBlockBarn, type BlockBarnPage, type BlockBarnRecord } from './block-barn-score.js';
 import { scoreGearhold } from './gearhold-score.js';
 import { LEVELS } from '../../../../games/gearhold/levels.js';
-import { AUTHORED } from '../../../../games/tidepool-pals/levels.js';
+import { AUTHORED, LAST_HAND_LEVEL } from '../../../../games/tidepool-pals/levels.js';
 import { SECTORS, SECTOR_LEN } from '../../../../games/hyperline/lib/world.js';
 import { GEARHOLD_PLAY_DEFAULTS, scoreGearholdPlay, type PlayRecord } from './gearhold-play-score.js';
 import { scoreHyperline } from './hyperline-score.js';
@@ -23,8 +23,8 @@ export type Scorer = {
 // The default ranges follow each game's own content, so a level or sector Hal (or Brian) adds is played and scored
 // like the rest: every Gearhold level; Tidepool's hand-made levels plus 10 generated ones (at least 1-30); Hyperline
 // up to 150 units into its last, endless sector (reach is judged against a fixed distance, HYPERLINE_BANDS.reach.ref).
-/** Tidepool levels scored by default: the hand-made ones and 10 generated after them, at least 30. */
-export const TIDEPOOL_TO = Math.max(30, AUTHORED.length + 10);
+/** Tidepool levels scored by default: the hand-made ones and 10 generated after them, at least 30, and every special level (LAST_HAND_LEVEL). */
+export const TIDEPOOL_TO = Math.max(30, AUTHORED.length + 10, LAST_HAND_LEVEL);
 /** Hyperline's default `until`: 150 units into the final sector. */
 export const HYPERLINE_UNTIL = (SECTORS.length - 1) * SECTOR_LEN + 150;
 

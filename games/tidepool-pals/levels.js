@@ -276,7 +276,14 @@ const SPECIAL = {
     { tide: T(5, 3, 'up'),
       intro: 'A jellyfish pool! A pal is bubbled in its bell: clear pals right next to it twice to set it free. Then clear the sand from its long trailing tentacles.' }),
     pool: poolOf(32) },
+  33: { ...L(33, 26, 5, [RESCUE(1), ICE(4)],
+    ['xx...xx', 'x.....x', '.i...i.', '...P...', 'xxi...i', 'xx.....', 'xxx....', 'xxxx...'],
+    { tide: T(5, 3, 'up'), exit: 'down',
+      intro: 'A curled seahorse pool! Its snout points down. Untangle the four netted pals, and clear the pals under the stranded one so it sinks all the way out through the snout. Careful: at low tide the water pulls up and floats it back.' }),
+    pool: poolOf(33) },
 };
+/** The highest hand-built level; the Hal scorer's default range follows it. */
+export const LAST_HAND_LEVEL = Math.max(AUTHORED.length, ...Object.keys(SPECIAL).map(Number));
 export function levelDef(n) { return n >= 1 && n <= AUTHORED.length ? AUTHORED[n - 1] : SPECIAL[n] ?? generateLevel(n); }
 /** The level for number n, with its `pool` index. Same as levelDef; reef.js reads levelFor(n).pool. */
 export const levelFor = levelDef;
@@ -285,7 +292,7 @@ export function levelFromSearch(search) {
   const v = new URLSearchParams(search || '').get('level');
   if (v === null || !/^\d+$/.test(v)) return null;
   const n = Number(v);
-  return n >= 1 && n <= Math.max(AUTHORED.length, ...Object.keys(SPECIAL).map(Number)) ? n : null;
+  return n >= 1 && n <= LAST_HAND_LEVEL ? n : null;
 }
 
 /**

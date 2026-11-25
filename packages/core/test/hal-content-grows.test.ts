@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LEVELS as GEAR } from '../../../games/gearhold/levels.js';
 import { SECTORS, SECTOR_LEN, sectorAt } from '../../../games/hyperline/lib/world.js';
 import { LEVELS as NIGHTS } from '../../../games/lanternkeep/lib/levels.js';
-import { AUTHORED, levelDef } from '../../../games/tidepool-pals/levels.js';
+import { AUTHORED, LAST_HAND_LEVEL, levelDef } from '../../../games/tidepool-pals/levels.js';
 import { scoreBlockBarn, type BlockBarnGesture, type BlockBarnRecord, type BlockBarnTargetSize, type BlockBarnViewport } from '../src/hal/block-barn-score.js';
 import { scoreGearholdPlay, type PlayRecord } from '../src/hal/gearhold-play-score.js';
 import { scoreGearhold } from '../src/hal/gearhold-score.js';
@@ -98,7 +98,7 @@ describe('content grows: Hyperline, one more sector', () => {
 
 describe('content grows: Tidepool Pals, one more hand-made level', () => {
   it('the default range covers every hand-made level and ten generated ones', () => {
-    expect(TIDEPOOL_TO).toBe(Math.max(30, AUTHORED.length + 10));
+    expect(TIDEPOOL_TO).toBe(Math.max(30, AUTHORED.length + 10, LAST_HAND_LEVEL));
     expect(SCORERS['tidepool-pals']!.defaults.to).toBe(TIDEPOOL_TO);
   });
 
