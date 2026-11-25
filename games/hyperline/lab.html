@@ -68,7 +68,9 @@ const mats = { Main: new T.MeshStandardMaterial({ roughness: 0.35, metalness: 0.
   Grey: new T.MeshStandardMaterial({ color: '#2A2440', roughness: 0.3, metalness: 0.8 }),
   Black: new T.MeshStandardMaterial({ color: '#05030A', roughness: 0.5, metalness: 0.4 }) };
 const rig = buildRig(T, robot, (n) => mats[n] || mats.Grey);
-rig.root.scale.setScalar(0.3);
+// Mirrored (x = -0.3) so the character's left side faces the camera: one-sided gestures like the wave stay visible.
+const MIRROR = new URLSearchParams(location.search).get('mirror') !== '0';
+rig.root.scale.set(MIRROR ? -0.3 : 0.3, 0.3, 0.3);
 rig.root.rotation.y = Math.PI / 2; // face down the track (+x)
 scene.add(rig.root);
 let tris = 0; rig.meshes.forEach((m) => { tris += m.geometry.index.count / 3; });
@@ -87,17 +89,30 @@ composer.addPass(new T.OutputPass());
 
 // Animation: run loops; jump and death play once and return to run.
 let cur = rig.actions.run; cur.play();
-const fade = (name, once) => {
+const fade = (name, once, blend = 0.08) => {
   const next = rig.actions[name]; if (next === cur) { next.reset().play(); return; }
   next.reset(); next.setLoop(once ? T.LoopOnce : T.LoopRepeat, Infinity); next.clampWhenFinished = once;
-  next.play(); cur.crossFadeTo(next, 0.12, false); cur = next;
+  next.play(); cur.crossFadeTo(next, blend, false); cur = next;
 };
-rig.mixer.addEventListener('finished', (e) => { if (e.action === rig.actions.jump) fade('run', false); });
-let y = 0, vy = 0, dead = false;
-const jump = () => { if (dead) { dead = false; fade('run', false); return; } if (y > 0.001) return; vy = 7.5; fade('jump', true); };
+// Jump: physics owns it. The clip's own crouch, hop and landing (0.71 s) are skipped: start at its take-off frame,
+// ease into the airborne pose over the rise, hold that pose until touchdown, then blend straight back into the run.
+const JUMP = { from: 0.21, hold: 0.33 }, JV = 7.5, G = 26, RISE = JV / G;
+let y = 0, vy = 0, dead = false, airborne = false;
+// Gestures (wave) turn the character toward the camera; running faces down the track. facing: 0 = track, 1 = camera.
+let facing = 0, turn = 0;
+const jump = () => {
+  if (dead) { dead = false; fade('run', false); return; }
+  if (airborne) return;
+  vy = JV; airborne = true; facing = 0;
+  const a = rig.actions.jump;
+  a.reset(); a.setLoop(T.LoopOnce, 1); a.clampWhenFinished = true;
+  a.time = JUMP.from; a.timeScale = (JUMP.hold - JUMP.from) / RISE;
+  a.play(); cur.crossFadeTo(a, 0.06, false); cur = a;
+};
 const bar = document.getElementById('bar');
 const btn = (label, fn, cls = '') => { const b = document.createElement('button'); b.textContent = label; b.className = cls; b.onclick = (e) => { e.stopPropagation(); fn(b); }; bar.append(b); return b; };
-btn('Jump', jump); btn('Crash', () => { dead = true; fade('death', true); }); btn('Wave', () => fade('wave', false));
+btn('Jump', jump); btn('Crash', () => { dead = true; facing = 0; fade('death', true); }); btn('Wave', () => { facing = 1; fade('wave', false); });
+btn('Run', () => { facing = 0; dead = false; fade('run', false); });
 for (const s of SKINS) { const b = btn('', () => { skin(s); bar.querySelectorAll('.sw').forEach((x) => x.classList.remove('on')); b.classList.add('on'); }, 'sw'); b.style.background = `radial-gradient(${s.a},${s.b})`; b.title = s.id; }
 bar.querySelector('.sw').classList.add('on');
 cv.addEventListener('pointerdown', jump);
@@ -115,8 +130,15 @@ function frame(now) {
   worst = Math.max(worst, dt * 1000); acc += dt; frames++;
   if (acc > 1) { fps = frames / acc; info.textContent = `Runner lab · Quaternius robot (CC0) · ${tris} tris · ${fps.toFixed(0)} fps · worst ${worst.toFixed(0)} ms`; acc = 0; frames = 0; worst = 0; }
   if (!dead) dist += dt * 11;
-  vy -= 26 * dt; y = Math.max(0, y + vy * dt); if (y === 0) vy = 0;
+  if (airborne) {
+    vy -= G * dt; y += vy * dt;
+    const a = rig.actions.jump;
+    if (a.time >= JUMP.hold) { a.time = JUMP.hold; a.timeScale = 0; } // hold the airborne pose
+    if (y <= 0) { y = 0; vy = 0; airborne = false; if (!dead) fade("run", false); }
+  }
   rig.root.position.y = y;
+  turn += (facing - turn) * (1 - Math.exp(-dt * 10));
+  rig.root.rotation.y = Math.PI / 2 - turn * 1.15; // about 66 degrees toward the camera
   for (let i = 0; i < 80; i++) { tmp.position.set(-20 + ((i * 1.2 - dist) % 96 + 96) % 96, 0.006, 0); tmp.scale.set(1, 1, 1); tmp.updateMatrix(); lines.setMatrixAt(i, tmp.matrix); }
   lines.instanceMatrix.needsUpdate = true;
   rig.mixer.update(dt);

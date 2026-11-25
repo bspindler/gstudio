@@ -103,6 +103,12 @@ Steps:
 - The existing skins become material sets and effects (rainbow and glitch shaders). The locker and shop thumbnails
   render the character.
 - Hit-stop and the crash use the death clip and then the existing shard break-apart.
+- The physics owns the jump, and the animation only follows it (Brian, 2026-11-25: the full Jump clip read as a
+  "two twitch" jump). Start the clip at its take-off frame, ease into the airborne pose over the rise, hold that pose
+  until touchdown, then blend straight back into the run. Skip the clip's own crouch and landing, and let the game's
+  squash play the landing. The lab does this (`JUMP = { from: 0.21, hold: 0.33 }` for the robot).
+- The model is mirrored so its left side faces the camera, and gestures (wave, the flex card) turn the character
+  toward the camera.
 - An obstacle kit of about 15 pieces (spike, block, blade, pillar, gate, pad, rail, ledge, slab and so on), from the
   kits where a piece fits and built in code where none does. Every piece has to pass the black-silhouette check.
 - Environments: a shader sun, layered mountains, an instanced skyline from the City MegaKit with parallax and lit
