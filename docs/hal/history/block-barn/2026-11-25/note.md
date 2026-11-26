@@ -6,3 +6,12 @@
 
 Changes:
 - HAL-339 polish(block-barn): Animals on the hay floor softly breathe and sway while the barn is idle: **merged** (0.11.2)
+
+## Run run-2026-11-26T06-00-04-974Z
+
+**Block Barn (calm toddler barn)**
+- **Merged (HAL-345):** at dusk, a tapped animal squeezes its eyes and stretches gently before saying its name. It moves eyes and body only (no head part, per L-202).
+- **What stays the same:** the tap still answers once, and nothing moves under reduced motion. It adds no sound, asset or tap zone. The score is 100 on every measure.
+
+Changes:
+- HAL-345 polish(block-barn): At dusk, a tapped animal gives a slow sleepy stretch before its name: **merged** (0.11.2)
