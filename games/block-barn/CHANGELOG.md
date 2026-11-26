@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.11.2 (2026-11-25)
 - Animals on the hay floor now softly breathe and sway while the barn is idle.
+- At dusk, tapping an animal now gives a slow sleepy stretch (eyes squeeze shut, body rises gently) along with its name.
 
 ## 0.11.1 (2026-11-24)
 - The little sun in the sky is easier to tap on a phone: its tap area is now palm-sized.

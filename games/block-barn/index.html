@@ -289,6 +289,13 @@
   @keyframes yawn-stretch { 30%, 65% { transform: scale(.94, 1.16) rotate(-4deg); } 45% { transform: scale(1.04, 1.2) rotate(-5deg); } }
   @keyframes yawn-eyes { 20%, 70% { transform: scaleY(.1); } }
 
+  /* at dusk (the window's or the sun's) a tapped animal gives a slow sleepy stretch: eyes squeeze slowly shut and open,
+     the body rises a touch and settles (animal's own art only; no tap zone moves, no sound, no flashing) */
+  .animal.dusk-stretch .art { transform-box: fill-box; transform-origin: 50% 100%; animation: dusk-stretch 2.6s ease-in-out; }
+  .animal.dusk-stretch .eye { transform-box: fill-box; transform-origin: 50% 50%; animation: dusk-eyes 2.6s ease-in-out; }
+  @keyframes dusk-stretch { 35%, 60% { transform: scale(.97, 1.09); } }
+  @keyframes dusk-eyes { 25%, 65% { transform: scaleY(.08); } }
+
   /* the animal the barn asked for finds its way to a slow, happy side-to-side sway, then settles */
   .animal.sway .art { transform-box: fill-box; transform-origin: 50% 100%; animation: happy-sway 3s ease-in-out; }
   @keyframes happy-sway { 25% { transform: rotate(-5deg); } 75% { transform: rotate(5deg); } }
@@ -414,6 +421,7 @@
     .animal.sway .art { animation: none; }
     .animal.hopout { animation: none; }
     .animal.yawn .art { animation: none; }
+    .animal.dusk-stretch .art, .animal.dusk-stretch .eye { animation: none; }
     .animal { transition: none; }
     .animal.trot .art { animation: none; }
     .animal.oh .art { animation: none; }
@@ -1121,6 +1129,17 @@ function tapAnimal(l) {
   talk(nameLines(l));
   react(l);
   hopOut(l);
+  duskStretch(l);
+}
+// At dusk the tapped animal also gives one slow sleepy stretch (eyes and body only; no head part). CSS only, never under
+// reduced motion; the class is removed on a timer and when the slot is redrawn. No sound, text or tap zone.
+function duskStretch(l) {
+  if (!(dusk || sunDusk) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const a = animalEl(l);
+  if (!a || !named.has(l)) return;
+  restart(a, 'dusk-stretch');
+  const tok = (a._duskTok = (a._duskTok || 0) + 1);
+  setTimeout(() => { if (a._duskTok === tok) a.classList.remove('dusk-stretch'); }, 2800);
 }
 // After its name, the tapped animal hops out of its block onto the hay, wiggles and hops back (CSS only; never under
 // reduced motion or at dusk). Adds no tap zone and no sound; a tap meanwhile just answers as usual and the hop is not
