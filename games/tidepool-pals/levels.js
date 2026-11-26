@@ -271,7 +271,7 @@ const SPECIAL = {
     { tide: T(4, 3, 'up'),
       intro: 'A big octopus pool! Its tentacle tips are rock pools that only hold pals at low tide, and the tide pulls up into its head. Untangle the four netted pals and fill the gem goal.' }),
     pool: poolOf(31) },
-  32: { ...L(32, 16, 5, [RESCUE(1), { t: 'sand' }],
+  32: { ...L(32, 20, 5, [RESCUE(1), { t: 'sand' }],
     ['xx...xx', 'x.....x', '.......', '...B...', '.......', '.s...s.', '.s.x.s.', 'xsxxxsx'],
     { tide: T(5, 3, 'up'),
       intro: 'A jellyfish pool! A pal is bubbled in its bell: clear pals right next to it twice to set it free. Then clear the sand from its long trailing tentacles.' }),

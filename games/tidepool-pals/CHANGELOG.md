@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.16.1 (2026-11-25)
+- Level 32 (the jellyfish pool) has 4 more moves, so it is less of a wall.
+
 ## 0.16.0 (2026-11-24)
 - New level 33: a curled seahorse pool with four nets, a stranded pal to steer out through its snout, and a tide that pulls up.
 

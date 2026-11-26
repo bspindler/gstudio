@@ -632,7 +632,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, 
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.16.0', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.16.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
