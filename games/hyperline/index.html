@@ -259,8 +259,10 @@ import { SKIN_TONES } from './gear3d.js';
 import { createAudio } from './audio.js';
 import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } from './lib/feel.js';
 
-const VERSION = '0.23.6'; // shown in Settings; the same as createStudio's version and game.yaml (tests check)
-const studio = createStudio({ game: 'hyperline', version: '0.23.6', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG) });
+// The version is written once, in createStudio below (Hal's release bump edits that literal and game.yaml);
+// Settings shows the same string, read back from the options when the SDK takes the endpoint.
+let VERSION = '';
+const studio = createStudio({ game: 'hyperline', version: '0.23.7', get endpoint() { VERSION = this.version; return resolveEndpoint(location, window.STUDIO_CONFIG); } });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio({ phone: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches });
 // The music follows course time at the runner's centre (where take-offs are measured), so its beats are the track's.

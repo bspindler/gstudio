@@ -292,7 +292,7 @@ export const PATTERNS = [
   // take-off window is wide; the second opens a beat after any landing from the first and is as narrow as `want`.
   { id: 'stagger', sector: 12, weight: (s) => (s === 12 ? 1.8 : 0.9),
     build(x, d, r, intro) {
-      const v = speedAt(x + 6), want = intro ? 0.09 : 0.115, w1 = 0.2 + r() * 0.04;
+      const v = speedAt(x + 6), want = intro ? 0.15 : 0.18, w1 = 0.28 + r() * 0.04;
       const cw1 = (T2 - T1 - w1) * v - 0.08, cw2 = (T2 - T1 - want) * v - 0.08; // cluster widths: first spike start to last spike end
       const hi1 = -0.44 - T1 * v;
       const lo2 = hi1 + (AIR + 0.05) * v;

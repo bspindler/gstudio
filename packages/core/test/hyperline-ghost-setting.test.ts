@@ -37,8 +37,9 @@ describe('hyperline 3D: nothing is drawn through the camera', () => {
 
 describe('hyperline settings show the real version', () => {
   it('VERSION matches createStudio, and the settings text uses it', () => {
-    const v = html.match(/const VERSION = '([^']+)'/)?.[1];
-    expect(v).toBe(html.match(/createStudio\(\{ game: 'hyperline', version: '([^']+)'/)?.[1]);
+    // One literal only (Hal's release bump edits just the createStudio one); VERSION is read back from it.
+    expect(html).not.toMatch(/const VERSION = '/);
+    expect(html).toMatch(/createStudio\(\{ game: 'hyperline', version: '[^']+', get endpoint\(\) \{ VERSION = this\.version;/);
     expect(html).toContain('Hyperline ${VERSION} · Nothing');
   });
 });
