@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.23.7 (2026-11-25)
 - Hyperline: eased the sector that was much deadlier than the one before it, so the early difficulty curve is smoother.
+- Every jump now shows a cyan ring on the track where you take off, plus a light haptic tick on supported devices.
 
 ## 0.23.6 (2026-11-25)
 - No more stutters at the start of a run or the first time the trail, a crash flash or the speed lines appear. Every

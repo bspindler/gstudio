@@ -492,7 +492,9 @@ function simStep() {
   const cxw = r.x + PS / 2, cyw = r.y + PS / 2, sk = SK[S.eq];
   for (const e of ev) {
     switch (e.t) {
-      case 'jump': G.buf = 0; G.squash = -1; audio.jump(); if (!reduced) G.cam = kick(G.cam, KICK_JUMP); spawn(cxw, r.flip ? r.y + PS : r.y, 5, '#FFFFFF', 3, 0.25, 0.08); break;
+      case 'jump': G.buf = 0; G.squash = -1; audio.jump(); if (!reduced) G.cam = kick(G.cam, KICK_JUMP); spawn(cxw, r.flip ? r.y + PS : r.y, 5, '#FFFFFF', 3, 0.25, 0.08);
+        buzz(10); G.ripples.push({ x: cxw, flip: r.flip, age: 0 }); if (G.ripples.length > 4) G.ripples.shift(); /* take-off: the same cyan ring as a landing, plus a light haptic tick */
+        break;
       case 'land': {
         const fall = G.peak === null ? 0 : Math.abs(G.peak - r.y); G.peak = null;
         audio.land(landPitch(fall)); buzz(fall > 2 ? 18 : 8);
