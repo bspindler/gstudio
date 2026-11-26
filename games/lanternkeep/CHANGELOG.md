@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.9.1 (2026-11-25)
+- Small moonlit silhouettes of the coming wave's creatures now glow in the corner before each wave starts, so you can plan your plants.
+
 ## 0.9.0 (2026-11-24)
 - New night 20, Burrow Hollow: Dusk Burrowers dig under a short stretch of the road, out of reach, and pop up further on, so spread your plants along the whole road.
 

@@ -85,6 +85,10 @@
     background: #120c22ee; border: 1px solid var(--line); padding: 9px 16px; border-radius: 18px;
     font-size: 14px; text-align: center; pointer-events: none; z-index: 2;
   }
+  .preview { position: absolute; left: 12px; top: 12px; display: flex; gap: 6px; pointer-events: none; z-index: 1; opacity: 0; transition: opacity .6s; }
+  .preview.on { opacity: .8; }
+  .preview canvas { width: 30px; height: 30px; filter: drop-shadow(0 0 6px #a89cff99); }
+  @media (prefers-reduced-motion: reduce) { .preview { transition: none; } }
   .callout {
     position: absolute; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none; z-index: 2;
     font-family: var(--serif); font-size: clamp(30px, 9vw, 44px); font-weight: 600; color: var(--text);
@@ -259,6 +263,7 @@
     <canvas id="gl" aria-label="Garden"></canvas>
     <canvas id="ov" aria-hidden="true"></canvas>
     <canvas id="board2d" aria-label="Garden" hidden></canvas>
+    <div class="preview" id="preview" aria-hidden="true"></div>
     <div class="callout" id="callout" aria-live="polite"></div>
     <div class="toast" id="toast" hidden></div>
     <button class="flare play-only" id="flareBtn" aria-label="Lantern Flare"><span><svg><use href="#i-flare"/></svg>Flare</span></button>
@@ -375,11 +380,12 @@ import { PERKS, canTake, modsFor, sparksFree } from './lib/meta.js';
 import { OLD_KEY, SAVE_KEY, isUnlocked, markSeen, parseSave, recordStars, totalStars } from './lib/save.js';
 import { createRendererThree } from './scene-three.js';
 import { createRenderer } from './render.js';
+import { previewKinds, drawSilhouette } from './preview.js';
 import { createAudio } from './audio.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 // Keep version the same as in game.yaml and CHANGELOG.md. Under the test robot the SDK sends nothing.
-const studio = createStudio({ game: 'lanternkeep', version: '0.9.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'lanternkeep', version: '0.9.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
@@ -634,6 +640,28 @@ function enemyList(wave) {
   const n = {};
   for (const [type, count] of wave) n[type] = (n[type] ?? 0) + count;
   return Object.entries(n).map(([t, c]) => `${c} ${c > 1 ? PLURAL[t] : SINGULAR[t]}`).join(', ');
+}
+
+// moonlit silhouettes of the coming wave's creature kinds, shown only while a wave is yet to start
+let previewKey = '';
+function refreshPreview() {
+  const el = $('preview');
+  const kinds = mode === 'play' && !endShown ? previewKinds(g) : [];
+  const key = kinds.join(',');
+  if (key !== previewKey) {
+    previewKey = key;
+    if (key) {
+      el.textContent = '';
+      const dpr = Math.min(2, window.devicePixelRatio || 1), px = Math.round(30 * dpr);
+      for (const k of kinds) {
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = px;
+        drawSilhouette(cv.getContext('2d'), k, px);
+        el.appendChild(cv);
+      }
+    }
+  }
+  el.classList.toggle('on', !!key);
 }
 
 let barKey = '';
@@ -1047,6 +1075,7 @@ function frame(now) {
   refreshHud();
   refreshTray();
   refreshBar();
+  refreshPreview();
   requestAnimationFrame(frame);
 }
 
