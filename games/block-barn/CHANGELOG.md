@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.11.2 (2026-11-25)
+- Animals on the hay floor now softly breathe and sway while the barn is idle.
+
 ## 0.11.1 (2026-11-24)
 - The little sun in the sky is easier to tap on a phone: its tap area is now palm-sized.
 

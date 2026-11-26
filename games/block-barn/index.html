@@ -182,6 +182,12 @@
   .animal { position: absolute; left: 0; right: 0; bottom: calc(var(--L) + var(--B) + 2px);
     height: min(100cqh - var(--L) - var(--B) - 2px, var(--S) * 1.6); pointer-events: none;
     transform: translateX(var(--dx, 0px)); transition: transform 2.4s ease-in-out; }
+  /* idle: a named animal on the hay softly breathes and sways (body scale and eyes only; no head of its own). Uses the
+     individual scale/rotate properties at zero specificity, so every gesture's own animation simply takes over. Visual only. */
+  :where(.animal:not(.ghost):not(.nap)) .art { transform-box: fill-box; transform-origin: 50% 100%; animation: idle-breathe 6s ease-in-out infinite; }
+  :where(.animal:not(.ghost):not(.nap)) .eye { transform-box: fill-box; transform-origin: 50% 50%; animation: idle-eyes 6s ease-in-out infinite; }
+  @keyframes idle-breathe { 0%, 100% { scale: 1 1; rotate: -.8deg; } 50% { scale: 1.012 1.025; rotate: .8deg; } }
+  @keyframes idle-eyes { 0%, 100% { scale: 1 1; } 50% { scale: 1.04 1.06; } }
   /* a named animal dragged along the hay trots there slowly, a faint bob on the way, and settles where the finger lifted */
   .animal.trot .art { transform-box: fill-box; transform-origin: 50% 100%; animation: trot-bob 2.4s ease-in-out; }
   @keyframes trot-bob { 12%, 37%, 62%, 87% { transform: translateY(-3%) rotate(1.5deg); } 25%, 50%, 75% { transform: translateY(0) rotate(-1deg); } }
@@ -399,6 +405,7 @@
     .mv .pic, .dance .pic { animation-duration: .5s !important; }
     .slot.invite .body { animation-duration: 4s; }
     .animal.ghost .pic { animation: none; }
+    :where(.animal) .art, :where(.animal) .eye { animation: none; }
     .animal.look .art { animation: none; }
     .animal.blink .eye { animation: none; }
     .animal.watch .eye { animation: none; }
@@ -506,7 +513,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.11.1', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.11.2', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
