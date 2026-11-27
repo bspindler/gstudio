@@ -262,7 +262,7 @@ import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } f
 // The version is written once, in createStudio below (Hal's release bump edits that literal and game.yaml);
 // Settings shows the same string, read back from the options when the SDK takes the endpoint.
 let VERSION = '';
-const studio = createStudio({ game: 'hyperline', version: '0.23.7', get endpoint() { VERSION = this.version; return resolveEndpoint(location, window.STUDIO_CONFIG); } });
+const studio = createStudio({ game: 'hyperline', version: '0.23.8', get endpoint() { VERSION = this.version; return resolveEndpoint(location, window.STUDIO_CONFIG); } });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio({ phone: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches });
 // The music follows course time at the runner's centre (where take-offs are measured), so its beats are the track's.
@@ -501,6 +501,7 @@ function simStep() {
         if (!reduced) G.cam = kick(G.cam, kickLand(fall));
         G.squash = 1;
         spawn(cxw, r.flip ? r.y + PS : r.y, 7, sk.a, 4, 0.3, 0.1);
+        spawn(cxw, r.flip ? r.y + PS : r.y, 6, '#22F0FF', 3.5, 0.22, 0.07, r.flip ? -1.5 : 1.5); /* landing spark: cyan = safe surface */
         G.ripples.push({ x: cxw, flip: r.flip, age: 0 }); if (G.ripples.length > 4) G.ripples.shift();
         if (e.spikes >= 3) pop(`${e.spikes} IN ONE JUMP`, cxw, cyw + 0.8, '#7CFF6B', 16);
         G.stats = applyEvent(G.stats, e); break; }

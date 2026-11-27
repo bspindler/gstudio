@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.8 (2026-11-26)
+- Landings now throw a short cyan spark off the track and play a soft low synth thud.
+
 ## 0.23.7 (2026-11-25)
 - Hyperline: eased the sector that was much deadlier than the one before it, so the early difficulty curve is smoother.
 - Every jump now shows a cyan ring on the track where you take off, plus a light haptic tick on supported devices.

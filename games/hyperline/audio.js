@@ -255,6 +255,7 @@ export function createAudio(opts = {}) {
     land(freq) {
       play('land', { vol: 0.7, rate: Math.max(0.5, Math.min(1.1, freq / 140)) });
       tone(freq, 0.12, { type: 'sine', to: freq * 0.55, vol: 0.16 });
+      tone(freq * 0.5, 0.16, { type: 'sine', to: 38, vol: 0.1 }); // a soft synth sub-thud under the music
     },
     /** For tests: what is decoded and where the sequencer is. Reads only. */
     debug() { return { state: ctx ? ctx.state : 'none', decoded: Object.keys(buffers).length, total: Object.keys(SFX).length, running: !!timer, step: stepDone, rate, wind: !!windSrc }; },
