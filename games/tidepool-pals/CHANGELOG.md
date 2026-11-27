@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.16.2 (2026-11-26)
+- Stranded pals now give an occasional slow glance and lean toward their exit while they wait.
+
 ## 0.16.1 (2026-11-25)
 - Level 32 (the jellyfish pool) has 4 more moves, so it is less of a wall.
 

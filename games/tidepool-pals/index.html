@@ -306,6 +306,10 @@ button:focus-visible{outline:3px solid var(--sand);outline-offset:2px}
 /* a clear lands next to a stranded or bubbled pal: it turns toward it (--pt) and gives a small hopeful bounce */
 .lost.perk .tl{animation:perk .55s ease-out 1}
 @keyframes perk{0%{transform:rotate(0) translateY(0)}30%{transform:rotate(var(--pt,8deg)) translateY(-14%) scale(1.08)}60%{transform:rotate(var(--pt,8deg)) translateY(0) scale(1)}80%{transform:rotate(var(--pt,8deg)) translateY(-5%)}100%{transform:rotate(0) translateY(0)}}
+/* an occasional slow glance and lean toward the exit (--gx, --gy, --gr) */
+.lost.glance .tl{animation:glance 1.6s ease-in-out 1}
+@keyframes glance{0%,100%{transform:translate(0,0) rotate(0)}30%,70%{transform:translate(var(--gx,0),var(--gy,0)) rotate(var(--gr,0))}}
+@media (prefers-reduced-motion:reduce){.lost.glance .tl{animation:none}}
 .swimmer{position:absolute;width:calc(100% / 7);height:calc(100% / 8);pointer-events:none;animation:swimoff 1.1s cubic-bezier(.4,0,.6,1) forwards}
 .swimmer svg{width:100%;height:100%;display:block;animation:paddle .25s ease-in-out infinite alternate}
 @keyframes swimoff{20%{transform:scale(1.25)}100%{transform:translate(var(--wx),var(--wy)) scale(1);opacity:0}}
@@ -632,7 +636,7 @@ import { BOOSTERS, DECOR, addPal, bankShell, buyBoosters, useBooster, buyDecor, 
 import { FIELD_NOTES, PAL_HOME, POOL_SIZE, STAGES, claimThriving, continueAt, didYouKnow, homeScenery, initReef, pendingThriving,
   poolInfo, poolOf, poolProgress, reefPools, residents, takeStageUps } from './reef.js';
 
-const studio = createStudio({ game: 'tidepool-pals', version: '0.16.1', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
+const studio = createStudio({ game: 'tidepool-pals', version: '0.16.2', endpoint: resolveEndpoint(location, window.STUDIO_CONFIG ?? { endpoint: '' }) });
 /** Game-specific events ride on the SDK's 'custom' event (the ingest accepts a fixed list of names). */
 const ev = (event, props = {}) => studio.track('custom', { event, ...props });
 const RM = matchMedia('(prefers-reduced-motion: reduce)');
@@ -1647,6 +1651,23 @@ function blinkOne() {
 }
 function blinkLoop() { setTimeout(() => { blinkOne(); blinkLoop(); }, 3500 + Math.random() * 3500); }
 blinkLoop();
+
+/* ---------- exit glance: now and then a resting stranded pal slowly leans toward its exit and settles back (cosmetic only) ---------- */
+function glanceOne() {
+  if (!motion() || !lvl || lvl.over || busy || aiming || pressing || view !== 'play' || !modal.hidden || !lvl.exit) return;
+  if (tilesEl.querySelector('.hintme, .now, .pop, .crumble, .shake, .matchglow, .spawn, .land, .perk, .glance')) return;
+  const lost = [...tilesEl.querySelectorAll('.tile.lost')].filter((t) => !t._dying && /^Stranded/.test(t.getAttribute('aria-label') || ''));
+  if (!lost.length) return;
+  const el = lost[Math.floor(Math.random() * lost.length)];
+  const [dr, dc] = GRAVITY[lvl.exit];
+  el.style.setProperty('--gx', dc * 8 + '%');
+  el.style.setProperty('--gy', dr * 8 + '%');
+  el.style.setProperty('--gr', dc * 9 + 'deg');
+  el.classList.add('glance');
+  setTimeout(() => el.classList.remove('glance'), 1700);
+}
+function glanceLoop() { setTimeout(() => { glanceOne(); glanceLoop(); }, 6000 + Math.random() * 5000); }
+glanceLoop();
 
 /* ---------- parallax tilt (pointer) ---------- */
 {
