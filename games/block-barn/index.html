@@ -347,6 +347,9 @@
   /* after it pops in and the block has landed, the tower's animal gives one slow, small, happy hop */
   .tanimal.pop .pic { animation: pop .5s cubic-bezier(.3,1.6,.5,1), tower-hop 1s ease-in-out .5s; }
   @keyframes tower-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-9px); } 70% { transform: translateY(0) scale(1.03, .97); } }
+  /* when an animal trots home, its block gives one slow, small wobble to welcome it (block body only; no sound, no flash) */
+  .body.welcome { animation: welcome-wobble 1.6s ease-in-out; }
+  @keyframes welcome-wobble { 20% { transform: rotate(-1.6deg); } 45% { transform: rotate(1.3deg); } 70% { transform: rotate(-.7deg); } 90% { transform: rotate(.3deg); } }
   #bale-bump.bump { animation: nudge .4s ease-out; }
   /* a tumbled block settles on the bale: it gives one slow, soft squash and eases back (no sound, no flash) */
   #bale-bump { transform-origin: 50% 100%; }
@@ -420,6 +423,7 @@
     .animal.look.nuz .art { animation: none; }
     .animal.sway .art { animation: none; }
     .animal.hopout { animation: none; }
+    .body.welcome { animation: none; }
     .animal.yawn .art { animation: none; }
     .animal.dusk-stretch .art, .animal.dusk-stretch .eye { animation: none; }
     .animal { transition: none; }
@@ -521,7 +525,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.11.2', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.11.3', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1082,7 +1086,23 @@ function trotAnimal(l, targetX) {
   if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
     restart(a, 'trot');
     setTimeout(() => a.classList.remove('trot'), 2500);
+    welcomeHome(l, 2300);
   }
+}
+// Once an animal has trotted home, its own block gives one slow, small wobble. CSS only, never under reduced motion;
+// skipped if the slot has since been redrawn for another letter or is busy with its own entrance. No sound or text.
+function welcomeHome(l, delay) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const k = floor.indexOf(l);
+  if (k < 0) return;
+  const body = slotsEl.children[k].querySelector('.body');
+  const tok = (body._welcomeTok = (body._welcomeTok || 0) + 1);
+  setTimeout(() => {
+    if (body._welcomeTok !== tok || floor[k] !== l || !named.has(l)) return;
+    if (body.classList.contains('arrive') || body.classList.contains('flip')) return;
+    restart(body, 'welcome');
+    setTimeout(() => { if (body._welcomeTok === tok) body.classList.remove('welcome'); }, 1700);
+  }, delay);
 }
 // A dragged animal let go on top of another one climbs onto its back; the pair takes a slow little walk, then the rider
 // hops down and trots home. Both come back exactly where they started, so nothing is left moved. It uses the
@@ -1120,7 +1140,7 @@ function rideAnimal(rl, hl) {
     { translate: P(walk, 0), offset: 0.78, easing: ease },
     { translate: P(0, 0) },
   ], { duration: RIDE_MS });
-  r._ride.finished.then(() => { slot.style.zIndex = prevZ; }, () => { slot.style.zIndex = prevZ; });
+  r._ride.finished.then(() => { slot.style.zIndex = prevZ; welcomeHome(rl, 0); }, () => { slot.style.zIndex = prevZ; });
   return true;
 }
 function tapAnimal(l) {
@@ -1327,6 +1347,7 @@ function visitLoft(l) {
       void a.offsetWidth;
       a.classList.add('trot-out');
       setTimeout(() => a.classList.remove('trot-out'), 1200);
+      welcomeHome(l, 1000);
     }, 4300);
   }, 1100);
   return true;
