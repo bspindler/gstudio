@@ -35,6 +35,8 @@
   #hands { pointer-events: none; }
   #vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at center, transparent 65%, rgba(0,0,0,.3) 100%); }
   #hitdir { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; }
+  #hitarc { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; opacity: 0; }
+  #hitarc i { position: absolute; left: -22vmin; top: -49vmin; width: 44vmin; height: 5vmin; border-top: 3px solid rgba(217,164,65,.9); border-radius: 50% 50% 0 0 / 100% 100% 0 0; filter: drop-shadow(0 0 4px rgba(255,190,60,.5)); -webkit-mask-image: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(90deg, transparent, #000 30%, #000 70%, transparent); }
   #hitdir i { position: absolute; left: -9px; top: -39vmin; width: 18px; height: 34px; background: linear-gradient(180deg, #ffd27a, #d9a441 55%, #7a5418); clip-path: polygon(50% 0, 100% 100%, 50% 80%, 0 100%); filter: drop-shadow(0 0 5px rgba(255,190,60,.7)); }
   #hurt { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at center, transparent 35%, rgba(255,30,10,.75)); opacity: 0; }
   #keyglow { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at center, transparent 50%, rgba(217,164,65,.55) 85%, rgba(255,205,100,.85)); box-shadow: inset 0 0 40px rgba(217,164,65,.6); opacity: 0; }
@@ -132,6 +134,7 @@
   <div id="vignette"></div>
   <div id="hurt"></div>
   <div id="hitdir" aria-hidden="true"><i></i></div>
+  <div id="hitarc" aria-hidden="true"><i></i></div>
   <div id="keyglow"></div>
   <div id="glow"></div>
   <div id="hud" hidden>
@@ -169,12 +172,13 @@ import { buildLevel, buildDoor, buildLantern, buildMachines, buildItems, buildSc
 import { buildGuns, gunTriangles } from './gun3d.js';
 import { spawnYaw } from './spawn.js';
 import { attackGlint } from './glint.js';
+import { hitArcLife, hitArcOpacity } from './hitarc.js';
 import { makeCheckpoint, parseCheckpoint } from './checkpoint.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 const hal = { shots: 0, hits: 0, dmg: 0, unseen: 0, hit: false, overhead: false }; // plain counters and the hook's overhead flag, set only by the hook
 
-const studio = createStudio({ game: 'gearhold', version: '0.12.0', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'gearhold', version: '0.12.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const view = $('view');
@@ -304,7 +308,7 @@ const viewLook = () => P.look + P.kick;
 
 let level = 0, mw = 0, mh = 0, grid = [], doorOpen = new Float32Array(0), doorMoving = new Uint8Array(0);
 let enemies = [], items = [], shots = [], fx = [], foes = 0, presses = [], waves = [];
-let hitFx = 0, hitDeg = 0;
+let hitFx = 0, hitDeg = 0, arcFx = 0;
 let kills = 0, levelTime = 0, noiseRadius = 0, msgTime = 0, lockedNag = 0, hurtFx = 0, glowFx = 0, keyFx = 0, shake = 0;
 let mode = 'title';
 let mood = LEVELS[0].mood;
@@ -522,7 +526,7 @@ function overheadCamera() {
   return { eye, view: M4.lookAt(eye, [mw / 2, 0, mh / 2], turned ? [1, 0, 0] : [0, 0, -1]), proj: M4.persp(vfov, asp, 0.5, h + 200) };
 }
 /** What is drawn over the world (the hands, the HUD, screen effects, messages, touch controls): left out of the overhead shots. */
-const OVERLAY_IDS = ['hands', 'hud', 'vignette', 'hurt', 'glow', 'msg', 'touchui'];
+const OVERLAY_IDS = ['hands', 'hud', 'vignette', 'hurt', 'hitarc', 'glow', 'msg', 'touchui'];
 function machineDraws(e, t, out) {
   const yaw = Math.PI / 2 - e.face;
   const dead = !!e.dead, mesh = MESH[e.golem ? 'n' : e.kind];
@@ -880,6 +884,8 @@ function hurt(n, unseen, sx, sy) {
       hitDeg = Math.round(Math.atan2(side, fwd) * 180 / Math.PI);
       hitFx = 1;
       $('hitdir').style.transform = `rotate(${hitDeg}deg)`;
+      arcFx = 1;
+      $('hitarc').style.transform = `rotate(${hitDeg}deg)`;
     }
   }
   { const eff = Math.min(n, P.hp); hal.dmg += eff; if (unseen) hal.unseen += eff; } // effective damage (capped at hp left)
@@ -1324,6 +1330,8 @@ function update(dt) {
   $('hurt').style.opacity = String(hurtFx);
   hitFx = Math.max(0, hitFx - dt * 1.2);
   $('hitdir').style.opacity = String(Math.min(1, hitFx * 1.5));
+  arcFx = hitArcLife(arcFx, dt);
+  $('hitarc').style.opacity = String(hitArcOpacity(arcFx));
   $('glow').style.opacity = String(glowFx);
   $('keyglow').style.opacity = String(keyFx);
   updateHud();
@@ -1373,7 +1381,7 @@ function showOverlay(title, tag, detail, stats, buttons) {
   $('touchui').hidden = true;
   $('msg').hidden = true;
   $('hurt').style.opacity = '0'; keyFx = 0; $('keyglow').style.opacity = '0';
-  hitFx = 0; $('hitdir').style.opacity = '0';
+  hitFx = 0; $('hitdir').style.opacity = '0'; arcFx = 0; $('hitarc').style.opacity = '0';
 }
 
 // A fresh start drops any checkpoint; startLevel(i, cp) respawns at that gear-key checkpoint instead.

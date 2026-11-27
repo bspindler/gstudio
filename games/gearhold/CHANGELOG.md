@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.12.1 (2026-11-26)
+- Gearhold: a faint brass arc at the screen edge now shows for about 0.4 s on the side a hit came from.
+
 ## 0.12.0 (2026-11-22)
 - New level 10, Bellworks: a bell-golem guards the exit hall and sends slow, glowing shockwaves across the floor; sidestep them, shoot it down, and the exit opens.
 - Turret Gallery: brass turrets are sturdier, so the hall takes a little more work to clear.
