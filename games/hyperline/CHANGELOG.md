@@ -4,6 +4,7 @@ Newest first. Each version matches `version` in `game.yaml` and the `createStudi
 
 ## 0.23.8 (2026-11-26)
 - Landings now throw a short cyan spark off the track and play a soft low synth thud.
+- Hyperline: tap or press Space anywhere on the game-over card to run again instantly from the same start.
 
 ## 0.23.7 (2026-11-25)
 - Hyperline: eased the sector that was much deadlier than the one before it, so the early difficulty curve is smoother.
