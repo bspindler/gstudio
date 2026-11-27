@@ -385,7 +385,7 @@ import { createAudio } from './audio.js';
 
 const HAL = new URLSearchParams(location.search).has('hal'); // test robot only; see the hal hook block at the end
 // Keep version the same as in game.yaml and CHANGELOG.md. Under the test robot the SDK sends nothing.
-const studio = createStudio({ game: 'lanternkeep', version: '0.9.1', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
+const studio = createStudio({ game: 'lanternkeep', version: '0.9.2', endpoint: HAL ? '' : resolveEndpoint(location, window.STUDIO_CONFIG) });
 
 const $ = (id) => document.getElementById(id);
 const app = $('app');
@@ -744,7 +744,7 @@ function refreshBar() {
 // ---------- growing and branches ----------
 function growTower(tw) {
   if (needsBranch(tw)) { openBranch(tw); return; }
-  if (upgrade(g, tw.id) === '') { audio.upgrade(); buzz(10); }
+  if (upgrade(g, tw.id) === '') { audio.upgrade(); buzz(10); handle([{ e: 'bloom', x: tw.x, y: tw.y }]); }
 }
 
 function openBranch(tw) {
@@ -760,6 +760,7 @@ function openBranch(tw) {
     btn.onclick = () => {
       if (upgrade(g, tw.id, k) !== '') return;
       audio.branch();
+      handle([{ e: 'bloom', x: tw.x, y: tw.y }]);
       buzz(20);
       studio.track('custom', { kind: 'branch', plant: tw.type, branch: br.name });
       closeBranch();

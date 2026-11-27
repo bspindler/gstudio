@@ -504,6 +504,7 @@ export function createRenderer(canvas, opts = {}) {
         fx.push({ k: 'lob', x1: ev.x1, y1: ev.y1 - 0.12, x2: ev.x2, y2: ev.y2, t: 0, life: 0.16 });
         fx.push({ k: 'burst', x: ev.x2, y: ev.y2, r: ev.splash, t: -0.12, life: 0.4 });
       } else if (ev.e === 'pulse') fx.push({ k: 'pulse', x: ev.x, y: ev.y, r: ev.range, t: 0, life: 0.5 });
+      else if (ev.e === 'bloom') fx.push({ k: 'pulse', x: ev.x, y: ev.y, r: 0.95, t: 0, life: 1.8, moon: true });
       else if (ev.e === 'chime') fx.push({ k: 'pulse', x: ev.x, y: ev.y, r: ev.range, t: 0, life: 1.1, moon: true });
       else if (ev.e === 'kill') {
         if (ev.reward >= 5) fx.push({ k: 'coin', x: ev.x, y: ev.y, text: `+${ev.reward}`, t: 0, life: 0.9 });

@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number.
 
+## 0.9.2 (2026-11-26)
+- A plant now gives a slow, soft moonlit bloom ring and a gentle chime when it grows or takes a branch.
+
 ## 0.9.1 (2026-11-25)
 - Small moonlit silhouettes of the coming wave's creatures now glow in the corner before each wave starts, so you can plan your plants.
 

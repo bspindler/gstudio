@@ -566,6 +566,7 @@ export function createRendererThree(canvas, overlay, opts = {}) {
       else if (ev.e === 'beam') { fx.push({ k: 'beam', x1: ev.x1, z1: ev.y1, x2: ev.x2, z2: ev.y2, t: 0, life: 0.34, heat: ev.heat }); fired.set(ev.id, 0); }
       else if (ev.e === 'burst') { fx.push({ k: 'lob', x1: ev.x1, z1: ev.y1, x2: ev.x2, z2: ev.y2, t: 0, life: 0.24, burn: ev.burn }); fx.push({ k: 'burst', x: ev.x2, z: ev.y2, r: ev.splash, t: -0.24, life: 0.5 }); fired.set(ev.id, 0); }
       else if (ev.e === 'pulse') { fx.push({ k: 'pulse', x: ev.x, z: ev.y, r: ev.range, t: 0, life: 0.7 }); fired.set(ev.id, 0); }
+      else if (ev.e === 'bloom') fx.push({ k: 'pulse', x: ev.x, z: ev.y, r: 0.95, t: 0, life: 1.8, moon: true });
       else if (ev.e === 'chime') { fx.push({ k: 'pulse', x: ev.x, z: ev.y, r: ev.range, t: 0, life: 1.2, moon: true }); fired.set(ev.id, 0); }
       else if (ev.e === 'kill') {
         const big = ev.type === 'toad' || ev.type === 'mothmother';
