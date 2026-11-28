@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.12.2 (2026-11-27)
+- An unsealed exit arch now gives a slow warm brass pulse, so it's easier to find across long routes.
+
 ## 0.12.1 (2026-11-26)
 - Gearhold: a faint brass arc at the screen edge now shows for about 0.4 s on the side a hit came from.
 
