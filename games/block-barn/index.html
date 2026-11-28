@@ -373,6 +373,12 @@
   #fx { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
   .puff { position: absolute; width: 96px; height: 68px; margin: -50px 0 0 -48px; animation: puff .75s ease-out forwards; }
   @keyframes puff { 0% { transform: scale(.3) translateY(10px); opacity: .9; } 60% { opacity: .85; } 100% { transform: scale(1.25) translateY(-14px); opacity: 0; } }
+  /* a tapped block puffs three pale, slow hay wisps up from beneath it, rising and fading over about 1s (code-drawn,
+     no sound, no flashing, no tap zone; skipped under reduced motion) */
+  .wisp { position: absolute; width: 5px; height: 16px; margin: -16px 0 0 -2px; border-radius: 50%; background: rgba(250, 236, 180, .7);
+    opacity: 0; animation: wisp 1.05s ease-out forwards; }
+  @keyframes wisp { 0% { transform: translate(0, 4px) scale(.6); opacity: 0; } 25% { opacity: .65; }
+    100% { transform: translate(var(--wx), -34px) rotate(var(--wr)) scale(1.1); opacity: 0; } }
   .falling { position: absolute; animation: fall 1.3s cubic-bezier(.4,0,.6,1) forwards; }
   /* each block lands, then gives one small eased bounce (up slowing, down speeding) as it settles */
   @keyframes fall { 0% { transform: none; } 45% { transform: translate(calc(var(--dx) * .7), var(--dy)) rotate(var(--rot)); animation-timing-function: cubic-bezier(.2,.6,.4,1); }
@@ -525,7 +531,7 @@ import { createRecorder, mountVoices } from './recorder.js';
 import { animalSVG, mouseSVG, puffSVG } from './draw.js';
 
 // Child-directed: the SDK runs in no-ingest mode and nothing is ever sent (no events, purchases or prompts).
-const studio = createStudio({ game: 'block-barn', version: '0.11.3', endpoint: '' });
+const studio = createStudio({ game: 'block-barn', version: '0.11.4', endpoint: '' });
 void studio;
 
 const $ = (id) => document.getElementById(id);
@@ -1041,6 +1047,27 @@ function puffAt(x, y) {
   sfx.puff();
 }
 
+// Three slow wisps of hay rise from beneath a tapped block's slot. Part of that tap's one answer: no sound, no text.
+function hayWisps(k) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const slot = slotsEl.children[k];
+  if (!slot) return;
+  const r = slot.getBoundingClientRect(), o = fx.getBoundingClientRect();
+  const cx = r.left - o.left + r.width / 2, by = r.bottom - o.top - 2;
+  const spread = Math.min(r.width, 120) * 0.22;
+  [-1, 0, 1].forEach((d, i) => {
+    const w = document.createElement('div');
+    w.className = 'wisp';
+    w.style.left = `${cx + d * spread}px`;
+    w.style.top = `${by}px`;
+    w.style.setProperty('--wx', `${d * 5 + (i - 1) * 2}px`);
+    w.style.setProperty('--wr', `${d * 14}deg`);
+    w.style.animationDelay = `${i * 0.08}s`;
+    fx.append(w);
+    setTimeout(() => w.remove(), 1300);
+  });
+}
+
 // ---------- what a tap does ----------
 function clearInvite() {
   if (invited === null) return;
@@ -1060,6 +1087,7 @@ function nameBlock(k) {
   sfx.clack(); sfx.pop();
   react(l);
   lookToward(k);
+  hayWisps(k);
   if (rng() < 0.14) hiddenFriend(k);
 }
 // A press held LONGPRESS ms or more and let go on a named animal is answered by one slow yawn instead of the tap
@@ -1150,6 +1178,8 @@ function tapAnimal(l) {
   react(l);
   hopOut(l);
   duskStretch(l);
+  const k = floor.indexOf(l);
+  if (k >= 0) hayWisps(k);
 }
 // At dusk the tapped animal also gives one slow sleepy stretch (eyes and body only; no head part). CSS only, never under
 // reduced motion; the class is removed on a timer and when the slot is redrawn. No sound, text or tap zone.

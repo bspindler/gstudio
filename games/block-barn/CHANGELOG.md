@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.11.4 (2026-11-27)
+- Tapping a block now puffs a few slow, soft hay wisps up from beneath it.
+
 ## 0.11.3 (2026-11-26)
 - When an animal trots home, its block gives a slow, soft wobble to welcome it back.
 
