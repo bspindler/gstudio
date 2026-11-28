@@ -576,7 +576,15 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
   const speedGeo = new T.BufferGeometry(); speedGeo.setAttribute('position', new T.BufferAttribute(new Float32Array(14 * 2 * 3), 3));
   const speed = new T.LineSegments(speedGeo, new T.LineBasicMaterial({ color: 0xffffff, transparent: true, depthTest: false, toneMapped: false }));
   speed.frustumCulled = false;
-  screen.add(speed, vigQuad, flashQuad);
+  const streakMat = new T.ShaderMaterial({
+    uniforms: { a: { value: 0 }, aspect: { value: 1 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform float a; uniform float aspect; varying vec2 vUv; void main(){ float w = max(0.07, 24.0 / (aspect * 400.0)); float e = min(vUv.x, 1.0 - vUv.x); float k = 1.0 - smoothstep(0.0, w, e); gl_FragColor = vec4(1.0, 0.169, 0.839, a * k); }',
+    transparent: true, depthTest: false, depthWrite: false,
+  });
+  const streakQuad = new T.Mesh(new T.PlaneGeometry(1, 1).translate(0.5, 0.5, 0), streakMat);
+  streakQuad.visible = false;
+  screen.add(speed, vigQuad, streakQuad, flashQuad);
 
   // ---------- composer ----------
   // The scene renders into a 4x multisampled buffer: the bloom chain draws into render targets, which the renderer's
@@ -820,6 +828,8 @@ function build(T, renderer, canvas, overlay, kit, opts = {}) {
     ovQuad.visible = !!st.overlayDirty; if (ovQuad.visible) ovTex.needsUpdate = true;
     flashQuad.visible = st.flash > 0; flashQuad.material.opacity = Math.min(0.6, st.flash || 0);
     vigQuad.visible = st.nearFlash > 0; vigMat.uniforms.a.value = Math.min(0.5, st.nearFlash || 0); vigMat.uniforms.aspect.value = W / H;
+    streakQuad.scale.set(W, H, 1); streakQuad.visible = st.nearStreak > 0;
+    streakMat.uniforms.a.value = Math.min(0.25, st.nearStreak || 0) * 2.4; streakMat.uniforms.aspect.value = W / H;
     speed.visible = !st.reduced && st.speed > 10.5 && st.showRunner;
     if (speed.visible) {
       const k = Math.min(1, (st.speed - 10.5) / 4), P = speedGeo.attributes.position.array;

@@ -262,7 +262,7 @@ import { kick, KICK_JUMP, kickLand, landPitch, nearChain, SLOWMO, springStep } f
 // The version is written once, in createStudio below (Hal's release bump edits that literal and game.yaml);
 // Settings shows the same string, read back from the options when the SDK takes the endpoint.
 let VERSION = '';
-const studio = createStudio({ game: 'hyperline', version: '0.23.8', get endpoint() { VERSION = this.version; return resolveEndpoint(location, window.STUDIO_CONFIG); } });
+const studio = createStudio({ game: 'hyperline', version: '0.23.9', get endpoint() { VERSION = this.version; return resolveEndpoint(location, window.STUDIO_CONFIG); } });
 const $ = (id) => document.getElementById(id);
 const audio = createAudio({ phone: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches });
 // The music follows course time at the runner's centre (where take-offs are measured), so its beats are the track's.
@@ -521,7 +521,7 @@ function simStep() {
         pop(`CLOSE! +${NEAR_CR}`, e.x, e.y + 0.4, '#22F0FF', 20);
         spawn(e.x, e.y, 8, '#22F0FF', 4, 0.35, 0.08);
         spawn(r.x + PS, r.flip ? r.y + PS : r.y, 5, '#22F0FF', 2.5, 0.22, 0.06);
-        G.nearFlash = reduced ? 0.25 : 0.5; break;
+        G.nearFlash = reduced ? 0.25 : 0.5; G.nearStreak = reduced ? 0.15 : 0.25; audio.whoosh(); break; // quick magenta edge streak (under 0.3 s)
       case 'pad': G.stats = applyEvent(G.stats, e); audio.pad(); spawn(cxw, r.y, 14, '#7CFF6B', 5, 0.45, 0.1, 4); break;
       case 'bar': G.stats = applyEvent(G.stats, e); break;
       case 'gate': audio.gate(); pop('THREADED', cxw, cyw + 0.9, '#FFE45C', 15); spawn(cxw, cyw, 8, '#FFE45C', 4, 0.35, 0.08); break;
@@ -727,7 +727,7 @@ function update(rdt) {
   G.lightTrail = G.lightTrail.filter((lp) => lp.age < 0.3);
   for (const rp of G.ripples) rp.age += dt;
   G.ripples = G.ripples.filter((rp) => rp.age < 0.45);
-  G.shake = Math.max(0, G.shake - dt); G.flash = Math.max(0, G.flash - dt * 2); G.nearFlash = Math.max(0, (G.nearFlash || 0) - dt * 3.5); G.blink = Math.max(0, G.blink - dt);
+  G.shake = Math.max(0, G.shake - dt); G.flash = Math.max(0, G.flash - dt * 2); G.nearFlash = Math.max(0, (G.nearFlash || 0) - dt * 3.5); G.nearStreak = Math.max(0, (G.nearStreak || 0) - dt); G.blink = Math.max(0, G.blink - dt);
   const r = G.runner;
   G.lift += ((r.flip ? 0 : Math.max(0, r.y - 1.6) * 0.55) - G.lift) * k;
   G.flipT += ((r.flip ? 1 : 0) - G.flipT) * (1 - Math.exp(-dt * 4));
@@ -749,7 +749,7 @@ function draw() {
     bestMark: G.state !== 'ready' && G.start <= 1 ? bestMarkX(G.mode === 'daily' ? (G.day === S.daily.day ? S.daily.best : 0) : S.best, G.start) : null,
     rx: r.x, runner: r, course: G.course, skin: SK[S.eq], trailId: S.trail, trailPts: G.state === 'run' ? G.trail : [],
     ghost: gp && Math.abs(gp.x - r.x) < 60 ? gp : null, parts: G.parts, pops: G.pops, ripples: G.ripples, lightTrail: reduced ? [] : G.lightTrail, shards: reduced ? [] : G.shards, squash: reduced ? 0 : G.squash, t: G.t, lift: G.lift, flipT: G.flipT,
-    shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0,
+    shakeX: sh ? (Math.random() - 0.5) * sh : 0, shakeY: sh ? (Math.random() - 0.5) * sh : 0, flash: G.flash, nearFlash: G.nearFlash || 0, nearStreak: G.nearStreak || 0,
     reduced, phase: G.state, tone: SKIN_TONES[S.tone], large: S.settings.bigRunner, speed: speedAt(r.x), kick: reduced ? 0 : G.cam.y, showRunner: G.state !== 'dead', blink: G.blink > 0 && Math.floor(G.blink * 10) % 2 === 0,
   };
   if (r3d) { st.overlayDirty = drawOverlay(cx, W, H, st); r3d.render(st); return; }

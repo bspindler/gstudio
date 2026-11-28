@@ -233,6 +233,8 @@ export function createAudio(opts = {}) {
       if (!play('chip', { vol: 0.5, rate: r })) tone(988 * r, 0.12, { type: 'sine', vol: 0.16 });
     },
     near() { if (!play('near', { vol: 0.55 })) hiss(0.28, { vol: 0.22, f0: 600, f1: 5000, q: 2.5 }); },
+    /** A quiet synth whoosh under the near-miss blip: a short band sweep, well under 0.3 s. */
+    whoosh() { hiss(0.22, { vol: 0.07, f0: 3200, f1: 500, q: 0.9 }); },
     /** Gravity flip: rising into the ceiling, falling back out. */
     flip(into = true) { if (!play(into ? 'flipIn' : 'flipOut', { vol: 0.6 })) tone(300, 0.25, { type: 'sine', to: into ? 900 : 150, vol: 0.14 }); },
     death() {

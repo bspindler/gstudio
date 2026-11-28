@@ -783,5 +783,14 @@ export function drawScene(c, W, H, st) {
     g.addColorStop(0, 'rgba(34,240,255,0)'); g.addColorStop(1, `rgba(34,240,255,${a})`);
     c.fillStyle = g; c.fillRect(0, 0, W, H);
   }
+  if (st.nearStreak > 0) {
+    // Magenta edge streak: a thin gradient down both sides, gone in a quarter second. Magenta means hazard.
+    const a = Math.min(0.25, st.nearStreak) * 2.4, w = Math.max(24, W * 0.07);
+    for (const [x0, x1] of [[0, w], [W, W - w]]) {
+      const g = c.createLinearGradient(x0, 0, x1, 0);
+      g.addColorStop(0, `rgba(255,43,214,${a})`); g.addColorStop(1, 'rgba(255,43,214,0)');
+      c.fillStyle = g; c.fillRect(Math.min(x0, x1), 0, w, H);
+    }
+  }
   if (st.flash > 0) { c.fillStyle = `rgba(255,255,255,${Math.min(0.6, st.flash)})`; c.fillRect(0, 0, W, H); }
 }

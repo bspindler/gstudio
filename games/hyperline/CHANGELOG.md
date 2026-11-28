@@ -2,6 +2,9 @@
 
 Newest first. Each version matches `version` in `game.yaml` and the `createStudio({ version })` call in `index.html`; a test keeps the three in sync. Fixes, tuning and polish bump the patch number, and new features bump the minor number. Hal adds an entry with every change it merges.
 
+## 0.23.9 (2026-11-27)
+- A near miss now flashes a quick magenta streak down the screen edges and adds a soft whoosh.
+
 ## 0.23.8 (2026-11-26)
 - Landings now throw a short cyan spark off the track and play a soft low synth thud.
 - Hyperline: tap or press Space anywhere on the game-over card to run again instantly from the same start.
